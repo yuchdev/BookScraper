@@ -11,12 +11,18 @@ Architecture below.
 
 ## Setup
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management, virtual environments, and packaging —
+there is no `requirements.txt`, `setup.py`, or `setup.cfg`; `pyproject.toml` (dependencies) + `uv.lock` (pinned,
+resolved versions — commit it) are the single source of truth.
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+uv sync                        # creates .venv and installs dependencies + the bookscraper package itself (editable)
+uv run playwright install chromium
 ```
+
+`uv sync` replaces `python -m venv` + `pip install -r requirements.txt` + `pip install -e .` in one step. Run any
+command inside the venv via `uv run <cmd>`, or activate it yourself with `source .venv/bin/activate` and drop the
+`uv run` prefix.
 
 MongoDB output requires a `.env` file in the repo root:
 ```dotenv
@@ -31,19 +37,19 @@ if `TLS_CERT_FILE` isn't set, `~/.bookscrapper/X509-cert-142838411852079927.pem`
 ## Running
 
 ```bash
-pip install -e .   # registers the `bookscraper` console script (or skip this and use `python -m bookscraper` instead)
+# `uv sync` (see Setup above) already registers the `bookscraper` console script inside .venv.
 
 # scrape-urls: scrapes a fixed list of URLs from a CSV (works for all 4 sites via Playwright).
-bookscraper scrape-urls -f urls.csv -c        # -c/--output-to-csv
-bookscraper scrape-urls -f urls.csv -m        # -m/--output-to-mongo
-bookscraper scrape-urls -f urls.csv -c -m     # both
+uv run bookscraper scrape-urls -f content/urls.csv -c        # -c/--output-to-csv
+uv run bookscraper scrape-urls -f content/urls.csv -m        # -m/--output-to-mongo
+uv run bookscraper scrape-urls -f content/urls.csv -c -m     # both
 
 # search: searches sites for books matching queries defined in parameters.py, then scrapes details.
-bookscraper search -c
-bookscraper search -m --max-search-pages 5
+uv run bookscraper search -c
+uv run bookscraper search -m --max-search-pages 5
 
-# Without installing:
-python -m bookscraper scrape-urls -f urls.csv -c
+# Without `uv run` (inside an activated .venv), or via `python -m` directly:
+python -m bookscraper scrape-urls -f content/urls.csv -c
 python -m bookscraper search -c
 ```
 
@@ -65,7 +71,7 @@ CLI wiring lives directly under `src/bookscraper/`:
   from the attribute name the code reads.
 - **`main.py`** — the real entry point: parses args via `cli.build_parser()` and dispatches to the matching
   `commands/*.py` module's `run(args)`. `main_sync()` wraps this in `asyncio.run(...)` and is what both the
-  `bookscraper` console-script (registered in `setup.cfg`'s `[options.entry_points]`) and `__main__.py` call.
+  `bookscraper` console-script (registered in `pyproject.toml`'s `[project.scripts]`) and `__main__.py` call.
 - **`__main__.py`** — enables `python -m bookscraper ...`; just calls `main.main_sync()`.
 - **`output.py`** — `resolve_output_destinations()`, the pre-flight-checks + interactive `(C)/(M)/(B)/(E)` prompt
   logic shared by both subcommands.
@@ -109,9 +115,12 @@ Other shared modules under `src/bookscraper/`:
   pre-existing, cosmetic logging bug (the real success/failure state is still reported correctly to the caller via
   the return value). Not yet fixed; `database.py` wasn't in scope of the CLI restructuring that touched this file's
   callers.
-- Several scraper output files (`books.csv`, `failed_books.csv`, `scraped_books.csv`, `other_links.csv`,
-  `urls.csv`, etc.) are committed to git despite being run artifacts — be careful not to assume they're gitignored
-  scratch files.
+- Curated input URL lists (`content/urls.csv`, `content/urls_amazon.csv`) live under `content/` and are committed —
+  they're hand-maintained candidate lists for `scrape-urls -f`, not run output. Actual run artifacts (`books.csv`,
+  `failed_books.csv`, `scraped_books.csv`, `other_links.csv`, `failed_urls.csv`) are gitignored and written to the
+  repo root by default; don't add new default output filenames without gitignoring them too.
 - `init_template.py` and `release_package.py` are leftover from a generic cookiecutter-style Python module template
   (renaming a template project, building/publishing wheels, tagging GitHub releases). They aren't part of the
-  scraping workflow and reference a generic `python_module` template name in places.
+  scraping workflow and reference a generic `python_module` template name in places. They also both read/write
+  `setup.cfg` directly (via `ConfigParser`), which no longer exists after the uv migration — running either script
+  as-is will fail. Not fixed, since neither script is part of the actual scraping workflow.

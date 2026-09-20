@@ -45,8 +45,8 @@ for point-in-time reviews.
 >
 > **3. Threat actors.** A compromised or hostile scrape target serving crafted
 > markup/JSON; anyone who can write the input URL CSV; anyone with read access to the
-> repository or working directory, since run artifacts and logs are committed today; a
-> network attacker on the Atlas path.
+> working directory, since `bookscraper.log` is uncommitted but unrotated and can
+> accumulate sensitive data locally; a network attacker on the Atlas path.
 >
 > **4. STRIDE analysis (initial).**
 > - *Spoofing* - `identify_website()` routes on a bare substring match, so a URL merely
@@ -58,9 +58,10 @@ for point-in-time reviews.
 > - *Repudiation* - `bookscraper.log` is a single unrotated file in the working directory
 >   with no integrity control; the rotation the README describes does not exist.
 > - *Information disclosure* - `exc_info=True` logging of MongoDB failures can write
->   connection strings containing credentials into `bookscraper.log`; `books.csv`,
->   `scraped_books.csv`, `failed_books.csv`, `other_links.csv`, and `urls.csv` are
->   committed to git.
+>   connection strings containing credentials into `bookscraper.log`. Run-artifact CSVs
+>   (`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`,
+>   `failed_urls.csv`) are now gitignored rather than committed; only the curated,
+>   hand-maintained input lists under `content/` are tracked.
 > - *Denial of service* - `get_leanpub_search_results_via_api` paginates `while True`
 >   with no cap and accumulates in memory; `search_and_scrape` gathers every detail fetch
 >   at once with no concurrency limit; `scrape_book` leaks a Playwright page per Leanpub

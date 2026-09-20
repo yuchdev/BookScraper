@@ -1,30 +1,28 @@
 import asyncio
+import json
 import logging
 import random
 import re
 from urllib.parse import (
-    quote_plus,
-    urlparse,
     parse_qs,
+    quote_plus,
     unquote,
     urljoin,
+    urlparse,
 )  # Added for URL parsing
-import httpx
-import json
 
+import httpx
 from playwright.async_api import Browser
 
 from .book_utils import print_log
+from .parameters import USER_AGENTS, site_constants
 from .scrape_details import route_handler
-from .parameters import site_constants, USER_AGENTS
 
 logger = logging.getLogger(__name__)
 
 
 async def get_leanpub_search_results_via_api(query: str):
-    print_log(
-        f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info"
-    )
+    print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
     logger.info(f"Leanpub - Fetching search results from Leanpub.com for {query}.")
     base_url = site_constants["leanpub"]["SEARCH_BASE_API"]
 
@@ -79,9 +77,7 @@ async def get_leanpub_search_results_via_api(query: str):
 
                     authors_list_for_book = []
                     relationships = book_item.get("relationships", {})
-                    accepted_authors_data = relationships.get(
-                        "accepted_authors", {}
-                    ).get("data", [])
+                    accepted_authors_data = relationships.get("accepted_authors", {}).get("data", [])
 
                     # For each author associated with this book (by ID)
                     for author_rel in accepted_authors_data:
@@ -124,9 +120,7 @@ async def get_leanpub_search_results_via_api(query: str):
                     f"An HTTP error occurred while requesting {exc.request.url!r}: {exc}",
                     "error",
                 )
-                logger.error(
-                    f"An HTTP error occurred while requesting {exc.request.url!r}: {exc}"
-                )
+                logger.error(f"An HTTP error occurred while requesting {exc.request.url!r}: {exc}")
                 break  # Break the loop on network/request errors
             except json.JSONDecodeError:
                 print_log(
@@ -142,18 +136,14 @@ async def get_leanpub_search_results_via_api(query: str):
                     f"An unexpected error occurred while processing page {current_page}: {e}",
                     "error",
                 )
-                logger.error(
-                    f"An unexpected error occurred while processing page {current_page}: {e}"
-                )
+                logger.error(f"An unexpected error occurred while processing page {current_page}: {e}")
                 break  # Catch any other unexpected errors
 
     print_log(
         f"Leanpub - Finished searching for '{query}'. Total books found: {len(all_extracted_books)}",
         "info",
     )
-    logger.info(
-        f"Leanpub - Finished searching for '{query}'. Total books found: {len(all_extracted_books)}"
-    )
+    logger.info(f"Leanpub - Finished searching for '{query}'. Total books found: {len(all_extracted_books)}")
     return all_extracted_books
 
 
@@ -217,9 +207,7 @@ async def get_search_results_via_playwright(
     try:
         site_config = site_constants.get(site_name)
         if not site_config:
-            logger.error(
-                f"Configuration for site '{site_name}' not found in site_constants."
-            )
+            logger.error(f"Configuration for site '{site_name}' not found in site_constants.")
             print_log(f"Error: Site '{site_name}' configuration missing.", "error")
             return []
 
@@ -227,9 +215,7 @@ async def get_search_results_via_playwright(
         selectors = site_config
 
         if "SEARCH_BASE_URL" not in selectors:
-            logger.error(
-                f"SEARCH_BASE_URL not defined for site '{site_name}'. Skipping search."
-            )
+            logger.error(f"SEARCH_BASE_URL not defined for site '{site_name}'. Skipping search.")
             print_log(f"Error: Search base URL missing for {site_name}.", "error")
             return []
 
@@ -237,9 +223,7 @@ async def get_search_results_via_playwright(
             case "amazon":
                 parsed_query = quote_plus(query)
                 search_urls = [
-                    f"{selectors['SEARCH_BASE_URL']}".replace(
-                        "[k]", parsed_query
-                    ).replace("[p]", str(p))
+                    f"{selectors['SEARCH_BASE_URL']}".replace("[k]", parsed_query).replace("[p]", str(p))
                     for p in range(1, selectors.get("SEARCH_MAXIMUM_PAGES"))
                 ]
 
@@ -258,9 +242,7 @@ async def get_search_results_via_playwright(
                         )
                         await page.wait_for_load_state("networkidle", timeout=60000)
                         actual_url_after_goto = page.url
-                        logger.info(
-                            f"Actual URL after navigation for page {current_page_num}: {actual_url_after_goto}"
-                        )
+                        logger.info(f"Actual URL after navigation for page {current_page_num}: {actual_url_after_goto}")
                     except Exception as e:
                         logger.error(
                             f"Failed to navigate to page {current_page_num}: {e}",
@@ -269,21 +251,15 @@ async def get_search_results_via_playwright(
 
                     # Find all book cards on the current page
                     # Case where no books are found, but might have book cards
-                    if selectors.get("SEARCH_NO_BOOKS_FOUND"):
-                        if (
-                            await page.locator(
-                                selectors["SEARCH_NO_BOOKS_FOUND"]
-                            ).count()
-                            > 0
-                        ):
-                            print_log(
-                                f"No book cards found on page {current_page_num} for {site_name}.",
-                                "warning",
-                            )
-                            logger.warning(
-                                f"No book cards found on page {current_page_num} for {site_name}."
-                            )
-                            break  # No books to scrape, exit the while loop
+                    if selectors.get("SEARCH_NO_BOOKS_FOUND") and (
+                        await page.locator(selectors["SEARCH_NO_BOOKS_FOUND"]).count() > 0
+                    ):
+                        print_log(
+                            f"No book cards found on page {current_page_num} for {site_name}.",
+                            "warning",
+                        )
+                        logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
+                        break  # No books to scrape, exit the while loop
 
                     # If book cards are found
                     await page.wait_for_selector(selectors["SEARCH_BOOK_CARD"])
@@ -293,9 +269,7 @@ async def get_search_results_via_playwright(
                             f"No book cards found on page {current_page_num} for {site_name}.",
                             "warning",
                         )
-                        logger.warning(
-                            f"No book cards found on page {current_page_num} for {site_name}."
-                        )
+                        logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
                         break  # No books to scrape, exit the while loop
 
                     #                    print_log(f"Found {len(book_cards)} book cards on page {current_page_num} for {site_name}.", "info")
@@ -313,13 +287,9 @@ async def get_search_results_via_playwright(
                             "search_result_index": i + 1,
                         }
                         try:
-                            link_element = card.locator(
-                                selectors["SEARCH_BOOK_DETAIL_LINK"]
-                            )
+                            link_element = card.locator(selectors["SEARCH_BOOK_DETAIL_LINK"])
                             raw_href = (
-                                await link_element.get_attribute("href")
-                                if await link_element.count() > 0
-                                else None
+                                await link_element.get_attribute("href") if await link_element.count() > 0 else None
                             )
 
                             book_url = None
@@ -333,16 +303,12 @@ async def get_search_results_via_playwright(
                                         query_params = parse_qs(parsed_href.query)
 
                                         if "url" in query_params:
-                                            embedded_path = unquote(
-                                                query_params["url"][0]
-                                            )
+                                            embedded_path = unquote(query_params["url"][0])
                                             book_url = urljoin(
                                                 site_constants["amazon"]["BASE_URL"],
                                                 embedded_path,
                                             )
-                                            logger.debug(
-                                                f"Extracted and decoded sponsored URL: {book_url}"
-                                            )
+                                            logger.debug(f"Extracted and decoded sponsored URL: {book_url}")
 
                                             # Attempt to extract ASIN from the final book_url (if available)
                                             asin_match = re.search(
@@ -352,9 +318,7 @@ async def get_search_results_via_playwright(
                                             if asin_match:
                                                 asin = asin_match.group(1)
                                         else:
-                                            logger.warning(
-                                                f"Sponsored link without 'url' parameter: {raw_href}"
-                                            )
+                                            logger.warning(f"Sponsored link without 'url' parameter: {raw_href}")
                                             continue  # Skip this card if we can't get a valid URL
 
                                     # Non-sponsored Amazon link
@@ -364,9 +328,7 @@ async def get_search_results_via_playwright(
                                             raw_href,
                                         )
                                         if selectors.get("SEARCH_ASIN_ATTRIBUTE"):
-                                            asin = await card.get_attribute(
-                                                selectors["SEARCH_ASIN_ATTRIBUTE"]
-                                            )
+                                            asin = await card.get_attribute(selectors["SEARCH_ASIN_ATTRIBUTE"])
                                         else:
                                             logger.warning(
                                                 "Check Amazon parameter SEARCH_ASIN_ATTRIBUTE to locate ASIN in book cards."
@@ -374,9 +336,7 @@ async def get_search_results_via_playwright(
 
                                 else:
                                     # For non-Amazon sites, just join the URL
-                                    book_url = urljoin(
-                                        site_constants[site_name]["BASE_URL"], raw_href
-                                    )
+                                    book_url = urljoin(site_constants[site_name]["BASE_URL"], raw_href)
 
                             book_data["url"] = book_url if book_url else None
                             # Amazon ASIN
@@ -386,9 +346,7 @@ async def get_search_results_via_playwright(
                             # Extract Title
                             title_element = card.locator(selectors["SEARCH_TITLE"])
                             book_data["title"] = (
-                                await title_element.text_content()
-                                if await title_element.count() > 0
-                                else None
+                                await title_element.text_content() if await title_element.count() > 0 else None
                             )
 
                             # Extract Authors
@@ -398,27 +356,17 @@ async def get_search_results_via_playwright(
                                 authors = await authors_elements.all_text_contents()
                             if site_name == "leanpub":
                                 names_list = authors[0].split(" and ")
-                                book_data["authors_from_search"] = (
-                                    names_list if authors else None
-                                )
+                                book_data["authors_from_search"] = names_list if authors else None
                             else:
-                                book_data["authors_from_search"] = (
-                                    ", ".join(authors) if authors else None
-                                )
+                                book_data["authors_from_search"] = ", ".join(authors) if authors else None
 
                             # Extract Publication Date
-                            publication_date_selector = selectors.get(
-                                "SEARCH_PUBLICATION_DATE"
-                            )
+                            publication_date_selector = selectors.get("SEARCH_PUBLICATION_DATE")
                             if publication_date_selector:
                                 try:
-                                    date_element = card.locator(
-                                        publication_date_selector
-                                    )
+                                    date_element = card.locator(publication_date_selector)
                                     book_data["publication_date"] = (
-                                        await date_element.text_content()
-                                        if await date_element.count() > 0
-                                        else None
+                                        await date_element.text_content() if await date_element.count() > 0 else None
                                     )
                                 except Exception as e:
                                     logger.warning(

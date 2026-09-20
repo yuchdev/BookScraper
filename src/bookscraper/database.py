@@ -1,20 +1,19 @@
 import logging
 import os
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from dotenv import load_dotenv
 from pymongo import MongoClient, server_api
 from pymongo.collection import Collection
 from pymongo.errors import (
-    ServerSelectionTimeoutError,
-    InvalidDocument,
     ConnectionFailure,
     DuplicateKeyError,
+    InvalidDocument,
     OperationFailure,
+    ServerSelectionTimeoutError,
 )
 
 from .book_utils import print_log
-
 
 module_logger = logging.getLogger(__name__)
 

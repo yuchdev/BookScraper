@@ -1,0 +1,31 @@
+src = ["src"]
+line-length = 120
+target-version = "py312"
+
+extend-exclude = [
+    "tests/flake8_lint/samples"
+]
+
+[lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "SIM102",
+    "SIM108",
+    "C4",
+    "UP017",
+    "UP037"
+]
+
+#   UP007 - Union[...] -> X | Y; Optional[X] -> X | None
+#   SIM300 - Yoda condition x == f(a, b)
+#   E402 - module level import not at top of file
+#   E501 - the line is too long
+ignore = [
+    "UP007",
+    "SIM300",
+    "E402",
+    "E501"
+]

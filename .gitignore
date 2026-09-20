@@ -1,3 +1,10 @@
+# bookscraper run artifacts (regenerated per run; curated input lists live in content/)
+/books.csv
+/failed_books.csv
+/failed_urls.csv
+/other_links.csv
+/scraped_books.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

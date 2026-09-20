@@ -82,9 +82,10 @@ client certificate/key PEM at `TLS_CERT_FILE` (default
 `~/.bookscrapper/X509-cert-142838411852079927.pem`) and the CA bundle at `TLS_CA_FILE`;
 `bookscraper.log`, which `book_utils.py` appends to unrotated in the working directory and which
 currently receives full tracebacks via `exc_info=True` alongside MongoDB failure strings that can
-embed the connection URI; scraped author names, which are personal data; and the run artifacts
-`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`, and `urls.csv`, which are
-committed to the repository rather than gitignored.
+embed the connection URI; and scraped author names, which are personal data. Run artifacts
+(`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`, `failed_urls.csv`) are
+gitignored, not committed; the curated input lists under `content/` (`urls.csv`, `urls_amazon.csv`)
+are committed intentionally since they're hand-maintained data, not scrape output.
 
 ### Docs
 

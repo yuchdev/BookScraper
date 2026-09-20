@@ -1,20 +1,19 @@
 import asyncio
 import json
-import random
 import logging
+import random
 import re
 from datetime import datetime
 from html import unescape
 from urllib.parse import urljoin
 
 import httpx
-
-from .book_utils import hash_book, extract_year_from_date, print_log
-
-from .parameters import USER_AGENTS, site_constants
-from .database import check_book_exists_in_db  # Import the new duplicate check function
-from pymongo.collection import Collection  # For type hinting the collection object
 from playwright.async_api import Browser, TimeoutError
+from pymongo.collection import Collection  # For type hinting the collection object
+
+from .book_utils import extract_year_from_date, hash_book, print_log
+from .database import check_book_exists_in_db  # Import the new duplicate check function
+from .parameters import USER_AGENTS, site_constants
 
 # Get a logger instance specifically for this module
 module_logger = logging.getLogger('scrape_details')

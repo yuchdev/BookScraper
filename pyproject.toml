@@ -1,8 +1,19 @@
 [project]
 name = "bookscraper"
 version = "1.0.0"
-requires-python = ">=3.8"
-dynamic = ["description", "readme", "dependencies"]
+description = "Asyncio + Playwright scraper for book metadata from Amazon, Packtpub, Leanpub, and O'Reilly, with CSV/MongoDB output."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "playwright>=1.50.0",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.0.1",
+    "pymongo>=4.11.2",
+    "httpx>=0.28.1",
+]
+
+[project.scripts]
+bookscraper = "bookscraper.main:main_sync"
 
 [build-system]
 requires = [
@@ -10,3 +21,18 @@ requires = [
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+# connection_test.py is a standalone MongoDB diagnostic script, not a pytest suite (see
+# CLAUDE.md) - it must stay out of collection so `pytest` never runs its
+# `test_mongodb_connection()` as a real test and attempts a live Atlas connection.
+addopts = "--ignore=test/connection_test.py"

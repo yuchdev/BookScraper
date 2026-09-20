@@ -20,14 +20,15 @@ checks for output destinations, ensuring a smooth and resilient scraping experie
 
 To quickly start the application at this stage of development:
 
-1. Install requirements and virtual environment, then run `pip install -e .` to register the `bookscraper` command
-2. Ensure the .env file is set with:
+1. cd into the BookScraper project folder
+2. run `uv sync` to create `.venv` and install dependencies (this also registers the `bookscraper` command inside
+   the venv), then `uv run playwright install chromium`
+3. Ensure the .env file is set with:
     ```dotenv
     MONGODB_URI="mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority"
     TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client certificates
     ```
-3. cd into BookScraper project folder
-4. run `bookscraper search --output-to-mongo` (or `python -m bookscraper search --output-to-mongo` without installing)
+4. run `uv run bookscraper search --output-to-mongo`
 
 ---
 
@@ -65,12 +66,16 @@ purposes.
 
 * **Python 3.9+**: Make sure you have a compatible Python version installed. You can download it
   from [python.org](https://www.python.org/downloads/).
-* **pip**: Python's package installer, usually comes with Python.
+* **[uv](https://docs.astral.sh/uv/)**: This project uses `uv` for dependency management, virtual environments, and
+  packaging (it replaces `pip` + `venv` + `setup.py`). Install it with:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 * **Playwright Browsers**: Playwright requires browser binaries. After installing project dependencies, you'll need to
   install them:
     ```bash
-    # (after pip install -r requirements.txt)
-    playwright install chromium
+    # (after uv sync)
+    uv run playwright install chromium
     ```
 * **MongoDB Atlas Cluster (Optional, for MongoDB output)**: If you plan to use MongoDB output, you'll need access to a
   MongoDB Atlas cluster. Refer to the [MongoDB Atlas documentation](https://www.mongodb.com/cloud/atlas/getting-started)
@@ -83,34 +88,23 @@ purposes.
    git clone https://github.com/YannickLalonde/BookScraper.git
    cd BookScraper
    ```
-2. **Create and activate a Python virtual environment (recommended):**
+2. **Install dependencies and create the virtual environment:**
    ```bash
-   python -m venv .venv
-   # On Windows:
-   .venv\Scripts\activate
-   # On macOS/Linux:
-   source .venv/bin/activate
+   uv sync
    ```
-3. **Install project dependencies using pip:**
+   `uv sync` reads `pyproject.toml`/`uv.lock`, creates `.venv` automatically, installs all dependencies pinned in
+   `uv.lock`, and installs the `bookscraper` package itself in editable mode (registering the `bookscraper` console
+   script inside `.venv`) — there's no separate `pip install -e .` step.
+3. **Install Playwright browser binaries:**
    ```bash
-   pip install -r requirements.txt
+   uv run playwright install chromium
    ```
-   You'll need a `requirements.txt` file in your project root with the following content:
-   ```
-   playwright>=1.43.0
-   pandas>=2.0.0
-   python-dotenv>=1.0.0
-   pymongo>=4.0.0
-   ```
-4. **Install Playwright browser binaries:**
+4. **Run the CLI:**
    ```bash
-   playwright install chromium
+   uv run bookscraper --help
    ```
-5. **Install the `bookscraper` package itself (registers the `bookscraper` command):**
-   ```bash
-   pip install -e .
-   ```
-   Without this step, the CLI is still runnable as `python -m bookscraper ...` from the project root.
+   `uv run` executes a command inside the project's `.venv` without needing to activate it first. Alternatively,
+   activate the venv yourself (`source .venv/bin/activate`) and drop the `uv run` prefix from any command below.
 
 ### Configuration (`.env` file)
 
@@ -163,7 +157,8 @@ url
 
 **`scrape-urls`** — scrape details for a known list of URLs:
 
-* `-f` or `--input-file <path/to/urls.csv>`: **(Required)** Path to your input CSV file containing book URLs.
+* `-f` or `--input-file <path/to/urls.csv>`: **(Required)** Path to your input CSV file containing book URLs (e.g.
+  the curated lists checked into `content/`).
 * `-c` or `--output-to-csv`: **(Optional)** If present, scraped data will be saved to `books.csv`, `failed_books.csv`,
   and `other_links.csv` in the current directory.
 * `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
@@ -180,41 +175,44 @@ url
 
 ### Examples
 
+All examples below use `uv run`, which runs the command inside `.venv` without activating it. If you've activated
+`.venv` yourself, drop the `uv run` prefix and call `bookscraper` (or `python -m bookscraper`) directly.
+
 1. **Scrape a known list of URLs, save to CSV only:**
    ```bash
-   bookscraper scrape-urls -f urls.csv -c
+   uv run bookscraper scrape-urls -f content/urls.csv -c
    ```
 2. **Scrape a known list of URLs, save to MongoDB only:**
    ```bash
-   bookscraper scrape-urls -f urls.csv -m
+   uv run bookscraper scrape-urls -f content/urls.csv -m
    ```
 3. **Scrape a known list of URLs, save to both CSV and MongoDB:**
    ```bash
-   bookscraper scrape-urls -f urls.csv -c -m
+   uv run bookscraper scrape-urls -f content/urls.csv -c -m
    ```
 4. **Search configured sites for new books, save to CSV only:**
    ```bash
-   bookscraper search -c
+   uv run bookscraper search -c
    ```
 5. **Search configured sites for new books, save to MongoDB only, up to 5 result pages per query:**
    ```bash
-   bookscraper search -m --max-search-pages 5
+   uv run bookscraper search -m --max-search-pages 5
    ```
-6. **Without installing the package, use `python -m bookscraper` instead of `bookscraper`:**
+6. **Without `uv run`, use `python -m bookscraper` inside an activated venv:**
    ```bash
-   python -m bookscraper scrape-urls -f urls.csv -c -m
+   python -m bookscraper scrape-urls -f content/urls.csv -c -m
    python -m bookscraper search -c -m
    ```
 7. **Display help messages:**
    ```bash
-   bookscraper --help
-   bookscraper scrape-urls --help
-   bookscraper search --help
+   uv run bookscraper --help
+   uv run bookscraper scrape-urls --help
+   uv run bookscraper search --help
    ```
 
 ### Interactive Output Selection
 
-If you run either subcommand without specifying `-c` or `-m` (e.g., `bookscraper scrape-urls -f urls.csv`), it will
+If you run either subcommand without specifying `-c` or `-m` (e.g., `bookscraper scrape-urls -f content/urls.csv`), it will
 perform pre-flight checks for CSV write permissions and MongoDB connectivity. Based on the successful checks, it will
 then prompt you to choose your desired output destination interactively:
 
@@ -236,7 +234,8 @@ prompt.
 
 ## 📊 Output Files
 
-Upon successful execution (and if CSV output is enabled), the following files will be generated in your project root:
+Upon successful execution (and if CSV output is enabled), the following files will be generated in your project root
+(these are run artifacts, not committed to the repo — see `.gitignore`):
 
 * **`books.csv`**: Contains all successfully scraped book details. Each row represents a book with columns for title,
   authors, ISBNs, publication date, description, tags, URL, site, year, and a unique hash.
@@ -264,11 +263,12 @@ The `BookScraper` utilizes a comprehensive logging system:
 ```
 BookScraper/
 ├── .env                  # Environment variables for MongoDB (ignored by Git)
-├── requirements.txt      # List of project dependencies for pip
+├── pyproject.toml        # Project metadata + dependencies (uv/PEP 621)
+├── uv.lock               # Locked, resolved dependency versions (commit this file)
 ├── README.md             # This README file
-├── books.csv             # Output CSV for scraped books (ignored by Git)
-├── failed_books.csv      # Output CSV for failed URLs (ignored by Git)
-├── other_links.csv       # Output CSV for other/unsupported URLs (ignored by Git)
+├── content/
+│   ├── urls.csv           # Curated input: general book/reference URLs for scrape-urls (committed)
+│   └── urls_amazon.csv    # Curated input: Amazon-specific URLs for scrape-urls (committed)
 └── src/
     └── bookscraper/
         ├── __init__.py

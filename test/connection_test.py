@@ -7,14 +7,15 @@ and TLS certificate file. It prints the connection variables and attempts to est
 a connection, providing detailed status information.
 """
 
-import os
-import sys
-import re
-from pathlib import Path
 import logging
+import os
+import re
+import sys
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pymongo import MongoClient, server_api
-from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # Configure direct access to default paths instead of importing from the project
 # This avoids import issues with the project's module structure

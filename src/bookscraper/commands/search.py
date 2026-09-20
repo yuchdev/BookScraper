@@ -4,13 +4,12 @@ import csv
 import logging
 import time
 
-from ..deduplicate import leanpub_prescrape_deduplicate
-
 from ..book_utils import print_log
-from ..scrape_details import get_leanpub_book_details
-from ..database import save_books_to_mongodb, close_mongo_connection
+from ..database import close_mongo_connection, save_books_to_mongodb
+from ..deduplicate import leanpub_prescrape_deduplicate
 from ..output import resolve_output_destinations
 from ..parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
+from ..scrape_details import get_leanpub_book_details
 from ..search_utils import get_leanpub_search_results_via_api
 
 module_logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ def save_books_to_csv(books: list[dict], filename="scraped_books.csv") -> None:
         for book in books:
             if book:
                 fieldnames.update(book.keys())
-        fieldnames = sorted(list(fieldnames))  # Sort for consistent column order
+        fieldnames = sorted(fieldnames)  # Sort for consistent column order
 
         module_logger.info(f"Saving scraped books to CSV: {filename}")
         print_log(f"Saving {len(books)} books to {filename}...", "info")
@@ -57,9 +56,7 @@ def save_books_to_csv(books: list[dict], filename="scraped_books.csv") -> None:
                 try:
                     writer.writerow(book)
                 except ValueError as ve:
-                    module_logger.error(
-                        f"Error writing row for book {book.get('title', 'Unknown Title')} to CSV: {ve}"
-                    )
+                    module_logger.error(f"Error writing row for book {book.get('title', 'Unknown Title')} to CSV: {ve}")
                 except Exception as e:
                     module_logger.error(
                         f"Unexpected error writing book {book.get('title', 'Unknown Title')} to CSV: {e}",
@@ -75,14 +72,10 @@ def save_books_to_csv(books: list[dict], filename="scraped_books.csv") -> None:
             f"An unexpected error occurred while saving books to CSV {filename}: {e}",
             exc_info=True,
         )
-        print_log(
-            f"Critical Error saving books to {filename}. Check log file.", "error"
-        )
+        print_log(f"Critical Error saving books to {filename}. Check log file.", "error")
 
 
-def save_failed_urls_to_csv(
-    failed_urls: list[dict], filename="failed_urls.csv"
-) -> None:
+def save_failed_urls_to_csv(failed_urls: list[dict], filename="failed_urls.csv") -> None:
     """
     Saves a list of dictionaries with failed URLs and their errors to a CSV file.
     Each dictionary should contain 'url', 'site', and 'error'.
@@ -112,9 +105,7 @@ def save_failed_urls_to_csv(
                 try:
                     writer.writerow(item)
                 except ValueError as ve:
-                    module_logger.error(
-                        f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}"
-                    )
+                    module_logger.error(f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}")
                 except Exception as e:
                     module_logger.error(
                         f"Unexpected error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {e}",
@@ -130,9 +121,7 @@ def save_failed_urls_to_csv(
             f"An unexpected error occurred while saving failed URLs to CSV {filename}: {e}",
             exc_info=True,
         )
-        print_log(
-            f"Critical Error saving failed URLs to {filename}. Check log file.", "error"
-        )
+        print_log(f"Critical Error saving failed URLs to {filename}. Check log file.", "error")
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -157,14 +146,10 @@ async def run(args: argparse.Namespace) -> None:
                 current_search_results = []
                 # Leanpub-Specific
                 if site_name.lower() == "leanpub":
-                    print_log(
-                        f"Leanpub - Searching for '{search_item}' via API...", "info"
-                    )
+                    print_log(f"Leanpub - Searching for '{search_item}' via API...", "info")
 
                     # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
-                    current_search_results = await get_leanpub_search_results_via_api(
-                        search_item
-                    )
+                    current_search_results = await get_leanpub_search_results_via_api(search_item)
 
                     # Pre-scrape deduplication
                     print_log("Leanpub - Deduplicating search results...")
@@ -172,13 +157,9 @@ async def run(args: argparse.Namespace) -> None:
                         book_title = book.get("title")
                         book_id = book.get("book_id")
                         book_slug = book.get("slug")
-                        book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace(
-                            "[slug]", book_slug
-                        )
+                        book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
                         book["book_url"] = book_url
-                        exists = await asyncio.to_thread(
-                            leanpub_prescrape_deduplicate, book_id, book_slug
-                        )
+                        exists = await asyncio.to_thread(leanpub_prescrape_deduplicate, book_id, book_slug)
 
                         if not exists:
                             # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
@@ -198,9 +179,7 @@ async def run(args: argparse.Namespace) -> None:
                     f"Found {len(current_search_results)} potential new books for '{search_item}'.",
                     "success",
                 )
-                module_logger.info(
-                    f"Found {len(current_search_results)} potential new books for '{search_item}'."
-                )
+                module_logger.info(f"Found {len(current_search_results)} potential new books for '{search_item}'.")
 
         # --- Deduplicate Cross-Site using ISBN / Fuzzy search / Hash ---
         new_books_for_detailed_scrape = books_from_search
@@ -209,23 +188,17 @@ async def run(args: argparse.Namespace) -> None:
         site_scrape_tasks = []
         for book_data_to_scrape in new_books_for_detailed_scrape:
             if book_data_to_scrape["site"].lower() == "leanpub":
-                print_log(
-                    f"--- Scraping {len(book_data_to_scrape)} Book Data ---", "step"
-                )
+                print_log(f"--- Scraping {len(book_data_to_scrape)} Book Data ---", "step")
                 # Scraping Leanpub details via httpx API
-                site_scrape_tasks.append(
-                    get_leanpub_book_details(url=book_data_to_scrape.get("book_url"))
-                )
+                site_scrape_tasks.append(get_leanpub_book_details(url=book_data_to_scrape.get("book_url")))
 
         # Run detailed scraping tasks for the current site concurrently
         if site_scrape_tasks:
-            current_site_scraped_results = await asyncio.gather(
-                *site_scrape_tasks, return_exceptions=True
-            )
+            current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
 
             # Process results from detailed scraping for the current site
             for original_book_data, result in zip(
-                new_books_for_detailed_scrape, current_site_scraped_results
+                new_books_for_detailed_scrape, current_site_scraped_results, strict=True
             ):
                 if isinstance(result, dict):
                     scraped_books_data.append(result)
@@ -260,17 +233,13 @@ async def run(args: argparse.Namespace) -> None:
                         "error",
                     )
         else:
-            print_log(
-                f"No new books identified for detailed scraping on {site_name}.", "info"
-            )
+            print_log(f"No new books identified for detailed scraping on {site_name}.", "info")
 
     except KeyboardInterrupt:
         print_log("Scraping interrupted by user.", "warning")
         module_logger.warning("Application interrupted by user.")
     except Exception as e:
-        module_logger.critical(
-            f"An unhandled error occurred in main execution: {e}", exc_info=True
-        )
+        module_logger.critical(f"An unhandled error occurred in main execution: {e}", exc_info=True)
         print_log(f"Critical error in main execution. Check logs: {e}", "error")
 
     # --- End of Site Iteration ---
@@ -278,9 +247,7 @@ async def run(args: argparse.Namespace) -> None:
     total_time = time.time() - start_time
     print_log("\n--- Scraping Process Summary ---", "step")
     print_log(f"Total scraping process completed in {total_time:.2f} seconds.")
-    print_log(
-        f"{len(scraped_books_data)} new book{'s' if len(scraped_books_data) != 1 else ''} scraped."
-    )
+    print_log(f"{len(scraped_books_data)} new book{'s' if len(scraped_books_data) != 1 else ''} scraped.")
     print_log(
         f"{len(failed_scrape_attempts)} URLs failed during detailed scrape.",
         "warning" if len(failed_scrape_attempts) > 0 else "info",

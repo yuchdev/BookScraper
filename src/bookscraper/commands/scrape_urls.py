@@ -35,7 +35,7 @@ def save_books_to_csv(books, filename="books.csv"):
             # Ensure book is a dictionary before trying to get keys
             if isinstance(book, dict):
                 fieldnames.update(book.keys())
-        fieldnames = sorted(list(fieldnames))
+        fieldnames = sorted(fieldnames)
         logger.info(f"CSV fields for {filename}: {fieldnames}")
 
         with open(filename, "w", newline="", encoding="utf-8") as csvfile:
@@ -79,9 +79,7 @@ def save_failed_urls_to_csv(failed_urls_with_status, filename="failed_books.csv"
             f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}",
             "success",
         )
-        logger.info(
-            f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}"
-        )
+        logger.info(f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}")
 
     except Exception as e:
         logger.error(
@@ -110,14 +108,10 @@ def save_other_links_to_csv(other_links, filename="other_links.csv"):
             f"Successfully saved {len(other_links)} 'other' links to {filename}",
             "success",
         )
-        logger.info(
-            f"Successfully saved {len(other_links)} 'other' links to {filename}"
-        )
+        logger.info(f"Successfully saved {len(other_links)} 'other' links to {filename}")
 
     except Exception as e:
-        logger.error(
-            f"Error saving 'other' links to CSV ({filename}): {e}", exc_info=True
-        )
+        logger.error(f"Error saving 'other' links to CSV ({filename}): {e}", exc_info=True)
         print_log(
             f"Error: Could not write 'other' links to CSV file {filename}. Details: {e}",
             "error",
@@ -177,9 +171,7 @@ async def run(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
     except KeyError:
-        logger.critical(
-            f"Error: CSV file '{filepath}' does not contain a 'url' column."
-        )
+        logger.critical(f"Error: CSV file '{filepath}' does not contain a 'url' column.")
         print_log(
             f"Critical Error: The CSV file '{filepath}' does not contain a 'url' column. Please ensure it has a 'url' header.",
             "error",
@@ -191,9 +183,7 @@ async def run(args: argparse.Namespace) -> None:
 
     for website, urls in website_urls.items():
         if website not in ["other"]:
-            print_log(
-                f"Found {len(urls)} {website.capitalize()} URLs to scrape.", "info"
-            )
+            print_log(f"Found {len(urls)} {website.capitalize()} URLs to scrape.", "info")
             all_urls_to_scrape.extend(urls)
         else:
             print_log(
@@ -222,9 +212,7 @@ async def run(args: argparse.Namespace) -> None:
         for i in range(0, total_urls_to_scrape, batch_size):
             batch_urls = all_urls_to_scrape[i : i + batch_size]
             current_batch_num = i // batch_size + 1
-            total_batches = (
-                total_urls_to_scrape + batch_size - 1
-            ) // batch_size  # Ceiling division
+            total_batches = (total_urls_to_scrape + batch_size - 1) // batch_size  # Ceiling division
             print_log(f"Starting batch {current_batch_num} of {total_batches}", "info")
 
             tasks = []
@@ -240,9 +228,7 @@ async def run(args: argparse.Namespace) -> None:
                 if isinstance(result, dict):
                     # This is a successfully scraped book (a dictionary)
                     books.append(result)
-                elif (
-                    isinstance(result, tuple) and len(result) == 2 and result[0] is None
-                ):
+                elif isinstance(result, tuple) and len(result) == 2 and result[0] is None:
                     # This is a status tuple: (None, "DUPLICATE") or (None, "FAILED")
                     original_url = batch_urls[index]
                     status_type = result[1]  # "DUPLICATE" or "FAILED"
@@ -251,24 +237,18 @@ async def run(args: argparse.Namespace) -> None:
                     failed_urls_with_status.append((original_url, status_type))
 
                     if status_type == "DUPLICATE":
-                        logger.info(
-                            f"Book from URL: {original_url} detected as duplicate and skipped from saving."
-                        )
+                        logger.info(f"Book from URL: {original_url} detected as duplicate and skipped from saving.")
                     elif status_type == "FAILED":
                         logger.error(f"Scraping failed for URL: {original_url}")
                 else:
                     # Catch-all for unexpected return types from scrape_book
                     original_url = batch_urls[index]
-                    logger.error(
-                        f"Unexpected return type from scrape_book for URL: {original_url}. Result: {result}"
-                    )
+                    logger.error(f"Unexpected return type from scrape_book for URL: {original_url}. Result: {result}")
                     failed_urls_with_status.append(
                         (original_url, "UNKNOWN_ERROR")
                     )  # Add to failed_urls for diagnostics
 
-            if (
-                current_batch_num < total_batches
-            ):  # Only pause if there are more batches
+            if current_batch_num < total_batches:  # Only pause if there are more batches
                 print_log("Pausing between batches...", "info")
                 await asyncio.sleep(random.uniform(3, 5))
 
@@ -293,9 +273,7 @@ async def run(args: argparse.Namespace) -> None:
     if destinations.output_to_csv:
         print_log("Saving scraped books to CSV files...", "info")
         save_books_to_csv(books)  # This now only contains dictionaries
-        save_failed_urls_to_csv(
-            failed_urls_with_status
-        )  # This contains URLs and their statuses
+        save_failed_urls_to_csv(failed_urls_with_status)  # This contains URLs and their statuses
         save_other_links_to_csv(website_urls["other"])
     else:
         print_log("CSV output not requested or not available.", "info")
@@ -308,9 +286,7 @@ async def run(args: argparse.Namespace) -> None:
             save_failed_urls_to_csv(failed_urls_with_status)
             save_other_links_to_csv(website_urls["other"])
         else:
-            logger.warning(
-                "Failed to save diagnostic failed/other links to CSV due to lack of write permissions."
-            )
+            logger.warning("Failed to save diagnostic failed/other links to CSV due to lack of write permissions.")
             print_log(
                 "Warning: Failed to save diagnostic failed/other links to CSV due to lack of write permissions.",
                 "warning",
