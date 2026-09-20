@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -24,41 +25,53 @@ COLORS = {
 }
 RESET_COLOR_CODE = "\x1b[0m"  # Reset all attributes
 
-# Set up a dedicated logger for bookscraper output
-# Using a specific logger name to avoid conflicts with the root logger
+LOG_DIR = Path.home() / ".bookscrapper" / "logs"
+MAX_LOG_FILES = 10
+# One log file per run/process, named so a directory listing sorts chronologically; the pid
+# suffix keeps two runs started within the same second from colliding.
+LOG_FILE_PATH = LOG_DIR / f"bookscraper_{datetime.now():%Y%m%d_%H%M%S}_{os.getpid()}.log"
+
+# Set up a dedicated logger for bookscraper output. Its own level is left NOTSET (never call
+# .setLevel() on it) so it always defers to whatever level configure_logging() sets on the
+# root logger below.
 logger = logging.getLogger("bookscraper_app")
-logger.setLevel(logging.INFO)  # Set the default logging level
 
-# File Handler: Writes logs to a file
-log_file_path = "bookscraper.log"
-# Ensure file_handler is only added once
-if not any(
-    isinstance(handler, logging.FileHandler) and handler.baseFilename == os.path.abspath(log_file_path)
-    for handler in logger.handlers
-):
-    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
 
-# Stream Handler: Writes logs to console
-# Ensure console_handler is only added once
-# if not any(isinstance(handler, logging.StreamHandler) and handler.stream is sys.stdout for handler in logger.handlers):
-#     console_handler = logging.StreamHandler(sys.stdout)
-#     console_handler.setLevel(logging.INFO)
-# The console handler's encoding is crucial here
-# It attempts to set the stream's encoding if possible, but the underlying
-# terminal might still have limitations.
-# console_handler.encoding = "utf-8"
-# For console output, we want to allow raw ANSI codes to be interpreted
-# so we'll apply them in print_log and pass clean text to the logger itself.
-# console_handler.setFormatter(logging.Formatter('%(message)s'))  # Formatter for console handler (no extra info)
-# logger.addHandler(console_handler)
+def _prune_old_logs(max_files: int = MAX_LOG_FILES) -> None:
+    """Delete the oldest run logs in LOG_DIR beyond the `max_files` most recently modified."""
+    log_files = sorted(LOG_DIR.glob("bookscraper_*.log"), key=lambda p: p.stat().st_mtime)
+    for old_file in log_files[:-max_files]:
+        old_file.unlink(missing_ok=True)
 
-# Optional: If you want to suppress output from the root logger, you can configure it:
-# logging.getLogger().setLevel(logging.CRITICAL)
-# logging.getLogger().addHandler(logging.NullHandler()) # Adds a handler that does nothing
+
+def configure_logging(level: int = logging.INFO) -> None:
+    """
+    Write every log record in the process to this run's file under ~/.bookscrapper/logs/ at the
+    given severity, and prune old run logs down to MAX_LOG_FILES.
+
+    The handler is attached to the ROOT logger rather than `logger` above: other modules in
+    this package create their own loggers via `logging.getLogger(__name__)` or ad hoc names
+    (database.py, search_utils.py, deduplicate.py, scrape_details.py, commands/search.py) that
+    aren't children of "bookscraper_app", so a handler placed there would miss them. Every
+    logger propagates to the root by default, so attaching there is the only way one call
+    reliably captures all application logging regardless of which logger name a module uses.
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    resolved_path = os.path.abspath(str(LOG_FILE_PATH))
+    if not any(
+        isinstance(handler, logging.FileHandler) and handler.baseFilename == resolved_path
+        for handler in root_logger.handlers
+    ):
+        file_handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        root_logger.addHandler(file_handler)
+        _prune_old_logs()
+
+
+configure_logging()
 
 
 # Regex to remove ANSI escape codes from a string (for clean file logs)

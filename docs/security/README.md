@@ -35,18 +35,20 @@ for point-in-time reviews.
 > **1. Scope.** Two locally-run CLI entry points (`src/scrape_existing_books.py`,
 > `src/bookscraper/search_and_scrape.py`). Trust boundaries: the operator-supplied URL
 > CSV; four third-party sites/APIs the project does not control; MongoDB Atlas over
-> TLS; the local filesystem (CSV exports, `bookscraper.log`, `.env`, `~/.bookscrapper/`).
+> TLS; the local filesystem (CSV exports, `~/.bookscrapper/logs/*.log`, `.env`,
+> `~/.bookscrapper/`).
 >
 > **2. Assets.** `MONGODB_URI` with inline Atlas credentials (from `.env`, falling back
 > to `~/.bookscrapper/driver_string.txt`); the X.509 client cert/key at `TLS_CERT_FILE`
 > (default `~/.bookscrapper/X509-cert-142838411852079927.pem`) and CA bundle at
 > `TLS_CA_FILE`; the `bookscraper_db.books` corpus; scraped author names (personal data)
-> and third-party copyrighted descriptions; `bookscraper.log`.
+> and third-party copyrighted descriptions; the per-run log files under `~/.bookscrapper/logs/`.
 >
 > **3. Threat actors.** A compromised or hostile scrape target serving crafted
-> markup/JSON; anyone who can write the input URL CSV; anyone with read access to the
-> working directory, since `bookscraper.log` is uncommitted but unrotated and can
-> accumulate sensitive data locally; a network attacker on the Atlas path.
+> markup/JSON; anyone who can write the input URL CSV; anyone with read access to
+> `~/.bookscrapper/`, since up to 10 retained run logs can accumulate sensitive data over time
+> (all severities from every module's logger land there, gated only by `--log-severity`); a
+> network attacker on the Atlas path.
 >
 > **4. STRIDE analysis (initial).**
 > - *Spoofing* - `identify_website()` routes on a bare substring match, so a URL merely
@@ -55,10 +57,13 @@ for point-in-time reviews.
 > - *Tampering* - scraped values reach MongoDB documents and CSV rows unvalidated;
 >   `$`-prefixed and dotted keys and leading `=`/`+`/`-`/`@` cells are unguarded.
 >   `scrape_details.py:60-65` strips HTML from `about_the_book` with regex, not a parser.
-> - *Repudiation* - `bookscraper.log` is a single unrotated file in the working directory
->   with no integrity control; the rotation the README describes does not exist.
+> - *Repudiation* - each run log under `~/.bookscrapper/logs/` has no integrity control
+>   (`_prune_old_logs()` silently deletes the oldest beyond the 10-file cap with no archival).
 > - *Information disclosure* - `exc_info=True` logging of MongoDB failures can write
->   connection strings containing credentials into `bookscraper.log`. Run-artifact CSVs
+>   connection strings containing credentials into the run log; since `configure_logging()`
+>   attaches the file handler to the root logger, every module's log calls (not just
+>   `book_utils.print_log()`) now reach this file, widening what could land there. Run-artifact
+>   CSVs
 >   (`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`,
 >   `failed_urls.csv`) are now gitignored rather than committed; only the curated,
 >   hand-maintained input lists under `content/` are tracked.

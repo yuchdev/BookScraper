@@ -7,9 +7,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="bookscraper",
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
     )
-    subparsers = parser.add_subparsers(
-        dest="command", required=True, metavar="{scrape-urls,search}"
-    )
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{scrape-urls,search}")
 
     scrape_parser = subparsers.add_parser(
         "scrape-urls",
@@ -36,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="output_to_mongo",
         action="store_true",
         help="Write scraped data to the configured MongoDB Atlas database.",
+    )
+    scrape_parser.add_argument(
+        "--log-severity",
+        dest="log_severity",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
     )
 
     search_parser = subparsers.add_parser(
@@ -64,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Maximum number of search-result pages to fetch per query per site (default: 3).",
+    )
+    search_parser.add_argument(
+        "--log-severity",
+        dest="log_severity",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
     )
 
     return parser

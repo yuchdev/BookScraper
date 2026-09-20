@@ -1,5 +1,7 @@
 import asyncio
+import logging
 
+from .book_utils import configure_logging
 from .cli import build_parser
 from .commands import scrape_urls, search
 
@@ -7,6 +9,7 @@ from .commands import scrape_urls, search
 async def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    configure_logging(getattr(logging, args.log_severity.upper()))
 
     if args.command == "scrape-urls":
         await scrape_urls.run(args)

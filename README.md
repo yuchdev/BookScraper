@@ -51,8 +51,9 @@ To quickly start the application at this stage of development:
       entries.
 * **Pre-flight Checks:** Verifies write permissions for CSV output and establishes MongoDB connection *before* starting
   the scraping process, preventing late-stage failures.
-* **Comprehensive Logging:** Detailed console output for real-time progress and a dedicated log file (`bookscraper.log`)
-  for in-depth debugging and historical records.
+* **Comprehensive Logging:** Detailed console output for real-time progress and a timestamped per-run log file under
+  `~/.bookscrapper/logs/` (the 10 most recent runs are kept) for in-depth debugging and historical records, with a
+  configurable `--log-severity` threshold.
 * **Command-Line Interface (CLI):** Easy-to-use arguments for specifying input file and output preferences.
 
 ---
@@ -163,6 +164,8 @@ url
   and `other_links.csv` in the current directory.
 * `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
   database.
+* `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
+  under `~/.bookscrapper/logs/` (default: `info`).
 
 **`search`** — discover new books by searching configured sites, then scrape their details:
 
@@ -172,6 +175,8 @@ url
   database.
 * `--max-search-pages <n>`: **(Optional)** Maximum number of search-result pages to fetch per query per site
   (default: `3`).
+* `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
+  under `~/.bookscrapper/logs/` (default: `info`).
 
 ### Examples
 
@@ -251,10 +256,14 @@ Upon successful execution (and if CSV output is enabled), the following files wi
 The `BookScraper` utilizes a comprehensive logging system:
 
 * **Console Output:** Real-time progress and critical messages are printed to your terminal, often with color-coded
-  statuses (e.g., yellow for info, red for errors).
-* **Log File:** All messages (INFO, WARNING, ERROR, CRITICAL) are appended to `bookscraper.log` in the current working
-  directory, including timestamps and full tracebacks for errors, which is invaluable for debugging. This file is not
-  rotated — delete or archive it manually if it grows too large.
+  statuses (e.g., yellow for info, red for errors). Console output always shows everything passed to it, regardless
+  of `--log-severity`.
+* **Log File:** Each run writes its own timestamped file under `~/.bookscrapper/logs/`
+  (`bookscraper_<YYYYMMDD_HHMMSS>_<pid>.log`), capturing all application logging (from every module, at or above the
+  configured severity) including full tracebacks for errors. Only the 10 most recent run logs are kept — older ones
+  are deleted automatically at the start of each run.
+* **`--log-severity {debug|info|warning|error}`:** **(Optional, both subcommands)** Sets the minimum severity written
+  to the log file (default: `info`). Does not affect console output.
 
 -----
 

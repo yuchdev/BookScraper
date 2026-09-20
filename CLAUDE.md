@@ -101,15 +101,33 @@ Other shared modules under `src/bookscraper/`:
   a `hash` field (SHA-256 of normalized title+authors+year, computed by `book_utils.hash_book`) that rejects
   duplicate inserts at write time. `database.py` holds the MongoDB client/db/collection as module-level globals,
   lazily initialized by `get_mongo_collection()`.
-- **`book_utils.py`** — `print_log()` (color-coded console + plain-text file logging through a single
-  `bookscraper_app` logger writing to `./bookscraper.log`), pre-flight checks (`check_csv_write_permission`,
-  `check_mongodb_connection`), `extract_year_from_date` (handles several site-specific date formats), `hash_book`.
+- **`book_utils.py`** — `print_log()` (color-coded console + plain-text file logging), `configure_logging(level)`
+  (attaches a single `FileHandler` to the **root** logger, pointed at a fresh per-run file under
+  `~/.bookscrapper/logs/` — see below), pre-flight checks (`check_csv_write_permission`, `check_mongodb_connection`),
+  `extract_year_from_date` (handles several site-specific date formats), `hash_book`.
+
+## Logging
+
+Every run writes to its own file: `~/.bookscrapper/logs/bookscraper_<YYYYMMDD_HHMMSS>_<pid>.log`, computed once as
+`LOG_FILE_PATH` when `book_utils.py` is imported (so it's stable for the lifetime of the process even though
+`configure_logging()` may be called more than once — see below). After creating a run's file, `_prune_old_logs()`
+deletes the oldest files matching `bookscraper_*.log` beyond `MAX_LOG_FILES` (10), keyed on `st_mtime`, so the
+directory never exceeds 10 run logs.
+
+All application logging — regardless of which logger a module uses — lands in that file. Several modules create
+their own logger via `logging.getLogger(__name__)` or an ad hoc name (`database.py`, `search_utils.py`,
+`deduplicate.py`, `scrape_details.py`, `commands/search.py`) rather than sharing `book_utils.py`'s `"bookscraper_app"`
+logger, so `configure_logging()` attaches the file handler to the **root** logger instead of a specific named one —
+every logger propagates there by default, so this is the only placement that reliably captures all of them.
+`main.py` calls `configure_logging()` once at startup with the level from `--log-severity {debug|info|warning|error}`
+(defined on both `scrape-urls` and `search` in `cli.py`; default `info`). `book_utils.py` also calls
+`configure_logging()` once at import time (default `info`) so the logger works for any code that imports it
+without going through the CLI — this is safe to call twice per run since it only adds the `FileHandler` (and only
+prunes old logs) the first time, keyed on `LOG_FILE_PATH` already being attached. Note: `print_log()`'s colored
+console output writes to `sys.stdout` directly, bypassing the logging framework entirely — `--log-severity` only
+filters what reaches the log file, not the console, which always prints everything passed to `print_log()`.
 
 ## Known inconsistencies to watch for
-
-- `book_utils.py`'s logger writes a single, non-rotating `bookscraper.log` to the current working directory (it's
-  opened in append mode, so it grows unbounded across runs — nothing rotates or prunes it). README and this file
-  now describe this behavior accurately; no rotating-log implementation exists.
 - `database.py`'s `get_mongo_collection()` logs `"Connection to MongoDB Atlas successful."` unconditionally after
   calling `_initialize_mongodb_connection()`, even when that call actually failed and returned `None` — a
   pre-existing, cosmetic logging bug (the real success/failure state is still reported correctly to the caller via
