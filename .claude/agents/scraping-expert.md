@@ -99,7 +99,7 @@ below - raise it as a finding rather than extending the pattern to a new target.
 Run these unconditionally, in order:
 
 1. `uv run ruff check . --fix && uv run ruff check .`
-2. `uv run pytest -q --cov=book_scrapper --cov-report=term-missing` - unit tests for parsers
+2. `uv run pytest -q --cov=bookscraper --cov-report=term-missing` - unit tests for parsers
    must run against saved fixture HTML/JSON, never a live network call.
 
 Fix everything each command surfaces before reporting the work done.

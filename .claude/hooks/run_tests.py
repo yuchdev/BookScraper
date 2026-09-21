@@ -5,7 +5,7 @@ Runs, in order, the same checks CI expects a clean session to satisfy:
 
   1. ``uv run ruff check . --fix``  - auto-fix what's mechanically fixable.
   2. ``uv run ruff check .``        - fail if anything remains unfixed.
-  3. ``uv run pytest -q --cov=book_scrapper --cov-report=term-missing``
+  3. ``uv run pytest -q --cov=bookscraper --cov-report=term-missing``
 
 If any step fails, the hook exits 2 so Claude is told to analyze that tool's
 own output and fix what it flagged before ending the session - not to weaken
@@ -51,7 +51,7 @@ def main() -> None:
     steps = [
         ("ruff --fix", ["uv", "run", "ruff", "check", ".", "--fix"]),
         ("ruff check", ["uv", "run", "ruff", "check", "."]),
-        ("pytest+cov", ["uv", "run", "pytest", "-q", "--cov=book_scrapper", "--cov-report=term-missing"]),
+        ("pytest+cov", ["uv", "run", "pytest", "-q", "--cov=bookscraper", "--cov-report=term-missing"]),
     ]
 
     for label, cmd in steps:

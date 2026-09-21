@@ -29,10 +29,15 @@ where = ["src"]
 dev = [
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [tool.pytest.ini_options]
-# connection_test_password.py / connection_test_tls.py / connection_test_settings.py are
-# standalone MongoDB diagnostic scripts, not a pytest suite (see CLAUDE.md) - they must stay
-# out of collection so `pytest` never runs them as real tests and attempts live Atlas connections.
-addopts = "--ignore=tests/connection_test_password.py --ignore=tests/connection_test_tls.py --ignore=tests/connection_test_settings.py"
+# tests/integration/ hits a real MongoDB Atlas cluster and requires real credentials (see
+# CLAUDE.md's Testing section) - excluded by default so `uv run pytest` stays fast and offline;
+# run it explicitly with `uv run pytest -m integration`.
+addopts = "-m \"not integration\""
+markers = [
+    "integration: hits a real external service (MongoDB Atlas); requires real credentials, excluded by default",
+]
+asyncio_mode = "auto"

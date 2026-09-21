@@ -66,6 +66,7 @@ async def get_leanpub_book_details(url: str):
                 "site": "leanpub.com",
                 "title": attributes.get("title"),
                 "book_id": book_data.get("id"),
+                "slug": attributes.get("slug"),
                 "authors": [],
                 "about_the_book": about_the_book,
                 "categories": [],

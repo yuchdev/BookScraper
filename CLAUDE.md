@@ -155,21 +155,52 @@ python -m bookscraper search --store-backend json
 
 ## Testing
 
-There is no real test suite. `tests/bookscraper_test.py` is an empty `unittest` placeholder.
-`tests/connection_test_password.py`, `tests/connection_test_tls.py`, and `tests/connection_test_settings.py` are
-standalone diagnostic scripts (not pytest-based, all `--ignore`d in `pyproject.toml`) for verifying MongoDB Atlas
-connectivity — run directly, e.g. `uv run python tests/connection_test_settings.py`. The first two share
-connection/reporting logic via `tests/mongo_test_helpers.py` and stay deliberately independent of `src/bookscraper`
-(one script per auth mechanism — SCRAM password vs. X.509 client-cert — since each exercises a different
-`MongoClient` code path and can fail independently of the other). `connection_test_settings.py` is different in
-kind: it *does* import `bookscraper.backends.mongo.config`, because its job is to integration-test the real
-`config.resolve_mongo_connection()` resolver itself (see Authentication configuration above) across all six valid
-`settings.json` shapes — both `pass` sources and all four `x509` `uri`/`cert` source combinations — using a
-temporary settings file per scenario (the real `~/.bookscrapper/settings.json` is never touched) and the same test
-credentials as the other two scripts. Expected outcome: both `pass` shapes resolve and connect; all four `x509`
-shapes resolve to identical, correct values but the live connection itself currently fails with Atlas's known
-`certificate validation failed` error (see Authentication configuration) — that failure is reported but doesn't
-fail the script, which only fails on an actual resolution bug or a regression in the `pass` shapes.
+`tests/` is a real pytest suite in three tiers, mirroring `src/bookscraper`'s subpackages:
+
+- **`tests/unit/`** — pure logic, no mocks: `cli.py`'s `build_parser()`, `book_utils.py`'s
+  `hash_book`/`extract_year_from_date`/`check_local_write_permission`, `backends/mongo/config.py`'s
+  resolver (all six `settings.json` shapes plus the legacy fallback, purely as resolution logic — no
+  network), `backends/local/store.py` (real file I/O via `tmp_path`), and `scraping/parameters.py`
+  data sanity checks.
+- **`tests/mock/`** — the rest of `src/bookscraper`, with every external dependency mocked
+  (`pymongo.MongoClient`, `httpx.AsyncClient`, Playwright's `Browser`/`Page`/`Locator` via
+  `tests/mock/scraping/playwright_fakes.py`): `backends/mongo/database.py`, `backends/mongo/deduplicate.py`,
+  `backends/storage.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
+  `commands/scrape_urls.py`, `commands/search.py`, and `main.py`.
+- **`tests/integration/`** — hits real MongoDB Atlas, tagged `@pytest.mark.integration` and excluded
+  from the default run (`addopts = -m "not integration"` in `pyproject.toml`); run explicitly with
+  `uv run pytest -m integration`. `test_connection_password.py` / `test_connection_tls.py` verify
+  SCRAM/X.509 connectivity directly; `test_connection_settings.py` integration-tests the real
+  `config.resolve_mongo_connection()` resolver (see Authentication configuration above) across all
+  six valid `settings.json` shapes using a temporary settings file per scenario (the real
+  `~/.bookscrapper/settings.json` is never touched). Expected outcome: both `pass` shapes resolve and
+  connect; all four `x509` shapes resolve to correct values but the live connection currently fails
+  with Atlas's known `certificate validation failed` error (see Authentication configuration) — those
+  legs are `@pytest.mark.xfail(strict=False)`, so they report as expected/non-blocking today and
+  would surface as `XPASS` the day that's fixed on the Atlas side, rather than silently staying green
+  forever or hard-failing the suite.
+
+**Coverage target:** `uv run pytest -m "not integration" --cov=bookscraper --cov-report=term-missing --cov-fail-under=90`
+enforces ≥90% line coverage on `src/bookscraper` (`scripts/*.py` is out of scope). The two
+Playwright-DOM-heavy functions — `scrape_details.py`'s `scrape_book()` and `search_utils.py`'s
+`get_search_results_via_playwright()` — get happy-path-plus-primary-error-branch coverage rather
+than exhaustive per-selector coverage; everything else targets ~100%.
+
+**Shared fixtures** (`tests/conftest.py`, used by `unit/` and `mock/`): `isolated_config` and
+`isolated_local_store` monkeypatch `backends/mongo/config.py`'s `CONFIG_DIR`/`SETTINGS_FILE` and
+`backends/local/store.py`'s `LOCAL_STORE_FILE` to `tmp_path`, so a test can never read or write the
+real `~/.bookscrapper/settings.json` (it holds real credentials) or the repo-root `books.json`.
+`no_real_env` strips MongoDB env vars for a test's duration so a prior `load_dotenv()` can't leak
+real values in. `tests/integration/conftest.py` additionally provides `require_env(name)`, which
+skips (not fails) a test when a required `.env` credential is absent.
+
+Test credentials (`tests/integration/` only) come from `TEST_MONGODB_URI_PASS` / `TEST_MONGODB_URI_TLS`,
+set in `.env` (repo root, git-ignored) — env-var only, no fallback file
+(`tests/integration/mongo_test_helpers.py`'s `get_mongodb_uri()` takes no fallback path), so a bug in
+either the production resolver or a test can never cross-load the other's credentials. The TLS test
+still reads the TLS *cert* from the production location (`TLS_CERT_FILE` / the newest
+`X509-cert-*.pem`) rather than a test-only copy, since there is one real X.509 identity, not a
+separate test one.
 
 **Credential separation (test vs. production):** production auth lives in `~/.bookscrapper/settings.json` (see
 Authentication configuration above). Test-only driver strings are `TEST_MONGODB_URI_PASS` / `TEST_MONGODB_URI_TLS`,

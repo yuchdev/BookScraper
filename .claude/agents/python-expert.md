@@ -98,7 +98,7 @@ Add/maintain docstrings on every public function, class, and agent interface you
 Run these unconditionally, in order, regardless of how small the change is - this step is never optional and never skipped because "the diff was tiny":
 
 1. `uv run ruff check . --fix && uv run ruff check .`
-2. `uv run pytest -q --cov=book_scrapper --cov-report=term-missing`
+2. `uv run pytest -q --cov=bookscraper --cov-report=term-missing`
 
 After each command, read its output and act on it before moving on:
 
