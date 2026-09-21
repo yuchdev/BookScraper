@@ -191,9 +191,9 @@ budget allows, else reschedule.
 **Milestone exit gates: this project defines none beyond "full suite green +
 `/pr-review`" - do not invent any.** There is no CI configuration, no coverage
 threshold, no lint config, and no integration or benchmark suite in the repository;
-`test/bookscraper_test.py` is an empty `unittest` placeholder and
-`test/connection_test.py` is a standalone MongoDB connectivity script that pytest does
-not collect. When a milestone's own `plan.md` names gates, those are the gates;
+`tests/bookscraper_test.py` is an empty `unittest` placeholder and
+`tests/connection_test_password.py` / `tests/connection_test_tls.py` / `tests/connection_test_settings.py` are
+standalone MongoDB connectivity scripts that pytest does not collect. When a milestone's own `plan.md` names gates, those are the gates;
 otherwise R1 records an empty `exit_gates` list.
 
 ## Iteration algorithm (execute phase)

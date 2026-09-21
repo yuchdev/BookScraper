@@ -9,14 +9,13 @@ from urllib.parse import urljoin
 
 import httpx
 from playwright.async_api import Browser, TimeoutError
-from pymongo.collection import Collection  # For type hinting the collection object
 
-from .book_utils import extract_year_from_date, hash_book, print_log
-from .database import check_book_exists_in_db  # Import the new duplicate check function
+from ..backends import StorageBackend
+from ..book_utils import extract_year_from_date, hash_book, print_log
 from .parameters import USER_AGENTS, site_constants
 
 # Get a logger instance specifically for this module
-module_logger = logging.getLogger('scrape_details')
+module_logger = logging.getLogger("scrape_details")
 
 
 async def route_handler(route):
@@ -57,11 +56,11 @@ async def get_leanpub_book_details(url: str):
             relationships = book_data.get("relationships", {})
             included = response_data.get("included", [])  # Relevant for authors
             about_the_book = unescape(attributes.get("about_the_book"))
-            about_the_book = re.sub(r'</p>', '\n\n', about_the_book, flags=re.IGNORECASE)
-            about_the_book = re.sub(r'</li>', '\n', about_the_book, flags=re.IGNORECASE)
-            about_the_book = re.sub(r'<[^>]*>', '', about_the_book)
-            about_the_book = re.sub(r'\n\n+', '\n\n', about_the_book).strip()
-            about_the_book = re.sub(r' +', ' ', about_the_book)
+            about_the_book = re.sub(r"</p>", "\n\n", about_the_book, flags=re.IGNORECASE)
+            about_the_book = re.sub(r"</li>", "\n", about_the_book, flags=re.IGNORECASE)
+            about_the_book = re.sub(r"<[^>]*>", "", about_the_book)
+            about_the_book = re.sub(r"\n\n+", "\n\n", about_the_book).strip()
+            about_the_book = re.sub(r" +", " ", about_the_book)
 
             extracted_details = {
                 "site": "leanpub.com",
@@ -71,14 +70,15 @@ async def get_leanpub_book_details(url: str):
                 "about_the_book": about_the_book,
                 "categories": [],
                 "last_published_at": None,
-                "hash": ""}
+                "hash": "",
+            }
 
             # Extract Last published at
             last_published_at_str = attributes.get("last_published_at")
             if last_published_at_str:
                 try:
                     # 'Z' indicates UTC. datetime.fromisoformat handles '+00:00'
-                    dt_object = datetime.fromisoformat(last_published_at_str.replace('Z', '+00:00'))
+                    dt_object = datetime.fromisoformat(last_published_at_str.replace("Z", "+00:00"))
                     extracted_details["last_published_at"] = dt_object.strftime("%Y-%m-%d")
                 except ValueError:
                     print_log(f"Warning: Could not parse date string: '{last_published_at_str}'", "warning")
@@ -107,8 +107,11 @@ async def get_leanpub_book_details(url: str):
                 if category_name:
                     extracted_details["categories"].append(category_name)
 
-            extracted_details["hash"] = hash_book(extracted_details["title"], extracted_details["authors"],
-                                                  extract_year_from_date(extracted_details["last_published_at"]))
+            extracted_details["hash"] = hash_book(
+                extracted_details["title"],
+                extracted_details["authors"],
+                extract_year_from_date(extracted_details["last_published_at"]),
+            )
 
             return extracted_details
 
@@ -126,7 +129,7 @@ async def get_leanpub_book_details(url: str):
         return None
 
 
-async def scrape_book(url: str, browser: Browser, site: str, mongo_collection: Collection = None):
+async def scrape_book(url: str, browser: Browser, site: str, storage_backend: StorageBackend = None):
     """
     Scrapes book details from a given URL, handles retries, and checks for duplicates.
 
@@ -134,7 +137,7 @@ async def scrape_book(url: str, browser: Browser, site: str, mongo_collection: C
         url: The URL of the book page to scrape (can be relative).
         browser: The Playwright browser instance.
         site: The identifier for the website (e.g., "amazon", "leanpub").
-        mongo_collection: The MongoDB collection object for duplicate checking.
+        storage_backend: The StorageBackend (mongo or json) to check for duplicates against.
 
     Returns:
         A dictionary of book details on successful scrape, (None, "DUPLICATE") if already exists,
@@ -202,7 +205,7 @@ async def scrape_book(url: str, browser: Browser, site: str, mongo_collection: C
             if meta_author_selector_meta:
                 all_author_elements = await page.locator(meta_author_selector_meta).all()
                 for author_element in all_author_elements:
-                    author_name = await author_element.get_attribute('content')
+                    author_name = await author_element.get_attribute("content")
                     if author_name:
                         authors_list.append(author_name)
 
@@ -229,9 +232,10 @@ async def scrape_book(url: str, browser: Browser, site: str, mongo_collection: C
                 # use Metadata (e.g., for Leanpub)
                 meta_publication_date_selector = selectors.get("PUBLICATION_DATE_META")
                 if meta_publication_date_selector:
-                    pub_date_text = await page.locator(meta_publication_date_selector).get_attribute('content',
-                                                                                                     timeout=10000)
-                    book_details["publication_date"] = pub_date_text.split('T')[0]
+                    pub_date_text = await page.locator(meta_publication_date_selector).get_attribute(
+                        "content", timeout=10000
+                    )
+                    book_details["publication_date"] = pub_date_text.split("T")[0]
                     book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
                 else:
                     publication_date_selector = selectors.get("PUBLICATION_DATE")
@@ -308,15 +312,17 @@ async def scrape_book(url: str, browser: Browser, site: str, mongo_collection: C
                 book_details["description"] = None
 
             # Generate hash
-            book_details["hash"] = hash_book(book_details['title'], book_details['authors'],
-                                             book_details['publication_year'])
+            book_details["hash"] = hash_book(
+                book_details["title"], book_details["authors"], book_details["publication_year"]
+            )
 
-            # Check for duplicates in MongoDB BEFORE returning, if mongo_collection is provided
-            if mongo_collection is not None:
-                is_duplicate = check_book_exists_in_db("", mongo_collection)
+            # Check for duplicates BEFORE returning, if a storage backend is provided
+            if storage_backend is not None:
+                is_duplicate = storage_backend.book_exists_by_hash(book_details["hash"])
                 if is_duplicate:
                     module_logger.info(
-                        f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}")
+                        f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
+                    )
                     print_log(f"Skipping duplicate book for URL: {url}", "warning")
                     await page.close()
                     return (None, "DUPLICATE")  # Indicate duplicate status

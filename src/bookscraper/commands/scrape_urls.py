@@ -8,53 +8,10 @@ import time
 import pandas as pd
 from playwright.async_api import async_playwright
 
+from ..backends import resolve_store_backend
 from ..book_utils import logger, print_log
-from ..database import close_mongo_connection, save_books_to_mongodb
-from ..output import resolve_output_destinations
-from ..parameters import HEADLESS_BROWSER
-from ..scrape_details import scrape_book
-
-
-def save_books_to_csv(books, filename="books.csv"):
-    """
-    Saves a list of book dictionaries to a CSV file.
-
-    Args:
-        books: A list of dictionaries, where each dictionary represents a book
-               and contains key-value pairs for book attributes (e.g., title, author).
-        filename: The name of the CSV file to create.
-    """
-    if not books:
-        logger.info(f"No book data to save to {filename}.")
-        return
-
-    try:
-        # Get all the unique keys (fields) from all dictionaries
-        fieldnames = set()
-        for book in books:
-            # Ensure book is a dictionary before trying to get keys
-            if isinstance(book, dict):
-                fieldnames.update(book.keys())
-        fieldnames = sorted(fieldnames)
-        logger.info(f"CSV fields for {filename}: {fieldnames}")
-
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-            writer.writeheader()
-            for book in books:
-                # Double-check before writing, ensuring it's a dictionary
-                if isinstance(book, dict):
-                    writer.writerow(book)
-
-        print_log(f"Successfully saved {len(books)} books to {filename}", "success")
-        logger.info(f"Successfully saved {len(books)} books to {filename}")
-
-    except Exception as e:
-        logger.error(f"Error saving books to CSV ({filename}): {e}", exc_info=True)
-        print_log(
-            f"Error: Could not write books to CSV file {filename}. Details: {e}",
-            "error",
-        )
+from ..scraping.parameters import HEADLESS_BROWSER
+from ..scraping.scrape_details import scrape_book
 
 
 def save_failed_urls_to_csv(failed_urls_with_status, filename="failed_books.csv"):
@@ -135,8 +92,7 @@ def identify_website(url):
 async def run(args: argparse.Namespace) -> None:
     start_time = time.time()
 
-    destinations = resolve_output_destinations(args.output_to_csv, args.output_to_mongo)
-    mongo_collection = destinations.mongo_collection
+    storage_backend = resolve_store_backend(args.store_backend)
 
     # Store URLs to scrape within a dictionary
     website_urls = {
@@ -218,9 +174,9 @@ async def run(args: argparse.Namespace) -> None:
             tasks = []
             for url in batch_urls:
                 site = identify_website(url)
-                # Pass the mongo_collection to scrape_book for immediate duplicate check
+                # Pass the storage_backend to scrape_book for immediate duplicate check
                 # scrape_book will return a dict on success, or (None, "DUPLICATE"), or (None, "FAILED")
-                tasks.append(scrape_book(url, browser, site, mongo_collection))
+                tasks.append(scrape_book(url, browser, site, storage_backend))
 
             results = await asyncio.gather(*tasks)
 
@@ -269,42 +225,16 @@ async def run(args: argparse.Namespace) -> None:
 
         await browser.close()
 
-    # Output Saving Based on Resolved Choices and pre-flight checks
-    if destinations.output_to_csv:
-        print_log("Saving scraped books to CSV files...", "info")
-        save_books_to_csv(books)  # This now only contains dictionaries
-        save_failed_urls_to_csv(failed_urls_with_status)  # This contains URLs and their statuses
-        save_other_links_to_csv(website_urls["other"])
-    else:
-        print_log("CSV output not requested or not available.", "info")
-        # If primary CSV output was not chosen or available, still save diagnostic files if possible
-        if destinations.can_output_to_csv:
-            print_log(
-                "Saving diagnostic failed/other links to CSV (as primary CSV output for books was not chosen).",
-                "info",
-            )
-            save_failed_urls_to_csv(failed_urls_with_status)
-            save_other_links_to_csv(website_urls["other"])
-        else:
-            logger.warning("Failed to save diagnostic failed/other links to CSV due to lack of write permissions.")
-            print_log(
-                "Warning: Failed to save diagnostic failed/other links to CSV due to lack of write permissions.",
-                "warning",
-            )
+    # Diagnostic reports (failed/duplicate URLs, skipped "other" links) are process
+    # diagnostics, not database content, so they're always written as CSV best-effort,
+    # independent of --store-backend.
+    save_failed_urls_to_csv(failed_urls_with_status)
+    save_other_links_to_csv(website_urls["other"])
 
-    if destinations.output_to_mongo:
-        print_log("Saving scraped books to MongoDB...", "info")
-        if books:
-            # Pass the mongo_collection to save_books_to_mongodb
-            # Use asyncio.to_thread as save_books_to_mongodb might be synchronous
-            await asyncio.to_thread(save_books_to_mongodb, books, mongo_collection)
-        else:
-            print_log("No new unique books scraped to save to MongoDB.", "info")
+    print_log(f"Saving scraped books via '{args.store_backend}' storage backend...", "info")
+    if books:
+        await asyncio.to_thread(storage_backend.save_books, books)
     else:
-        print_log("MongoDB output not requested or not available.", "info")
+        print_log("No new unique books scraped to save.", "info")
 
-    # Ensure the MongoDB connection is closed if one was established during pre-flight checks
-    if destinations.can_output_to_mongo:
-        close_mongo_connection()
-        logger.info("MongoDB client closed.")
-        print_log("MongoDB client closed.", "info")
+    storage_backend.close()

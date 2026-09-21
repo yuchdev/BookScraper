@@ -4,75 +4,13 @@ import csv
 import logging
 import time
 
+from ..backends import resolve_store_backend
 from ..book_utils import print_log
-from ..database import close_mongo_connection, save_books_to_mongodb
-from ..deduplicate import leanpub_prescrape_deduplicate
-from ..output import resolve_output_destinations
-from ..parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
-from ..scrape_details import get_leanpub_book_details
-from ..search_utils import get_leanpub_search_results_via_api
+from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
+from ..scraping.scrape_details import get_leanpub_book_details
+from ..scraping.search_utils import get_leanpub_search_results_via_api
 
 module_logger = logging.getLogger(__name__)
-
-
-def save_books_to_csv(books: list[dict], filename="scraped_books.csv") -> None:
-    """
-    Save a list of book dictionaries to a CSV file.
-
-    This function automatically determines the CSV column headers by collecting all unique keys
-    from the provided list of book dictionaries. It writes the data to the specified CSV file,
-    handling any errors during the write process and logging relevant information.
-
-    Args:
-                    books (list[dict]): A list of dictionaries, each representing a book's data.
-                    filename (str, optional): The filename for the output CSV file. Defaults to "scraped_books.csv".
-
-    Returns:
-                    None
-
-    Logs:
-                    - Info logs for start and successful completion of saving.
-                    - Error logs for issues during writing individual rows or file I/O errors.
-                    - Critical logs for unexpected exceptions.
-    """
-    if not books:
-        module_logger.info(f"No book data to save to {filename}.")
-        return
-    try:
-        # Collect all unique fieldnames from all books
-        fieldnames = set()
-        for book in books:
-            if book:
-                fieldnames.update(book.keys())
-        fieldnames = sorted(fieldnames)  # Sort for consistent column order
-
-        module_logger.info(f"Saving scraped books to CSV: {filename}")
-        print_log(f"Saving {len(books)} books to {filename}...", "info")
-
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-            writer.writeheader()
-            for book in books:
-                try:
-                    writer.writerow(book)
-                except ValueError as ve:
-                    module_logger.error(f"Error writing row for book {book.get('title', 'Unknown Title')} to CSV: {ve}")
-                except Exception as e:
-                    module_logger.error(
-                        f"Unexpected error writing book {book.get('title', 'Unknown Title')} to CSV: {e}",
-                        exc_info=True,
-                    )
-        print_log(f"Books successfully saved to {filename}.", "success")
-        module_logger.info(f"Books successfully saved to {filename}.")
-    except IOError as e:
-        module_logger.error(f"I/O error saving books to CSV {filename}: {e}")
-        print_log(f"Error saving books to {filename}: {e}", "error")
-    except Exception as e:
-        module_logger.critical(
-            f"An unexpected error occurred while saving books to CSV {filename}: {e}",
-            exc_info=True,
-        )
-        print_log(f"Critical Error saving books to {filename}. Check log file.", "error")
 
 
 def save_failed_urls_to_csv(failed_urls: list[dict], filename="failed_urls.csv") -> None:
@@ -128,8 +66,7 @@ async def run(args: argparse.Namespace) -> None:
     start_time = time.time()
     module_logger.info("Application started.")
 
-    destinations = resolve_output_destinations(args.output_to_csv, args.output_to_mongo)
-    mongo_collection = destinations.mongo_collection
+    storage_backend = resolve_store_backend(args.store_backend)
 
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
@@ -159,7 +96,7 @@ async def run(args: argparse.Namespace) -> None:
                         book_slug = book.get("slug")
                         book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
                         book["book_url"] = book_url
-                        exists = await asyncio.to_thread(leanpub_prescrape_deduplicate, book_id, book_slug)
+                        exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
 
                         if not exists:
                             # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
@@ -256,25 +193,17 @@ async def run(args: argparse.Namespace) -> None:
 
     # --- Output Saving ---
     print_log("\n--- Output Summary ---", "step")
-    if destinations.output_to_csv:
-        save_books_to_csv(scraped_books_data)
-        save_failed_urls_to_csv(failed_scrape_attempts)
-    elif destinations.can_output_to_csv:
-        print_log("CSV output was not chosen.", "info")
-    else:
-        print_log("CSV output not requested.", "info")
+    # failed_urls.csv is a process diagnostic, not database content, so it's always
+    # written as CSV best-effort, independent of --store-backend.
+    save_failed_urls_to_csv(failed_scrape_attempts)
 
-    if destinations.output_to_mongo:
-        if scraped_books_data:
-            print_log("Saving newly scraped books to MongoDB database...")
-            save_books_to_mongodb(scraped_books_data, mongo_collection)
-        else:
-            print_log("No new books to save to MongoDB database.")
+    if scraped_books_data:
+        print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
+        storage_backend.save_books(scraped_books_data)
     else:
-        print_log("MongoDB output not requested.", "info")
+        print_log("No new books to save.")
 
-    if destinations.can_output_to_mongo:
-        close_mongo_connection()
+    storage_backend.close()
 
     print_log("\nApplication finished.", "step")
     module_logger.info("Application finished.")

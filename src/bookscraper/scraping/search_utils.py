@@ -14,7 +14,7 @@ from urllib.parse import (
 import httpx
 from playwright.async_api import Browser
 
-from .book_utils import print_log
+from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
 from .scrape_details import route_handler
 

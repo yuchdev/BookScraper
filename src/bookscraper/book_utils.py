@@ -25,7 +25,8 @@ COLORS = {
 }
 RESET_COLOR_CODE = "\x1b[0m"  # Reset all attributes
 
-LOG_DIR = Path.home() / ".bookscrapper" / "logs"
+CONFIG_DIR = Path.home() / ".bookscrapper"
+LOG_DIR = CONFIG_DIR / "logs"
 MAX_LOG_FILES = 10
 # One log file per run/process, named so a directory listing sorts chronologically; the pid
 # suffix keeps two runs started within the same second from colliding.
@@ -109,7 +110,7 @@ def print_log(text: str, status: str = "info") -> None:
         )
 
 
-def check_csv_write_permission(directory: str = ".") -> bool:
+def check_local_write_permission(directory: str = ".") -> bool:
     """
     Checks if the application has write permissions in the specified directory.
     Attempts to create, write to, and delete a dummy file.
@@ -131,8 +132,8 @@ def check_csv_write_permission(directory: str = ".") -> bool:
         )
         return False
     except Exception as e:
-        logger.error(f"An unexpected error occurred during CSV write permission test: {e}", exc_info=True)
-        print_log("An unexpected error occurred during CSV write permission test. Check log for details.", "error")
+        logger.error(f"An unexpected error occurred during local write permission test: {e}", exc_info=True)
+        print_log("An unexpected error occurred during local write permission test. Check log for details.", "error")
         return False
 
 
@@ -141,9 +142,18 @@ def check_mongodb_connection() -> Optional[bool]:
     Attempts to establish and ping a MongoDB Atlas connection.
     Returns True if successful, False otherwise.
     """
+    # Local import: book_utils is imported by bookscraper.backends (via backends.mongo)
+    # before backends.mongo.config exists as an importable attribute, so importing it
+    # at module level here would be circular. Deferring until call time breaks the cycle.
+    from .backends.mongo import config
+
     load_dotenv()  # Ensure .env variables are loaded
-    mongodb_uri = os.environ.get("MONGODB_URI")
-    tls_cert_file = os.environ.get("TLS_CERT_FILE")
+    try:
+        mongodb_uri, tls_cert_file = config.resolve_mongo_connection()
+    except config.ConfigError as e:
+        logger.error(f"Invalid MongoDB configuration: {e}")
+        print_log(f"MongoDB Check Error: Invalid MongoDB configuration: {e}", "error")
+        return False
 
     if not mongodb_uri:
         logger.error("MONGODB_URI not found in environment variables for MongoDB connection test.")

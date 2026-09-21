@@ -22,18 +22,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the CSV file containing URLs to scrape (must have a 'url' column).",
     )
     scrape_parser.add_argument(
-        "-c",
-        "--output-to-csv",
-        dest="output_to_csv",
-        action="store_true",
-        help="Write scraped data to CSV files (books.csv, failed_books.csv, other_links.csv).",
-    )
-    scrape_parser.add_argument(
-        "-m",
-        "--output-to-mongo",
-        dest="output_to_mongo",
-        action="store_true",
-        help="Write scraped data to the configured MongoDB Atlas database.",
+        "--store-backend",
+        dest="store_backend",
+        choices=["mongo", "json"],
+        required=True,
+        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
+        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
+        "schema as the MongoDB documents).",
     )
     scrape_parser.add_argument(
         "--log-severity",
@@ -50,18 +45,13 @@ def build_parser() -> argparse.ArgumentParser:
         "against MongoDB, and scrape details for new results.",
     )
     search_parser.add_argument(
-        "-c",
-        "--output-to-csv",
-        dest="output_to_csv",
-        action="store_true",
-        help="Write scraped data to CSV files (scraped_books.csv, failed_urls.csv).",
-    )
-    search_parser.add_argument(
-        "-m",
-        "--output-to-mongo",
-        dest="output_to_mongo",
-        action="store_true",
-        help="Write scraped data to the configured MongoDB Atlas database.",
+        "--store-backend",
+        dest="store_backend",
+        choices=["mongo", "json"],
+        required=True,
+        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
+        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
+        "schema as the MongoDB documents).",
     )
     search_parser.add_argument(
         "--max-search-pages",

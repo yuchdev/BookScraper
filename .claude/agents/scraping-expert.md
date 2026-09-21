@@ -14,7 +14,7 @@ party's behavior changing without notice.
 
 ## Scrape targets
 
-Four sites are configured in `site_constants` (`src/bookscraper/parameters.py`); only one runs
+Four sites are configured in `site_constants` (`src/bookscraper/scraping/parameters.py`); only one runs
 end-to-end today.
 
 - **Leanpub** (`leanpub.com`) - the sole active target (`SITES_TO_SCRAPE = ["leanpub"]`). Two

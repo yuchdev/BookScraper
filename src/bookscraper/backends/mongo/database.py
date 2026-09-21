@@ -13,7 +13,8 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
-from .book_utils import print_log
+from ...book_utils import print_log
+from . import config
 
 module_logger = logging.getLogger(__name__)
 
@@ -23,9 +24,7 @@ _mongo_db = None
 _mongo_collection = None
 
 
-def _initialize_mongodb_connection() -> Tuple[
-    Optional[MongoClient], Optional[Collection]
-]:
+def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Collection]]:
     """
     Initializes the MongoDB client and books collection.
     This function should only be called once when the application starts or if the connection is lost.
@@ -39,18 +38,16 @@ def _initialize_mongodb_connection() -> Tuple[
     _mongo_collection = None
 
     load_dotenv()
-    mongodb_uri = os.environ.get("MONGODB_URI")
-    tls_ca_file = os.environ.get(
-        "TLS_CA_FILE"
-    )  # CA bundle for server certificate verification
-    tls_client_cert_key_file = os.environ.get(
-        "TLS_CERT_FILE"
-    )  # Client certificate/key for X.509 authentication
+    tls_ca_file = os.environ.get("TLS_CA_FILE")  # CA bundle for server certificate verification
+    try:
+        mongodb_uri, tls_client_cert_key_file = config.resolve_mongo_connection()
+    except config.ConfigError as e:
+        module_logger.critical(f"Invalid MongoDB configuration: {e}")
+        print_log(f"Critical Error: Invalid MongoDB configuration: {e}", "error")
+        return None, None
 
     if not mongodb_uri:
-        module_logger.critical(
-            "MONGODB_URI not found in environment variables. Cannot connect to MongoDB."
-        )
+        module_logger.critical("MONGODB_URI not found in environment variables. Cannot connect to MongoDB.")
         # print_log("Error: MONGODB_URI not found in environment variables. Aborting MongoDB connection.", "error")
         return None, None
 
@@ -72,13 +69,9 @@ def _initialize_mongodb_connection() -> Tuple[
                 "error",
             )
             return None, None
-        module_logger.info(
-            f"Using X.509 client certificate/key file for authentication: {tls_client_cert_key_file}"
-        )
+        module_logger.info(f"Using X.509 client certificate/key file for authentication: {tls_client_cert_key_file}")
     else:
-        module_logger.info(
-            "TLS_CERT_FILE not set. X.509 authentication will not be used."
-        )
+        module_logger.info("TLS_CERT_FILE not set. X.509 authentication will not be used.")
 
     try:
         if tls_client_cert_key_file:
@@ -104,9 +97,7 @@ def _initialize_mongodb_connection() -> Tuple[
         # print_log("Successfully connected to MongoDB Atlas!", "info")
 
         _mongo_db = _mongo_client[os.environ.get("MONGODB_DB_NAME", "bookscraper_db")]
-        _mongo_collection = _mongo_db[
-            os.environ.get("MONGODB_COLLECTION_NAME", "books")
-        ]
+        _mongo_collection = _mongo_db[os.environ.get("MONGODB_COLLECTION_NAME", "books")]
 
         # Ensure a unique index on 'hash' to prevent duplicate insertions
         ensure_unique_index_on_hash(_mongo_collection)
@@ -124,9 +115,7 @@ def _initialize_mongodb_connection() -> Tuple[
         _mongo_collection = None
         return None, None
     except Exception as e:
-        module_logger.critical(
-            f"An unexpected error occurred during MongoDB operation: {e}", exc_info=True
-        )
+        module_logger.critical(f"An unexpected error occurred during MongoDB operation: {e}", exc_info=True)
         print_log(
             f"Critical Error: An unexpected error occurred during MongoDB operation. Please check the log file for full traceback. Details: {e}",
             "error",
@@ -182,17 +171,11 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Collection = None
             A dictionary containing insertion summary (num_inserted, num_duplicates, num_errors).
     """
     # Use the passed collection if provided, otherwise get the global one
-    books_collection = (
-        mongo_collection if mongo_collection is not None else get_mongo_collection()
-    )
+    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
-    if (
-        books_collection is None
-    ):  # If it's still None after trying to get it, log error and return
+    if books_collection is None:  # If it's still None after trying to get it, log error and return
         module_logger.error("MongoDB collection not available. Cannot save books.")
-        print_log(
-            "Error: MongoDB collection not available. Cannot save books.", "error"
-        )
+        print_log("Error: MongoDB collection not available. Cannot save books.", "error")
 
     num_inserted = 0
     num_duplicates = 0
@@ -203,22 +186,16 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Collection = None
             result = books_collection.insert_one(book)
             if result.acknowledged:
                 num_inserted += 1
-                module_logger.info(
-                    f"Inserted book: {book.get('title', 'Unknown Title')} (ID: {result.inserted_id})"
-                )
+                module_logger.info(f"Inserted book: {book.get('title', 'Unknown Title')} (ID: {result.inserted_id})")
             else:
-                module_logger.warning(
-                    f"Insertion not acknowledged for {book.get('title', 'Unknown Title')}."
-                )
+                module_logger.warning(f"Insertion not acknowledged for {book.get('title', 'Unknown Title')}.")
                 print_log(
                     f"Warning: Insertion not acknowledged for {book.get('title', 'Unknown Title')}.",
                     "warning",
                 )
                 num_errors += 1
         except DuplicateKeyError:
-            module_logger.info(
-                f"Duplicate book found by hash '{book['hash']}'. Skipping insertion."
-            )
+            module_logger.info(f"Duplicate book found by hash '{book['hash']}'. Skipping insertion.")
             # print_log(f"Info: Duplicate book found by hash '{book['hash']}'. Skipping insertion.", "info")
             num_duplicates += 1
         except InvalidDocument as e:
@@ -261,28 +238,18 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Collection = None
     )
 
 
-def check_amazon_asin_exists_in_db(
-    asin: str, mongo_collection: Collection = None
-) -> bool:
-    books_collection = (
-        mongo_collection if mongo_collection is not None else get_mongo_collection()
-    )
+def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Collection = None) -> bool:
+    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
     if books_collection is None:
-        module_logger.error(
-            "MongoDB collection not provided for duplicate check or not initialized."
-        )
-        print_log(
-            "Error: MongoDB collection not available for duplicate check.", "error"
-        )
+        module_logger.error("MongoDB collection not provided for duplicate check or not initialized.")
+        print_log("Error: MongoDB collection not available for duplicate check.", "error")
         return False
 
     try:
         is_duplicate = books_collection.find_one({"asin": asin}) is not None
         if is_duplicate:
-            module_logger.info(
-                f"ASIN {asin} found in MongoDB Atlas database. Skipping detailed scrape."
-            )
+            module_logger.info(f"ASIN {asin} found in MongoDB Atlas database. Skipping detailed scrape.")
         return is_duplicate
 
     except Exception as e:
@@ -297,34 +264,24 @@ def check_amazon_asin_exists_in_db(
         return False
 
 
-def check_book_exists_in_db(
-    book_hash: str, mongo_collection: Collection = None
-) -> bool:
+def check_book_exists_in_db(book_hash: str, mongo_collection: Collection = None) -> bool:
     """
     Checks if a book with the given hash already exists in the database.
     """
-    books_collection = (
-        mongo_collection if mongo_collection is not None else get_mongo_collection()
-    )
+    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
     # module_logger.info(f"Debug: Type of books_collection in check_book_exists_in_db: {type(books_collection)}")
     # print_log(f"Debug: Type of MongoDB collection in duplicate check: {type(books_collection)}", "info")
 
     if books_collection is None:
-        module_logger.error(
-            "MongoDB collection not provided for duplicate check or not initialized."
-        )
-        print_log(
-            "Error: MongoDB collection not available for duplicate check.", "error"
-        )
+        module_logger.error("MongoDB collection not provided for duplicate check or not initialized.")
+        print_log("Error: MongoDB collection not available for duplicate check.", "error")
         return False
 
     try:
         return books_collection.find_one({"hash": book_hash}) is not None
     except Exception as e:
-        module_logger.error(
-            f"Error checking for duplicate book in DB: {e}", exc_info=True
-        )
+        module_logger.error(f"Error checking for duplicate book in DB: {e}", exc_info=True)
         print_log(f"Error: Error checking for duplicate book in DB: {e}", "error")
         return False
 
@@ -358,26 +315,20 @@ def update_book_isbn(
         return False
 
     try:
-        result = books_collection.update_one(
-            {"hash": book_hash}, {"$set": update_fields}
-        )
+        result = books_collection.update_one({"hash": book_hash}, {"$set": update_fields})
         if result.modified_count > 0:
             module_logger.info(f"Updated ISBNs for book with hash '{book_hash}'.")
             print_log(f"Updated ISBNs for book with hash '{book_hash}'.", "info")
             return True
         else:
-            module_logger.warning(
-                f"Book with hash '{book_hash}' not found for ISBN update or no change needed."
-            )
+            module_logger.warning(f"Book with hash '{book_hash}' not found for ISBN update or no change needed.")
             print_log(
                 f"Warning: Book with hash '{book_hash}' not found for ISBN update or no change needed.",
                 "warning",
             )
             return False
     except Exception as e:
-        module_logger.error(
-            f"Error updating ISBNs for hash '{book_hash}': {e}", exc_info=True
-        )
+        module_logger.error(f"Error updating ISBNs for hash '{book_hash}': {e}", exc_info=True)
         print_log(f"Error: Error updating ISBNs for hash '{book_hash}': {e}", "error")
         return False
 
@@ -399,7 +350,5 @@ def ensure_unique_index_on_hash(books_collection: Collection):
         else:
             module_logger.info("Unique index on 'hash' field already exists.")
     except Exception as e:
-        module_logger.error(
-            f"Failed to ensure unique index on 'hash': {e}", exc_info=True
-        )
+        module_logger.error(f"Failed to ensure unique index on 'hash': {e}", exc_info=True)
         print_log(f"Error: Failed to ensure unique index on 'hash': {e}", "error")

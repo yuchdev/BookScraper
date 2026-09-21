@@ -32,7 +32,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# connection_test.py is a standalone MongoDB diagnostic script, not a pytest suite (see
-# CLAUDE.md) - it must stay out of collection so `pytest` never runs its
-# `test_mongodb_connection()` as a real test and attempts a live Atlas connection.
-addopts = "--ignore=test/connection_test.py"
+# connection_test_password.py / connection_test_tls.py / connection_test_settings.py are
+# standalone MongoDB diagnostic scripts, not a pytest suite (see CLAUDE.md) - they must stay
+# out of collection so `pytest` never runs them as real tests and attempts live Atlas connections.
+addopts = "--ignore=tests/connection_test_password.py --ignore=tests/connection_test_tls.py --ignore=tests/connection_test_settings.py"
