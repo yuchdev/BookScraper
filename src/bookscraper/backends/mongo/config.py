@@ -32,8 +32,8 @@ def get_default_tls_cert_file() -> Optional[str]:
     """
     Newest ~/.bookscrapper/X509-cert-*.pem by mtime, or None if none exist.
     Legacy fallback only, used when settings.json doesn't exist - see
-    scripts/rotate_atlas_cert.py, which writes rotated certs there with a
-    timestamped name.
+    cert_rotation.py (`bookscraper rotate-cert`), which writes rotated certs
+    there with a timestamped name.
     """
     candidates = sorted(CONFIG_DIR.glob("X509-cert-*.pem"), key=lambda p: p.stat().st_mtime)
     return str(candidates[-1]) if candidates else None

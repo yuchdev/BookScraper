@@ -387,3 +387,78 @@ class TestEnsureUniqueIndexOnHash:
         collection.index_information.side_effect = RuntimeError("boom")
         # Must not propagate.
         database.ensure_unique_index_on_hash(collection)
+
+
+# --------------------------------------------------------------------------- #
+# X.509 auth-mechanism diagnostics
+#
+# pymongo does not infer MONGODB-X509 from a client certificate, so a cert paired
+# with a URI that never requests it yields an unauthenticated connection. These
+# cover the detection helpers and the three-way warning branch.
+# --------------------------------------------------------------------------- #
+X509_URI = "mongodb+srv://cluster.example.net/db?authSource=%24external&authMechanism=MONGODB-X509"
+SCRAM_URI = "mongodb+srv://user:pw@cluster.example.net/db?retryWrites=true"
+BARE_URI = "mongodb+srv://cluster.example.net/db?retryWrites=true"
+
+
+@pytest.mark.parametrize(
+    "uri, expected",
+    [
+        (X509_URI, True),
+        ("mongodb+srv://c.example.net/db?authMechanism=mongodb-x509", True),  # case-insensitive
+        (SCRAM_URI, False),
+        (BARE_URI, False),
+        ("mongodb+srv://c.example.net/db?authMechanism=SCRAM-SHA-256", False),
+    ],
+)
+def test_uri_selects_x509_auth(uri, expected) -> None:
+    assert database.uri_selects_x509_auth(uri) is expected
+
+
+@pytest.mark.parametrize(
+    "uri, expected",
+    [(SCRAM_URI, True), (X509_URI, False), (BARE_URI, False)],
+)
+def test_uri_has_embedded_credentials(uri, expected) -> None:
+    assert database.uri_has_embedded_credentials(uri) is expected
+
+
+def test_x509_mechanism_present_warns_nothing() -> None:
+    with (
+        patch.object(database.module_logger, "warning") as warn,
+        patch.object(database.module_logger, "critical") as crit,
+        patch.object(database, "print_log") as printed,
+    ):
+        database._warn_if_x509_mechanism_missing(X509_URI, "/certs/x.pem")
+
+    warn.assert_not_called()
+    crit.assert_not_called()
+    printed.assert_not_called()
+
+
+def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
+    """Legacy resolution attaches the newest cert to any URI, so a working SCRAM
+    setup can pick one up incidentally - that is a warning, not a critical."""
+    with (
+        patch.object(database.module_logger, "warning") as warn,
+        patch.object(database.module_logger, "critical") as crit,
+        patch.object(database, "print_log") as printed,
+    ):
+        database._warn_if_x509_mechanism_missing(SCRAM_URI, "/certs/x.pem")
+
+    crit.assert_not_called()
+    printed.assert_not_called()
+    assert "SCRAM" in warn.call_args.args[0]
+
+
+def test_cert_without_mechanism_or_credentials_is_critical() -> None:
+    """No mechanism and no userinfo means the connection authenticates as nobody."""
+    with (
+        patch.object(database.module_logger, "critical") as crit,
+        patch.object(database, "print_log") as printed,
+    ):
+        database._warn_if_x509_mechanism_missing(BARE_URI, "/certs/x.pem")
+
+    assert "will not be authenticated" in crit.call_args.args[0]
+    assert "MONGODB-X509" in crit.call_args.args[0]
+    assert printed.call_args.args[1] == "warning"

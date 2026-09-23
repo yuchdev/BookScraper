@@ -98,3 +98,82 @@ def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
 def test_missing_subcommand_rejected() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args([])
+
+
+def test_rotate_cert_parses_full_valid_arg_set() -> None:
+    args = build_parser().parse_args(
+        ["rotate-cert", "--months", "12", "--output", "/tmp/cert.pem", "--log-severity", "error"]
+    )
+    assert args.command == "rotate-cert"
+    assert args.months == 12
+    assert isinstance(args.months, int)
+    assert args.output == "/tmp/cert.pem"
+    assert args.log_severity == "error"
+
+
+def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env() -> None:
+    args = build_parser().parse_args(["rotate-cert"])
+    assert args.months is None
+    assert args.output is None
+    assert args.log_severity == "info"
+
+
+def test_rotate_cert_rejects_non_integer_months() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--months", "soon"])
+
+
+# --------------------------------------------------------------------------- #
+# detect-schema subparser
+# --------------------------------------------------------------------------- #
+def test_detect_schema_parses_full_valid_arg_set() -> None:
+    args = build_parser().parse_args(
+        [
+            "detect-schema",
+            "--site",
+            "amazon",
+            "--url",
+            "https://www.amazon.com/dp/1",
+            "--url",
+            "https://www.amazon.com/dp/2",
+            "--output",
+            "report.txt",
+            "--log-severity",
+            "debug",
+        ]
+    )
+    assert args.command == "detect-schema"
+    assert args.site == "amazon"
+    assert args.url == ["https://www.amazon.com/dp/1", "https://www.amazon.com/dp/2"]
+    assert args.output == "report.txt"
+    assert args.log_severity == "debug"
+
+
+def test_detect_schema_url_is_repeatable_into_a_list() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "leanpub", "--url", "https://leanpub.com/a"])
+    assert args.url == ["https://leanpub.com/a"]
+
+
+def test_detect_schema_requires_site() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["detect-schema", "--url", "https://x/1"])
+
+
+def test_detect_schema_requires_url() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["detect-schema", "--site", "amazon"])
+
+
+def test_detect_schema_rejects_unknown_site() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["detect-schema", "--site", "goodreads", "--url", "https://x/1"])
+
+
+def test_detect_schema_output_defaults_to_none() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "oreilly", "--url", "https://x/1"])
+    assert args.output is None
+
+
+def test_detect_schema_log_severity_defaults_to_info() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "packtpub", "--url", "https://x/1"])
+    assert args.log_severity == "info"

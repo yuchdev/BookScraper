@@ -39,6 +39,11 @@ To quickly start the application at this stage of development:
     * Packtpub (`packtpub.com`)
     * Leanpub (`leanpub.com`)
     * O'Reilly (`oreilly.com`)
+* **AI-Assisted Schema Detection:** The `detect-schema` subcommand loads sample detail pages with Playwright,
+  asks Claude (via the `anthropic` SDK) to propose CSS selectors for the fields in `site_constants[site]`, validates
+  every proposal against each page's live DOM, and prints a diff-style report — it *proposes* selector updates for a
+  human to apply and never rewrites the schema itself. Needs `ANTHROPIC_API_KEY`. See
+  [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
 * **Asynchronous & Parallel Processing:** Leverages `asyncio` and `Playwright` for high-performance concurrent scraping.
 * **Robustness:**
     * **Retry Mechanism:** Automatic retries for failed page loads or scraping errors.
@@ -120,6 +125,8 @@ TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client
 * Replace `<username>`, `<password>`, `<cluster-url>`, and `<database-name>` with your MongoDB Atlas credentials.
 * `TLS_CERT_FILE`: This is optional. If your MongoDB Atlas setup requires client certificate authentication, provide the
   full path to your `.pem` file. If not needed for your connection, you can omit this line or leave it empty.
+* `ANTHROPIC_API_KEY`: Required **only** for the `detect-schema` subcommand (AI-assisted CSS-selector proposals).
+  None of the scraping/storage subcommands need it. An optional `ANTHROPIC_MODEL` pins/overrides the model used.
 
 #### Default Configuration
 
@@ -134,9 +141,25 @@ If you don't specify the configuration in the `.env` file, the application will 
 
 ## 💡 Usage
 
-`bookscraper` has two subcommands: `scrape-urls` (scrape details for a known list of URLs) and `search` (discover
-new books by searching configured sites, then scrape their details). Run `bookscraper --help`,
-`bookscraper scrape-urls --help`, or `bookscraper search --help` for full option listings.
+`bookscraper` has three subcommands: `scrape-urls` (scrape details for a known list of URLs), `search` (discover
+new books by searching configured sites, then scrape their details), and `detect-schema` (an AI-assisted
+developer-maintenance tool that proposes CSS-selector updates for a site's detail page). Run `bookscraper
+--help` or `bookscraper <subcommand> --help` for full option listings.
+
+**`detect-schema`** — propose CSS-selector updates for a site's detail page (dev maintenance):
+
+```bash
+uv run bookscraper detect-schema --site amazon \
+  --url "https://www.amazon.com/dp/1098131029" \
+  --url "https://www.amazon.com/dp/1492051365"
+```
+
+It loads each `--url` with Playwright, asks Claude to propose selectors for the fields already in
+`site_constants[site]`, validates them against every sample page's live DOM (flagging any that match
+inconsistently), and prints a diff-style report (optionally also to `--output <path>`). It never writes to
+`parameters.py` — you apply the changes you agree with by hand. Requires `ANTHROPIC_API_KEY` (see
+Configuration above). Takes no `--store-backend`: it never touches book storage. Full writeup, including
+the manual selector loop it automates, is in [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
 
 ### Input CSV Format (`scrape-urls`)
 

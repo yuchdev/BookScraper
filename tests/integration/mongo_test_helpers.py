@@ -19,12 +19,28 @@ Credential layout:
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 from pymongo import MongoClient, server_api
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 PRODUCTION_CONFIG_DIR = Path.home() / ".bookscrapper"
-DEFAULT_TLS_CERT_FILE = PRODUCTION_CONFIG_DIR / "X509-cert-142838411852079927.pem"
+TLS_CERT_GLOB = "X509-cert-*.pem"
+
+
+def get_default_tls_cert_file(config_dir: Path = PRODUCTION_CONFIG_DIR) -> Optional[Path]:
+    """
+    Newest ~/.bookscrapper/X509-cert-*.pem by mtime, or None if none exist.
+
+    Deliberately mirrors config.get_default_tls_cert_file() rather than importing it,
+    to keep this module standalone (see the module docstring). It must stay a glob for
+    the newest file, NOT a pinned filename: `bookscraper rotate-cert` writes each new
+    cert under a fresh timestamped name, so a hardcoded name goes stale on the first
+    rotation and silently skips this tier instead of testing the current identity.
+    """
+    candidates = sorted(config_dir.glob(TLS_CERT_GLOB), key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else None
+
 
 _URI_PATTERN = re.compile(r"^mongodb(\+srv)?:\/\/(([^:]+):([^@]+)@)?([^\/\?]+)(\/([^\?]*))?(\?.*)?$")
 
@@ -58,25 +74,26 @@ def get_mongodb_uri(env_var_name):
     return None
 
 
-def get_tls_cert_file(env_var_name="TLS_CERT_FILE", default_path: Path = DEFAULT_TLS_CERT_FILE):
+def get_tls_cert_file(env_var_name="TLS_CERT_FILE", config_dir: Path = PRODUCTION_CONFIG_DIR):
     """
-    Resolves the TLS client certificate path: env var first, then the production
-    default. Shared with production on purpose - there is one X.509 cert, not a
-    separate test cert, so the TLS test script authenticates as the same identity
-    the production app would.
+    Resolves the TLS client certificate path: env var first, then the newest
+    X509-cert-*.pem under the production config dir. Shared with production on purpose -
+    there is one X.509 cert, not a separate test cert, so the TLS test authenticates as
+    the same identity the production app would, including after a rotation.
     """
     tls_cert_file = os.environ.get(env_var_name)
     if tls_cert_file and os.path.exists(tls_cert_file):
         print(f"Using TLS certificate file from environment variable {env_var_name}: {tls_cert_file}")
         return tls_cert_file
 
-    if default_path.exists():
-        print(f"Using default TLS certificate file: {default_path}")
+    default_path = get_default_tls_cert_file(config_dir)
+    if default_path is not None:
+        print(f"Using newest TLS certificate file: {default_path}")
         return str(default_path)
 
     print(
         f"WARNING: TLS certificate file not found in environment variable {env_var_name} "
-        f"or default location: {default_path}"
+        f"or as {config_dir / TLS_CERT_GLOB}"
     )
     return None
 

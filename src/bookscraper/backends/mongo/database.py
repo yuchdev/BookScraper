@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
 
 from dotenv import load_dotenv
 from pymongo import MongoClient, server_api
@@ -17,6 +18,63 @@ from ...book_utils import print_log
 from . import config
 
 module_logger = logging.getLogger(__name__)
+
+X509_AUTH_MECHANISM = "MONGODB-X509"
+
+
+def uri_selects_x509_auth(uri: str) -> bool:
+    """
+    True if `uri` explicitly asks for MONGODB-X509 authentication.
+
+    pymongo never infers the auth mechanism from a client certificate: passing
+    tlsCertificateKeyFile performs mutual TLS at the transport layer but leaves the
+    connection *unauthenticated* unless authMechanism=MONGODB-X509 is requested (Atlas's
+    own "Connect with X.509" string includes it, alongside authSource=$external). A cert
+    paired with a URI that omits it is therefore a misconfiguration worth surfacing - see
+    _warn_if_x509_mechanism_missing().
+    """
+    mechanisms = parse_qs(urlsplit(uri).query).get("authMechanism", [])
+    return any(m.strip().upper() == X509_AUTH_MECHANISM for m in mechanisms)
+
+
+def uri_has_embedded_credentials(uri: str) -> bool:
+    """True if the URI carries username[:password] userinfo (i.e. SCRAM credentials)."""
+    return bool(urlsplit(uri).username)
+
+
+def _warn_if_x509_mechanism_missing(uri: str, cert_file: str) -> None:
+    """
+    Logs a diagnostic when a client cert is supplied but the URI doesn't select X.509.
+
+    Deliberately a warning, not an abort: in the legacy (no settings.json) resolution
+    path a cert is attached whenever one merely exists in ~/.bookscrapper, so a working
+    SCRAM setup can pick one up incidentally - aborting there would break it. What this
+    prevents is the silent case, where the cert looks configured but no X.509
+    authentication is actually negotiated.
+    """
+    if uri_selects_x509_auth(uri):
+        return
+
+    if uri_has_embedded_credentials(uri):
+        module_logger.warning(
+            f"A TLS client certificate is configured ({cert_file}) but the URI selects password (SCRAM) "
+            f"auth, not {X509_AUTH_MECHANISM}. The certificate will be presented for mutual TLS and "
+            "otherwise ignored. If X.509 auth was intended, the URI needs "
+            f"'?authMechanism={X509_AUTH_MECHANISM}&authSource=$external' and no username:password."
+        )
+        return
+
+    module_logger.critical(
+        f"A TLS client certificate is configured ({cert_file}) but the URI neither selects "
+        f"{X509_AUTH_MECHANISM} nor carries credentials, so this connection will not be authenticated. "
+        f"Add '?authMechanism={X509_AUTH_MECHANISM}&authSource=$external' to the URI."
+    )
+    print_log(
+        f"Warning: TLS certificate configured but the URI does not request {X509_AUTH_MECHANISM} "
+        "authentication - the connection will be unauthenticated.",
+        "warning",
+    )
+
 
 # Global variables to hold the MongoDB client, database, and collection
 _mongo_client = None
@@ -70,6 +128,7 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
             )
             return None, None
         module_logger.info(f"Using X.509 client certificate/key file for authentication: {tls_client_cert_key_file}")
+        _warn_if_x509_mechanism_missing(mongodb_uri, tls_client_cert_key_file)
     else:
         module_logger.info("TLS_CERT_FILE not set. X.509 authentication will not be used.")
 

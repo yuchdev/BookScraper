@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `bookscraper` is an asyncio + Playwright scraper that pulls book metadata (title, authors, ISBNs, publication date,
 description, tags) from Amazon, Packtpub, Leanpub, and O'Reilly, and writes results to one of two interchangeable
 storage backends — a MongoDB Atlas collection, or a local `books.json` file schema-identical to it (see **Storage
-backend** below). It exposes one CLI (`bookscraper`) with two subcommands covering two distinct workflows — see
-Architecture below.
+backend** below). It exposes one CLI (`bookscraper`) with four subcommands — two scraping workflows, MongoDB Atlas
+X.509 certificate rotation (`rotate-cert`), and an AI-assisted selector-schema detection maintenance tool
+(`detect-schema`) — see Architecture below.
 
 ## Setup
 
@@ -74,7 +75,7 @@ X.509 (client-cert) auth — two independently-sourced fields, `uri` and `cert`:
 ```
 `uri.source` and `cert.source` are chosen independently, so all four combinations (literal/literal, literal/env,
 env/literal, env/env) are valid and behave identically as long as they resolve to the same underlying values — see
-`tests/connection_test_settings.py`, which exercises all four plus both `pass` shapes.
+`tests/integration/test_connection_settings.py`, which exercises all four plus both `pass` shapes.
 
 **Legacy fallback (no settings.json):** for backward compatibility, `MONGODB_URI` / `TLS_CERT_FILE` env vars (via
 `.env` in the repo root or the real environment) are read directly, with `TLS_CERT_FILE` — if unset — falling back
@@ -87,24 +88,40 @@ TLS_CERT_FILE="/path/to/cert.pem"   # optional, for X.509 client-cert auth
 TLS_CA_FILE="/path/to/ca.pem"       # optional, for server CA verification (database.py only)
 ```
 
-**TLS certificate rotation pipeline:** `scripts/rotate_atlas_cert.py` issues a fresh Atlas-managed X.509 client
-certificate via the Atlas Admin API (`POST .../databaseUsers/{user}/certs`, requires a Project-Owner-scoped Atlas
-API Service Account: `ATLAS_CLIENT_ID` / `ATLAS_CLIENT_SECRET` / `ATLAS_PROJECT_ID` / `ATLAS_DB_USER` in `.env` or
-the environment) and atomically writes it to `~/.bookscrapper/X509-cert-<UTC timestamp>.pem`. Its position in the
-auth system above depends on how the app is configured:
+**TLS certificate rotation pipeline:** `bookscraper rotate-cert` (`commands/rotate_cert.py`, backed by
+`backends/mongo/cert_rotation.py`) issues a fresh Atlas-managed X.509 client certificate via the Atlas Admin API
+(`POST .../databaseUsers/{user}/certs`, requires a Project-Owner-scoped Atlas API Service Account: `ATLAS_CLIENT_ID` /
+`ATLAS_CLIENT_SECRET` / `ATLAS_PROJECT_ID` / `ATLAS_DB_USER` in `.env` or the environment) and atomically writes it
+to `~/.bookscrapper/X509-cert-<UTC timestamp>.pem`. Validity defaults to 6 months (`--months` / `ATLAS_CERT_MONTHS`,
+1-24) and the output path can be overridden (`--output` / `ATLAS_CERT_FILE`); flags beat env vars. Failures (a missing
+`ATLAS_*` variable, an out-of-range `--months`, an Atlas HTTP error, an unreachable API) exit non-zero with a
+`print_log` error and never touch `settings.json`; HTTP errors report only the status code, never the response body.
+Its position in the auth system above depends on how the app is configured:
 - **No `settings.json`:** nothing else to do — the legacy fallback's "newest `X509-cert-*.pem`" glob picks up the
   new file automatically on the next run.
-- **`settings.json` with `x509.cert.source: "literal"`:** the script repoints `x509.cert.value` at the new
-  filename itself (`update_settings_after_rotation()`), so resolution stays fully deterministic — no stale
-  reference to a since-rotated cert — without a manual edit.
-- **`settings.json` with `x509.cert.source: "env"`:** the script only prints a reminder naming the env var and the
-  new path; it deliberately never modifies your environment or `.env` on your behalf.
-- **`auth_type: "pass"`, or no rotation applicable:** the script leaves `settings.json` untouched and says so.
+- **`settings.json` with `x509.cert.source: "literal"`:** the command repoints `x509.cert.value` at the new
+  filename itself (`update_settings_after_rotation()`, an atomic owner-only `0600` rewrite), so resolution stays
+  fully deterministic — no stale reference to a since-rotated cert — without a manual edit.
+- **`settings.json` with `x509.cert.source: "env"`:** the command only prints a reminder naming the env var and
+  the new path; it deliberately never modifies your environment or `.env` on your behalf.
+- **`auth_type: "pass"`, or no rotation applicable:** the command leaves `settings.json` untouched and says so.
 
-Note: as of this writing, Atlas still rejects the certificates this cluster's X.509 database user presents
-(`certificate validation failed`, Atlas error code 8000) — a server-side/Atlas-registration issue, not a client- or
-resolver-side bug (`tests/connection_test_tls.py` and all four `x509` shapes in `tests/connection_test_settings.py`
-fail with this exact error today, by design, until that's resolved on the Atlas side).
+**Status of the `certificate validation failed` (Atlas error 8000) report — UNVERIFIED, do not treat as settled.**
+Earlier revisions of this file stated as fact that Atlas rejects this cluster's X.509 certificates, and that the
+failure is server-side rather than a client- or resolver-side bug. That conclusion is not currently reproducible and
+was never backed by a recorded run: it entered the docs during a restructuring commit (`59b5675`), and the tests
+cited as its evidence do not demonstrate it. As of 2026-09-23, on this machine:
+- `~/.bookscrapper/` contains only `logs/` — there is **no `settings.json` and no `X509-cert-*.pem`**, so no client
+  certificate is ever presented to Atlas.
+- `TEST_MONGODB_URI_PASS` / `TEST_MONGODB_URI_TLS` are unset, so all 8 `tests/integration/` tests **skip** at the
+  first gate; none fail and none reach Atlas. The `xfail(strict=False)` markers on the `x509` legs are inert.
+
+The root cause is therefore still open — re-diagnose from a real run before repeating the "server-side issue" claim.
+Two things to know when credentials return: those `xfail` markers would silently absorb a genuine *client-side*
+failure (the "silently staying green" outcome the Testing section warns against), and X.509 auth requires the URI to
+carry `authMechanism=MONGODB-X509` (with `authSource=$external`), since pymongo never infers the mechanism from a
+client certificate — `database.uri_selects_x509_auth()` now logs a diagnostic when a cert is paired with a URI that
+omits it.
 
 ## Storage backend
 
@@ -145,13 +162,49 @@ uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
 uv run bookscraper search --store-backend mongo
 uv run bookscraper search --store-backend json --max-search-pages 5
 
+# rotate-cert: issues a new Atlas X.509 client certificate (needs ATLAS_* credentials, see Authentication
+# configuration). Unlike the two above it takes no --store-backend and never touches the book data.
+uv run bookscraper rotate-cert
+uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-manual.pem
+
+# detect-schema: AI-assisted CSS-selector proposals for a site's detail page (dev-maintenance tool).
+# Takes no --store-backend and never touches book data; needs ANTHROPIC_API_KEY. See AI-assisted schema
+# detection below.
+uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029"
+uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
+
 # Without `uv run` (inside an activated .venv), or via `python -m` directly:
 python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
 python -m bookscraper search --store-backend json
+python -m bookscraper rotate-cert
+python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/x/9780123456789/"
 ```
 
 `--store-backend` is required — omitting it is an argparse error, not an interactive prompt (there is no more
 `(C)/(M)/(B)/(E)` choice: see Storage backend above for why the choice is always explicit).
+
+## AI-assisted schema detection
+
+`bookscraper detect-schema` (`commands/detect_schema.py`, backed by `scraping/schema_detection.py`) automates the
+otherwise-manual loop of figuring out a site's CSS selectors when its markup drifts — see
+`docs/scraping/schema-detection.md` (full manual-and-automated writeup) and
+`docs/adr/0002-ai-assisted-schema-detection.md` (design rationale). It takes `--site
+{amazon,packtpub,leanpub,oreilly}`, one or more repeatable `--url` sample detail pages, an optional `--output`, and
+`--log-severity` like the other subcommands; it does **not** take `--store-backend`.
+
+The pipeline: load each URL with Playwright (reusing `scrape_details.route_handler` document-only blocking) → prune
+each page to an LLM-sized HTML snapshot → ask Claude (official `anthropic` SDK, `ANTHROPIC_API_KEY` read straight
+from the environment/`.env`, optional `ANTHROPIC_MODEL` override) to propose a CSS selector + rationale per existing
+`site_constants[site]` detail-field → re-query every proposal against **each** sample page's live DOM, flagging any
+field that matches on some sample URLs but not others → emit a diff-style report to stdout (and to `--output` if
+given).
+
+Two hard rules mirror the project's existing conventions: it **never writes `parameters.py`** (propose, never
+auto-apply — a human applies changes by hand, the same "automation proposes, a human/deterministic step decides"
+restraint as the config/rotation paths above), and it **fails loudly** — a missing `ANTHROPIC_API_KEY`, a page-load
+failure, or a malformed/non-JSON AI response each raise `SchemaDetectionError`, surfaced as a `print_log` error and
+a non-zero exit, never partial output. `anthropic` is a direct dependency in `pyproject.toml`; the test suite always
+mocks the client and never makes a real API call.
 
 ## Testing
 
@@ -160,13 +213,16 @@ python -m bookscraper search --store-backend json
 - **`tests/unit/`** — pure logic, no mocks: `cli.py`'s `build_parser()`, `book_utils.py`'s
   `hash_book`/`extract_year_from_date`/`check_local_write_permission`, `backends/mongo/config.py`'s
   resolver (all six `settings.json` shapes plus the legacy fallback, purely as resolution logic — no
-  network), `backends/local/store.py` (real file I/O via `tmp_path`), and `scraping/parameters.py`
-  data sanity checks.
+  network), `backends/mongo/cert_rotation.py`'s months validation / atomic write / `settings.json`
+  repointing (real file I/O via `tmp_path`), `backends/local/store.py` (real file I/O via `tmp_path`), `scraping/parameters.py`
+  data sanity checks, and `scraping/schema_detection.py`'s pure logic (HTML pruning/truncation, AI-response
+  shape validation, diff-report formatting).
 - **`tests/mock/`** — the rest of `src/bookscraper`, with every external dependency mocked
   (`pymongo.MongoClient`, `httpx.AsyncClient`, Playwright's `Browser`/`Page`/`Locator` via
   `tests/mock/scraping/playwright_fakes.py`): `backends/mongo/database.py`, `backends/mongo/deduplicate.py`,
-  `backends/storage.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
-  `commands/scrape_urls.py`, `commands/search.py`, and `main.py`.
+  `backends/mongo/cert_rotation.py`'s Atlas API calls (`httpx.post` mocked), `backends/storage.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
+  `scraping/schema_detection.py` (Playwright faked, `anthropic` client mocked — never a real API call),
+  `commands/scrape_urls.py`, `commands/search.py`, `commands/rotate_cert.py`, `commands/detect_schema.py`, and `main.py`.
 - **`tests/integration/`** — hits real MongoDB Atlas, tagged `@pytest.mark.integration` and excluded
   from the default run (`addopts = -m "not integration"` in `pyproject.toml`); run explicitly with
   `uv run pytest -m integration`. `test_connection_password.py` / `test_connection_tls.py` verify
@@ -207,8 +263,12 @@ Authentication configuration above). Test-only driver strings are `TEST_MONGODB_
 set in `.env` (repo root, git-ignored) — env-var only, no fallback file (`mongo_test_helpers.get_mongodb_uri()`
 takes no fallback path), so a bug in either the production resolver or a test script can never cross-load the
 other's credentials, and there's no separate `~/.bookscrapper/test/` subtree to keep in sync. The TLS test script
-still reads the TLS *cert* from the production location (`TLS_CERT_FILE` / the newest `X509-cert-*.pem`) rather
-than a test-only copy, since there is one real X.509 identity, not a separate test one.
+still reads the TLS *cert* from the production location (`TLS_CERT_FILE`, else the newest `X509-cert-*.pem` by mtime
+via `mongo_test_helpers.get_default_tls_cert_file()`) rather than a test-only copy, since there is one real X.509
+identity, not a separate test one. That resolution must stay a **glob for the newest file, never a pinned
+filename** — it was pinned to a single manually-downloaded cert until 2026-09-23, which meant a rotation stranded
+the tier on a name that no longer existed and it skipped instead of testing the current identity
+(`tests/unit/test_integration_helpers.py` guards this).
 
 ## Architecture
 
@@ -218,7 +278,8 @@ points and cross-cutting utilities. Import direction is one-way and there are no
 `backends/` → `book_utils.py`; nothing under `backends/` or `scraping/` ever imports from `commands/`.
 
 Root-level entry points and shared utilities:
-- **`cli.py`** — argparse only: builds the `bookscraper` parser and its two subparsers (`scrape-urls`, `search`).
+- **`cli.py`** — argparse only: builds the `bookscraper` parser and its four subparsers (`scrape-urls`, `search`,
+  `rotate-cert`, `detect-schema`).
   Every flag sets an explicit `dest=` (e.g. `--input-file` → `input_file`) so a CLI flag can never silently drift
   from the attribute name the code reads.
 - **`main.py`** — the real entry point: parses args via `cli.build_parser()` and dispatches to the matching
@@ -231,7 +292,8 @@ Root-level entry points and shared utilities:
   `extract_year_from_date` (handles several site-specific date formats), `hash_book`. Stays at the package root
   since every subpackage below imports from it and it has no backend/scraping-specific logic of its own.
 
-**`commands/`** — the two CLI workflows, each calling `resolve_store_backend()` (from `backends/`) once up front:
+**`commands/`** — the CLI workflows. The two scraping ones each call `resolve_store_backend()` (from `backends/`) once
+up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
 - **`scrape_urls.py`** — the "I already have URLs" workflow: takes a CSV of book URLs, buckets them by site via
   `identify_website()`, and scrapes each in batches of 10 concurrent Playwright tasks via
   `scraping.scrape_details.scrape_book()`, passing it the resolved `StorageBackend` for inline duplicate checks.
@@ -240,6 +302,14 @@ Root-level entry points and shared utilities:
   the resolved storage backend *before* doing the expensive detail scrape, then scrapes details for the survivors.
   Currently only Leanpub is wired end-to-end, entirely via its JSON API through `httpx` (no browser needed).
   `SITES_TO_SCRAPE` is currently `["leanpub"]`.
+- **`rotate_cert.py`** — the "rotate the Atlas X.509 client certificate" workflow: loads `.env`, calls
+  `backends.mongo.cert_rotation.rotate_certificate()` in a worker thread (it uses blocking `httpx`), reports the
+  result through `print_log`, and `sys.exit(1)`s on a `RotationError`. See TLS certificate rotation pipeline above.
+- **`detect_schema.py`** — the "propose selector-schema updates" workflow (dev maintenance, not scraping): loads
+  sample detail-page URLs, asks Claude to propose CSS selectors, validates them against each page's live DOM, and
+  prints a diff-style report. Takes `--site`, one or more repeatable `--url`, and an optional `--output`; no
+  `--store-backend` (it never touches book storage) and it never writes `parameters.py`. `sys.exit(1)`s on a
+  `SchemaDetectionError`. See AI-assisted schema detection above.
 
 **`backends/`** — the storage-backend abstraction (see Storage backend above):
 - **`storage.py`** — `StorageBackend` (the mongo/json contract), `MongoBackend`, `JsonBackend`, and
@@ -253,6 +323,10 @@ Root-level entry points and shared utilities:
 - **`mongo/config.py`** — `resolve_mongo_connection()`, the deterministic MongoDB auth resolver
   (`~/.bookscrapper/settings.json` when present, else the legacy env-var fallback) shared by `mongo/database.py`
   and `book_utils.py`. See Authentication configuration above.
+- **`mongo/cert_rotation.py`** — Atlas Admin API client for issuing a new X.509 client certificate
+  (`rotate_certificate()`, raising `RotationError` on any failure), plus the atomic cert write and
+  `update_settings_after_rotation()`, which repoints `settings.json` via `config`. Returns status lines instead of
+  printing, so `commands/rotate_cert.py` owns all user-facing output. See TLS certificate rotation pipeline above.
 - **`local/store.py`** — the `json` backend's implementation: `books.json` at the repo root, persistent and
   accumulating across runs, with the same `hash`-uniqueness and `asin`/`book_id`/`slug` lookup semantics as
   `mongo/database.py`'s MongoDB functions (`save_books`, `check_book_exists`, `check_amazon_asin_exists`,
@@ -268,6 +342,14 @@ Root-level entry points and shared utilities:
   loads.
 - **`search_utils.py`** — collects search-result candidates per site: Leanpub via paginated API calls
   (`get_leanpub_search_results_via_api`), other sites via Playwright (partially implemented).
+- **`schema_detection.py`** — the `detect-schema` engine (dev maintenance): loads sample detail pages with
+  Playwright (reusing `scrape_details.route_handler`), prunes each to an LLM-sized HTML snapshot, asks Claude via
+  the `anthropic` SDK to propose selectors for the existing `site_constants[site]` field names, re-queries every
+  proposal against each page's live DOM (flagging selectors that match inconsistently across sample URLs), and
+  formats a diff-style report. Reads `ANTHROPIC_API_KEY` directly from the environment (not via `mongo/config.py`'s
+  `settings.json`, which is Mongo-auth-specific); fails loudly (`SchemaDetectionError`) on a missing key, a
+  page-load failure, or a malformed AI response. Imports only from `scraping/` + `book_utils.py` — never
+  `commands/` or `backends/`. See AI-assisted schema detection above.
 
 ## Logging
 
@@ -284,7 +366,7 @@ rather than sharing `book_utils.py`'s `"bookscraper_app"`
 logger, so `configure_logging()` attaches the file handler to the **root** logger instead of a specific named one —
 every logger propagates there by default, so this is the only placement that reliably captures all of them.
 `main.py` calls `configure_logging()` once at startup with the level from `--log-severity {debug|info|warning|error}`
-(defined on both `scrape-urls` and `search` in `cli.py`; default `info`). `book_utils.py` also calls
+(defined on `scrape-urls`, `search`, `rotate-cert`, and `detect-schema` in `cli.py`; default `info`). `book_utils.py` also calls
 `configure_logging()` once at import time (default `info`) so the logger works for any code that imports it
 without going through the CLI — this is safe to call twice per run since it only adds the `FileHandler` (and only
 prunes old logs) the first time, keyed on `LOG_FILE_PATH` already being attached. Note: `print_log()`'s colored

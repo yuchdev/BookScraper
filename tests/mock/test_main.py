@@ -57,6 +57,44 @@ async def test_main_dispatches_to_search_run() -> None:
 
 
 @pytest.mark.asyncio
+async def test_main_dispatches_to_rotate_cert_run() -> None:
+    args = SimpleNamespace(command="rotate-cert", log_severity="info")
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging") as mock_configure,
+        patch.object(main.scrape_urls, "run", new_callable=AsyncMock) as mock_scrape_run,
+        patch.object(main.search, "run", new_callable=AsyncMock) as mock_search_run,
+        patch.object(main.rotate_cert, "run", new_callable=AsyncMock) as mock_rotate_run,
+    ):
+        await main.main()
+
+    mock_configure.assert_called_once_with(logging.INFO)
+    mock_rotate_run.assert_awaited_once_with(args)
+    mock_scrape_run.assert_not_called()
+    mock_search_run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_main_dispatches_to_detect_schema_run() -> None:
+    args = SimpleNamespace(command="detect-schema", log_severity="info")
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging") as mock_configure,
+        patch.object(main.scrape_urls, "run", new_callable=AsyncMock) as mock_scrape_run,
+        patch.object(main.search, "run", new_callable=AsyncMock) as mock_search_run,
+        patch.object(main.detect_schema, "run", new_callable=AsyncMock) as mock_detect_run,
+    ):
+        await main.main()
+
+    mock_configure.assert_called_once_with(logging.INFO)
+    mock_detect_run.assert_awaited_once_with(args)
+    mock_scrape_run.assert_not_called()
+    mock_search_run.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_main_unknown_command_calls_parser_error() -> None:
     """The else branch delegates to parser.error() for an unrecognized command."""
     args = SimpleNamespace(command="bogus", log_severity="warning")

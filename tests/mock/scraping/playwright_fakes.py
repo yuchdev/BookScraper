@@ -8,9 +8,10 @@ raw ``unittest.mock`` chains:
   ``card.locator(sub_sel).get_attribute(...)`` ...).
 * ``httpx.AsyncClient`` used as an async context manager.
 
-This module hand-rolls just enough of both to keep ``test_scrape_details.py`` and
-``test_search_utils.py`` readable. It is deliberately not a general Playwright/httpx
-framework - only the surface the two source files touch is implemented.
+This module hand-rolls just enough of both to keep ``test_scrape_details.py``,
+``test_search_utils.py`` and ``test_schema_detection.py`` readable. It is deliberately
+not a general Playwright/httpx framework - only the surface the source files touch is
+implemented.
 """
 
 from __future__ import annotations
@@ -57,10 +58,14 @@ class FakeLocator:
     * ``FakeLocator([{"text": "a"}, {"text": "b"}])`` - two elements.
     * ``FakeLocator([{"attrs": {"href": "/x"}, "sub": {".title": FakeLocator("T")}}])`` -
       one element carrying attributes and its own nested locators.
+
+    Pass ``raises=<exception>`` to make ``count()`` raise, mimicking Playwright raising on
+    an invalid selector string (used to test the "bad selector must not abort" path).
     """
 
-    def __init__(self, matches: LocatorInit = None) -> None:
+    def __init__(self, matches: LocatorInit = None, raises: Optional[BaseException] = None) -> None:
         self._matches: list[Match] = _normalize(matches)
+        self._raises = raises
 
     @property
     def first(self) -> FakeLocator:
@@ -85,6 +90,8 @@ class FakeLocator:
         return [FakeLocator([m]) for m in self._matches]
 
     async def count(self) -> int:
+        if self._raises is not None:
+            raise self._raises
         return len(self._matches)
 
     async def click(self, *args: Any, **kwargs: Any) -> None:
@@ -108,7 +115,8 @@ class FakePage:
 
     ``locators`` maps a selector string to the ``FakeLocator`` that
     ``page.locator(selector)`` should return; unknown selectors yield an empty
-    locator. ``title`` sets the (awaitable) page title.
+    locator. ``title`` sets the (awaitable) page title. ``content`` sets the string
+    returned by the (awaitable) ``content()`` call used for HTML-snapshot extraction.
     """
 
     def __init__(
@@ -116,10 +124,12 @@ class FakePage:
         locators: Optional[dict[str, FakeLocator]] = None,
         title: str = "",
         url: str = "https://example.test/",
+        content: str = "",
     ) -> None:
         self._locators: dict[str, FakeLocator] = locators or {}
         self.url = url
         self.title = AsyncMock(return_value=title)
+        self.content = AsyncMock(return_value=content)
         self.goto = AsyncMock()
         self.close = AsyncMock()
         self.route = AsyncMock()
@@ -136,7 +146,8 @@ class FakeBrowser:
     """A stand-in for a Playwright ``Browser`` whose ``new_page()`` is awaitable.
 
     Pass a single ``page`` (returned every call) or a ``page_factory`` callable
-    (invoked per call, e.g. to hand out a fresh page per attempt).
+    (invoked per call, e.g. to hand out a fresh page per attempt / per URL). ``close()``
+    is an ``AsyncMock`` so ``await browser.close()`` works.
     """
 
     def __init__(
@@ -148,6 +159,24 @@ class FakeBrowser:
             self.new_page = AsyncMock(side_effect=page_factory)
         else:
             self.new_page = AsyncMock(return_value=page if page is not None else FakePage())
+        self.close = AsyncMock()
+
+
+def build_playwright_factory(browser: FakeBrowser) -> MagicMock:
+    """Build an ``async_playwright()`` stand-in whose context manager yields an object
+    with ``chromium.launch`` returning ``browser`` (an awaitable).
+
+    Patch ``schema_detection.async_playwright`` (or any module using the same shape) with
+    the returned factory.
+    """
+    playwright_obj = MagicMock()
+    playwright_obj.chromium.launch = AsyncMock(return_value=browser)
+
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=playwright_obj)
+    cm.__aexit__ = AsyncMock(return_value=False)
+
+    return MagicMock(return_value=cm)
 
 
 # ---------------------------------------------------------------------------
