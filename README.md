@@ -1,6 +1,6 @@
 # BookScraper
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python)
+![Python](https://img.shields.io/badge/Python-3.13%2B-blue?style=for-the-badge&logo=python)
 ![Playwright](https://img.shields.io/badge/Playwright-Chromium-green?style=for-the-badge&logo=playwright)
 ![MongoDB](https://img.shields.io/badge/MongoDB-4.0%2B-47A248?style=for-the-badge&logo=mongodb)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
@@ -70,7 +70,7 @@ purposes.
 
 ### Prerequisites
 
-* **Python 3.9+**: Make sure you have a compatible Python version installed. You can download it
+* **Python 3.13+**: Make sure you have a compatible Python version installed. You can download it
   from [python.org](https://www.python.org/downloads/).
 * **[uv](https://docs.astral.sh/uv/)**: This project uses `uv` for dependency management, virtual environments, and
   packaging (it replaces `pip` + `venv` + `setup.py`). Install it with:

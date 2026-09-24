@@ -9,6 +9,8 @@ duplicate-check behavior: a book saved in one run is still there, and still dete
 as a duplicate, in the next.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path

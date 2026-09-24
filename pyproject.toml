@@ -3,7 +3,7 @@ name = "bookscraper"
 version = "1.0.0"
 description = "Asyncio + Playwright scraper for book metadata from Amazon, Packtpub, Leanpub, and O'Reilly, with CSV/MongoDB output."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 dependencies = [
     "playwright>=1.50.0",
     "pandas>=2.2.3",

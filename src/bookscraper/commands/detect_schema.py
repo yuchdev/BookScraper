@@ -10,6 +10,8 @@ See `scraping/schema_detection.py` for the pipeline and
 `docs/scraping/schema-detection.md` for the full manual-and-automated workflow writeup.
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 

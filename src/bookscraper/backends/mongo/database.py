@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 from typing import Optional, Tuple
@@ -207,7 +209,7 @@ def get_mongo_collection() -> Optional[Collection]:
     return _mongo_collection
 
 
-def close_mongo_connection():
+def close_mongo_connection() -> None:
     """
     Closes the global MongoDB client connection.
     """
@@ -220,7 +222,7 @@ def close_mongo_connection():
         module_logger.info("MongoDB connection closed.")
 
 
-def save_books_to_mongodb(books: list[dict], mongo_collection: Collection = None):
+def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collection] = None) -> None:
     """
     Saves a list of book dictionaries to MongoDB.
     Optionally accepts a pre-established MongoDB collection; otherwise,
@@ -297,7 +299,7 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Collection = None
     )
 
 
-def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Collection = None) -> bool:
+def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collection] = None) -> bool:
     books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
     if books_collection is None:
@@ -323,7 +325,7 @@ def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Collection = Non
         return False
 
 
-def check_book_exists_in_db(book_hash: str, mongo_collection: Collection = None) -> bool:
+def check_book_exists_in_db(book_hash: str, mongo_collection: Optional[Collection] = None) -> bool:
     """
     Checks if a book with the given hash already exists in the database.
     """
@@ -348,9 +350,9 @@ def check_book_exists_in_db(book_hash: str, mongo_collection: Collection = None)
 def update_book_isbn(
     books_collection: Collection,
     book_hash: str,
-    new_isbn10: str = None,
-    new_isbn13: str = None,
-):
+    new_isbn10: Optional[str] = None,
+    new_isbn13: Optional[str] = None,
+) -> bool:
     """
     Updates the ISBNs of an existing book in the database.
     This function expects an already connected collection to be passed to it.
@@ -392,7 +394,7 @@ def update_book_isbn(
         return False
 
 
-def ensure_unique_index_on_hash(books_collection: Collection):
+def ensure_unique_index_on_hash(books_collection: Collection) -> None:
     """
     Ensures a unique index on the 'hash' field in the MongoDB collection.
     """

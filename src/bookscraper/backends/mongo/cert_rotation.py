@@ -23,6 +23,8 @@ Optional (each can also be overridden by a `bookscraper rotate-cert` flag):
 Run: uv run bookscraper rotate-cert
 """
 
+from __future__ import annotations
+
 import json
 import os
 import pathlib

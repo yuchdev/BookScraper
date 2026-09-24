@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -5,10 +7,11 @@ import random
 import re
 from datetime import datetime
 from html import unescape
+from typing import Optional, Union
 from urllib.parse import urljoin
 
 import httpx
-from playwright.async_api import Browser, TimeoutError
+from playwright.async_api import Browser, Route, TimeoutError
 
 from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
@@ -18,7 +21,7 @@ from .parameters import USER_AGENTS, site_constants
 module_logger = logging.getLogger("scrape_details")
 
 
-async def route_handler(route):
+async def route_handler(route: Route) -> None:
     request = route.request
     # Allow document (HTML page) requests to go through.
     # Block other resource types (images, fonts, stylesheets, etc.) to speed up scraping.
@@ -28,7 +31,7 @@ async def route_handler(route):
         await route.abort()
 
 
-async def get_leanpub_book_details(url: str):
+async def get_leanpub_book_details(url: str) -> Optional[dict]:
     """
     Fetches detailed information for a single Leanpub book from the provided JSON structure.
 
@@ -130,7 +133,9 @@ async def get_leanpub_book_details(url: str):
         return None
 
 
-async def scrape_book(url: str, browser: Browser, site: str, storage_backend: StorageBackend = None):
+async def scrape_book(
+    url: str, browser: Browser, site: str, storage_backend: Optional[StorageBackend] = None
+) -> Optional[Union[dict, tuple[None, str]]]:
     """
     Scrapes book details from a given URL, handles retries, and checks for duplicates.
 

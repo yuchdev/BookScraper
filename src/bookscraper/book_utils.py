@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
@@ -251,7 +253,7 @@ def extract_year_from_date(date_string: str) -> Optional[int]:
         return None
 
 
-def hash_book(title: str = "", authors: list = None, year=None) -> str:
+def hash_book(title: str = "", authors: Optional[list] = None, year: Optional[int] = None) -> str:
     """
     Calculates a SHA-256 hash for a book based on its title, authors, and year.
 

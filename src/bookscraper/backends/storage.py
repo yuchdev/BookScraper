@@ -12,6 +12,8 @@ backends now implement identical read+write behavior - see local/store.py's JSON
 mongo/database.py's MongoDB collection.
 """
 
+from __future__ import annotations
+
 import sys
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -43,7 +45,7 @@ class StorageBackend(ABC):
 
 
 class MongoBackend(StorageBackend):
-    def __init__(self, collection: Collection):
+    def __init__(self, collection: Collection) -> None:
         self._collection = collection
 
     def save_books(self, books: list[dict]) -> None:

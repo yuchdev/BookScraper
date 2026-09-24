@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import asyncio
 import csv
@@ -14,7 +16,7 @@ from ..scraping.parameters import HEADLESS_BROWSER
 from ..scraping.scrape_details import scrape_book
 
 
-def save_failed_urls_to_csv(failed_urls_with_status, filename="failed_books.csv"):
+def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str]], filename: str = "failed_books.csv") -> None:
     """
     Saves the failed/duplicate URLs with their status to a CSV file.
 
@@ -49,7 +51,7 @@ def save_failed_urls_to_csv(failed_urls_with_status, filename="failed_books.csv"
         )
 
 
-def save_other_links_to_csv(other_links, filename="other_links.csv"):
+def save_other_links_to_csv(other_links: list[str], filename: str = "other_links.csv") -> None:
     """Saves the 'other' links (skipped URLs) to a CSV file."""
     if not other_links:
         logger.info(f"No 'other' links to save to {filename}.")
@@ -75,7 +77,7 @@ def save_other_links_to_csv(other_links, filename="other_links.csv"):
         )
 
 
-def identify_website(url):
+def identify_website(url: str) -> str:
     """Identifies the website based on the URL."""
     if "amazon.com" in url:
         return "amazon"

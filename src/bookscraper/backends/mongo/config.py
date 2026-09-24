@@ -15,6 +15,8 @@ See CLAUDE.md's "Authentication configuration" section for the settings.json
 schema and all six valid (auth_type, source, source) combinations.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path

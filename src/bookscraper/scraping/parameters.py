@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 USER_AGENTS = [
     # Chrome (Windows)
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",

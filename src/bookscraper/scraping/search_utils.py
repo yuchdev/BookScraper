@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -21,7 +23,7 @@ from .scrape_details import route_handler
 logger = logging.getLogger(__name__)
 
 
-async def get_leanpub_search_results_via_api(query: str):
+async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
     print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
     logger.info(f"Leanpub - Fetching search results from Leanpub.com for {query}.")
     base_url = site_constants["leanpub"]["SEARCH_BASE_API"]

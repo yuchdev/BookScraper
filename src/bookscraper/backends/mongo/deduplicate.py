@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import logging
+from typing import Optional
 
 from pymongo.collection import Collection
 
@@ -8,7 +11,7 @@ from .database import get_mongo_collection
 module_logger = logging.getLogger("deduplicate")
 
 
-def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection: Collection = None) -> bool:
+def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection: Optional[Collection] = None) -> bool:
     """
     Checks if a Leanpub book exists in the database by either its book_id or book_slug.
     At least one of book_id or book_slug must be provided.

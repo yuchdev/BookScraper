@@ -36,8 +36,8 @@ import re
 from typing import Any, Optional
 
 import anthropic
+from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from playwright.async_api import async_playwright
 
 from ..book_utils import print_log
 from .parameters import HEADLESS_BROWSER, USER_AGENTS, site_constants
@@ -273,7 +273,7 @@ def format_diff_report(
 # --------------------------------------------------------------------------- #
 # External-collaborator helpers (network / browser) - mock-tested.
 # --------------------------------------------------------------------------- #
-def _extract_text(message: Any) -> str:
+def _extract_text(message: anthropic.types.Message) -> str:
     """Concatenate the text blocks of an anthropic ``Message`` response."""
     parts: list[str] = []
     for block in getattr(message, "content", []) or []:
@@ -305,7 +305,7 @@ def call_anthropic(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> str
     return _extract_text(message)
 
 
-async def fetch_pruned_html(url: str, page: Any, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
+async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
     """Navigate ``page`` to ``url`` and return a pruned HTML snapshot.
 
     Applies a rotated User-Agent and the shared ``route_handler`` (document-only)
