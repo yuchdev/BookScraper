@@ -60,3 +60,21 @@ report with a drift exit code, and prompt-injection hardening.
 Total line coverage is 95% (344 passed, 8 integration deselected), but the gate is not enforced in configuration,
 `scrape_details.py` (80%) and `search_utils.py` (88%) are below the bar, entry points are uncovered, branch
 coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wrong project.
+
+## Notes & decisions
+
+- **2026-09-29 - implement-milestone run started (Phase R).** Baseline: 344 passed, 8 integration deselected.
+  status.md and the task READMEs agree; R3 found no stale rows or live divergences. R4: every task has a folder,
+  a README and one spec per subtask row, so no gap specs were needed.
+- **2026-09-29 - Execution order** (dependency-respecting, per plan *Execution order*): 01.0 → 02.0 → 02.1 → 06.0 →
+  04.0 → 06.1 → 05.0 → 03.0 → 03.1 → 03.2 → 07.0 → 03.3 → 08.0 → 06.2.
+- **2026-09-29 - Run conventions (user-ratified):** work lands on branch `milestone/0001-generic-implementation`,
+  one commit per subtask, never pushed. The run pauses for review after each task close. 06.0 fixtures are
+  captured from the live sites. If a site bot-walls the capture, a hand-built fixture is used for that site and
+  recorded here.
+- **2026-09-29 - Known blocker:** 02.1/08 (live X.509 re-diagnosis) needs Atlas credentials that this machine
+  doesn't have. Per that spec's requirement 4, it stays 🔶 with the blocker written down unless credentials are
+  provided.
+- **2026-09-29 - Repo fix during setup:** `.gitignore`'s `/books.json` line carried an inline `#` comment, which
+  gitignore treats as part of the pattern, so `books.json` was not actually ignored. Fixed, and `.claude/state/`
+  (loop cursors) is now ignored.
