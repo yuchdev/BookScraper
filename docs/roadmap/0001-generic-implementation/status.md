@@ -7,7 +7,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
-| 01.0 | Storage backend abstraction        | 🔶 In progress | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
+| 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
 | 02.0 | MongoDB auth configuration         | 🔶 In progress | 3 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -32,7 +32,35 @@ Delivered before this milestone was written down: the `StorageBackend` contract,
 `books.json` with hash uniqueness), `MongoBackend` (delegating to `database.py` / `deduplicate.py`), and the
 required `--store-backend` flag with a pre-flight check. Open: `save_books_to_mongodb` continues after a `None`
 collection and returns nothing; the JSON store writes non-atomically and re-reads the file per lookup; no
-indexes on `asin` / `book_id` / `slug`; no cross-backend parity test.
+indexes on `asin` / `book_id` / `slug`; no cross-backend parity test. All four are now closed (below).
+
+### Task 01.0 - Storage backend abstraction (✅ 2026-09-29)
+
+**Delivered** (commits `d396fcf`..`69f1448` on `milestone/0001-generic-implementation`):
+
+- **05** `SaveSummary(inserted, duplicates, errors)` returned by both backends. `save_books_to_mongodb` returns
+  immediately on a `None` collection, writes with one `insert_many(ordered=False)` over copies of the caller's
+  dicts, pre-validates BSON per document, and splits `BulkWriteError` into duplicates (11000) and errors. Both
+  scraping commands log the summary.
+- **06** `ensure_indexes()` adds sparse, non-unique `asin` / `book_id` / `slug` lookup indexes next to the unique
+  `hash` index. `ensure_unique_index_on_hash` is kept as a deprecated alias.
+- **07** Shared `book_utils.atomic_write_bytes` (also used by `cert_rotation`, mode `0600`): temp file, fsync,
+  replace, temp cleanup on failure, and existing-mode preservation. `books.json.bak` holds one generation, and
+  `LocalStoreCorruptError` refuses to overwrite an unparseable store (the json pre-flight exits on it).
+  `JsonBackend` keeps an in-memory hash/asin/book_id/slug index, so the file is parsed once per process.
+- **08** Parity suite (`tests/mock/backends/test_backend_parity.py`, mongomock 4.3.0 dev dependency;
+  [dep audit](/docs/reviews/2026-09-29-dep-audit.md) clean). It found and fixed one divergence: the Mongo path
+  stored a hash-less book (the unique index treats a missing field as `null`), where the JSON store rejects it.
+
+**Tests / gate:** 344 → 382 passed (8 integration deselected), 95% total. `database.py`, `store.py` and
+`storage.py` are at 100%. `/verify-subtask` PASS ×4. `/pr-review`: feature LGTM and security PASS, so APPROVE;
+its three non-blocking suggestions are applied in `69f1448`.
+
+**Reconciliation note:** 08's "deliberately break `store.leanpub_book_exists`" probe no longer reaches the parity
+suite, because 07 moved `JsonBackend` lookups onto its in-memory index. Breaking `JsonBackend.leanpub_book_exists`
+does fail the suite, and the store function stays covered by its own unit test. All of 05-08 are *consumed*.
+The 06 success criteria (`getIndexes()` and `explain()` showing `IXSCAN` on a live cluster) are still manual
+checks, pending Atlas access.
 
 ## Task 02.0 - MongoDB auth configuration
 
@@ -83,3 +111,6 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   a call that relies on the default. Every current caller passes an explicit path (`JsonBackend` now passes
   `store.LOCAL_STORE_FILE` at call time), so nothing is exposed today. Candidate fix: `path: Optional[Path] = None`
   resolved at call time. Revisit in 06.1 or 08.0.
+- **2026-09-29 - follow-up from the 01.0 review (pre-existing, not 01.0 scope):** `commands/search.py` calls
+  `storage_backend.save_books()` directly, which blocks the event loop during a Mongo bulk write, whereas
+  `scrape_urls.py` wraps the same call in `asyncio.to_thread`. Pick this up in 03.3 (search pipeline).
