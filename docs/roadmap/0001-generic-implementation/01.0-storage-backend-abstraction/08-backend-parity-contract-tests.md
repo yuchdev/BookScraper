@@ -1,7 +1,7 @@
 # 08 - Backend parity contract tests
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [05-mongo-save-hardening.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md), [07-json-store-atomic-write-and-cache.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md)
 **Role:** Testing Expert
 

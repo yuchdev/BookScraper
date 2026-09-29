@@ -10,9 +10,10 @@ audits, secret scans, performance-regression findings, and license checks.
 
 ## Contents
 
-| Document                               | Description               |
-|----------------------------------------|---------------------------|
-| [example-report.md](example-report.md) | Example efficiency audit. |
+| Document                                                             | Description                                                              |
+|----------------------------------------------------------------------|--------------------------------------------------------------------------|
+| [example-report.md](example-report.md)                              | Example efficiency audit.                                                |
+| [2026-09-29-dep-audit.md](2026-09-29-dep-audit.md)                  | Dep audit: mongomock addition (milestone 0001/01.0/08) — no CVEs found. |
 
 ## What a review report must contain
 

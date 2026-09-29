@@ -262,6 +262,15 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
     docs: list[dict] = []
     num_errors = 0
     for book in books:
+        # A document with no 'hash' cannot be de-duplicated (the unique 'hash' index
+        # would index it as null and silently accept it), so reject it up front as an
+        # error rather than store an un-dedupable book - matching store.save_books on
+        # the json backend, so both backends agree that a hash-less book is an error.
+        if not (isinstance(book, dict) and book.get("hash")):
+            module_logger.error(f"Book missing 'hash', cannot store: {book}")
+            print_log("Error: Book missing 'hash', cannot store.", "error")
+            num_errors += 1
+            continue
         doc = dict(book)
         try:
             bson.BSON.encode(doc)

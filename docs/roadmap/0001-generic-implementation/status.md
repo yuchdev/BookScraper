@@ -7,7 +7,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
-| 01.0 | Storage backend abstraction        | 🔶 In progress | 7 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
+| 01.0 | Storage backend abstraction        | 🔶 In progress | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
 | 02.0 | MongoDB auth configuration         | 🔶 In progress | 3 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 20 / 94 subtasks complete.
+**Totals:** 21 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
