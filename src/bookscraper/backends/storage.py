@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Optional
 
 from pymongo.collection import Collection
@@ -25,11 +26,33 @@ from .local import store
 from .mongo import database, deduplicate
 
 
+@dataclass(frozen=True)
+class SaveSummary:
+    """
+    Outcome of a :meth:`StorageBackend.save_books` call, identical in shape for
+    both backends so a caller can distinguish a 100%-duplicate batch from a total
+    failure (which it could not when ``save_books`` returned ``None``).
+
+    :ivar inserted: Documents newly written.
+    :ivar duplicates: Documents skipped because their ``hash`` already exists.
+    :ivar errors: Documents rejected for any other reason.
+    """
+
+    inserted: int
+    duplicates: int
+    errors: int
+
+    @property
+    def total(self) -> int:
+        """Total documents accounted for: ``inserted + duplicates + errors``."""
+        return self.inserted + self.duplicates + self.errors
+
+
 class StorageBackend(ABC):
     """Uniform read/write contract shared by the mongo and json backends."""
 
     @abstractmethod
-    def save_books(self, books: list[dict]) -> None: ...
+    def save_books(self, books: list[dict]) -> SaveSummary: ...
 
     @abstractmethod
     def book_exists_by_hash(self, book_hash: str) -> bool: ...
@@ -48,8 +71,8 @@ class MongoBackend(StorageBackend):
     def __init__(self, collection: Collection) -> None:
         self._collection = collection
 
-    def save_books(self, books: list[dict]) -> None:
-        database.save_books_to_mongodb(books, self._collection)
+    def save_books(self, books: list[dict]) -> SaveSummary:
+        return database.save_books_to_mongodb(books, self._collection)
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
         return database.check_book_exists_in_db(book_hash, self._collection)
@@ -65,8 +88,8 @@ class MongoBackend(StorageBackend):
 
 
 class JsonBackend(StorageBackend):
-    def save_books(self, books: list[dict]) -> None:
-        store.save_books(books)
+    def save_books(self, books: list[dict]) -> SaveSummary:
+        return store.save_books(books)
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
         return store.check_book_exists(book_hash)

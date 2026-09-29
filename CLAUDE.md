@@ -135,6 +135,15 @@ requested backend (MongoDB ping, or local write-permission test) and exits the p
 above). `backends/__init__.py` re-exports `StorageBackend`, `MongoBackend`, `JsonBackend`, and
 `resolve_store_backend` for `from ..backends import ...` elsewhere in the package.
 
+`save_books()` returns a frozen `SaveSummary` dataclass (also in `storage.py`, re-exported nowhere else) — the
+identical shape from both backends — with `inserted` / `duplicates` / `errors` counts and a `total` property. This
+lets a caller tell a 100%-duplicate batch apart from a total failure (the old `None` return could not), and both
+scraping subcommands log it and treat `summary.errors > 0` as the partial-failure signal. The mongo backend writes
+in a single `insert_many(docs, ordered=False)` over per-document *copies* (so pymongo's in-place `_id` assignment
+never mutates the caller's dicts), pre-validating each document with `bson.BSON.encode` so one bad document is one
+error rather than an aborted batch, and returns `SaveSummary(0, 0, len(books))` immediately when the collection is
+unavailable.
+
 - **`mongo`** (`storage.MongoBackend`) — thin wrapper over `backends/mongo/database.py`'s existing MongoDB
   functions (`save_books_to_mongodb`, `check_book_exists_in_db`, `check_amazon_asin_exists_in_db`) plus
   `backends/mongo/deduplicate.py`'s `leanpub_prescrape_deduplicate`.

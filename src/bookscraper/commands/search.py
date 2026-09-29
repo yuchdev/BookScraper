@@ -201,7 +201,13 @@ async def run(args: argparse.Namespace) -> None:
 
     if scraped_books_data:
         print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
-        storage_backend.save_books(scraped_books_data)
+        summary = storage_backend.save_books(scraped_books_data)
+        # summary.errors > 0 is the partial-failure signal the exit-code contract
+        # (task 05.0, subtask 05) consumes.
+        print_log(
+            f"Save summary: {summary.inserted} new, {summary.duplicates} duplicates, {summary.errors} errors.",
+            "warning" if summary.errors > 0 else "success",
+        )
     else:
         print_log("No new books to save.")
 

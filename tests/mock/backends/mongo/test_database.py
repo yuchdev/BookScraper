@@ -12,14 +12,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymongo.errors import (
+    BulkWriteError,
     ConnectionFailure,
-    DuplicateKeyError,
-    InvalidDocument,
-    OperationFailure,
     ServerSelectionTimeoutError,
 )
 
 from bookscraper.backends.mongo import config, database
+from bookscraper.backends.storage import SaveSummary
 
 
 @pytest.fixture(autouse=True)
@@ -239,39 +238,157 @@ class TestCloseMongoConnection:
 # save_books_to_mongodb
 # --------------------------------------------------------------------------- #
 class TestSaveBooksToMongodb:
-    def test_all_insert_branches_counted(self) -> None:
-        collection = Mock(name="collection")
-        collection.insert_one.side_effect = [
-            Mock(acknowledged=True, inserted_id="id1"),
-            Mock(acknowledged=False),
-            DuplicateKeyError("dup"),
-            InvalidDocument("bad"),
-            OperationFailure("op"),
-            RuntimeError("boom"),
-        ]
-        books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(6)]
-
-        with patch.object(database, "print_log") as mock_print:
-            database.save_books_to_mongodb(books, collection)
-
-        assert collection.insert_one.call_count == 6
-        summary_calls = [c.args[0] for c in mock_print.call_args_list if "insertion summary" in c.args[0]]
-        assert summary_calls, "expected a summary print_log call"
-        # 1 acknowledged insert, 1 duplicate, 4 errors (unacked + invalid + opfail + generic).
-        assert "1 new, 1 duplicates, 4 errors." in summary_calls[-1]
-
-    def test_none_collection_logs_error_and_does_not_raise(self, monkeypatch) -> None:
+    def test_save_returns_all_errors_and_skips_io_when_collection_is_none(self, monkeypatch) -> None:
+        """
+        Scenario: the resolved collection is None, so nothing can be written.
+        Boundaries: two books, no live collection; the previous code fell through and
+        raised AttributeError per book, reporting N errors as N swallowed exceptions.
+        On failure: a total outage is misreported, and pymongo is touched despite there
+        being no collection.
+        """
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
-        books = [{"title": "x", "hash": "h"}]
+        books = [{"title": "x", "hash": "h1"}, {"title": "y", "hash": "h2"}]
 
         with patch.object(database, "print_log") as mock_print:
-            # Real behavior: books_collection stays None, the not-available error is
-            # logged, then None.insert_one raises AttributeError which the generic
-            # except catches - so this must NOT propagate.
-            database.save_books_to_mongodb(books, None)
+            summary = database.save_books_to_mongodb(books, None)
 
+        assert summary == SaveSummary(inserted=0, duplicates=0, errors=2)
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("not available" in msg for msg in printed)
+
+    def test_save_empty_list_returns_zero_summary_without_db_call(self) -> None:
+        """
+        Scenario: an empty batch resolves to a zero summary and never touches the DB.
+        Boundaries: [] with a live collection present.
+        On failure: an empty insert_many([]) raises InvalidOperation, or a needless
+        round-trip is issued.
+        """
+        collection = Mock(name="collection")
+
+        summary = database.save_books_to_mongodb([], collection)
+
+        assert summary == SaveSummary(inserted=0, duplicates=0, errors=0)
+        collection.insert_many.assert_not_called()
+
+    def test_save_uses_single_unordered_insert_many(self) -> None:
+        """
+        Scenario: a 100-book batch is written with exactly one unordered insert_many.
+        Boundaries: 100 valid documents, all inserted.
+        On failure: the per-book insert_one regression returns (500 round-trips), or the
+        batch is ordered and aborts on the first duplicate.
+        """
+        collection = Mock(name="collection")
+        collection.insert_many.return_value = Mock(inserted_ids=[f"id{i}" for i in range(100)])
+        books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(100)]
+
+        with patch.object(database, "print_log"):
+            summary = database.save_books_to_mongodb(books, collection)
+
+        collection.insert_many.assert_called_once()
+        args, kwargs = collection.insert_many.call_args
+        assert len(args[0]) == 100
+        assert kwargs["ordered"] is False
+        assert summary == SaveSummary(inserted=100, duplicates=0, errors=0)
+
+    def test_bulk_write_error_splits_duplicates_from_other_errors(self) -> None:
+        """
+        Scenario: insert_many partially fails; duplicates (code 11000) and other write
+        errors are counted apart, with nInserted as the success count.
+        Boundaries: details carrying two 11000 codes and one 121 (document-validation).
+        On failure: duplicates inflate the error count (or vice versa) and the partial-
+        failure signal misfires.
+        """
+        collection = Mock(name="collection")
+        details = {
+            "nInserted": 2,
+            "writeErrors": [
+                {"code": 11000, "errmsg": "dup key"},
+                {"code": 11000, "errmsg": "dup key"},
+                {"code": 121, "errmsg": "doc validation"},
+            ],
+        }
+        collection.insert_many.side_effect = BulkWriteError(details)
+        books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(5)]
+
+        with patch.object(database, "print_log"):
+            summary = database.save_books_to_mongodb(books, collection)
+
+        assert summary == SaveSummary(inserted=2, duplicates=2, errors=1)
+
+    def test_invalid_document_counted_as_error_without_aborting_batch(self) -> None:
+        """
+        Scenario: one un-encodable document is rejected up front while the rest of the
+        batch is still inserted.
+        Boundaries: a batch of one BSON-encodable and one un-encodable document.
+        On failure: the bad document aborts the whole insert_many, so a single malformed
+        record loses every other book in the batch.
+        """
+        collection = Mock(name="collection")
+        collection.insert_many.return_value = Mock(inserted_ids=["id1"])
+        good = {"title": "Good", "hash": "h1"}
+        bad = {"title": "Bad", "hash": "h2", "broken": object()}  # object() is not BSON-encodable
+
+        with patch.object(database, "print_log"):
+            summary = database.save_books_to_mongodb([good, bad], collection)
+
+        # Only the encodable document reaches insert_many.
+        args, _ = collection.insert_many.call_args
+        assert [d["hash"] for d in args[0]] == ["h1"]
+        assert summary == SaveSummary(inserted=1, duplicates=0, errors=1)
+
+    def test_all_invalid_documents_skip_insert_many(self) -> None:
+        """
+        Scenario: every document fails pre-validation, so insert_many is never called.
+        Boundaries: a batch whose only member is un-encodable.
+        On failure: insert_many([]) is issued and raises InvalidOperation.
+        """
+        collection = Mock(name="collection")
+        bad = {"title": "Bad", "hash": "h1", "broken": object()}
+
+        with patch.object(database, "print_log"):
+            summary = database.save_books_to_mongodb([bad], collection)
+
+        collection.insert_many.assert_not_called()
+        assert summary == SaveSummary(inserted=0, duplicates=0, errors=1)
+
+    def test_caller_dicts_are_not_mutated_with_object_id(self) -> None:
+        """
+        Scenario: pymongo assigns _id in place on the docs it inserts; the caller's dicts
+        must be untouched so a later json.dumps diagnostic write does not choke on an
+        ObjectId.
+        Boundaries: insert_many stamps _id onto the doc it receives.
+        On failure: the caller's dict gains an ObjectId _id and downstream JSON writes fail.
+        """
+        collection = Mock(name="collection")
+
+        def _stamp_id(docs, ordered):  # noqa: ARG001 - mirrors pymongo's in-place _id assignment
+            for doc in docs:
+                doc["_id"] = "stamped-object-id"
+            return Mock(inserted_ids=["stamped-object-id"])
+
+        collection.insert_many.side_effect = _stamp_id
+        book = {"title": "Book", "hash": "h1"}
+
+        with patch.object(database, "print_log"):
+            database.save_books_to_mongodb([book], collection)
+
+        assert "_id" not in book
+
+    def test_unexpected_insert_many_error_counts_whole_batch_as_errors(self) -> None:
+        """
+        Scenario: insert_many fails with something other than a BulkWriteError (e.g. a
+        connection drop mid-insert); the whole encodable batch is reported as errors.
+        Boundaries: a generic exception raised by insert_many.
+        On failure: the exception propagates out of save_books instead of being summarized.
+        """
+        collection = Mock(name="collection")
+        collection.insert_many.side_effect = RuntimeError("connection lost")
+        books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(3)]
+
+        with patch.object(database, "print_log"):
+            summary = database.save_books_to_mongodb(books, collection)
+
+        assert summary == SaveSummary(inserted=0, duplicates=0, errors=3)
 
 
 # --------------------------------------------------------------------------- #

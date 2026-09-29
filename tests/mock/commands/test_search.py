@@ -9,6 +9,7 @@ import csv
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
 from bookscraper.commands.search import run, save_failed_urls_to_csv
 
@@ -147,6 +148,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
     fresh = _leanpub_book("fresh-book", "Fresh Book")
 
     backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
     # First book already in DB, second is new.
     backend.leanpub_book_exists = MagicMock(side_effect=[True, False])
 
@@ -181,6 +183,7 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     weird = _leanpub_book("weird", "Weird Book")
 
     backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
     backend.leanpub_book_exists = MagicMock(return_value=False)
 
     search_api = AsyncMock(return_value=[good, boom, weird])

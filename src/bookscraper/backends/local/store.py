@@ -14,9 +14,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from ...book_utils import print_log
+
+if TYPE_CHECKING:
+    from ..storage import SaveSummary
 
 module_logger = logging.getLogger(__name__)
 
@@ -39,12 +42,21 @@ def _write_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
     path.write_text(json.dumps(books, indent=2, default=str), encoding="utf-8")
 
 
-def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
+def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
     """
     Appends new books to the local JSON store, skipping any whose 'hash' already
     exists - mirroring MongoDB's unique index on 'hash' (database.save_books_to_mongodb's
-    DuplicateKeyError skip).
+    duplicate skip).
+
+    :param books: Book documents to persist.
+    :param path: Store file location (overridable for tests).
+    :returns: A :class:`~bookscraper.backends.storage.SaveSummary` matching the shape
+        the mongo backend returns, so both backends are interchangeable to the caller.
     """
+    # Local import: backends.storage imports this module, so a module-level import of
+    # SaveSummary would be circular.
+    from ..storage import SaveSummary
+
     existing_books = _load_books(path)
     existing_hashes = {b.get("hash") for b in existing_books if isinstance(b, dict)}
 
@@ -79,6 +91,7 @@ def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
         f"Local JSON store insertion summary: {num_inserted} new, {num_duplicates} duplicates, {num_errors} errors.",
         "success",
     )
+    return SaveSummary(inserted=num_inserted, duplicates=num_duplicates, errors=num_errors)
 
 
 def check_book_exists(book_hash: str, path: Path = LOCAL_STORE_FILE) -> bool:

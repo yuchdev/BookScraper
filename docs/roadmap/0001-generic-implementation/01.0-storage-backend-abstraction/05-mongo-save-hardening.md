@@ -1,7 +1,7 @@
 # 05 - Mongo save hardening
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [03-mongo-backend-wrapper.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/03-mongo-backend-wrapper.md)
 **Role:** Python Expert
 

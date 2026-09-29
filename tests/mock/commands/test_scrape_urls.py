@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
+from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands.scrape_urls import (
     identify_website,
     run,
@@ -214,6 +215,7 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
 
     backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
     pw_factory, browser = _make_playwright_factory()
     book = {"title": "Good Book", "hash": "abc123"}
     scrape_book = AsyncMock(side_effect=[book])
@@ -277,6 +279,7 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> No
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
 
     backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=11, duplicates=0, errors=0)
     pw_factory, browser = _make_playwright_factory()
     books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(11)]
     scrape_book = AsyncMock(side_effect=books)

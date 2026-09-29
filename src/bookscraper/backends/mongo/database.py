@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 
+import bson
 from dotenv import load_dotenv
 from pymongo import MongoClient, server_api
 from pymongo.collection import Collection
 from pymongo.errors import (
+    BulkWriteError,
     ConnectionFailure,
-    DuplicateKeyError,
     InvalidDocument,
-    OperationFailure,
     ServerSelectionTimeoutError,
 )
+
+if TYPE_CHECKING:
+    from ..storage import SaveSummary
 
 from ...book_utils import print_log
 from . import config
@@ -222,43 +225,46 @@ def close_mongo_connection() -> None:
         module_logger.info("MongoDB connection closed.")
 
 
-def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collection] = None) -> None:
+def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collection] = None) -> SaveSummary:
     """
-    Saves a list of book dictionaries to MongoDB.
-    Optionally accepts a pre-established MongoDB collection; otherwise,
-    uses the globally managed MongoDB collection.
+    Saves a list of book dictionaries to MongoDB in a single unordered bulk insert.
 
-    Returns:
-            A dictionary containing insertion summary (num_inserted, num_duplicates, num_errors).
+    Optionally accepts a pre-established MongoDB collection; otherwise, uses the
+    globally managed MongoDB collection. Each document is validated and inserted as
+    a *copy* so pymongo never mutates the caller's dicts with an ObjectId ``_id``
+    (which would later break ``json.dumps`` in a diagnostic write).
+
+    :param books: Book documents to insert.
+    :param mongo_collection: Optional pre-resolved collection; the global one is used
+        when omitted.
+    :returns: A :class:`~bookscraper.backends.storage.SaveSummary` describing how many
+        documents were inserted, skipped as duplicates, or rejected as errors. When the
+        collection is unavailable, every book is reported as an error.
     """
+    # Local import: backends.storage imports this module, so importing SaveSummary at
+    # module level would be circular (mirrors book_utils's config import comment).
+    from ..storage import SaveSummary
+
     # Use the passed collection if provided, otherwise get the global one
     books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
     if books_collection is None:  # If it's still None after trying to get it, log error and return
         module_logger.error("MongoDB collection not available. Cannot save books.")
         print_log("Error: MongoDB collection not available. Cannot save books.", "error")
+        return SaveSummary(inserted=0, duplicates=0, errors=len(books))
 
-    num_inserted = 0
-    num_duplicates = 0
+    if not books:
+        return SaveSummary(inserted=0, duplicates=0, errors=0)
+
+    # Pre-validate each document as a copy: a single un-encodable document is counted
+    # as one error rather than aborting the whole insert_many batch, and the copy means
+    # insert_many's in-place _id assignment never touches the caller's dicts.
+    docs: list[dict] = []
     num_errors = 0
-
     for book in books:
+        doc = dict(book)
         try:
-            result = books_collection.insert_one(book)
-            if result.acknowledged:
-                num_inserted += 1
-                module_logger.info(f"Inserted book: {book.get('title', 'Unknown Title')} (ID: {result.inserted_id})")
-            else:
-                module_logger.warning(f"Insertion not acknowledged for {book.get('title', 'Unknown Title')}.")
-                print_log(
-                    f"Warning: Insertion not acknowledged for {book.get('title', 'Unknown Title')}.",
-                    "warning",
-                )
-                num_errors += 1
-        except DuplicateKeyError:
-            module_logger.info(f"Duplicate book found by hash '{book['hash']}'. Skipping insertion.")
-            # print_log(f"Info: Duplicate book found by hash '{book['hash']}'. Skipping insertion.", "info")
-            num_duplicates += 1
+            bson.BSON.encode(doc)
         except InvalidDocument as e:
             module_logger.error(
                 f"Invalid document for insertion: {e}. Book: {book.get('title', 'Unknown Title')}",
@@ -269,26 +275,29 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
                 "error",
             )
             num_errors += 1
-        except OperationFailure as e:
-            module_logger.error(
-                f"MongoDB operation failed for {book.get('title', 'Unknown Title')}: {e}",
-                exc_info=True,
-            )
-            print_log(
-                f"Error: MongoDB operation failed for {book.get('title', 'Unknown Title')}: {e}",
-                "error",
-            )
-            num_errors += 1
+            continue
+        docs.append(doc)
+
+    num_inserted = 0
+    num_duplicates = 0
+
+    if docs:
+        try:
+            result = books_collection.insert_many(docs, ordered=False)
+            num_inserted = len(result.inserted_ids)
+        except BulkWriteError as e:
+            # ordered=False keeps going after failures; nInserted counts the survivors,
+            # and each write error is a duplicate (code 11000) or some other rejection.
+            num_inserted = e.details.get("nInserted", 0)
+            for write_error in e.details.get("writeErrors", []):
+                if write_error.get("code") == 11000:
+                    num_duplicates += 1
+                else:
+                    num_errors += 1
         except Exception as e:
-            module_logger.error(
-                f"Unexpected error during insertion of {book.get('title', 'Unknown Title')}: {e}",
-                exc_info=True,
-            )
-            print_log(
-                f"Error: Unexpected error during insertion of {book.get('title', 'Unknown Title')}: {e}",
-                "error",
-            )
-            num_errors += 1
+            module_logger.error(f"MongoDB bulk insertion failed: {e}", exc_info=True)
+            print_log(f"Error: MongoDB bulk insertion failed: {e}", "error")
+            num_errors += len(docs)
 
     module_logger.info(
         f"MongoDB insertion summary: {num_inserted} new, {num_duplicates} duplicate{'s' if num_duplicates != 1 else ''}, {num_errors} error{'s' if num_errors != 1 else ''}."
@@ -297,6 +306,7 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
         f"MongoDB insertion summary: {num_inserted} new, {num_duplicates} duplicates, {num_errors} errors.",
         "success",
     )
+    return SaveSummary(inserted=num_inserted, duplicates=num_duplicates, errors=num_errors)
 
 
 def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collection] = None) -> bool:

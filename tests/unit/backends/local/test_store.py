@@ -11,6 +11,7 @@ the real repo-root books.json.
 import json
 
 from bookscraper.backends.local import store
+from bookscraper.backends.storage import SaveSummary
 
 
 def _read(path):
@@ -65,6 +66,29 @@ class TestSaveBooks:
         before = _read(isolated_local_store)
         store.save_books([{"hash": "h1", "title": "Dup"}], isolated_local_store)
         assert _read(isolated_local_store) == before
+
+    def test_json_save_books_returns_summary(self, isolated_local_store) -> None:
+        """
+        Scenario: save_books reports its outcome as a SaveSummary, matching the mongo
+        backend's return contract so the two are interchangeable to the caller.
+        Boundaries: a mixed batch - one insert, one hash-duplicate, one hash-less error.
+        On failure: the counts drift from what was actually written, or the caller gets
+        None and cannot tell a duplicate-only batch from a failure.
+        """
+        store.save_books([{"hash": "h1", "title": "First"}], isolated_local_store)
+
+        summary = store.save_books(
+            [
+                {"hash": "h2", "title": "New"},
+                {"hash": "h1", "title": "Dup"},
+                {"title": "No Hash"},
+            ],
+            isolated_local_store,
+        )
+
+        assert isinstance(summary, SaveSummary)
+        assert (summary.inserted, summary.duplicates, summary.errors) == (1, 1, 1)
+        assert summary.total == 3
 
 
 class TestCheckBookExists:
@@ -123,6 +147,20 @@ class TestLeanpubBookExists:
 
     def test_empty_store_returns_false(self, isolated_local_store) -> None:
         assert store.leanpub_book_exists("42", "some-book", isolated_local_store) is False
+
+    def test_non_dict_entry_is_skipped(self, isolated_local_store) -> None:
+        """
+        Scenario: a corrupted store holding a non-dict element is walked past to reach a
+        genuine match further down the list.
+        Boundaries: a list mixing a bare string with a valid book document.
+        On failure: the loop calls .get on a str and raises AttributeError instead of
+        skipping the malformed entry.
+        """
+        isolated_local_store.write_text(
+            json.dumps(["not-a-dict", {"hash": "h1", "book_id": "42", "slug": "some-book"}]),
+            encoding="utf-8",
+        )
+        assert store.leanpub_book_exists("42", None, isolated_local_store) is True
 
 
 class TestLoadBooksRecovery:
