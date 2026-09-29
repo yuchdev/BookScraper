@@ -273,7 +273,7 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
             continue
         doc = dict(book)
         try:
-            bson.BSON.encode(doc)
+            bson.encode(doc)
         except InvalidDocument as e:
             module_logger.error(
                 f"Invalid document for insertion: {e}. Book: {book.get('title', 'Unknown Title')}",

@@ -123,8 +123,12 @@ def atomic_write_bytes(path: Path, data: bytes, mode: Optional[int] = None) -> N
     :param path: Destination file; its parent directory is created if missing.
     :param data: Bytes to write.
     :param mode: If given, ``chmod`` the file to this permission mask before the replace
-        (e.g. ``0o600`` for a secret). Omit for world-readable defaults.
+        (e.g. ``0o600`` for a secret). If omitted, an existing ``path`` keeps its current
+        permissions and a new one gets ``0o644`` - the temp file is born ``0o600``
+        (``mkstemp``), so without this the result would silently become owner-only.
     """
+    if mode is None:
+        mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.NamedTemporaryFile(
@@ -138,8 +142,7 @@ def atomic_write_bytes(path: Path, data: bytes, mode: Optional[int] = None) -> N
         temp_path = Path(tmp.name)
 
     try:
-        if mode is not None:
-            temp_path.chmod(mode)
+        temp_path.chmod(mode)
         os.replace(temp_path, path)
     except BaseException:
         # Never leave a stray temp file behind; the target is untouched either way.

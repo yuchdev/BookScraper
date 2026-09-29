@@ -150,6 +150,11 @@ def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
     return SaveSummary(inserted=num_inserted, duplicates=num_duplicates, errors=num_errors)
 
 
+# The lookups below re-read and re-parse the whole file on every call. Production code goes
+# through JsonBackend's in-memory index instead (backends/storage.py); don't call these from
+# a hot path such as a per-candidate dedup loop.
+
+
 def check_book_exists(book_hash: str, path: Path = LOCAL_STORE_FILE) -> bool:
     if not book_hash:
         return False

@@ -8,6 +8,7 @@ needs mocking; it belongs to the mock tier).
 """
 
 from bookscraper.book_utils import (
+    atomic_write_bytes,
     check_local_write_permission,
     extract_year_from_date,
     hash_book,
@@ -155,3 +156,26 @@ class TestCheckLocalWritePermission:
 
         monkeypatch.setattr("builtins.open", raise_runtime_error)
         assert check_local_write_permission(str(tmp_path)) is False
+
+
+class TestAtomicWriteBytesPermissions:
+    def test_new_file_defaults_to_0644_and_existing_mode_is_preserved(self, tmp_path) -> None:
+        """
+        Scenario: atomic_write_bytes without an explicit mode must not inherit mkstemp's
+        owner-only 0600 - a new file gets 0644 and a rewrite keeps the file's current mode.
+        Boundaries: new file (no mode), existing 0640 file (no mode), explicit 0600 override.
+        On failure: books.json silently becomes owner-only after the first save, or a
+        rewrite quietly widens/narrows permissions the user set.
+        """
+        target = tmp_path / "store.json"
+
+        atomic_write_bytes(target, b"[]")
+        assert target.stat().st_mode & 0o777 == 0o644
+
+        target.chmod(0o640)
+        atomic_write_bytes(target, b"[1]")
+        assert target.stat().st_mode & 0o777 == 0o640
+        assert target.read_bytes() == b"[1]"
+
+        atomic_write_bytes(target, b"[2]", mode=0o600)
+        assert target.stat().st_mode & 0o777 == 0o600
