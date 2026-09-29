@@ -1,7 +1,7 @@
 # 06 - Secondary lookup indexes
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (live getIndexes/explain checks pending a cluster)
 **Role:** Python Expert
 
 ## Context

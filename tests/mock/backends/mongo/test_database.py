@@ -82,7 +82,7 @@ class TestInitializeMongodbConnection:
             Mock(return_value=("mongodb+srv://uri", str(cert))),
         )
         spy_index = Mock()
-        monkeypatch.setattr(database, "ensure_unique_index_on_hash", spy_index)
+        monkeypatch.setattr(database, "ensure_indexes", spy_index)
 
         # MagicMock so `_mongo_client[db_name][coll_name]` subscripting works.
         client_instance = MagicMock(name="client")
@@ -95,7 +95,7 @@ class TestInitializeMongodbConnection:
         assert kwargs["tlsCertificateKeyFile"] == str(cert)
         # ping was issued on the admin database.
         client_instance.admin.command.assert_called_once_with("ping")
-        # unique index ensured on the resolved collection.
+        # indexes ensured on the resolved collection.
         spy_index.assert_called_once()
         assert returned_client is client_instance
         assert returned_collection is database._mongo_collection
@@ -107,7 +107,7 @@ class TestInitializeMongodbConnection:
             "resolve_mongo_connection",
             Mock(return_value=("mongodb+srv://uri", None)),
         )
-        monkeypatch.setattr(database, "ensure_unique_index_on_hash", Mock())
+        monkeypatch.setattr(database, "ensure_indexes", Mock())
 
         client_instance = MagicMock(name="client")
         with patch.object(database, "MongoClient", return_value=client_instance) as mock_client:
@@ -126,7 +126,7 @@ class TestInitializeMongodbConnection:
             "resolve_mongo_connection",
             Mock(return_value=("mongodb+srv://uri", None)),
         )
-        monkeypatch.setattr(database, "ensure_unique_index_on_hash", Mock())
+        monkeypatch.setattr(database, "ensure_indexes", Mock())
 
         client_instance = MagicMock(name="client")
         with patch.object(database, "MongoClient", return_value=client_instance) as mock_client:
@@ -480,18 +480,26 @@ class TestUpdateBookIsbn:
 
 
 # --------------------------------------------------------------------------- #
-# ensure_unique_index_on_hash
+# ensure_indexes (and its deprecated ensure_unique_index_on_hash alias)
 # --------------------------------------------------------------------------- #
+_ALL_SECONDARY_NAMES = ("asin_lookup_index", "book_id_lookup_index", "slug_lookup_index")
+
+
 class TestEnsureUniqueIndexOnHash:
     def test_creates_index_when_absent(self) -> None:
         collection = Mock()
-        collection.index_information.return_value = {"_id_": {}}
+        # Secondary indexes already present so only the hash index is created, keeping
+        # this alias test focused on the hash-index behavior it has always covered.
+        collection.index_information.return_value = {"_id_": {}, **{name: {} for name in _ALL_SECONDARY_NAMES}}
         database.ensure_unique_index_on_hash(collection)
         collection.create_index.assert_called_once_with("hash", unique=True, name="hash_unique_index")
 
     def test_skips_create_when_present(self) -> None:
         collection = Mock()
-        collection.index_information.return_value = {"hash_unique_index": {}}
+        collection.index_information.return_value = {
+            "hash_unique_index": {},
+            **{name: {} for name in _ALL_SECONDARY_NAMES},
+        }
         database.ensure_unique_index_on_hash(collection)
         collection.create_index.assert_not_called()
 
@@ -504,6 +512,99 @@ class TestEnsureUniqueIndexOnHash:
         collection.index_information.side_effect = RuntimeError("boom")
         # Must not propagate.
         database.ensure_unique_index_on_hash(collection)
+
+
+class TestEnsureIndexes:
+    def test_ensure_indexes_creates_all_four_when_absent(self) -> None:
+        """
+        Scenario: an empty collection gets the unique hash index plus all three sparse
+        secondary lookup indexes created in one call.
+        Boundaries: index_information() reports only the implicit _id_ index.
+        On failure: a lookup field is left unindexed, so pre-scrape dedup falls back to a
+        full collection scan.
+        """
+        collection = Mock()
+        collection.index_information.return_value = {"_id_": {}}
+        database.ensure_indexes(collection)
+        collection.create_index.assert_any_call("hash", unique=True, name="hash_unique_index")
+        collection.create_index.assert_any_call("asin", sparse=True, name="asin_lookup_index")
+        collection.create_index.assert_any_call("book_id", sparse=True, name="book_id_lookup_index")
+        collection.create_index.assert_any_call("slug", sparse=True, name="slug_lookup_index")
+        assert collection.create_index.call_count == 4
+
+    def test_ensure_indexes_is_idempotent_when_all_present(self) -> None:
+        """
+        Scenario: every index already exists, so a repeat call creates nothing.
+        Boundaries: index_information() reports all four named indexes.
+        On failure: a redundant create_index round-trip is issued, or a duplicate-index
+        error is raised on a healthy collection.
+        """
+        collection = Mock()
+        collection.index_information.return_value = {
+            "hash_unique_index": {},
+            **{name: {} for name in _ALL_SECONDARY_NAMES},
+        }
+        database.ensure_indexes(collection)
+        collection.create_index.assert_not_called()
+
+    def test_secondary_index_failure_warns_and_continues(self) -> None:
+        """
+        Scenario: creating the first secondary index fails; the remaining secondary
+        indexes are still created and the failure is only a warning.
+        Boundaries: only the hash index pre-exists; the asin index create raises.
+        On failure: one bad index aborts the whole call, leaving later indexes missing.
+        """
+        collection = Mock()
+        collection.index_information.return_value = {"hash_unique_index": {}}
+
+        def create_index(field, **kwargs):
+            if field == "asin":
+                raise RuntimeError("boom")
+
+        collection.create_index.side_effect = create_index
+
+        with patch.object(database, "print_log") as mock_print:
+            database.ensure_indexes(collection)
+
+        attempted = [c.args[0] for c in collection.create_index.call_args_list]
+        assert attempted == ["asin", "book_id", "slug"]
+        printed = [c.args[0] for c in mock_print.call_args_list]
+        assert any("Warning: Failed to ensure sparse index on 'asin'" in msg for msg in printed)
+
+    def test_secondary_indexes_are_sparse_and_non_unique(self) -> None:
+        """
+        Scenario: the secondary indexes are created sparse and never unique, since two
+        editions can legitimately share a slug across sites.
+        Boundaries: empty collection so all secondary indexes are created.
+        On failure: a unique secondary index would reject legitimate cross-site editions.
+        """
+        collection = Mock()
+        collection.index_information.return_value = {"_id_": {}}
+        database.ensure_indexes(collection)
+
+        for call in collection.create_index.call_args_list:
+            field, kwargs = call.args[0], call.kwargs
+            if field == "hash":
+                continue
+            assert kwargs.get("sparse") is True
+            assert "unique" not in kwargs
+
+    def test_none_collection_is_noop(self) -> None:
+        # Must not raise.
+        database.ensure_indexes(None)
+
+    def test_index_information_failure_aborts(self) -> None:
+        """
+        Scenario: reading index_information() fails, so no index is attempted and the
+        error keeps the prior hash-index failure behavior.
+        Boundaries: index_information() raises before any create_index call.
+        On failure: the exception propagates, or secondary indexes are attempted against
+        an unreadable collection.
+        """
+        collection = Mock()
+        collection.index_information.side_effect = RuntimeError("boom")
+        database.ensure_indexes(collection)
+        collection.create_index.assert_not_called()
 
 
 # --------------------------------------------------------------------------- #

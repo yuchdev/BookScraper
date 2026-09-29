@@ -163,8 +163,8 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         _mongo_db = _mongo_client[os.environ.get("MONGODB_DB_NAME", "bookscraper_db")]
         _mongo_collection = _mongo_db[os.environ.get("MONGODB_COLLECTION_NAME", "books")]
 
-        # Ensure a unique index on 'hash' to prevent duplicate insertions
-        ensure_unique_index_on_hash(_mongo_collection)
+        # Ensure the unique 'hash' index plus the sparse secondary lookup indexes.
+        ensure_indexes(_mongo_collection)
 
         return _mongo_client, _mongo_collection
 
@@ -404,17 +404,42 @@ def update_book_isbn(
         return False
 
 
-def ensure_unique_index_on_hash(books_collection: Collection) -> None:
+# Sparse secondary lookup indexes, as (field, index name) pairs. Each accelerates a
+# pre-scrape dedup lookup (asin -> Amazon, book_id/slug -> Leanpub) that would otherwise
+# be a full collection scan. All are sparse (only documents carrying the field are
+# indexed) and none is unique: two editions can legitimately share a slug across sites.
+_SECONDARY_INDEXES: Tuple[Tuple[str, str], ...] = (
+    ("asin", "asin_lookup_index"),
+    ("book_id", "book_id_lookup_index"),
+    ("slug", "slug_lookup_index"),
+)
+
+
+def ensure_indexes(books_collection: Collection) -> None:
     """
-    Ensures a unique index on the 'hash' field in the MongoDB collection.
+    Ensures the unique 'hash' index and the sparse secondary lookup indexes exist.
+
+    Each index is created idempotently: `index_information()` is read once up front and
+    an index is only created when its name is absent. The unique 'hash' index guards
+    against duplicate inserts at write time; the sparse 'asin', 'book_id', and 'slug'
+    indexes turn the pre-scrape deduplication lookups into index scans instead of full
+    collection scans.
+
+    A failure creating one secondary index is logged as a warning and the remaining
+    indexes are still attempted. A failure reading `index_information()` or creating the
+    unique 'hash' index is logged as an error and aborts the call, matching the prior
+    behavior of the hash-only helper.
+
+    :param books_collection: The MongoDB books collection, or None when unavailable.
     """
     if books_collection is None:
-        module_logger.error("MongoDB collection not available to ensure unique index.")
+        module_logger.error("MongoDB collection not available to ensure indexes.")
         return
 
     try:
-        # Check if the index already exists before creating it
-        if "hash_unique_index" not in books_collection.index_information():
+        # Check which indexes already exist before creating any of them.
+        existing_indexes = books_collection.index_information()
+        if "hash_unique_index" not in existing_indexes:
             books_collection.create_index("hash", unique=True, name="hash_unique_index")
             module_logger.info("Ensured unique index on 'hash' field.")
             print_log("Ensured unique index on 'hash' field.", "info")
@@ -423,3 +448,29 @@ def ensure_unique_index_on_hash(books_collection: Collection) -> None:
     except Exception as e:
         module_logger.error(f"Failed to ensure unique index on 'hash': {e}", exc_info=True)
         print_log(f"Error: Failed to ensure unique index on 'hash': {e}", "error")
+        return
+
+    for field, index_name in _SECONDARY_INDEXES:
+        try:
+            if index_name not in existing_indexes:
+                books_collection.create_index(field, sparse=True, name=index_name)
+                module_logger.info(f"Ensured sparse index on '{field}' field.")
+                print_log(f"Ensured sparse index on '{field}' field.", "info")
+            else:
+                module_logger.info(f"Sparse index on '{field}' field already exists.")
+        except Exception as e:
+            module_logger.warning(f"Failed to ensure sparse index on '{field}': {e}", exc_info=True)
+            print_log(f"Warning: Failed to ensure sparse index on '{field}': {e}", "warning")
+
+
+def ensure_unique_index_on_hash(books_collection: Collection) -> None:
+    """
+    Ensures the collection indexes exist.
+
+    .. deprecated::
+        Use :func:`ensure_indexes` instead. This thin alias is retained so existing
+        imports keep working; it now also creates the sparse secondary lookup indexes.
+
+    :param books_collection: The MongoDB books collection, or None when unavailable.
+    """
+    ensure_indexes(books_collection)
