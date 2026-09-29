@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from ...book_utils import print_log
+from ...book_utils import atomic_write_bytes, print_log
 
 if TYPE_CHECKING:
     from ..storage import SaveSummary
@@ -26,20 +27,73 @@ module_logger = logging.getLogger(__name__)
 LOCAL_STORE_FILE = Path("books.json")
 
 
-def _load_books(path: Path = LOCAL_STORE_FILE) -> list[dict]:
+class LocalStoreCorruptError(Exception):
+    """
+    The local store file exists but is not valid JSON. Raised by :func:`save_books`
+    (via :func:`assert_store_readable`) so a corrupt store fails loudly at pre-flight
+    instead of being silently overwritten - which would discard every book it holds,
+    the one file CLAUDE.md says never to lose.
+    """
+
+
+def _load_books(path: Path = LOCAL_STORE_FILE, *, raise_on_corrupt: bool = False) -> list[dict]:
+    """
+    Load the store as a list of book documents.
+
+    :param path: Store file location.
+    :param raise_on_corrupt: When ``True``, an existing-but-unparseable file raises
+        :class:`LocalStoreCorruptError` instead of being treated as empty. Writers set
+        this so they never clobber a store they could not read; read-only lookups leave
+        it ``False`` and degrade to an empty result.
+    :returns: The parsed list, or ``[]`` when the file is missing, not a JSON list, or
+        (with ``raise_on_corrupt`` false) unreadable.
+    """
     if not path.exists():
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (OSError, json.JSONDecodeError) as e:
+    except json.JSONDecodeError as e:
+        if raise_on_corrupt:
+            raise LocalStoreCorruptError(
+                f"Local store {path} is not valid JSON ({e}); refusing to overwrite it and "
+                f"lose its contents. Restore it from {path}.bak or another backup (or move it "
+                "aside to start fresh), then re-run."
+            ) from e
         module_logger.error(f"Failed to read local store {path}: {e}")
         print_log(f"Error: Failed to read local store {path}: {e}", "error")
         return []
+    except OSError as e:
+        module_logger.error(f"Failed to read local store {path}: {e}")
+        print_log(f"Error: Failed to read local store {path}: {e}", "error")
+        return []
+    return data if isinstance(data, list) else []
+
+
+def assert_store_readable(path: Path = LOCAL_STORE_FILE) -> None:
+    """
+    Raise :class:`LocalStoreCorruptError` if an existing store file cannot be parsed.
+
+    Called by ``resolve_store_backend('json')`` at pre-flight so a corrupt store aborts
+    the run before any scraping starts, rather than at the first save.
+
+    :param path: Store file location.
+    """
+    _load_books(path, raise_on_corrupt=True)
 
 
 def _write_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
-    path.write_text(json.dumps(books, indent=2, default=str), encoding="utf-8")
+    """
+    Persist ``books`` atomically, keeping one backup generation.
+
+    Before replacing the live file it is copied to ``<name>.bak`` (one generation), then
+    the new content is written to a temp file, ``fsync``ed, and ``os.replace``d over the
+    target - so an interrupt mid-write leaves the previous store fully intact rather than
+    a truncated file the next load would discard.
+    """
+    payload = json.dumps(books, indent=2, default=str).encode("utf-8")
+    if path.exists():
+        shutil.copy2(path, path.with_name(f"{path.name}.bak"))
+    atomic_write_bytes(path, payload)
 
 
 def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
@@ -52,12 +106,14 @@ def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
     :param path: Store file location (overridable for tests).
     :returns: A :class:`~bookscraper.backends.storage.SaveSummary` matching the shape
         the mongo backend returns, so both backends are interchangeable to the caller.
+    :raises LocalStoreCorruptError: If ``path`` exists but is not valid JSON; the store
+        is left untouched rather than overwritten (and its books lost).
     """
     # Local import: backends.storage imports this module, so a module-level import of
     # SaveSummary would be circular.
     from ..storage import SaveSummary
 
-    existing_books = _load_books(path)
+    existing_books = _load_books(path, raise_on_corrupt=True)
     existing_hashes = {b.get("hash") for b in existing_books if isinstance(b, dict)}
 
     num_inserted = 0

@@ -28,12 +28,12 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import tempfile
 from datetime import UTC, datetime
 from typing import Optional
 
 import httpx
 
+from ...book_utils import atomic_write_bytes
 from . import config
 
 DEFAULT_CERT_MONTHS = 6
@@ -104,20 +104,8 @@ def issue_certificate(token: str, project_id: str, db_user: str, months: int) ->
 
 
 def atomic_write(path: pathlib.Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    with tempfile.NamedTemporaryFile(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        delete=False,
-    ) as tmp:
-        tmp.write(data)
-        tmp.flush()
-        os.fsync(tmp.fileno())
-        temp_path = pathlib.Path(tmp.name)
-
-    temp_path.chmod(0o600)
-    temp_path.replace(path)
+    # The cert (and settings.json, which can hold a connection string) is owner-only.
+    atomic_write_bytes(path, data, mode=0o600)
 
 
 def default_output_path() -> pathlib.Path:

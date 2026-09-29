@@ -4,6 +4,9 @@
 # bookscraper run artifacts (curated input lists live in content/)
 # --store-backend json local store; persists/accumulates across runs, don't delete casually
 /books.json
+# one-generation backup + in-flight temp files from the store's atomic write
+/books.json.bak
+/.books.json.*
 /failed_books.csv
 /failed_urls.csv
 /other_links.csv

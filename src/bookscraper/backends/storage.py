@@ -88,17 +88,69 @@ class MongoBackend(StorageBackend):
 
 
 class JsonBackend(StorageBackend):
+    """
+    File-backed backend over :mod:`bookscraper.backends.local.store`.
+
+    Holds an in-memory index of the store's ``hash``/``asin``/``book_id``/``slug`` values,
+    built once (lazily) from the file and kept current by :meth:`save_books` for the life
+    of the process. Every lookup then hits the index rather than re-reading and re-parsing
+    the whole file, so ``search``'s per-candidate ``leanpub_book_exists`` calls cost
+    O(candidates) instead of O(candidates x store size).
+    """
+
+    _INDEX_FIELDS = (("hashes", "hash"), ("asins", "asin"), ("book_ids", "book_id"), ("slugs", "slug"))
+
+    def __init__(self) -> None:
+        self._index: Optional[dict[str, set[str]]] = None
+
+    @classmethod
+    def _add_to_index(cls, index: dict[str, set[str]], book: dict) -> None:
+        for bucket, field in cls._INDEX_FIELDS:
+            value = book.get(field)
+            if value:
+                index[bucket].add(value)
+
+    def _ensure_index(self) -> dict[str, set[str]]:
+        if self._index is None:
+            index: dict[str, set[str]] = {bucket: set() for bucket, _ in self._INDEX_FIELDS}
+            # Pass the path explicitly (read now, not at def time) so tests that
+            # monkeypatch store.LOCAL_STORE_FILE stay isolated from the real store.
+            for book in store._load_books(store.LOCAL_STORE_FILE):
+                if isinstance(book, dict):
+                    self._add_to_index(index, book)
+            self._index = index
+        return self._index
+
     def save_books(self, books: list[dict]) -> SaveSummary:
-        return store.save_books(books)
+        summary = store.save_books(books, store.LOCAL_STORE_FILE)
+        # Mirror in the cache exactly what store.save_books just persisted: books that
+        # carry a hash not already known (duplicates and hash-less errors are not written).
+        if self._index is not None:
+            for book in books:
+                if not isinstance(book, dict):
+                    continue
+                book_hash = book.get("hash")
+                if book_hash and book_hash not in self._index["hashes"]:
+                    self._add_to_index(self._index, book)
+        return summary
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
-        return store.check_book_exists(book_hash)
+        if not book_hash:
+            return False
+        return book_hash in self._ensure_index()["hashes"]
 
     def book_exists_by_asin(self, asin: str) -> bool:
-        return store.check_amazon_asin_exists(asin)
+        if not asin:
+            return False
+        return asin in self._ensure_index()["asins"]
 
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
-        return store.leanpub_book_exists(book_id, book_slug)
+        if not book_id and not book_slug:
+            return False
+        index = self._ensure_index()
+        if book_id and book_id in index["book_ids"]:
+            return True
+        return bool(book_slug) and book_slug in index["slugs"]
 
 
 def resolve_store_backend(backend_name: str) -> StorageBackend:
@@ -125,6 +177,13 @@ def resolve_store_backend(backend_name: str) -> StorageBackend:
             print_log("  Local write permission: FAILED. Cannot use 'json' backend.", "error")
             sys.exit(1)
         print_log("  Local write permission: OK", "info")
+        print_log("  Checking local store integrity...", "info")
+        try:
+            store.assert_store_readable(store.LOCAL_STORE_FILE)
+        except store.LocalStoreCorruptError as e:
+            print_log(f"  Local store: CORRUPT. Cannot use 'json' backend. {e}", "error")
+            sys.exit(1)
+        print_log("  Local store: OK", "info")
         return JsonBackend()
 
     print_log(f"Unknown storage backend: {backend_name!r}", "error")

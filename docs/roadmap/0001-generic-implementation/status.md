@@ -7,7 +7,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
-| 01.0 | Storage backend abstraction        | 🔶 In progress | 6 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
+| 01.0 | Storage backend abstraction        | 🔶 In progress | 7 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
 | 02.0 | MongoDB auth configuration         | 🔶 In progress | 3 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 19 / 94 subtasks complete.
+**Totals:** 20 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -78,3 +78,8 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
 - **2026-09-29 - Repo fix during setup:** `.gitignore`'s `/books.json` line carried an inline `#` comment, which
   gitignore treats as part of the pattern, so `books.json` was not actually ignored. Fixed, and `.claude/state/`
   (loop cursors) is now ignored.
+- **2026-09-29 - 01.0/07 follow-up (open, minor):** `backends/local/store.py`'s module functions bind
+  `LOCAL_STORE_FILE` as a def-time default, so monkeypatching it (the `isolated_local_store` fixture) doesn't reach
+  a call that relies on the default. Every current caller passes an explicit path (`JsonBackend` now passes
+  `store.LOCAL_STORE_FILE` at call time), so nothing is exposed today. Candidate fix: `path: Optional[Path] = None`
+  resolved at call time. Revisit in 06.1 or 08.0.

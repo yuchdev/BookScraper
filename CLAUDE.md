@@ -153,7 +153,13 @@ unavailable.
   and accumulates across runs**, and enforces the same uniqueness-by-`hash` semantics as MongoDB's unique index —
   a book saved in one run is still there, and still correctly detected as a duplicate, in the next. This is what
   makes the two backends behave identically from the caller's perspective, and what "local storage matches
-  database content one-to-one" means in practice.
+  database content one-to-one" means in practice. Writes are atomic (temp file + `fsync` + `os.replace`, via
+  `book_utils.atomic_write_bytes`) with a one-generation `books.json.bak` backup taken before each replace, so an
+  interrupt mid-write never truncates the store; and a store that exists but isn't valid JSON is refused rather
+  than overwritten — `save_books`/pre-flight raise `store.LocalStoreCorruptError` (surfaced by
+  `resolve_store_backend('json')` as a `print_log` error + `sys.exit(1)` before any scraping) instead of silently
+  discarding its books. `JsonBackend` also caches an in-memory `hash`/`asin`/`book_id`/`slug` index, built once and
+  kept current by `save_books`, so repeated dedup lookups don't re-parse the file.
 - Diagnostic reports that aren't database content — `failed_urls.csv` / `failed_books.csv` / `other_links.csv` —
   are unrelated to `--store-backend` and are always written as CSV best-effort by both subcommands, since MongoDB
   itself never stores failed/skipped attempts either.

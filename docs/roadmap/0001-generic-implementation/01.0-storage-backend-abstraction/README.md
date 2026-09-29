@@ -26,7 +26,7 @@ re-parses the whole file on every lookup, and pre-scrape lookups on `asin` / `bo
 | 04 | [`--store-backend` selection & pre-flight](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/04-store-backend-selection.md)   | ✅ Complete    | 08     |
 | 05 | [Mongo save hardening](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md)                          | ✅ Complete    | 08     |
 | 06 | [Secondary lookup indexes](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/06-secondary-lookup-indexes.md)                  | ✅ Complete    | -      |
-| 07 | [JSON store atomic write & index cache](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md) | ⬜ Not started | 08 |
+| 07 | [JSON store atomic write & index cache](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md) | ✅ Complete    | 08 |
 | 08 | [Backend parity contract tests](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/08-backend-parity-contract-tests.md)        | ⬜ Not started | -      |
 
 ## Key constraints

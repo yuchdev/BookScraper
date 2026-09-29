@@ -9,13 +9,23 @@ the real repo-root books.json.
 """
 
 import json
+import os
+
+import pytest
 
 from bookscraper.backends.local import store
+from bookscraper.backends.local.store import LocalStoreCorruptError
 from bookscraper.backends.storage import SaveSummary
 
 
 def _read(path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _temp_leftovers(store_path):
+    """In-flight atomic-write temp files (``.books.json.<random>``) left in the dir."""
+    prefix = f".{store_path.name}."
+    return [p.name for p in store_path.parent.iterdir() if p.name.startswith(prefix)]
 
 
 class TestSaveBooks:
@@ -163,6 +173,93 @@ class TestLeanpubBookExists:
         assert store.leanpub_book_exists("42", None, isolated_local_store) is True
 
 
+class TestAtomicWriteAndBackup:
+    def test_write_is_atomic_and_leaves_no_temp_files(self, isolated_local_store) -> None:
+        """
+        Scenario: a completed save leaves the final store and no debris.
+        Boundaries: one insert into a fresh store, then a directory scan for temp files.
+        On failure: a stray ``.books.json.<random>`` temp file lingers (the replace was
+        skipped or the temp was never cleaned), signalling a non-atomic write path.
+        """
+        store.save_books([{"hash": "h1", "title": "Book One"}], isolated_local_store)
+
+        assert _read(isolated_local_store) == [{"hash": "h1", "title": "Book One"}]
+        assert _temp_leftovers(isolated_local_store) == []
+
+    def test_interrupted_write_preserves_previous_store(self, isolated_local_store, monkeypatch) -> None:
+        """
+        Scenario: the process dies during the final rename of a save; the accumulated
+        store must survive intact so the next run doesn't overwrite it with a truncated
+        (then empty-parsed) file.
+        Boundaries: os.replace raises mid-write on the second save; the first book stays.
+        On failure: books.json is truncated or reverts to only the new book - silent loss
+        of every previously accumulated book.
+        """
+        store.save_books([{"hash": "h1", "title": "Original"}], isolated_local_store)
+
+        def boom(*_args, **_kwargs):
+            raise OSError("simulated crash during rename")
+
+        monkeypatch.setattr(os, "replace", boom)
+
+        with pytest.raises(OSError, match="simulated crash"):
+            store.save_books([{"hash": "h2", "title": "New"}], isolated_local_store)
+
+        # The live store is exactly what it was before the interrupted save.
+        assert _read(isolated_local_store) == [{"hash": "h1", "title": "Original"}]
+        # ...and the failed attempt cleaned up its temp file.
+        assert list(isolated_local_store.parent.glob(f".{isolated_local_store.name}.*")) == []
+
+    def test_save_refuses_to_overwrite_corrupt_store(self, isolated_local_store) -> None:
+        """
+        Scenario: an existing store file is not valid JSON; a save must refuse rather than
+        clobber it and discard whatever it might hold.
+        Boundaries: a truncated/garbage file on disk, then a save of a valid book.
+        On failure: save_books silently overwrites the corrupt file, losing its contents
+        and returning a misleading success summary.
+        """
+        isolated_local_store.write_text('[{"hash": "h1", "title": "trunc', encoding="utf-8")
+
+        with pytest.raises(LocalStoreCorruptError, match=str(isolated_local_store)):
+            store.save_books([{"hash": "h2", "title": "New"}], isolated_local_store)
+
+        # File left byte-for-byte untouched.
+        assert isolated_local_store.read_text(encoding="utf-8") == '[{"hash": "h1", "title": "trunc'
+
+    def test_backup_file_holds_previous_generation(self, isolated_local_store) -> None:
+        """
+        Scenario: each replace is preceded by copying the current store to <name>.bak, so
+        one generation back is always recoverable.
+        Boundaries: no .bak on the first (file-creating) write; after the second write the
+        .bak holds the first generation while the live file holds both books.
+        On failure: the backup is missing or already holds the new content, defeating the
+        one-generation recovery the corrupt-store refusal points users to.
+        """
+        backup = isolated_local_store.with_name(f"{isolated_local_store.name}.bak")
+
+        store.save_books([{"hash": "h1", "title": "First"}], isolated_local_store)
+        assert not backup.exists()  # nothing to back up on a fresh store
+
+        store.save_books([{"hash": "h2", "title": "Second"}], isolated_local_store)
+
+        assert _read(backup) == [{"hash": "h1", "title": "First"}]
+        assert {b["hash"] for b in _read(isolated_local_store)} == {"h1", "h2"}
+
+
+class TestAssertStoreReadable:
+    def test_valid_store_does_not_raise(self, isolated_local_store) -> None:
+        store.save_books([{"hash": "h1"}], isolated_local_store)
+        store.assert_store_readable(isolated_local_store)  # must not raise
+
+    def test_missing_store_does_not_raise(self, isolated_local_store) -> None:
+        store.assert_store_readable(isolated_local_store)  # must not raise
+
+    def test_corrupt_store_raises(self, isolated_local_store) -> None:
+        isolated_local_store.write_text("{not json", encoding="utf-8")
+        with pytest.raises(LocalStoreCorruptError):
+            store.assert_store_readable(isolated_local_store)
+
+
 class TestLoadBooksRecovery:
     def test_malformed_json_returns_empty_list(self, isolated_local_store) -> None:
         isolated_local_store.write_text("{not valid json", encoding="utf-8")
@@ -173,4 +270,15 @@ class TestLoadBooksRecovery:
         assert store._load_books(isolated_local_store) == []
 
     def test_nonexistent_file_returns_empty_list(self, isolated_local_store) -> None:
+        assert store._load_books(isolated_local_store) == []
+
+    def test_unreadable_file_returns_empty_list(self, isolated_local_store) -> None:
+        """
+        Scenario: an OSError while reading the store (not a JSON error) degrades to an empty
+        result for read-only callers rather than crashing a lookup.
+        Boundaries: the store path is a directory, so read_text raises IsADirectoryError.
+        On failure: a transient read error propagates out of a lookup instead of being
+        contained.
+        """
+        isolated_local_store.mkdir()  # path.exists() is True, but read_text raises OSError
         assert store._load_books(isolated_local_store) == []

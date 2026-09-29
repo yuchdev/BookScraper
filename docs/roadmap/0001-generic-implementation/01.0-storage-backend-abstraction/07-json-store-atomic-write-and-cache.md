@@ -1,7 +1,7 @@
 # 07 - JSON store atomic write & index cache
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-json-local-store.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/02-json-local-store.md)
 **Role:** Python Expert
 

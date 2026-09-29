@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -110,6 +111,40 @@ def print_log(text: str, status: str = "info") -> None:
         logger.error(
             f"Failed to print colored message to console directly: {e}. Original message: {clean_text}", exc_info=False
         )
+
+
+def atomic_write_bytes(path: Path, data: bytes, mode: Optional[int] = None) -> None:
+    """
+    Write ``data`` to ``path`` atomically: a crash or interrupt mid-write can never
+    leave ``path`` truncated. Writes to a temp file in the same directory, ``fsync``s
+    it, then ``os.replace``s it over the target - the replace is atomic on POSIX, so a
+    reader sees either the complete old file or the complete new one, never a partial.
+
+    :param path: Destination file; its parent directory is created if missing.
+    :param data: Bytes to write.
+    :param mode: If given, ``chmod`` the file to this permission mask before the replace
+        (e.g. ``0o600`` for a secret). Omit for world-readable defaults.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as tmp:
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        temp_path = Path(tmp.name)
+
+    try:
+        if mode is not None:
+            temp_path.chmod(mode)
+        os.replace(temp_path, path)
+    except BaseException:
+        # Never leave a stray temp file behind; the target is untouched either way.
+        temp_path.unlink(missing_ok=True)
+        raise
 
 
 def check_local_write_permission(directory: str = ".") -> bool:
