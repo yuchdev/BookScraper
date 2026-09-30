@@ -131,7 +131,7 @@ server-selection timeout defaults to `client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
 overridable via the `MONGODB_SERVER_SELECTION_TIMEOUT_MS` env var (a blank/non-integer/non-positive
 value warns and falls back to the default).
 
-**TLS certificate rotation pipeline:** `bookscraper rotate-cert` (`commands/rotate_cert.py`, backed by
+**TLS certificate rotation pipeline** (see operator runbook: [`docs/runbooks/x509-certificate-rotation.md`](docs/runbooks/x509-certificate-rotation.md))**:** `bookscraper rotate-cert` (`commands/rotate_cert.py`, backed by
 `backends/mongo/cert_rotation.py`) issues a fresh Atlas-managed X.509 client certificate via the Atlas Admin API
 (`POST .../databaseUsers/{user}/certs`, requires a Project-Owner-scoped Atlas API Service Account: `ATLAS_CLIENT_ID` /
 `ATLAS_CLIENT_SECRET` / `ATLAS_PROJECT_ID` / `ATLAS_DB_USER` in `.env` or the environment) and atomically writes it

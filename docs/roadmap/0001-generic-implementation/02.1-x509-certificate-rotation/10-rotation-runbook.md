@@ -1,7 +1,7 @@
 # 10 - Rotation runbook
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [06-certificate-expiry-inspection.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/06-certificate-expiry-inspection.md), [07-old-certificate-retention.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/07-old-certificate-retention.md), [09-verify-before-repoint.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/09-verify-before-repoint.md)
 **Role:** Docs Writer
 
