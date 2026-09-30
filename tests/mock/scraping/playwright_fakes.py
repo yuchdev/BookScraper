@@ -142,23 +142,56 @@ class FakePage:
         return self._locators.get(selector, FakeLocator([]))
 
 
+class FakeContext:
+    """A stand-in for a Playwright ``BrowserContext`` for the capture path.
+
+    ``cookies`` is the list ``context.cookies()`` returns; if ``cookies_after_clear`` is
+    given it is what ``cookies()`` returns after ``clear_cookies()`` (defaults to empty,
+    i.e. clearing works). ``origins`` seeds ``storage_state()['origins']``.
+    """
+
+    def __init__(
+        self,
+        page: Optional[FakePage] = None,
+        cookies: Optional[list] = None,
+        cookies_after_clear: Optional[list] = None,
+        origins: Optional[list] = None,
+    ) -> None:
+        self._cookies = list(cookies or [])
+        self._cookies_after_clear = list(cookies_after_clear or [])
+        self._cleared = False
+        self.storage_state = AsyncMock(return_value={"cookies": [], "origins": list(origins or [])})
+        self.new_page = AsyncMock(return_value=page if page is not None else FakePage())
+        self.close = AsyncMock()
+
+    async def cookies(self, *args: Any, **kwargs: Any) -> list:
+        return self._cookies_after_clear if self._cleared else self._cookies
+
+    async def clear_cookies(self, *args: Any, **kwargs: Any) -> None:
+        self._cleared = True
+
+
 class FakeBrowser:
     """A stand-in for a Playwright ``Browser`` whose ``new_page()`` is awaitable.
 
     Pass a single ``page`` (returned every call) or a ``page_factory`` callable
     (invoked per call, e.g. to hand out a fresh page per attempt / per URL). ``close()``
-    is an ``AsyncMock`` so ``await browser.close()`` works.
+    is an ``AsyncMock`` so ``await browser.close()`` works. ``context`` (a
+    ``FakeContext``) is what ``new_context()`` returns for the capture path.
     """
 
     def __init__(
         self,
         page: Optional[FakePage] = None,
         page_factory: Optional[Any] = None,
+        context: Optional[FakeContext] = None,
     ) -> None:
         if page_factory is not None:
             self.new_page = AsyncMock(side_effect=page_factory)
         else:
             self.new_page = AsyncMock(return_value=page if page is not None else FakePage())
+        self.new_context = AsyncMock(return_value=context if context is not None else FakeContext())
+        self.version = "chromium-test"
         self.close = AsyncMock()
 
 

@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | ⬜ Not started | 0 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 1 / 7         | -                                                                                                      |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 28 / 94 subtasks complete.
+**Totals:** 29 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -199,3 +199,13 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   file doesn't exist and `~/.bookscrapper/` holds only `logs/`. Most likely a stale `TLS_CERT_FILE` in `.env` or
   the environment is still pointing at it through the legacy fallback. That's correct fail-loud behaviour, and no
   test wrote outside `tmp_path`. Not confirmed, because reading `.env` was declined. For the user to check.
+- **2026-09-30 - Task 06.0 threat model:** [2026-09-30-real-html-test-corpus.md](/docs/security/2026-09-30-real-html-test-corpus.md)
+  (FIX-1..14). FIX-1 (logged-out, cookie-less capture context), FIX-2 (fail-closed `assert_clean`) and FIX-8
+  (default-deny offline harness) are CRITICAL merge gates.
+- **2026-09-30 - Corpus policy (user-ratified; `yuchdev/BookScraper` is a PUBLIC repo):** (1) Fixtures commit the
+  real markup and structure that selectors need. Long prose (descriptions, reviews, blurbs, author bios) is replaced
+  with neutral placeholder text, sizes are capped, and factual metadata (title, authors, ISBN, date, publisher) is
+  kept. This answers the threat model's FIX-12 licensing question. (2) The one-off capture of a handful of pages is
+  done **regardless of robots.txt**, by the user's explicit decision. It is still logged out, cookie-less and
+  rate-limited, and the decision is recorded in the corpus policy (`tests/fixtures/README.md`). The FIX-7 clause
+  "assumes robots is honoured during capture" is therefore superseded for this capture only.
