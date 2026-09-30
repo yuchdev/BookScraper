@@ -149,6 +149,24 @@ Its position in the auth system above depends on how the app is configured:
   the new path; it deliberately never modifies your environment or `.env` on your behalf.
 - **`auth_type: "pass"`, or no rotation applicable:** the command leaves `settings.json` untouched and says so.
 
+After a successful rotation the command also prints the **new** cert's expiry date (parsed back from the
+just-written file via `cert_rotation.read_certificate_expiry()`).
+
+**Certificate expiry inspection (`--check`) and the pre-flight expiry warning:** certificates expire after 1-24
+months, so `bookscraper rotate-cert --check [--warn-days N]` (default `N = 30`) reports the **currently active**
+cert's expiry without rotating. It resolves the same cert the app connects with
+(`config.resolve_mongo_connection()`'s cert), prints `path`, `expires: <ISO date>`, and `days remaining: <n>`, and
+is a **pure local file read** — it never contacts Atlas and never needs the `ATLAS_*` variables, so it's safe as a
+cron/CI health check. Its exit codes are: **`0`** if more than `N` days remain (or no x509 cert is configured — a
+no-op), **`3`** if the cert expires within `N` days (so cron/CI can alert), **`1`** if the cert is expired or
+unreadable. Exit code `3` is dispatched through `main.py` via `sys.exit(3)` in `commands/rotate_cert.py`, the same
+`SystemExit`-propagation path as the existing `1`. Separately, `resolve_store_backend("mongo")` runs a non-raising
+pre-flight helper `cert_rotation.cert_expiry_warning(cert_path, warn_days=30)` and `print_log`s any warning *before*
+connecting; a parse failure there is a warning, never a crash. Both paths parse **only the first `CERTIFICATE` PEM
+block** of the combined key+cert file (via the `cryptography` package, a direct dependency) — the private-key block
+is never read or logged, and a missing file / absent-or-unparseable certificate raises `RotationError` naming only
+the file path, never its contents.
+
 **Status of the `certificate validation failed` (Atlas error 8000) report — UNVERIFIED, do not treat as settled.**
 Earlier revisions of this file stated as fact that Atlas rejects this cluster's X.509 certificates, and that the
 failure is server-side rather than a client- or resolver-side bug. That conclusion is not currently reproducible and
@@ -225,6 +243,11 @@ uv run bookscraper search --store-backend json --max-search-pages 5
 uv run bookscraper rotate-cert
 uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-manual.pem
 
+# rotate-cert --check: report the active cert's expiry only (no Atlas contact, no ATLAS_* needed).
+# Exit 0 if >N days remain (or no x509 cert configured), 3 if within N days, 1 if expired/unreadable.
+uv run bookscraper rotate-cert --check
+uv run bookscraper rotate-cert --check --warn-days 14
+
 # detect-schema: AI-assisted CSS-selector proposals for a site's detail page (dev-maintenance tool).
 # Takes no --store-backend and never touches book data; needs ANTHROPIC_API_KEY. See AI-assisted schema
 # detection below.
@@ -272,7 +295,9 @@ mocks the client and never makes a real API call.
   `hash_book`/`extract_year_from_date`/`check_local_write_permission`, `backends/mongo/config.py`'s
   resolver (all six `settings.json` shapes plus the legacy fallback, purely as resolution logic — no
   network), `backends/mongo/cert_rotation.py`'s months validation / atomic write / `settings.json`
-  repointing (real file I/O via `tmp_path`), `backends/local/store.py` (real file I/O via `tmp_path`), `scraping/parameters.py`
+  repointing plus `read_certificate_expiry` / `cert_expiry_warning` (throwaway self-signed certs generated
+  in-test via `cryptography`, including a private-key-never-logged leak test — real file I/O via `tmp_path`),
+  `backends/local/store.py` (real file I/O via `tmp_path`), `scraping/parameters.py`
   data sanity checks, and `scraping/schema_detection.py`'s pure logic (HTML pruning/truncation, AI-response
   shape validation, diff-report formatting).
 - **`tests/mock/`** — the rest of `src/bookscraper`, with every external dependency mocked

@@ -9,7 +9,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
 | 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
-| 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
+| 02.1 | X.509 certificate rotation         | 🔶 In progress | 6 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 24 / 94 subtasks complete.
+**Totals:** 25 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -152,3 +152,12 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
 - **2026-09-30 - Spec extension ratified by the user:** subtask 06's permission check also warns when
   `settings.json` is a symlink or not owned by the current UID (threat model SEC-9). It stays warning-only, once
   per process, and is skipped on Windows.
+- **2026-09-30 - Task 02.1 threat model:** [2026-09-30-x509-certificate-rotation.md](/docs/security/2026-09-30-x509-certificate-rotation.md)
+  (ROT-1..18, no CRITICAL). Subtask 08 (live re-diagnosis) is **blocked**: this machine has no `ATLAS_*` or
+  `TEST_MONGODB_URI_*` variables and no cert or `settings.json`, so per its requirement 4 it stays 🔶 and the xfail
+  markers stay. Execution order: 06 → 09 → 07 → 10.
+- **2026-09-30 - Observation, 02.1/06 verification:** running `rotate-cert --check` on this machine exited 1 with
+  "Could not read certificate file" for `X509-cert-142838411852079927.pem`, the old hand-downloaded cert name. That
+  file doesn't exist and `~/.bookscrapper/` holds only `logs/`. Most likely a stale `TLS_CERT_FILE` in `.env` or
+  the environment is still pointing at it through the legacy fallback. That's correct fail-loud behaviour, and no
+  test wrote outside `tmp_path`. Not confirmed, because reading `.env` was declined. For the user to check.

@@ -95,6 +95,21 @@ def build_parser() -> argparse.ArgumentParser:
         "X509-cert-*.pem under ~/.bookscrapper/).",
     )
     rotate_parser.add_argument(
+        "--check",
+        dest="check",
+        action="store_true",
+        help="Report the currently active X.509 certificate's expiry instead of rotating "
+        "(no Atlas contact, no ATLAS_* needed). Exit 0 if more than --warn-days remain (or no "
+        "cert is configured), 3 if within the window, 1 if expired or unreadable.",
+    )
+    rotate_parser.add_argument(
+        "--warn-days",
+        dest="warn_days",
+        type=int,
+        default=30,
+        help="With --check, the number of days before expiry that triggers exit code 3 (default: 30).",
+    )
+    rotate_parser.add_argument(
         "--log-severity",
         dest="log_severity",
         choices=["debug", "info", "warning", "error"],

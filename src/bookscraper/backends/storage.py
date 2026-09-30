@@ -14,6 +14,7 @@ mongo/database.py's MongoDB collection.
 
 from __future__ import annotations
 
+import pathlib
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -23,7 +24,8 @@ from pymongo.collection import Collection
 
 from ..book_utils import check_local_write_permission, print_log
 from .local import store
-from .mongo import database, deduplicate
+from .mongo import config, database, deduplicate
+from .mongo.cert_rotation import cert_expiry_warning
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,27 @@ class JsonBackend(StorageBackend):
         return bool(book_slug) and book_slug in index["slugs"]
 
 
+def _warn_if_cert_expiring() -> None:
+    """
+    Emit an advisory pre-flight warning if the active X.509 client certificate is expired or
+    close to expiring, before the mongo backend connects.
+
+    Advisory only: it resolves the active cert via ``config.resolve_mongo_connection()`` and
+    delegates to the non-raising :func:`cert_expiry_warning`. A resolver failure
+    (:class:`~bookscraper.backends.mongo.config.ConfigError`) is swallowed here - the real
+    connection attempt that follows surfaces it properly - and a cert-parse failure returns a
+    warning string rather than crashing (ROT-16, ROT-17). No PEM/key bytes reach the log or
+    console (ROT-3).
+    """
+    try:
+        _uri, cert_file = config.resolve_mongo_connection()
+    except config.ConfigError:
+        return
+    warning = cert_expiry_warning(pathlib.Path(cert_file) if cert_file else None)
+    if warning:
+        print_log(warning, "warning")
+
+
 def resolve_store_backend(backend_name: str) -> StorageBackend:
     """
     Runs a pre-flight check for the requested backend and returns a ready-to-use
@@ -163,6 +186,7 @@ def resolve_store_backend(backend_name: str) -> StorageBackend:
     print_log(f"\nRunning pre-flight checks for '{backend_name}' storage backend...", "info")
 
     if backend_name == "mongo":
+        _warn_if_cert_expiring()
         print_log("  Checking MongoDB connection...", "info")
         mongo_collection = database.get_mongo_collection()
         if mongo_collection is None:

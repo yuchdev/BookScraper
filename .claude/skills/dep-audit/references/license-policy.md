@@ -19,10 +19,12 @@ dependency's license into one of the three tiers below and report accordingly.
 
 ### ✅ Allow (permissive — no action)
 
-MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, PSF/Python-2.0, MPL-2.0
+MIT, MIT-0 (OSI-approved MIT variant without the attribution clause — strictly
+more permissive than MIT; ruled Allow on that basis), BSD-2-Clause, BSD-3-Clause,
+Apache-2.0, ISC, PSF/Python-2.0, MPL-2.0
 (file-level copyleft — fine for a dependency we don't modify), Unlicense, CC0,
-Zlib. These impose only attribution/notice obligations. Ensure NOTICE/attribution
-is preserved but take no further action.
+Zlib. These impose only attribution/notice obligations (MIT-0 imposes none).
+Ensure NOTICE/attribution is preserved where required but take no further action.
 
 ### ⚠️ Flag (review before shipping)
 

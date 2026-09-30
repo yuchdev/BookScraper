@@ -7,13 +7,43 @@ filesystem access occurs. The assertions pin both the delegated call args and th
 each adapter returns exactly what its collaborator returned.
 """
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from bookscraper.backends import storage
 from bookscraper.backends.local import store
+from bookscraper.backends.mongo.config import ConfigError
 from bookscraper.backends.storage import JsonBackend, MongoBackend, SaveSummary, resolve_store_backend
+
+_TEST_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_TEST_KEY_PEM = _TEST_KEY.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+
+
+def _write_combined_cert(path, expiry: datetime):
+    """Write a throwaway combined key+cert PEM expiring at ``expiry``; return the path."""
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "bookscraper-test")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(_TEST_KEY.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(expiry - timedelta(days=365))
+        .not_valid_after(expiry)
+        .sign(_TEST_KEY, hashes.SHA256())
+    )
+    path.write_bytes(_TEST_KEY_PEM + cert.public_bytes(serialization.Encoding.PEM))
+    return path
 
 
 class TestSaveSummary:
@@ -210,7 +240,10 @@ class TestResolveStoreBackend:
     def test_mongo_with_live_collection_returns_mongo_backend(self) -> None:
         fake_collection = Mock(name="collection")
 
-        with patch.object(storage, "database") as mock_db:
+        with (
+            patch.object(storage, "_warn_if_cert_expiring"),
+            patch.object(storage, "database") as mock_db,
+        ):
             mock_db.get_mongo_collection.return_value = fake_collection
             backend = resolve_store_backend("mongo")
 
@@ -219,7 +252,10 @@ class TestResolveStoreBackend:
         mock_db.get_mongo_collection.assert_called_once_with()
 
     def test_mongo_with_no_collection_exits(self) -> None:
-        with patch.object(storage, "database") as mock_db:
+        with (
+            patch.object(storage, "_warn_if_cert_expiring"),
+            patch.object(storage, "database") as mock_db,
+        ):
             mock_db.get_mongo_collection.return_value = None
             with pytest.raises(SystemExit) as exc_info:
                 resolve_store_backend("mongo")
@@ -267,3 +303,128 @@ class TestResolveStoreBackend:
         assert exc_info.value.code == 1
         mock_db.get_mongo_collection.assert_not_called()
         mock_check.assert_not_called()
+
+
+class TestCertExpiryPreflight:
+    def test_preflight_prints_warning_for_soon_expiring_cert(self, tmp_path) -> None:
+        """
+        Scenario: the mongo pre-flight prints a renewal warning when the active cert is close
+        to expiry, before it connects, and still returns a working backend.
+        Boundaries: cert ~10 days out; resolver and collection are mocked so no real I/O.
+        On failure: an about-to-expire identity is discovered only when a scrape run fails.
+        """
+        cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=10))
+
+        with (
+            patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", str(cert))),
+            patch.object(storage, "print_log") as mock_print,
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            backend = resolve_store_backend("mongo")
+
+        assert isinstance(backend, MongoBackend)
+        warnings = [c.args for c in mock_print.call_args_list if c.args[1] == "warning"]
+        assert any("expires on" in msg for msg, _ in warnings)
+
+    def test_preflight_parse_failure_is_warning_not_crash(self, tmp_path) -> None:
+        """
+        Scenario: an unparseable/key-only cert on the pre-flight path yields a warning, not a
+        crash, and the connection still proceeds (ROT-17).
+        Boundaries: a key-only PEM (no CERTIFICATE block) as the resolved cert.
+        On failure: a bad cert aborts the whole run at pre-flight instead of warning.
+        """
+        key_only = tmp_path / "key-only.pem"
+        key_only.write_bytes(_TEST_KEY_PEM)
+
+        with (
+            patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", str(key_only))),
+            patch.object(storage, "print_log") as mock_print,
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            backend = resolve_store_backend("mongo")
+
+        assert isinstance(backend, MongoBackend)
+        warnings = [c.args[0] for c in mock_print.call_args_list if c.args[1] == "warning"]
+        assert any(msg.startswith("WARNING: could not read TLS client certificate expiry") for msg in warnings)
+        # The private key body never appears in any logged line (ROT-3).
+        assert all("PRIVATE KEY" not in c.args[0] for c in mock_print.call_args_list)
+
+    def test_preflight_no_warning_when_cert_far_from_expiry(self, tmp_path) -> None:
+        """
+        Scenario: a healthy, far-from-expiry cert produces no pre-flight warning.
+        Boundaries: cert ~200 days out.
+        On failure: healthy certs generate a warning on every run, training users to ignore it.
+        """
+        cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=200))
+
+        with (
+            patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", str(cert))),
+            patch.object(storage, "print_log") as mock_print,
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            resolve_store_backend("mongo")
+
+        assert not [c for c in mock_print.call_args_list if c.args[1] == "warning"]
+
+    def test_preflight_no_cert_configured_is_silent(self) -> None:
+        """
+        Scenario: with no x509 cert configured the pre-flight is silent (nothing to warn about).
+        Boundaries: resolver returns cert=None.
+        On failure: a password-auth setup gets a spurious cert warning.
+        """
+        with (
+            patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", None)),
+            patch.object(storage, "print_log") as mock_print,
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            resolve_store_backend("mongo")
+
+        assert not [c for c in mock_print.call_args_list if c.args[1] == "warning"]
+
+    def test_preflight_never_leaks_key_material_to_log_or_console(self, tmp_path, caplog, capsys) -> None:
+        """
+        Scenario: with print_log running for real, a key-only cert on the pre-flight path leaks
+        no private-key bytes to the captured log records or to stdout (ROT-3, CWE-532/CWE-312).
+        Boundaries: a key-only PEM; print_log NOT mocked so both sinks are exercised.
+        On failure: the private-key PEM body reaches ~/.bookscrapper/logs or the console.
+        """
+        import logging
+
+        key_only = tmp_path / "key-only.pem"
+        key_only.write_bytes(_TEST_KEY_PEM)
+        key_body = _TEST_KEY_PEM.decode()
+
+        with (
+            caplog.at_level(logging.DEBUG),
+            patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", str(key_only))),
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            resolve_store_backend("mongo")
+
+        captured = capsys.readouterr()
+        assert "PRIVATE KEY" not in captured.out
+        assert key_body not in captured.out
+        assert all("PRIVATE KEY" not in rec.getMessage() for rec in caplog.records)
+        assert all(key_body not in rec.getMessage() for rec in caplog.records)
+
+    def test_preflight_config_error_is_swallowed(self) -> None:
+        """
+        Scenario: a resolver ConfigError in the advisory pre-flight is swallowed, leaving the
+        real connection attempt to surface it properly.
+        Boundaries: resolve_mongo_connection raises ConfigError.
+        On failure: an advisory warning path crashes the run before the real error is reported.
+        """
+        with (
+            patch.object(storage.config, "resolve_mongo_connection", side_effect=ConfigError("bad")),
+            patch.object(storage, "print_log"),
+            patch.object(storage, "database") as mock_db,
+        ):
+            mock_db.get_mongo_collection.return_value = Mock(name="collection")
+            backend = resolve_store_backend("mongo")
+
+        assert isinstance(backend, MongoBackend)

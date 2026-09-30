@@ -30,7 +30,7 @@ Subtasks 01-05 record the delivered pipeline. Subtasks 06-10 make it safe to run
 | 03 | [Atomic owner-only write](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/03-atomic-owner-only-write.md)                    | ✅ Complete    | 04     |
 | 04 | [settings.json repointing](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/04-settings-json-repointing.md)                  | ✅ Complete    | 05, 09 |
 | 05 | [`rotate-cert` command](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/05-rotate-cert-command.md)                          | ✅ Complete    | 06, 07 |
-| 06 | [Certificate expiry inspection](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/06-certificate-expiry-inspection.md)        | ⬜ Not started | 10     |
+| 06 | [Certificate expiry inspection](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/06-certificate-expiry-inspection.md)        | ✅ Complete    | 10     |
 | 07 | [Old-certificate retention](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/07-old-certificate-retention.md)                | ⬜ Not started | 10     |
 | 08 | [Live X.509 re-diagnosis](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/08-live-x509-rediagnosis.md)                      | ⬜ Not started | 09     |
 | 09 | [Verify before repoint](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/09-verify-before-repoint.md)                        | ⬜ Not started | 10     |

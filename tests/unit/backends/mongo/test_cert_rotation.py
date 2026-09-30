@@ -7,10 +7,46 @@ Real file I/O via tmp_path (through the isolated_config fixture, so the real
 import json
 import re
 import stat
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from bookscraper.backends.mongo import cert_rotation
+
+# One throwaway key generated once and reused across the cert fixtures below - the material is
+# never committed and never leaves the test process (spec: "Never commit a key").
+_TEST_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_TEST_KEY_PEM = _TEST_KEY.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+
+
+def _cert_pem(not_valid_after: datetime) -> bytes:
+    """A self-signed CERTIFICATE PEM block expiring at ``not_valid_after``."""
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "bookscraper-test")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(_TEST_KEY.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(not_valid_after - timedelta(days=365))
+        .not_valid_after(not_valid_after)
+        .sign(_TEST_KEY, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.PEM)
+
+
+def _combined_pem(not_valid_after: datetime, *, key_first: bool = True) -> bytes:
+    """A combined private-key + certificate PEM, in either block ordering."""
+    cert_pem = _cert_pem(not_valid_after)
+    return (_TEST_KEY_PEM + cert_pem) if key_first else (cert_pem + _TEST_KEY_PEM)
 
 
 def _write_settings(config_dir, settings: dict) -> None:
@@ -159,3 +195,161 @@ def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config) -
 
     assert "unrecognized shape" in notes[0]
     assert json.loads((isolated_config / "settings.json").read_text()) == settings
+
+
+# --------------------------------------------------------------------------- #
+# read_certificate_expiry
+# --------------------------------------------------------------------------- #
+def test_read_expiry_from_combined_key_and_cert_pem(tmp_path) -> None:
+    """
+    Scenario: the expiry is read out of a combined private-key + certificate PEM.
+    Boundaries: key block first (rotation's own ordering); expiry returned as tz-aware UTC.
+    On failure: the health check cannot tell when the active identity expires.
+    """
+    expiry = datetime(2027, 6, 1, 12, 0, 0, tzinfo=UTC)
+    cert_file = tmp_path / "X509-cert.pem"
+    cert_file.write_bytes(_combined_pem(expiry, key_first=True))
+
+    result = cert_rotation.read_certificate_expiry(cert_file)
+
+    assert result == expiry
+    assert result.tzinfo is not None
+
+
+def test_read_expiry_parses_first_cert_when_cert_precedes_key(tmp_path) -> None:
+    """
+    Scenario: the certificate is still found when the CERTIFICATE block precedes the key block.
+    Boundaries: reversed ordering; the parser must key on the block type, not file position.
+    On failure: a valid cert-first file is misread as having no certificate.
+    """
+    expiry = datetime(2028, 1, 15, 0, 0, 0, tzinfo=UTC)
+    cert_file = tmp_path / "X509-cert.pem"
+    cert_file.write_bytes(_combined_pem(expiry, key_first=False))
+
+    assert cert_rotation.read_certificate_expiry(cert_file) == expiry
+
+
+def test_read_expiry_missing_file_raises_rotation_error(tmp_path) -> None:
+    """
+    Scenario: a missing cert file raises RotationError naming only the path.
+    Boundaries: file does not exist.
+    On failure: a missing cert crashes with a raw OSError instead of a controlled message.
+    """
+    missing = tmp_path / "nope.pem"
+    with pytest.raises(cert_rotation.RotationError, match=re.escape(str(missing))):
+        cert_rotation.read_certificate_expiry(missing)
+
+
+def test_read_expiry_pem_without_certificate_block_raises(tmp_path) -> None:
+    """
+    Scenario: a PEM that holds only a private key (no CERTIFICATE block) is rejected.
+    Boundaries: valid key bytes present, but no certificate to read.
+    On failure: the key block is mistaken for a certificate, or the key bytes leak.
+    """
+    key_only = tmp_path / "key-only.pem"
+    key_only.write_bytes(_TEST_KEY_PEM)
+
+    with pytest.raises(cert_rotation.RotationError, match="No X.509 CERTIFICATE block"):
+        cert_rotation.read_certificate_expiry(key_only)
+
+
+def test_read_expiry_garbage_certificate_block_raises(tmp_path) -> None:
+    """
+    Scenario: a file with a CERTIFICATE header but garbage body raises a parse RotationError.
+    Boundaries: the regex matches a block, but cryptography cannot parse it.
+    On failure: an unparseable cert crashes with a raw cryptography ValueError.
+    """
+    garbage = tmp_path / "garbage.pem"
+    garbage.write_bytes(b"-----BEGIN CERTIFICATE-----\nnot base64 at all\n-----END CERTIFICATE-----\n")
+
+    with pytest.raises(cert_rotation.RotationError, match="Could not parse"):
+        cert_rotation.read_certificate_expiry(garbage)
+
+
+def test_read_expiry_never_leaks_key_bytes_on_error(tmp_path) -> None:
+    """
+    Scenario: an error on a file that also contains the private key must not echo key bytes.
+    Boundaries: combined key + corrupted cert; the RotationError message is inspected.
+    On failure: private-key PEM lands in an exception message and then a log (CWE-532/CWE-312).
+    """
+    corrupt = tmp_path / "X509-cert.pem"
+    corrupt.write_bytes(_TEST_KEY_PEM + b"-----BEGIN CERTIFICATE-----\nZZZZ\n-----END CERTIFICATE-----\n")
+
+    with pytest.raises(cert_rotation.RotationError) as excinfo:
+        cert_rotation.read_certificate_expiry(corrupt)
+
+    message = str(excinfo.value)
+    assert "PRIVATE KEY" not in message
+    assert _TEST_KEY_PEM.decode() not in message
+
+
+# --------------------------------------------------------------------------- #
+# cert_expiry_warning
+# --------------------------------------------------------------------------- #
+def test_cert_expiry_warning_none_cert_returns_none() -> None:
+    """
+    Scenario: no configured cert means nothing to warn about.
+    Boundaries: cert_path is None.
+    On failure: the pre-flight path crashes when x509 auth is not in use.
+    """
+    assert cert_rotation.cert_expiry_warning(None) is None
+
+
+def test_cert_expiry_warning_far_expiry_returns_none(tmp_path) -> None:
+    """
+    Scenario: a cert well outside the warn window produces no warning.
+    Boundaries: expiry ~180 days out, default 30-day window.
+    On failure: healthy certs generate noise on every run.
+    """
+    cert_file = tmp_path / "X509-cert.pem"
+    cert_file.write_bytes(_combined_pem(datetime.now(UTC) + timedelta(days=180)))
+
+    assert cert_rotation.cert_expiry_warning(cert_file) is None
+
+
+def test_cert_expiry_warning_within_window_warns(tmp_path) -> None:
+    """
+    Scenario: a cert inside the warn window returns a renewal warning.
+    Boundaries: expiry ~10 days out, default 30-day window.
+    On failure: an about-to-expire identity goes unannounced until a run fails.
+    """
+    cert_file = tmp_path / "X509-cert.pem"
+    cert_file.write_bytes(_combined_pem(datetime.now(UTC) + timedelta(days=10)))
+
+    warning = cert_rotation.cert_expiry_warning(cert_file)
+
+    assert warning is not None
+    assert "expires on" in warning
+    assert "rotate-cert" in warning
+
+
+def test_cert_expiry_warning_expired_warns(tmp_path) -> None:
+    """
+    Scenario: an already-expired cert returns an expired warning.
+    Boundaries: expiry in the past.
+    On failure: an expired identity is reported as merely 'soon', hiding an outage cause.
+    """
+    cert_file = tmp_path / "X509-cert.pem"
+    cert_file.write_bytes(_combined_pem(datetime.now(UTC) - timedelta(days=5)))
+
+    warning = cert_rotation.cert_expiry_warning(cert_file)
+
+    assert warning is not None
+    assert "expired on" in warning
+
+
+def test_cert_expiry_warning_parse_failure_is_warning_not_raise(tmp_path) -> None:
+    """
+    Scenario: a parse failure returns a warning string instead of raising (ROT-17).
+    Boundaries: a key-only file (no CERTIFICATE block) on the non-raising pre-flight path.
+    On failure: a bad cert crashes the whole connection pre-flight instead of warning.
+    """
+    key_only = tmp_path / "key-only.pem"
+    key_only.write_bytes(_TEST_KEY_PEM)
+
+    warning = cert_rotation.cert_expiry_warning(key_only)
+
+    assert warning is not None
+    assert warning.startswith("WARNING")
+    assert "PRIVATE KEY" not in warning
+    assert _TEST_KEY_PEM.decode() not in warning

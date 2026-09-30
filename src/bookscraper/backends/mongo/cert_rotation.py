@@ -28,10 +28,12 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 from datetime import UTC, datetime
 from typing import Optional
 
 import httpx
+from cryptography import x509
 
 from ...book_utils import atomic_write_bytes
 from . import config
@@ -39,6 +41,16 @@ from . import config
 DEFAULT_CERT_MONTHS = 6
 MIN_CERT_MONTHS = 1
 MAX_CERT_MONTHS = 24
+
+#: Default expiry-warning window (days) shared by ``--check`` and the pre-flight helper.
+DEFAULT_WARN_DAYS = 30
+
+#: Matches a single PEM ``CERTIFICATE`` block. Used to extract *only* the certificate from a
+#: combined key+cert file, so the private-key block is never handed to the parser (ROT-1).
+_CERTIFICATE_PEM_PATTERN = re.compile(
+    rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+    re.DOTALL,
+)
 
 ATLAS_OAUTH_URL = "https://cloud.mongodb.com/api/oauth/token"
 ATLAS_API_BASE_URL = "https://cloud.mongodb.com/api/atlas/v2"
@@ -197,3 +209,74 @@ def rotate_certificate(
 
     atomic_write(output, cert)
     return output, update_settings_after_rotation(output)
+
+
+def read_certificate_expiry(path: pathlib.Path) -> datetime:
+    """
+    Return the expiry (``not_valid_after``) of the X.509 certificate at ``path``.
+
+    ``path`` is the combined private-key + certificate PEM produced by rotation. Only the
+    **first** ``CERTIFICATE`` PEM block is extracted and parsed; the private-key block is
+    never read, loaded, or retained (ROT-1). The result is timezone-aware UTC.
+
+    Any failure - a missing/unreadable file, no certificate block, or an unparseable block -
+    raises :class:`RotationError` naming **only the file path**, never the file contents, the
+    offending bytes, or any key material (ROT-2, ROT-3).
+
+    :param path: Path to the combined key+cert PEM file.
+    :returns: The certificate's expiry as a timezone-aware UTC ``datetime``.
+    :raises RotationError: If the file is missing/unreadable, has no certificate block, or the
+        certificate cannot be parsed.
+    """
+    try:
+        pem_bytes = path.read_bytes()
+    except OSError:
+        # Name only the path - never the errno/exception text, keeping the leak-free contract
+        # uniform across every failure of this path (ROT-2, ROT-3).
+        raise RotationError(f"Could not read certificate file: {path}") from None
+
+    match = _CERTIFICATE_PEM_PATTERN.search(pem_bytes)
+    if match is None:
+        raise RotationError(f"No X.509 CERTIFICATE block found in {path}.")
+
+    try:
+        certificate = x509.load_pem_x509_certificate(match.group(0))
+    except ValueError:
+        # Never interpolate the exception or the PEM bytes - they can echo key material (ROT-3).
+        raise RotationError(f"Could not parse the X.509 certificate in {path}.") from None
+
+    return certificate.not_valid_after_utc
+
+
+def cert_expiry_warning(cert_path: Optional[pathlib.Path], warn_days: int = DEFAULT_WARN_DAYS) -> Optional[str]:
+    """
+    Non-raising pre-flight helper: a warning string if the certificate at ``cert_path`` is
+    expired or expires within ``warn_days`` days, else ``None``.
+
+    Called by ``storage.resolve_store_backend`` before connecting, so it must never raise: a
+    parse failure returns a warning string rather than crashing the connection path (ROT-17).
+    It performs a local file read only and never contacts Atlas (ROT-16). No PEM or key bytes
+    ever appear in the returned string (ROT-3) - a parse failure is reported via the leak-free
+    :class:`RotationError` message (path only).
+
+    :param cert_path: The active TLS client certificate path, or ``None`` when no x509 cert is
+        configured (in which case there is nothing to warn about).
+    :param warn_days: Warn when this many days or fewer remain before expiry (default 30).
+    :returns: A warning string, or ``None`` when there is nothing to warn about.
+    """
+    if cert_path is None:
+        return None
+    try:
+        expires = read_certificate_expiry(cert_path)
+    except RotationError as e:
+        return f"WARNING: could not read TLS client certificate expiry: {e}"
+
+    days_remaining = (expires - datetime.now(UTC)).days
+    if days_remaining < 0:
+        return f"WARNING: the TLS client certificate {cert_path} expired on {expires.date().isoformat()}."
+    if days_remaining <= warn_days:
+        return (
+            f"WARNING: the TLS client certificate {cert_path} expires on {expires.date().isoformat()} "
+            f"({days_remaining} day(s) remaining). Run 'bookscraper rotate-cert' to renew it."
+        )
+    return None

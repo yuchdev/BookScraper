@@ -123,6 +123,24 @@ def test_rotate_cert_rejects_non_integer_months() -> None:
         build_parser().parse_args(["rotate-cert", "--months", "soon"])
 
 
+def test_rotate_cert_check_flags() -> None:
+    args = build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "14"])
+    assert args.check is True
+    assert args.warn_days == 14
+    assert isinstance(args.warn_days, int)
+
+
+def test_rotate_cert_check_defaults() -> None:
+    args = build_parser().parse_args(["rotate-cert"])
+    assert args.check is False
+    assert args.warn_days == 30
+
+
+def test_rotate_cert_warn_days_rejects_non_integer() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "soon"])
+
+
 # --------------------------------------------------------------------------- #
 # detect-schema subparser
 # --------------------------------------------------------------------------- #
