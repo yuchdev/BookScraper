@@ -9,7 +9,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
 | 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
-| 02.1 | X.509 certificate rotation         | 🔶 In progress | 9 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
+| 02.1 | X.509 certificate rotation         | ✅ Complete (08 blocked) | 9 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -106,7 +106,45 @@ Delivered: `bookscraper rotate-cert` issues a cert via the Atlas Admin API using
 credentials, writes it atomically `0600`, and repoints `settings.json` for literal cert references. Open: expiry
 inspection (`--check`), retention/pruning, verify-before-repoint, a recorded live re-diagnosis of the unverified
 Atlas-8000 claim (so the inert `xfail(strict=False)` markers can be removed or made strict), and an operator
-runbook.
+runbook. All are now closed except the live re-diagnosis (below).
+
+### Task 02.1 - X.509 certificate rotation (✅ 2026-09-30, subtask 08 blocked)
+
+**Delivered** (commits `eb88f4e`..`6ea5708`; threat model
+[2026-09-30-x509-certificate-rotation.md](/docs/security/2026-09-30-x509-certificate-rotation.md)):
+
+- **06** `read_certificate_expiry()` parses only the first `CERTIFICATE` block of the combined PEM, using the new
+  direct dependency `cryptography` 50.0.1 ([dep audit](/docs/reviews/2026-09-30-dep-audit.md) clean; MIT-0 added
+  to the license allow list). `rotate-cert --check [--warn-days N]` exits 0/3/1 with no Atlas contact. The mongo
+  pre-flight warns when the cert is close to expiry, and a successful rotation prints the new expiry date.
+- **09** `verify_certificate()` pings with the new cert through the shared redacted client factory before
+  `settings.json` is repointed. On failure there is no repoint, the new PEM is kept, and the command exits 1.
+  New flags `--no-verify` and `--verify-attempts`. `rotate_certificate()` now returns
+  `(path, lines, verified)`.
+- **07** `prune_old_certificates()` keeps the newest `--keep N` (default 2) plus a canonicalised protected set,
+  unlinks the matched path rather than a symlink target, and skips entirely on an unresolvable active cert, after
+  `--no-verify`, or after a failed verification. `--no-prune` disables it. Prune tests assert `CONFIG_DIR` is not
+  the real `~/.bookscrapper`.
+- **10** [Operator runbook](/docs/runbooks/x509-certificate-rotation.md), placeholders only, linked from CLAUDE.md
+  and `docs/README.md`.
+
+**Tests / gate:** 422 → 488 passed (8 integration deselected, all still collect), 96% total. `cert_rotation.py`,
+`rotate_cert.py`, `cli.py` and `storage.py` are at 100%. A full suite run leaves `~/.bookscrapper/` unchanged.
+`/verify-subtask` PASS ×4, `/secret-scan` clean, `security-auditor` task close PASS (every HIGH closed).
+`/pr-review`: feature LGTM and security PASS, so APPROVE. The fix in `6ea5708` stops pruning from crashing on a
+dangling `X509-cert-*.pem` symlink or a file that vanishes mid-prune, both of which happen after a successful
+rotation.
+
+**Deferred:** **08 (live X.509 re-diagnosis) is blocked.** This machine has no Atlas credentials, so the
+`xfail(strict=False)` markers stay (requirement 4) and the runbook's Atlas-8000 row stays marked UNVERIFIED. It
+is still open under the milestone definition of done. Non-blocking review suggestions, not applied:
+- `rotate-cert --check` silently ignores rotation-only flags. Revisit with 05.0's CLI work.
+- "No superseded certificates to prune" reads the same whether nothing was old enough or everything old was
+  protected.
+
+**Reconciliation note:** 06, 07, 09 and 10 are *consumed*. 08 is *open (blocked)*. The one spec departure is in
+07: `--no-verify` also suppresses pruning, a more conservative choice than the spec wording, documented in
+CLAUDE.md and the runbook.
 
 ## Task 04.0 - AI-assisted schema detection
 
