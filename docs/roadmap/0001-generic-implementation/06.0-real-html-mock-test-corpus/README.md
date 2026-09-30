@@ -21,7 +21,7 @@ intercepted, and golden files record the expected records.
 | #  | Document                                                             | Status         | Blocks     |
 |----|----------------------------------------------------------------------|----------------|------------|
 | 01 | [Capture & sanitize script](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/01-capture-and-sanitize-script.md)  | ✅ Complete    | 02, 05, 06 |
-| 02 | [Corpus layout & policy](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/02-corpus-layout-and-policy.md)        | ⬜ Not started | 03         |
+| 02 | [Corpus layout & policy](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/02-corpus-layout-and-policy.md)        | ✅ Complete    | 03         |
 | 03 | [Chromium fixture-serving harness](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/03-fixture-serving-harness.md) | ⬜ Not started | 04       |
 | 04 | [Detail-page golden tests](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/04-detail-page-golden-tests.md)      | ⬜ Not started | -          |
 | 05 | [Search-page & API JSON fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/05-search-and-api-fixtures.md) | ⬜ Not started | -         |

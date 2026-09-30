@@ -1,0 +1,13 @@
+# Test corpus (task 06.0): sanitized, captured third-party HTML is machine-generated.
+# Mark it linguist-generated and suppress textual diffs so pull-request reviews stay
+# readable and GitHub does not count it as hand-written source.
+#
+# Threat model FIX-13: suppressing the HTML diff must NOT become a review-bypass. The
+# compensating controls are (a) tests/unit/test_fixture_corpus.py::test_meta_sha256_matches_file,
+# which fails if any .html is edited after capture, (b) the secret-scan gate run over
+# tests/fixtures/, and (c) goldens (*.expected.json) staying fully diffable below.
+tests/fixtures/**/*.html linguist-generated=true -diff
+
+# Golden records stay diffable and reviewable - a deliberate golden change must show
+# up in the PR diff.
+tests/fixtures/**/*.expected.json -linguist-generated diff

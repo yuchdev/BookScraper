@@ -1,0 +1,39 @@
+{
+  "data": {
+    "id": "103",
+    "type": "Book",
+    "attributes": {
+      "title": "C++ Best Practices",
+      "slug": "cppbestpractices",
+      "about_the_book": "Neutralized prose omitted from the public test corpus.",
+      "last_published_at": "2021-06-10T00:00:00Z",
+      "categories": [
+        {
+          "name": "Computer Science"
+        },
+        {
+          "name": "C and C++"
+        }
+      ]
+    },
+    "relationships": {
+      "accepted_authors": {
+        "data": [
+          {
+            "id": "202",
+            "type": "Author"
+          }
+        ]
+      }
+    }
+  },
+  "included": [
+    {
+      "type": "Author",
+      "id": "202",
+      "attributes": {
+        "name": "Jason Turner"
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1122,
+  "bytes_sanitized": 775,
+  "captured_at": "2026-09-30T17:30:55.548857+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "Packtpub served a Cloudflare 'Just a moment...' JS challenge to the headless capture; hand-built from the public structure the packtpub detail selectors read (FIX-6).",
+  "sanitizer_version": "1.0.0",
+  "sha256": "31dbcfb9866198c3743c6996c55eeff35e44d8cce23ff33577b6c1e49d9c658d",
+  "site": "packtpub",
+  "url": "https://www.packtpub.com/product/mastering-the-c-17-stl/9781787126824"
+}

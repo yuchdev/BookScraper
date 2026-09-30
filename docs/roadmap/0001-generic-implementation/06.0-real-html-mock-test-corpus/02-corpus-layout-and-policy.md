@@ -1,7 +1,7 @@
 # 02 - Corpus layout & policy
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (all fixtures hand-built - capture walled; see status.md 2026-10-01)
 **Depends on:** [01-capture-and-sanitize-script.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/01-capture-and-sanitize-script.md)
 **Role:** Docs Writer → Testing Expert
 

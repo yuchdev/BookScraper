@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1163,
+  "bytes_sanitized": 816,
+  "captured_at": "2026-09-30T17:30:55.556111+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "Packtpub served a Cloudflare 'Just a moment...' JS challenge to the headless capture; hand-built from the public structure the packtpub detail selectors read (FIX-6).",
+  "sanitizer_version": "1.0.0",
+  "sha256": "fc78fd7a59c4781a804e4d6d0e491579a4d376dc30692f73a595b2f0155d8552",
+  "site": "packtpub",
+  "url": "https://www.packtpub.com/product/software-architecture-with-c/9781838554590"
+}

@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1026,
+  "bytes_sanitized": 739,
+  "captured_at": "2026-09-30T17:30:55.578540+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "O'Reilly served a JS-gated, near-empty page (~344 raw bytes, no usable structure) to the logged-out headless capture; hand-built from the public structure the oreilly detail selectors read (FIX-6).",
+  "sanitizer_version": "1.0.0",
+  "sha256": "cf7ee69ebd9d2ee347050b9ec432802b38f20e2078fdbbe6ca02a5a29367c8be",
+  "site": "oreilly",
+  "url": "https://www.oreilly.com/library/view/effective-modern-c/9781491908419/"
+}

@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 1 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 2 / 7         | -                                                                                                      |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 29 / 94 subtasks complete.
+**Totals:** 30 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -209,3 +209,19 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   done **regardless of robots.txt**, by the user's explicit decision. It is still logged out, cookie-less and
   rate-limited, and the decision is recorded in the corpus policy (`tests/fixtures/README.md`). The FIX-7 clause
   "assumes robots is honoured during capture" is therefore superseded for this capture only.
+- **2026-10-01 - 06.0/02 capture outcome and decision (user-ratified):** the headless, logged-out capture was
+  blocked on every site: an Amazon CAPTCHA, a Packtpub Cloudflare challenge, and an O'Reilly JS gate (a ~344 B
+  page). This machine's Playwright 1.63 won't run its bundled Chromium on macOS 13, so capture drives the system
+  Chromium 147 via `executable_path`. That is a platform workaround, not evasion. Decision: retry **once per site
+  headed** (the scraper itself runs headed, `HEADLESS_BROWSER=False`), still logged out, cookie-less, rate-limited
+  and without stealth tricks. Keep whatever succeeds. Sites that still block stay hand-built, flagged
+  `hand_built: true` in `.meta.json`, and record that real-markup drift detection is not yet achieved for them.
+- **2026-10-01 - Finding for task 03.0 (Leanpub API):** the documented `api/v1/cache/books/<slug>.json` endpoint
+  returns 404, and `leanpub.com/<slug>.json` returns 401. `search` is the only end-to-end workflow and depends on
+  it (`get_leanpub_book_details`), so live Leanpub scraping is likely broken today. The Leanpub fixtures are
+  hand-built from the JSON:API shape the parser expects. Route this to 03.0/05 (Leanpub API detail hardening) or
+  03.3.
+- **2026-10-01 - Sanitizer over-redaction (fixed before any fixture is committed):** the substring match `auth`
+  redacted Leanpub's `accepted_authors`, and the prose rule neutralized the short O'Reilly heading "Book
+  description", which its selector anchors on. Fix: segment-based key matching, and never neutralize text under
+  ~80 chars.

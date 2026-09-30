@@ -1,0 +1,39 @@
+{
+  "data": {
+    "id": "102",
+    "type": "Book",
+    "attributes": {
+      "title": "C++ Lambda Story",
+      "slug": "cpplambda",
+      "about_the_book": "Neutralized prose omitted from the public test corpus.",
+      "last_published_at": "2020-09-01T00:00:00Z",
+      "categories": [
+        {
+          "name": "Computer Science"
+        },
+        {
+          "name": "C and C++"
+        }
+      ]
+    },
+    "relationships": {
+      "accepted_authors": {
+        "data": [
+          {
+            "id": "201",
+            "type": "Author"
+          }
+        ]
+      }
+    }
+  },
+  "included": [
+    {
+      "type": "Author",
+      "id": "201",
+      "attributes": {
+        "name": "Bartlomiej Filipek"
+      }
+    }
+  ]
+}

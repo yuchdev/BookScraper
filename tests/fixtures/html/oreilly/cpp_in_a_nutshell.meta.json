@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1015,
+  "bytes_sanitized": 728,
+  "captured_at": "2026-09-30T17:30:55.586522+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "O'Reilly served a JS-gated, near-empty page (~344 raw bytes, no usable structure) to the logged-out headless capture; hand-built from the public structure the oreilly detail selectors read (FIX-6).",
+  "sanitizer_version": "1.0.0",
+  "sha256": "4a0ed55911eb9210e51dbdfc2637ce6ebc4260c79bb70d634dbe787b935f1bfa",
+  "site": "oreilly",
+  "url": "https://www.oreilly.com/library/view/c-in-a/0596002985/"
+}

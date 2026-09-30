@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 845,
+  "bytes_sanitized": 733,
+  "captured_at": "2026-09-30T17:30:55.591466+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "api",
+  "logged_out": true,
+  "reason": "Leanpub's documented api/v1/cache JSON:API endpoints now return 404 and the book .json variant returns 401; hand-built from the JSON:API shape get_leanpub_book_details expects (FIX-6).",
+  "sanitizer_version": "1.0.0",
+  "sha256": "309c050b08d8bc71f5a2594e39eb0d1c93255bcc5b5c890534198d748527a6ce",
+  "site": "leanpub",
+  "url": "https://leanpub.com/api/v1/cache/books/cpp17indetail.json?include=accepted_authors"
+}
