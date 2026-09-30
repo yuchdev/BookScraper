@@ -456,6 +456,32 @@ def test_prune_unlink_failure_is_warning(prune_config, monkeypatch) -> None:
     assert (prune_config / "X509-cert-0.pem").exists()  # survived the failed unlink
 
 
+def test_prune_tolerates_dangling_symlink_and_vanished_file(prune_config, monkeypatch) -> None:
+    """
+    Scenario: a dangling X509-cert-*.pem symlink, or a file deleted between glob() and the
+    mtime read, must not crash pruning - it runs after a rotation that already succeeded.
+    Boundaries: one dangling symlink (oldest by lstat) plus a glob that also yields a path that
+        no longer exists; keep=1 over two real certs.
+    On failure: FileNotFoundError from the sort key aborts the command after the new cert was
+        written, verified and repointed - on every run, for the dangling-link case.
+    """
+    _make_cert(prune_config, "X509-cert-old.pem", 1000)
+    newest = _make_cert(prune_config, "X509-cert-new.pem", 3000)
+    dangling = prune_config / "X509-cert-dangling.pem"
+    dangling.symlink_to(prune_config / "does-not-exist.pem")
+    os.utime(dangling, (500, 500), follow_symlinks=False)
+    vanished = prune_config / "X509-cert-vanished.pem"
+    real_glob = pathlib.Path.glob
+    monkeypatch.setattr(pathlib.Path, "glob", lambda self, pattern: [*real_glob(self, pattern), vanished])
+
+    status = cert_rotation.prune_old_certificates(1, set())
+
+    assert newest.exists()
+    assert not (prune_config / "X509-cert-old.pem").exists()
+    assert not dangling.is_symlink()  # the dangling link itself was pruned, not followed
+    assert not any(s.startswith("WARNING") for s in status)
+
+
 @pytest.mark.parametrize("spelling", ["relative", "dotdot", "symlink"])
 def test_prune_protects_active_cert_via_different_spelling(prune_config, tmp_path, monkeypatch, spelling) -> None:
     """

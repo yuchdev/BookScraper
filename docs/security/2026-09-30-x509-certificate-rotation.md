@@ -151,3 +151,63 @@ subtask):
 
 Hand fixes to `python-expert` and regression tests (key-never-logged, prune-protects-active,
 verify-leaves-settings-untouched, redacted-report) to `testing-expert`.
+
+## Verification - task 02.1 close (2026-09-30)
+
+As-built review of `git diff eb90685..05530f0`. Verdict: **PASS**. No CRITICAL/HIGH residuals.
+Subtask 08 is blocked (no Atlas credentials); ROT-14/15 are **N/A** this round (no
+`docs/reviews/*-x509-integration-run.md` was committed - confirmed absent).
+
+Per-ROT status:
+
+- **ROT-1 PASS** - `read_certificate_expiry` (cert_rotation.py:460-470) extracts only the first
+  `CERTIFICATE` block via `_CERTIFICATE_PEM_PATTERN` and parses `match.group(0)`; the private-key
+  block is never handed to `x509.load_pem_x509_certificate`. Returns `not_valid_after_utc` (tz-aware).
+- **ROT-2 PASS** - every failure (OSError, no block, ValueError) raises `RotationError` with the
+  path only (cert_rotation.py:455-468); OSError and ValueError use `from None`.
+- **ROT-3 PASS** - no expiry path (`read_certificate_expiry`, `--check` _run_check, post-rotation
+  expiry line, `cert_expiry_warning`) interpolates PEM/key bytes or the raw exception into any log,
+  message, or console line.
+- **ROT-4 PASS** - `cryptography>=50.0.1` pinned direct dep (pyproject.toml:14); `uv.lock`
+  regenerated (resolves 50.0.1, +cffi 2.1.1, +pycparser 3.0) and committed.
+- **ROT-5 PASS** - `cryptography` 50.0.1 has no open CVEs (dep-audit 2026-09-30). The 2026 advisories
+  CVE-2026-39892 (<=46.0.6), CVE-2026-69249 (<49.0.0), CVE-2026-34073 (<46.0.6) are all fixed before
+  50.0.1; CVE-2026-69249 is chain-verification DoS, not reachable by single-cert parse anyway.
+- **ROT-6 PASS** - `_prune_after_rotation` (cert_rotation.py:379-392) builds protected = {new_cert} ∪
+  {resolver cert *after* repoint} ∪ {TLS_CERT_FILE, expanduser}. Resolution runs after
+  `update_settings_after_rotation`.
+- **ROT-7 PASS** - `prune_old_certificates` (cert_rotation.py:420-423) canonicalizes both candidate
+  (`candidate.resolve()`) and every protected path (`p.resolve()`) before the membership test;
+  symlink/relative/`..` spellings of the active cert are still recognized as protected.
+- **ROT-8 PASS** - a `config.ConfigError` from the post-repoint resolve short-circuits with a skip
+  status line (cert_rotation.py:382-386); pruning never runs on uncertainty.
+- **ROT-9 PASS** - candidates come solely from `config.CONFIG_DIR.glob("X509-cert-*.pem")`
+  (cert_rotation.py:415-419); an `--output` cert outside CONFIG_DIR is never a candidate.
+- **ROT-10 PASS** - deletion is `candidate.unlink()` on the matched glob path itself
+  (cert_rotation.py:426), never resolve-then-delete; a failed unlink is a `WARNING:` line naming
+  only the path + exception class, not an exception.
+- **ROT-11 PASS** - `verify_certificate` (cert_rotation.py:230-244) builds only via
+  `build_mongo_client(uri, str(cert_path), ca_file)` and `ping`; inherits SEC-3/4/8 redaction. No
+  hand-rolled `MongoClient`, no raw pymongo error logged. Client closed in `finally` every attempt.
+- **ROT-12 PASS** - on final `MongoConnectionError` (cert_rotation.py:344-353) the command returns
+  `verified=False` without calling `update_settings_after_rotation` and without pruning; the new PEM
+  stays on disk; `commands/rotate_cert.py:105-108` exits 1.
+- **ROT-13 PASS** - the failure WARNING interpolates only the redacted `MongoConnectionError`
+  (`_redact_pymongo_error` = class name + code/codeName; client.py:198-219) - no host/URI/DB
+  user/Atlas body. Pruning runs strictly on the verified-success (or no-URI) branches, never on failure.
+- **ROT-14 N/A** - subtask 08 blocked (no Atlas creds); no integration-run report committed.
+- **ROT-15 N/A** - same; nothing to secret-scan this round.
+- **ROT-16 PASS** - `--check` (`_run_check`) and the `resolve_store_backend` pre-flight
+  (`_warn_if_cert_expiring` -> `cert_expiry_warning`) do local file reads only, contact no Atlas,
+  need no `ATLAS_*`. Exit codes 0 / 3 / 1 as specified; `--keep` rejects <1 at parse time
+  (`_positive_int`, cli.py) so pruning can never delete every cert.
+- **ROT-17 PASS** - `cert_expiry_warning` (cert_rotation.py:489-504) is non-raising (catches
+  `RotationError`, returns a path-only warning string); imported at storage.py:28 with no cycle.
+- **ROT-18 PASS** - `docs/runbooks/x509-certificate-rotation.md` (410 lines) uses placeholders
+  (`<...>`, 38 occurrences) throughout; secret scan found no real host/user/password/project-id/cert
+  filename/token (the only `cloud.mongodb.com` reference is the public Atlas API base URL).
+
+Residual risk (LOW, non-blocking): `--warn-days` and `--verify-attempts` use plain `type=int` (no
+lower bound). A negative `--verify-attempts` is absorbed by `max(1, attempts)`; a negative
+`--warn-days` only shifts the `--check` exit-3 threshold. Neither reaches a secret sink or the prune
+path. No action required.

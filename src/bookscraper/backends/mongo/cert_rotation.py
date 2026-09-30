@@ -283,7 +283,9 @@ def rotate_certificate(
     :param verify_attempts: Maximum verification ping attempts.
     :param keep: Number of newest certificates to retain when pruning (>= 1).
     :param prune: When True (default), prune superseded certs after a successful repoint.
-    :returns: (path the certificate was written to, status lines, verification-passed flag).
+    :returns: (path the certificate was written to, status lines, ``verified``). ``verified`` is
+        False only when verification ran and failed; it is True when it passed *or* was skipped
+        (``--no-verify``, or no URI configured) - i.e. it means "the command should exit 0".
     :raises RotationError: For missing/invalid configuration, an Atlas API failure, or a
         MongoDB configuration that cannot be resolved for verification.
     """
@@ -368,7 +370,9 @@ def _prune_after_rotation(new_cert: pathlib.Path, keep: int) -> list[str]:
     ``protected`` = {the just-written ``new_cert``} ∪ {the cert
     :func:`config.resolve_mongo_connection` resolves *after* repointing} ∪ {``TLS_CERT_FILE`` if
     set} (ROT-6). Resolution happens *after* :func:`update_settings_after_rotation` has run, so the
-    resolved cert reflects the freshly repointed configuration. If the active cert cannot be
+    resolved cert reflects the freshly repointed configuration - except in env-source mode, where
+    settings.json is not rewritten and this is still the *old* cert (kept, correctly; the new one
+    is protected via ``new_cert`` regardless). If the active cert cannot be
     resolved (a :class:`config.ConfigError` or any resolver failure), pruning is **skipped
     entirely** with a status line - never prune on uncertainty (ROT-8).
 
@@ -412,11 +416,20 @@ def prune_old_certificates(keep: int, protected: set[pathlib.Path]) -> list[str]
     :param protected: Paths that must never be pruned however old; each is canonicalized here.
     :returns: One status line per deletion or failed unlink, or a single "nothing to prune" line.
     """
-    candidates = sorted(
-        config.CONFIG_DIR.glob("X509-cert-*.pem"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
+    # Age a cert by its content (stat follows a symlink to its target); fall back to the link's
+    # own lstat for a dangling symlink, and drop a file that vanished between glob() and here.
+    # Either would otherwise raise out of a prune that runs after the rotation already succeeded.
+    dated: list[tuple[float, pathlib.Path]] = []
+    for path in config.CONFIG_DIR.glob("X509-cert-*.pem"):
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            try:
+                mtime = path.lstat().st_mtime
+            except OSError:
+                continue
+        dated.append((mtime, path))
+    candidates = [path for _mtime, path in sorted(dated, key=lambda item: item[0], reverse=True)]
     protected_resolved = {p.resolve() for p in protected}
     status: list[str] = []
     for candidate in candidates[keep:]:
