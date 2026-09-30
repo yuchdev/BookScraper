@@ -1,7 +1,7 @@
 # 07 - Old-certificate retention
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [05-rotate-cert-command.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/05-rotate-cert-command.md)
 **Role:** Security Auditor → Python Expert
 

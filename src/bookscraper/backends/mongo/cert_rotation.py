@@ -57,6 +57,11 @@ DEFAULT_VERIFY_DELAY_S = 6.0
 #: Default expiry-warning window (days) shared by ``--check`` and the pre-flight helper.
 DEFAULT_WARN_DAYS = 30
 
+#: Default number of newest ``X509-cert-*.pem`` files retained by post-rotation pruning.
+#: Overridable via ``--keep``; the CLI rejects values below 1 so pruning can never delete every
+#: certificate (see :func:`prune_old_certificates`).
+DEFAULT_KEEP_CERTS = 2
+
 #: Matches a single PEM ``CERTIFICATE`` block. Used to extract *only* the certificate from a
 #: combined key+cert file, so the private-key block is never handed to the parser (ROT-1).
 _CERTIFICATE_PEM_PATTERN = re.compile(
@@ -245,10 +250,12 @@ def rotate_certificate(
     *,
     verify: bool = True,
     verify_attempts: int = DEFAULT_VERIFY_ATTEMPTS,
+    keep: int = DEFAULT_KEEP_CERTS,
+    prune: bool = True,
 ) -> tuple[pathlib.Path, list[str], bool]:
     """
     Issues a new Atlas-managed X.509 client certificate, writes it to disk, verifies it
-    authenticates, and only then repoints ``settings.json`` at it.
+    authenticates, and only then repoints ``settings.json`` at it and prunes superseded certs.
 
     Credentials come from the ATLAS_* environment variables (the caller is expected
     to have called load_dotenv() first). `months` and `output` take precedence over
@@ -263,10 +270,19 @@ def rotate_certificate(
     returned ``verified`` flag is ``False`` so the caller exits non-zero. Only on a passing (or
     skipped) verification is :func:`update_settings_after_rotation` called.
 
+    When ``prune`` is True, superseded ``X509-cert-*.pem`` files are removed **after** the
+    successful repoint via :func:`_prune_after_rotation` (keeping the newest ``keep`` plus the
+    active cert - see ROT-6/7/8). Pruning runs only on a verified success or when verification
+    was skipped for lack of a configured URI; it is deliberately **not** run after ``--no-verify``
+    (there is no confirmation the new cert works, so old certs are kept to avoid a lockout) nor
+    ever after a failed verification (ROT-13).
+
     :param months: Certificate validity in months, or None to defer to env/default.
     :param output: Output PEM path, or None to defer to env/default.
     :param verify: When True (default), ping the new cert before repointing.
     :param verify_attempts: Maximum verification ping attempts.
+    :param keep: Number of newest certificates to retain when pruning (>= 1).
+    :param prune: When True (default), prune superseded certs after a successful repoint.
     :returns: (path the certificate was written to, status lines, verification-passed flag).
     :raises RotationError: For missing/invalid configuration, an Atlas API failure, or a
         MongoDB configuration that cannot be resolved for verification.
@@ -294,7 +310,15 @@ def rotate_certificate(
 
     if not verify:
         notes = ["Verification skipped (--no-verify); repointing settings.json without pinging Atlas."]
-        return output, notes + update_settings_after_rotation(output), True
+        notes += update_settings_after_rotation(output)
+        if prune:
+            # No confirmation the new cert works, so old certs are kept to avoid a lockout (the
+            # HIGH self-inflicted-lockout finding). Pruning only ever runs on a positive signal.
+            notes.append(
+                "Skipping cert pruning: verification was skipped (--no-verify), so there is no "
+                "confirmation the new certificate authenticates - old certificates are kept."
+            )
+        return output, notes, True
 
     try:
         uri = config.resolve_mongo_connection()[0]
@@ -309,24 +333,104 @@ def rotate_certificate(
 
     if not uri:
         notes = ["Skipping verification: no MongoDB URI is configured (nothing to ping)."]
-        return output, notes + update_settings_after_rotation(output), True
+        notes += update_settings_after_rotation(output)
+        if prune:
+            # Nothing to authenticate against means no identity to lock out of, so pruning is safe.
+            notes += _prune_after_rotation(output, keep)
+        return output, notes, True
 
     try:
         verify_certificate(output, uri, attempts=verify_attempts)
     except MongoConnectionError as e:
-        # Verification failed for good: do NOT repoint (ROT-12). The new PEM stays on disk and the
-        # previously configured certificate remains in use. The message carries only the redacted
-        # code/codeName (ROT-11, ROT-13) - never the URI, host, DB user, or Atlas response body.
+        # Verification failed for good: do NOT repoint (ROT-12) and do NOT prune (ROT-13). The new
+        # PEM stays on disk and the previously configured certificate remains in use. The message
+        # carries only the redacted code/codeName (ROT-11, ROT-13) - never the URI, host, DB user,
+        # or Atlas response body.
         note = (
             f"WARNING: the new certificate at {output} failed verification ({e}); "
             "settings.json left unchanged - the previously configured certificate remains in use."
         )
         return output, [note], False
 
-    # Verification passed: it is now safe to repoint. (Subtask 07 will prune superseded certs
-    # here, on this success-only path - never before verification succeeds, per ROT-13.)
+    # Verification passed: it is now safe to repoint and then prune superseded certs on this
+    # success-only path - never before verification succeeds, per ROT-13.
     notes = [f"Verified: the new certificate authenticates to MongoDB Atlas ({output.name})."]
-    return output, notes + update_settings_after_rotation(output), True
+    notes += update_settings_after_rotation(output)
+    if prune:
+        notes += _prune_after_rotation(output, keep)
+    return output, notes, True
+
+
+def _prune_after_rotation(new_cert: pathlib.Path, keep: int) -> list[str]:
+    """
+    Build the ``protected`` set and prune superseded certs after a successful repoint.
+
+    ``protected`` = {the just-written ``new_cert``} ∪ {the cert
+    :func:`config.resolve_mongo_connection` resolves *after* repointing} ∪ {``TLS_CERT_FILE`` if
+    set} (ROT-6). Resolution happens *after* :func:`update_settings_after_rotation` has run, so the
+    resolved cert reflects the freshly repointed configuration. If the active cert cannot be
+    resolved (a :class:`config.ConfigError` or any resolver failure), pruning is **skipped
+    entirely** with a status line - never prune on uncertainty (ROT-8).
+
+    :param new_cert: The certificate just written by this rotation (always protected).
+    :param keep: Number of newest certificates to retain.
+    :returns: Status lines from the prune, or a single skip line if the active cert is unresolvable.
+    """
+    protected = {new_cert}
+    try:
+        _uri, active_cert = config.resolve_mongo_connection()
+    except config.ConfigError as e:
+        return [
+            f"Skipping cert pruning: the active certificate could not be resolved ({e}); "
+            "no old certificate is removed on uncertainty."
+        ]
+    if active_cert:
+        protected.add(pathlib.Path(active_cert))
+    tls_cert = os.environ.get("TLS_CERT_FILE")
+    if tls_cert:
+        protected.add(pathlib.Path(tls_cert).expanduser())
+    return prune_old_certificates(keep, protected)
+
+
+def prune_old_certificates(keep: int, protected: set[pathlib.Path]) -> list[str]:
+    """
+    Delete superseded ``X509-cert-*.pem`` files from :data:`config.CONFIG_DIR`, keeping the newest
+    ``keep`` plus every path in ``protected`` however old.
+
+    Candidates come **solely** from ``config.CONFIG_DIR.glob("X509-cert-*.pem")`` sorted
+    newest-first by ``st_mtime``; nothing outside ``CONFIG_DIR`` and nothing not matching the glob
+    is ever a candidate, so a ``--output`` cert written elsewhere is never pruned (ROT-9). Each
+    candidate and each protected path is canonicalized with :meth:`Path.resolve` before comparison,
+    so a symlink-, relative-, or ``..``-spelled reference to the active cert is still recognized as
+    protected and never deleted (ROT-7). Deletion unlinks the **matched glob path itself** - it
+    never ``resolve()``\\ s a symlink and deletes the target outside ``CONFIG_DIR`` (ROT-10). A
+    failed unlink becomes a ``WARNING:`` status line naming only the path and the exception class,
+    never an exception (ROT-10).
+
+    :param keep: Number of newest certificates to retain (>= 1; the CLI rejects lower values so
+        pruning can never delete every certificate).
+    :param protected: Paths that must never be pruned however old; each is canonicalized here.
+    :returns: One status line per deletion or failed unlink, or a single "nothing to prune" line.
+    """
+    candidates = sorted(
+        config.CONFIG_DIR.glob("X509-cert-*.pem"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    protected_resolved = {p.resolve() for p in protected}
+    status: list[str] = []
+    for candidate in candidates[keep:]:
+        if candidate.resolve() in protected_resolved:
+            continue
+        try:
+            candidate.unlink()
+        except OSError as e:
+            status.append(f"WARNING: could not delete old certificate {candidate}: {type(e).__name__}.")
+        else:
+            status.append(f"Pruned superseded certificate {candidate.name}.")
+    if not status:
+        status.append(f"No superseded certificates to prune (kept the newest {keep} plus any in use).")
+    return status
 
 
 def read_certificate_expiry(path: pathlib.Path) -> datetime:

@@ -50,7 +50,16 @@ def _write_combined_cert(path: pathlib.Path, expiry: datetime) -> pathlib.Path:
     return path
 
 
-def _args(months=None, output=None, check=False, warn_days=30, no_verify=False, verify_attempts=5) -> SimpleNamespace:
+def _args(
+    months=None,
+    output=None,
+    check=False,
+    warn_days=30,
+    no_verify=False,
+    verify_attempts=5,
+    keep=2,
+    no_prune=False,
+) -> SimpleNamespace:
     return SimpleNamespace(
         command="rotate-cert",
         months=months,
@@ -59,6 +68,8 @@ def _args(months=None, output=None, check=False, warn_days=30, no_verify=False, 
         warn_days=warn_days,
         no_verify=no_verify,
         verify_attempts=verify_attempts,
+        keep=keep,
+        no_prune=no_prune,
         log_severity="info",
     )
 
@@ -78,7 +89,7 @@ async def test_run_success_passes_args_through_and_reports_notes(tmp_path) -> No
         await rotate_cert.run(_args(months=9, output=str(tmp_path / "out.pem")))
 
     mock_dotenv.assert_called_once_with()
-    mock_rotate.assert_called_once_with(9, tmp_path / "out.pem", verify=True, verify_attempts=5)
+    mock_rotate.assert_called_once_with(9, tmp_path / "out.pem", verify=True, verify_attempts=5, keep=2, prune=True)
     logged = [(c.args[0], c.args[1]) for c in mock_print.call_args_list]
     assert (f"Certificate written to {cert}", "success") in logged
     assert ("note one", "info") in logged
@@ -112,7 +123,7 @@ async def test_run_without_output_flag_passes_none(tmp_path) -> None:
     ):
         await rotate_cert.run(_args())
 
-    mock_rotate.assert_called_once_with(None, None, verify=True, verify_attempts=5)
+    mock_rotate.assert_called_once_with(None, None, verify=True, verify_attempts=5, keep=2, prune=True)
 
 
 @pytest.mark.asyncio
@@ -126,6 +137,24 @@ async def test_run_expands_user_in_output_flag(tmp_path) -> None:
         await rotate_cert.run(_args(output="~/certs/x.pem"))
 
     assert mock_rotate.call_args.args[1] == pathlib.Path("~/certs/x.pem").expanduser()
+
+
+@pytest.mark.asyncio
+async def test_no_prune_flag_disables_pruning(tmp_path) -> None:
+    """
+    Scenario: --no-prune and --keep map onto rotate_certificate's prune/keep arguments.
+    Boundaries: rotate_certificate mocked; only the forwarded call arguments are asserted.
+    On failure: the CLI flags never reach the pruning logic, so retention can't be controlled.
+    """
+    cert = _write_combined_cert(tmp_path / "c.pem", datetime(2027, 6, 1, tzinfo=UTC))
+    with (
+        patch(f"{MODULE}.load_dotenv"),
+        patch(f"{MODULE}.cert_rotation.rotate_certificate", return_value=(cert, [], True)) as mock_rotate,
+        patch(f"{MODULE}.print_log"),
+    ):
+        await rotate_cert.run(_args(no_prune=True, keep=5))
+
+    mock_rotate.assert_called_once_with(None, None, verify=True, verify_attempts=5, keep=5, prune=False)
 
 
 @pytest.mark.asyncio

@@ -161,8 +161,22 @@ after every attempt. On **final** failure the command does **not** repoint `sett
 cert keeps working), leaves the new PEM on disk, prints a `WARNING:` line naming the new path and the redacted error
 code, and exits `1`. `--no-verify` skips the whole step (repointing without a ping) for offline or first-time setups.
 If `config.resolve_mongo_connection()` itself raises `ConfigError`, rotation fails loudly (`RotationError`, exit `1`)
-without repointing rather than pinging or guessing. Pruning of superseded certs (a later subtask) will run only on
-the verification-success path.
+without repointing rather than pinging or guessing.
+
+**Old-certificate retention (pruning):** each rotation leaves another `X509-cert-*.pem` (a live private key) in
+`~/.bookscrapper/`, so after a successful repoint the command prunes superseded ones via
+`cert_rotation.prune_old_certificates()`, keeping only the newest `--keep N` (default `2`, a custom argparse type that
+rejects `0`/negatives so pruning can never delete every cert) plus the currently-active cert. The `protected` set is
+{the cert just written} ∪ {the cert `config.resolve_mongo_connection()` resolves **after** repointing} ∪
+{`TLS_CERT_FILE` if set}; candidates and protected paths are compared canonically (`Path.resolve()`) so a symlink-,
+relative-, or `..`-spelled reference to the active cert is never deleted. Candidates come **only** from
+`config.CONFIG_DIR.glob("X509-cert-*.pem")` — a `--output` cert written elsewhere is never pruned — and the matched
+glob path itself is unlinked (a symlink candidate's target outside the dir is left alone); a failed unlink is a
+`WARNING:` status line, not a crash. Pruning is **skipped entirely** (with a status line) if the active cert cannot be
+resolved (`ConfigError`) — never prune on uncertainty — and never runs after a failed verification. `--no-prune`
+disables pruning. `--no-verify` also suppresses pruning: without a positive authentication signal, old certs are kept
+to avoid a self-inflicted lockout (pruning still runs on a verified success and on the "no URI configured" skip, where
+there is no identity to lock out of).
 
 After a successful (or skipped) verification the command also prints the **new** cert's expiry date (parsed back from
 the just-written file via `cert_rotation.read_certificate_expiry()`); this line sits right after the
@@ -262,6 +276,10 @@ uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-ma
 # settings.json is left untouched and the command exits 1. Tune retries or skip the check entirely:
 uv run bookscraper rotate-cert --verify-attempts 8
 uv run bookscraper rotate-cert --no-verify              # offline / first-time setup: repoint without pinging
+# After a successful rotation, superseded X509-cert-*.pem files are pruned, keeping only the newest
+# --keep N (default 2) plus the active cert. Retain more, or keep them all:
+uv run bookscraper rotate-cert --keep 5
+uv run bookscraper rotate-cert --no-prune               # keep every certificate on disk
 
 # rotate-cert --check: report the active cert's expiry only (no Atlas contact, no ATLAS_* needed).
 # Exit 0 if >N days remain (or no x509 cert configured), 3 if within N days, 1 if expired/unreadable.

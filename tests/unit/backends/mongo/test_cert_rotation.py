@@ -5,6 +5,8 @@ Real file I/O via tmp_path (through the isolated_config fixture, so the real
 """
 
 import json
+import os
+import pathlib
 import re
 import stat
 from datetime import UTC, datetime, timedelta
@@ -353,3 +355,161 @@ def test_cert_expiry_warning_parse_failure_is_warning_not_raise(tmp_path) -> Non
     assert warning.startswith("WARNING")
     assert "PRIVATE KEY" not in warning
     assert _TEST_KEY_PEM.decode() not in warning
+
+
+# --------------------------------------------------------------------------- #
+# prune_old_certificates
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def prune_config(isolated_config):
+    """isolated_config plus a hard safety guard: refuse to run a prune test whose CONFIG_DIR was
+    not redirected away from the real ~/.bookscrapper. A real prune would delete live private
+    keys, so an unpatched CONFIG_DIR must fail the test, never fall through to the real directory.
+    """
+    real = pathlib.Path.home() / ".bookscrapper"
+    assert cert_rotation.config.CONFIG_DIR != real, "CONFIG_DIR not isolated - refusing to prune real certs"
+    assert isolated_config != real
+    return isolated_config
+
+
+def _make_cert(config_dir: pathlib.Path, name: str, mtime: float) -> pathlib.Path:
+    """Write a throwaway ``name`` under ``config_dir`` with an explicit ``st_mtime`` for ordering."""
+    path = config_dir / name
+    path.write_bytes(b"pem")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_prune_keeps_newest_n(prune_config) -> None:
+    """
+    Scenario: with keep=2, only the two newest certs by mtime survive.
+    Boundaries: five candidates, no protected paths; ordering is by st_mtime, newest-first.
+    On failure: too many stale private keys linger, or too many are deleted.
+    """
+    for i in range(5):
+        _make_cert(prune_config, f"X509-cert-{i}.pem", 1000 + i)
+
+    status = cert_rotation.prune_old_certificates(2, set())
+
+    remaining = sorted(p.name for p in prune_config.glob("X509-cert-*.pem"))
+    assert remaining == ["X509-cert-3.pem", "X509-cert-4.pem"]
+    assert sum("Pruned superseded" in s for s in status) == 3
+
+
+def test_prune_never_deletes_protected_even_if_oldest(prune_config) -> None:
+    """
+    Scenario: a protected cert survives pruning however old it is (ROT-6).
+    Boundaries: the oldest of five certs is in the protected set with keep=2.
+    On failure: the active identity is deleted, causing a self-inflicted lockout.
+    """
+    certs = [_make_cert(prune_config, f"X509-cert-{i}.pem", 1000 + i) for i in range(5)]
+    oldest = certs[0]
+
+    cert_rotation.prune_old_certificates(2, {oldest})
+
+    remaining = sorted(p.name for p in prune_config.glob("X509-cert-*.pem"))
+    assert remaining == ["X509-cert-0.pem", "X509-cert-3.pem", "X509-cert-4.pem"]
+
+
+def test_prune_ignores_files_outside_glob_and_dir(prune_config, tmp_path) -> None:
+    """
+    Scenario: only ``X509-cert-*.pem`` files inside CONFIG_DIR are candidates (ROT-9).
+    Boundaries: a non-matching name, a wrong extension, and a matching-name file *outside*
+    CONFIG_DIR all coexist with prunable candidates.
+    On failure: a user-supplied --output cert elsewhere, or an unrelated file, is deleted.
+    """
+    old = _make_cert(prune_config, "X509-cert-0.pem", 1000)
+    new = _make_cert(prune_config, "X509-cert-1.pem", 2000)
+    non_matching = prune_config / "settings.json"
+    non_matching.write_text("{}")
+    wrong_ext = prune_config / "X509-cert-note.txt"
+    wrong_ext.write_text("x")
+    outside = tmp_path / "X509-cert-external.pem"
+    outside.write_bytes(b"pem")
+
+    cert_rotation.prune_old_certificates(1, set())
+
+    assert not old.exists()  # superseded candidate deleted
+    assert new.exists()  # newest kept
+    assert non_matching.exists()
+    assert wrong_ext.exists()
+    assert outside.exists()  # matching name but outside CONFIG_DIR - never a candidate
+
+
+def test_prune_unlink_failure_is_warning(prune_config, monkeypatch) -> None:
+    """
+    Scenario: a failed unlink becomes a WARNING status line, not a raised exception (ROT-10).
+    Boundaries: Path.unlink patched to raise OSError; the file consequently survives.
+    On failure: one undeletable cert aborts the whole rotation with an unhandled error.
+    """
+    _make_cert(prune_config, "X509-cert-0.pem", 1000)
+    _make_cert(prune_config, "X509-cert-1.pem", 2000)
+
+    def _boom(self, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(pathlib.Path, "unlink", _boom)
+
+    status = cert_rotation.prune_old_certificates(1, set())
+
+    assert any(s.startswith("WARNING") and "OSError" in s for s in status)
+    assert (prune_config / "X509-cert-0.pem").exists()  # survived the failed unlink
+
+
+@pytest.mark.parametrize("spelling", ["relative", "dotdot", "symlink"])
+def test_prune_protects_active_cert_via_different_spelling(prune_config, tmp_path, monkeypatch, spelling) -> None:
+    """
+    Scenario: the active cert is protected even when spelled differently from the glob path (ROT-7).
+    Boundaries: the same on-disk cert referenced via a relative path, a ``..`` path, or a symlink;
+    it is also the oldest, so only canonical comparison saves it.
+    On failure: a spelling mismatch treats the in-use cert as unprotected and deletes it.
+    """
+    active = _make_cert(prune_config, "X509-cert-active.pem", 1000)  # oldest
+    _make_cert(prune_config, "X509-cert-new.pem", 2000)  # newest
+
+    if spelling == "relative":
+        monkeypatch.chdir(prune_config)
+        spelled = pathlib.Path("X509-cert-active.pem")
+    elif spelling == "dotdot":
+        (prune_config / "sub").mkdir()
+        spelled = prune_config / "sub" / ".." / "X509-cert-active.pem"
+    else:  # symlink
+        spelled = tmp_path / "link-to-active.pem"
+        spelled.symlink_to(active)
+
+    cert_rotation.prune_old_certificates(1, {spelled})
+
+    assert active.exists()  # protected despite the different spelling and being the oldest
+
+
+def test_prune_symlink_candidate_outside_dir_removes_link_not_target(prune_config, tmp_path) -> None:
+    """
+    Scenario: a symlink candidate pointing outside CONFIG_DIR has the link removed, target intact.
+    Boundaries: the matched glob entry is a symlink to a file outside CONFIG_DIR (ROT-10).
+    On failure: resolve()-then-delete removes the external target instead of the link.
+    """
+    target = tmp_path / "outside-real-cert.pem"
+    target.write_bytes(b"pem")
+    os.utime(target, (1000, 1000))
+    link = prune_config / "X509-cert-link.pem"
+    link.symlink_to(target)  # candidate; stat() follows to target's old mtime, so it sorts oldest
+    _make_cert(prune_config, "X509-cert-new.pem", 2000)  # newest, kept
+
+    status = cert_rotation.prune_old_certificates(1, set())
+
+    assert not link.is_symlink()  # the link itself (the candidate) was removed
+    assert target.exists()  # the target outside CONFIG_DIR is untouched
+    assert any("Pruned superseded" in s for s in status)
+
+
+def test_prune_reports_nothing_when_within_keep(prune_config) -> None:
+    """
+    Scenario: with fewer candidates than keep, nothing is deleted and a single status line says so.
+    Boundaries: one candidate, keep=2.
+    On failure: a no-op prune reports a deletion, or emits no status at all.
+    """
+    _make_cert(prune_config, "X509-cert-0.pem", 1000)
+
+    status = cert_rotation.prune_old_certificates(2, set())
+
+    assert status == ["No superseded certificates to prune (kept the newest 2 plus any in use)."]

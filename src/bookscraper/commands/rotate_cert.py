@@ -63,7 +63,9 @@ async def run(args: argparse.Namespace) -> None:
     :func:`_run_check`); otherwise it issues a new certificate, verifies it authenticates to
     Atlas (unless ``--no-verify``), and prints its expiry date. If verification fails,
     ``settings.json`` is left untouched (the previous certificate keeps working) and the command
-    exits non-zero.
+    exits non-zero. On a successful rotation the newest ``--keep`` certificates are retained and
+    older ones pruned, unless ``--no-prune`` is given (see
+    :func:`cert_rotation.prune_old_certificates`).
     """
     # ATLAS_* credentials may live in .env rather than the real environment; --check reads no
     # ATLAS_* but still loads .env so settings.json "env"-sourced cert paths resolve.
@@ -83,6 +85,8 @@ async def run(args: argparse.Namespace) -> None:
             output,
             verify=not args.no_verify,
             verify_attempts=args.verify_attempts,
+            keep=args.keep,
+            prune=not args.no_prune,
         )
     except cert_rotation.RotationError as e:
         print_log(f"Certificate rotation failed: {e}", "error")

@@ -159,6 +159,34 @@ def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
         build_parser().parse_args(["rotate-cert", "--verify-attempts", "many"])
 
 
+def test_rotate_cert_prune_defaults() -> None:
+    args = build_parser().parse_args(["rotate-cert"])
+    assert args.keep == 2
+    assert isinstance(args.keep, int)
+    assert args.no_prune is False
+
+
+def test_rotate_cert_keep_and_no_prune_flags() -> None:
+    args = build_parser().parse_args(["rotate-cert", "--keep", "5", "--no-prune"])
+    assert args.keep == 5
+    assert args.no_prune is True
+
+
+def test_keep_zero_rejected_by_cli() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--keep", "0"])
+
+
+def test_keep_negative_rejected_by_cli() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--keep", "-3"])
+
+
+def test_keep_non_integer_rejected_by_cli() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--keep", "lots"])
+
+
 # --------------------------------------------------------------------------- #
 # detect-schema subparser
 # --------------------------------------------------------------------------- #

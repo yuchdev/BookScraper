@@ -1,7 +1,7 @@
 # 08 - Live X.509 re-diagnosis
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/README.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 Blocked - no Atlas credentials on this machine (see status.md Notes & decisions, 2026-09-30); xfail markers stay per requirement 4
 **Role:** Testing Expert → Python Expert
 
 ## Context

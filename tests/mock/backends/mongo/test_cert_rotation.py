@@ -5,6 +5,7 @@ isolated_config so the real ~/.bookscrapper is never read or written.
 """
 
 import json
+import os
 import pathlib
 from unittest.mock import Mock, patch
 
@@ -387,3 +388,188 @@ def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(at
     build.assert_not_called()
     # PEM was written before the failure; settings.json is left pointing at the old cert.
     assert json.loads((isolated_config / "settings.json").read_text()) == _X509_SETTINGS
+
+
+# --------------------------------------------------------------------------- #
+# rotate_certificate pruning integration (subtask 07)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def prune_guard(isolated_config):
+    """isolated_config plus a hard guard: a prune-through-rotation test must never run against the
+    real ~/.bookscrapper, whose X509-cert-*.pem files hold live private keys."""
+    assert cert_rotation.config.CONFIG_DIR != pathlib.Path.home() / ".bookscrapper"
+    return isolated_config
+
+
+def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard) -> None:
+    """
+    Scenario: after a verified rotation the active cert and the new cert are kept, older certs pruned.
+    Boundaries: keep=1; the resolver reports an older 'active' cert that must survive despite being
+    beyond keep (protected), while a still-older stale cert is pruned (ROT-6/7).
+    On failure: the active identity is deleted, or stale keys linger past keep.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    active = prune_guard / "X509-cert-old.pem"
+    active.write_bytes(b"active")
+    os.utime(active, (1000, 1000))
+    stale = prune_guard / "X509-cert-stale.pem"
+    stale.write_bytes(b"stale")
+    os.utime(stale, (500, 500))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", str(active))),
+        patch(f"{MODULE}.build_mongo_client"),
+        patch(f"{MODULE}.ping"),
+    ):
+        path, notes, verified = cert_rotation.rotate_certificate(keep=1, verify_attempts=1)
+
+    assert verified is True
+    assert path.exists()  # new cert kept (newest and protected)
+    assert active.exists()  # protected active cert kept despite being older and beyond keep=1
+    assert not stale.exists()  # superseded cert pruned
+    assert any("Pruned superseded" in n for n in notes)
+
+
+def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -> None:
+    """
+    Scenario: a cert named by TLS_CERT_FILE is protected from pruning however old (ROT-6).
+    Boundaries: keep=1 with a TLS_CERT_FILE cert older than the newest, so only the TLS_CERT_FILE
+    clause of the protected set keeps it.
+    On failure: an in-use cert referenced only via TLS_CERT_FILE is deleted.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    tls_cert = prune_guard / "X509-cert-tls.pem"
+    tls_cert.write_bytes(b"tls")
+    os.utime(tls_cert, (500, 500))
+    monkeypatch.setenv("TLS_CERT_FILE", str(tls_cert))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", "old.pem")),
+        patch(f"{MODULE}.build_mongo_client"),
+        patch(f"{MODULE}.ping"),
+    ):
+        _path, _notes, verified = cert_rotation.rotate_certificate(keep=1, verify_attempts=1)
+
+    assert verified is True
+    assert tls_cert.exists()  # protected via TLS_CERT_FILE despite being older than keep=1
+
+
+def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> None:
+    """
+    Scenario: the URI resolves for verification but the post-repoint resolve raises ConfigError, so
+    pruning is skipped entirely - never prune on uncertainty (ROT-8).
+    Boundaries: resolve_mongo_connection succeeds once (URI) then raises ConfigError (prune).
+    On failure: a resolver hiccup deletes certs blindly, risking loss of the active identity.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    stale = prune_guard / "X509-cert-stale.pem"
+    stale.write_bytes(b"stale")
+    os.utime(stale, (500, 500))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(
+            f"{MODULE}.config.resolve_mongo_connection",
+            side_effect=[("mongodb+srv://x", "old.pem"), cert_rotation.config.ConfigError("bad shape")],
+        ),
+        patch(f"{MODULE}.build_mongo_client"),
+        patch(f"{MODULE}.ping"),
+    ):
+        _path, notes, verified = cert_rotation.rotate_certificate(keep=1, verify_attempts=1)
+
+    assert verified is True
+    assert stale.exists()  # nothing pruned on uncertainty
+    assert any("Skipping cert pruning" in n and "uncertainty" in n for n in notes)
+
+
+def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
+    """
+    Scenario: verification fails, so pruning never runs (ROT-13) - no superseded cert is removed.
+    Boundaries: ping always raises; prune_old_certificates patched to detect any call.
+    On failure: certs are pruned around an unverified/broken new identity.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", "old.pem")),
+        patch(f"{MODULE}.build_mongo_client"),
+        patch(f"{MODULE}.ping", side_effect=MongoConnectionError("OperationFailure 8000 AtlasError")),
+        patch(f"{MODULE}.prune_old_certificates") as mock_prune,
+    ):
+        _path, _notes, verified = cert_rotation.rotate_certificate(verify_attempts=1)
+
+    assert verified is False
+    mock_prune.assert_not_called()
+
+
+def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
+    """
+    Scenario: an Atlas API failure aborts rotation before any pruning is attempted.
+    Boundaries: httpx.post returns 500; prune_old_certificates patched to detect any call.
+    On failure: certs are pruned even though no new cert was successfully issued.
+    """
+    with (
+        patch(f"{MODULE}.httpx.post", return_value=_response(status=500, json_body={})),
+        patch(f"{MODULE}.prune_old_certificates") as mock_prune,
+        pytest.raises(cert_rotation.RotationError),
+    ):
+        cert_rotation.rotate_certificate()
+
+    mock_prune.assert_not_called()
+
+
+def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
+    """
+    Scenario: prune=False leaves every superseded cert on disk after a verified rotation.
+    Boundaries: a stale cert well beyond keep=1 survives; no 'Pruned' note is emitted.
+    On failure: --no-prune still deletes certs.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    stale = prune_guard / "X509-cert-stale.pem"
+    stale.write_bytes(b"stale")
+    os.utime(stale, (500, 500))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", "old.pem")),
+        patch(f"{MODULE}.build_mongo_client"),
+        patch(f"{MODULE}.ping"),
+    ):
+        _path, notes, verified = cert_rotation.rotate_certificate(keep=1, verify_attempts=1, prune=False)
+
+    assert verified is True
+    assert stale.exists()
+    assert not any("Pruned" in n for n in notes)
+
+
+def test_no_verify_does_not_prune(atlas_env, prune_guard) -> None:
+    """
+    Scenario: --no-verify (verify=False) repoints but never prunes, keeping old certs against a
+    possible lockout (the chosen conservative interaction of --no-verify with pruning).
+    Boundaries: a stale cert beyond keep=1 survives; a skip note is emitted.
+    On failure: an unverified rotation deletes the previously working identity.
+    """
+    (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
+    stale = prune_guard / "X509-cert-stale.pem"
+    stale.write_bytes(b"stale")
+    os.utime(stale, (500, 500))
+    responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
+
+    with (
+        patch(f"{MODULE}.httpx.post", side_effect=responses),
+        patch(f"{MODULE}.build_mongo_client") as build,
+    ):
+        _path, notes, verified = cert_rotation.rotate_certificate(keep=1, verify=False)
+
+    assert verified is True
+    build.assert_not_called()
+    assert stale.exists()
+    assert any("Skipping cert pruning" in n and "--no-verify" in n for n in notes)

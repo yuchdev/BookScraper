@@ -3,6 +3,26 @@ from __future__ import annotations
 import argparse
 
 
+def _positive_int(value: str) -> int:
+    """
+    ``argparse`` type for a strictly positive integer (>= 1).
+
+    Used by ``rotate-cert --keep`` so ``0`` and negatives are rejected at parse time - a
+    ``--keep 0`` would otherwise ask pruning to delete every certificate, including the active one.
+
+    :param value: The raw command-line token.
+    :returns: The parsed integer.
+    :raises argparse.ArgumentTypeError: If ``value`` is not an integer or is below 1.
+    """
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be an integer, got {value!r}") from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer (>= 1), got {parsed}")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Builds the `bookscraper` CLI's argument parser."""
     parser = argparse.ArgumentParser(
@@ -124,6 +144,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="How many times to retry the post-rotation Atlas verification ping before giving up "
         "(default: 5); Atlas can take a short while to propagate a newly issued certificate.",
+    )
+    rotate_parser.add_argument(
+        "--keep",
+        dest="keep",
+        type=_positive_int,
+        default=2,
+        help="After a successful rotation, keep only the newest N X509-cert-*.pem files under "
+        "~/.bookscrapper/ (plus the active cert, always) and delete the rest (default: 2). Must be "
+        ">= 1 so pruning can never remove every certificate.",
+    )
+    rotate_parser.add_argument(
+        "--no-prune",
+        dest="no_prune",
+        action="store_true",
+        help="Do not delete superseded X509-cert-*.pem files after a successful rotation; keep "
+        "every certificate on disk.",
     )
     rotate_parser.add_argument(
         "--log-severity",
