@@ -210,6 +210,73 @@ class TestGetMongoCollection:
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("FAILED" in msg for msg in printed)
 
+    def test_success_message_only_printed_when_collection_initialized(self, monkeypatch) -> None:
+        """
+        Scenario: init returns a live collection, so exactly one 'success'-status line
+        announces the connection.
+        Boundaries: init returns (client, non-None collection).
+        On failure: the success line is dropped on a healthy connection, or emitted with
+        the wrong status.
+        """
+        collection = Mock(name="collection")
+        monkeypatch.setattr(
+            database,
+            "_initialize_mongodb_connection",
+            Mock(return_value=(Mock(name="client"), collection)),
+        )
+        with patch.object(database, "print_log") as mock_print:
+            result = database.get_mongo_collection()
+
+        assert result is collection
+        success_calls = [c for c in mock_print.call_args_list if c.args[1] == "success"]
+        assert len(success_calls) == 1
+
+    def test_no_success_message_when_initialization_returns_none(self, monkeypatch) -> None:
+        """
+        Scenario: init fails and returns (None, None); no contradictory 'success' line is
+        emitted on top of the cause already logged by init and the FAILED line printed by
+        resolve_store_backend.
+        Boundaries: init returns (None, None) without raising.
+        On failure: a green 'success' line follows a red critical line, the exact
+        pre-existing inconsistency this subtask removes.
+        """
+        monkeypatch.setattr(
+            database,
+            "_initialize_mongodb_connection",
+            Mock(return_value=(None, None)),
+        )
+        with patch.object(database, "print_log") as mock_print:
+            result = database.get_mongo_collection()
+
+        assert result is None
+        statuses = [c.args[1] for c in mock_print.call_args_list]
+        assert "success" not in statuses
+
+    def test_success_message_names_db_and_collection_not_uri(self, monkeypatch) -> None:
+        """
+        Scenario: the success line identifies the target by database.collection only,
+        never leaking the host or connection URI into the console/log.
+        Boundaries: init returns a live collection; the resolved URI is never referenced
+        by the message.
+        On failure: the success line embeds the host/URI (credential leakage into the
+        persistent log) or omits the database/collection identity.
+        """
+        monkeypatch.setattr(
+            database,
+            "_initialize_mongodb_connection",
+            Mock(return_value=(Mock(name="client"), Mock(name="collection"))),
+        )
+        with patch.object(database, "print_log") as mock_print:
+            database.get_mongo_collection()
+
+        success_calls = [c for c in mock_print.call_args_list if c.args[1] == "success"]
+        assert len(success_calls) == 1
+        message = success_calls[0].args[0]
+        assert "bookscraper_db.books" in message
+        # No connection URI: neither the scheme separator nor userinfo/host markers.
+        assert "://" not in message
+        assert "@" not in message
+
 
 # --------------------------------------------------------------------------- #
 # close_mongo_connection

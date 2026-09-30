@@ -8,7 +8,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
-| 02.0 | MongoDB auth configuration         | 🔶 In progress | 3 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
+| 02.0 | MongoDB auth configuration         | 🔶 In progress | 4 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 21 / 94 subtasks complete.
+**Totals:** 22 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -114,3 +114,9 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
 - **2026-09-29 - follow-up from the 01.0 review (pre-existing, not 01.0 scope):** `commands/search.py` calls
   `storage_backend.save_books()` directly, which blocks the event loop during a Mongo bulk write, whereas
   `scrape_urls.py` wraps the same call in `asyncio.to_thread`. Pick this up in 03.3 (search pipeline).
+- **2026-09-30 - Task 02.0 threat model:** [2026-09-30-mongodb-auth-configuration.md](/docs/security/2026-09-30-mongodb-auth-configuration.md)
+  (SEC-1..12, no CRITICAL). Its two HIGH findings (raw pymongo exception text reaching the persistent logs, and
+  `check_mongodb_connection` dropping a missing cert and ignoring `TLS_CA_FILE`) are closed by subtask 05.
+- **2026-09-30 - Spec extension ratified by the user:** subtask 06's permission check also warns when
+  `settings.json` is a symlink or not owned by the current UID (threat model SEC-9). It stays warning-only, once
+  per process, and is skipped on Windows.

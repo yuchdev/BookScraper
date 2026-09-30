@@ -157,8 +157,6 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
 
         # The ping command is used to confirm that the connection has been established.
         _mongo_client.admin.command("ping")
-        # module_logger.info("Successfully connected to MongoDB Atlas!")
-        # print_log("Successfully connected to MongoDB Atlas!", "info")
 
         _mongo_db = _mongo_client[os.environ.get("MONGODB_DB_NAME", "bookscraper_db")]
         _mongo_collection = _mongo_db[os.environ.get("MONGODB_COLLECTION_NAME", "books")]
@@ -201,9 +199,21 @@ def get_mongo_collection() -> Optional[Collection]:
         try:
             # Attempt to initialize the connection if it's not already set up
             _mongo_client, _mongo_collection = _initialize_mongodb_connection()
-            print_log("Connection to MongoDB Atlas successful.", "success")
-            module_logger.info("Connection to MongoDB Atlas successful.")
+            # Announce success only when a collection was actually obtained. A failed
+            # init returns None having already logged the specific cause (and
+            # resolve_store_backend prints the FAILED line), so emitting a "success"
+            # line here too would be duplicate and contradictory. Name only the
+            # database/collection, never the host or URI.
+            if _mongo_collection is not None:
+                db_name = os.environ.get("MONGODB_DB_NAME", "bookscraper_db")
+                collection_name = os.environ.get("MONGODB_COLLECTION_NAME", "books")
+                success_message = f"Connection to MongoDB Atlas successful ({db_name}.{collection_name})."
+                print_log(success_message, "success")
+                module_logger.info(success_message)
         except Exception as e:
+            # Defensive: _initialize_mongodb_connection() catches everything today, so
+            # this branch is currently unreachable. It is kept for a future refactor
+            # that lets init raise, and is covered by a unit test.
             print_log(
                 f"MongoDB connection: FAILED. MongoDB output will not be available: {e}",
                 "error",

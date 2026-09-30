@@ -389,11 +389,6 @@ console output writes to `sys.stdout` directly, bypassing the logging framework 
 filters what reaches the log file, not the console, which always prints everything passed to `print_log()`.
 
 ## Known inconsistencies to watch for
-- `backends/mongo/database.py`'s `get_mongo_collection()` logs `"Connection to MongoDB Atlas successful."`
-  unconditionally after calling `_initialize_mongodb_connection()`, even when that call actually failed and
-  returned `None` — a pre-existing, cosmetic logging bug (the real success/failure state is still reported
-  correctly to the caller via the return value). Not yet fixed; this file wasn't in scope of the CLI restructuring
-  that touched its callers.
 - Curated input URL lists (`content/urls.csv`, `content/urls_amazon.csv`) live under `content/` and are committed —
   they're hand-maintained candidate lists for `scrape-urls -f`, not run output. Actual run artifacts (`books.json`
   for `--store-backend json`; `failed_books.csv`, `failed_urls.csv`, `other_links.csv` diagnostics regardless of
