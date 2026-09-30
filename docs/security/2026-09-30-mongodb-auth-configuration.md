@@ -116,3 +116,86 @@ treated as BLOCK. SEC-9 (symlink/ownership) is an additive hardening beyond the 
 descoped, record it as an accepted follow-up rather than dropping it silently. Hand fixes to
 `python-expert` and the corresponding regression tests (redaction, missing-cert-raises, permission-warning,
 unknown-key) to `testing-expert`.
+
+## Verification - subtask 05 (2026-09-30)
+
+Post-implementation review of the single `MongoClient` factory (new
+`src/bookscraper/backends/mongo/client.py`; call-site changes in `database.py` and
+`book_utils.py`; tests in `tests/mock/backends/mongo/test_client.py`). Verified against the
+as-built code, not the design.
+
+### Redaction contract as built
+
+There is exactly one `MongoClient(...)` construction site in `src/`
+(`client.py:190`, inside `build_mongo_client`). Every connection/auth failure leaves the
+factory as a `MongoConnectionError` whose message is produced by `_redact_pymongo_error`
+(`client.py:198-219`) and is limited to: the originating exception **class name**, plus the
+pymongo `code` (int) and `details["codeName"]` (str) **when present** - e.g.
+`OperationFailure 8000 AtlasError`. It never contains the URI, host list, userinfo, password,
+or raw pymongo message text. The original exception is suppressed with `from None` on both the
+constructor wrap (`client.py:191-195`) and `ping()` (`client.py:233-234`), so raw text cannot
+leak through `__cause__`/`__context__` tracebacks either.
+
+An error message may therefore contain, at most: (a) an exception class name and numeric/name
+error code; or (b) on the missing-cert path (`client.py:174-175`), the **resolved cert file
+path** (not its contents) - permitted by SEC-10. No message emitted by this factory carries a
+URI, credential, or host.
+
+Call-site discipline: both connection paths interpolate only the already-redacted
+`MongoConnectionError` (`database.py:109-113`, `book_utils.py:232-236`), and both defensive
+`except Exception` branches log **only** `type(e).__name__` with no `exc_info`
+(`database.py:118-126`, `book_utils.py:238-246`). The remaining `exc_info=True` / raw `{e}`
+sites in `database.py` (save/query/index helpers) are on an already-established collection, not
+the connection/auth path, and are out of SEC-3/4 scope.
+
+### Per-SEC status
+
+- **SEC-3 - PASS.** `ping()` (`client.py:222-234`) re-raises as redacted `MongoConnectionError`
+  (class + code/codeName only). Covered by `test_ping_wraps_error_keeping_code_name_only`,
+  `test_ping_wraps_error_without_code`, `test_ping_error_does_not_leak_host_in_message_or_logs`.
+- **SEC-4 - PASS.** No connection/auth failure path interpolates raw `{e}` or uses `exc_info`;
+  all go through the redacted error, and the defensive branches log class name only.
+- **SEC-5 - PASS.** `build_mongo_client` hard-codes `server_api=ServerApi("1")` and
+  `tlsAllowInvalidCertificates=False` (`client.py:177-181`); `tlsAllowInvalidHostnames` is never
+  set (pymongo default False). The signature exposes no `**kwargs` passthrough and no toggle;
+  explicit kwargs take precedence over URI options, and a hostile URI carrying `tlsInsecure=true`
+  conflicts with the explicit kwarg and raises (caught, redacted, connection fails) rather than
+  relaxing validation. `tls=True`+`tlsCertificateKeyFile` set only with a cert, `tlsCAFile` only
+  with a CA file. Covered by the `test_build_client_*` kwargs assertions.
+- **SEC-6 - PASS.** A non-`None` `cert_file` that does not exist raises `MongoConnectionError`
+  before any client is built (`client.py:174-175`); the cert is never silently dropped on either
+  path. Covered by `test_build_client_missing_cert_file_raises`.
+- **SEC-7 - PASS.** `check_mongodb_connection` reads `TLS_CA_FILE` (`book_utils.py:204`) and calls
+  the same `build_mongo_client(uri, cert, ca, timeout_ms=...)` as
+  `_initialize_mongodb_connection` (`database.py:91-97`), yielding identical kwargs; one
+  `MongoClient(` in `src/`. Covered by `test_database_and_preflight_build_identical_client_kwargs`.
+- **SEC-8 - PASS.** No `MongoConnectionError` message or factory log line includes the URI. The
+  only URI-derived facts logged are the booleans from `uri_selects_x509_auth` /
+  `uri_has_embedded_credentials` used by `_warn_if_x509_mechanism_missing`, which logs the cert
+  path but never the URI.
+
+### HIGH findings
+
+- **HIGH #1 (credential/URI leakage via pymongo exception text) - CLOSED.** Every connection/auth
+  failure path (constructor wrap, `ping`, both `MongoConnectionError` handlers, both defensive
+  `except Exception` branches) is redacted to class name + code/codeName, or class name only. No
+  raw `{e}` or `exc_info` remains on the connection path. CWE-532 / CWE-209 exposure removed.
+- **HIGH #2 (`check_mongodb_connection` dropping a missing cert / ignoring `TLS_CA_FILE`) -
+  CLOSED.** The pre-flight now routes through the shared factory, which raises on a missing cert
+  (SEC-6) and honors `TLS_CA_FILE` (SEC-7); certless silent fallback is gone. Certificate
+  validation is not disableable through any code path (SEC-5).
+
+### Residual risk
+
+- **LOW / defense-in-depth (unchanged from MEDIUM findings, out of subtask-05 scope):** SEC-9
+  (settings.json symlink/foreign-ownership warning) and SEC-10 (literal cert-path containment)
+  belong to subtask 06 and are not verified here.
+- **LOW (accepted):** the missing-cert `MongoConnectionError` and the X.509-mechanism warnings
+  include the resolved cert **file path** (never contents) in logs - permitted by SEC-10 and
+  useful for diagnosis; a path is not a credential.
+- **INFORMATIONAL:** `_redact_pymongo_error` accepts `BaseException` and reads `code`/`details`
+  defensively (non-dict `details` ignored, `test_redact_ignores_non_dict_details`); should a
+  future pymongo release ever place secret text in a top-level `.code`/`.codeName`, the redactor
+  would surface it, but no current pymongo error does.
+
+### Verdict: PASS

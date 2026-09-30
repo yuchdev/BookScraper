@@ -88,6 +88,22 @@ TLS_CERT_FILE="/path/to/cert.pem"   # optional, for X.509 client-cert auth
 TLS_CA_FILE="/path/to/ca.pem"       # optional, for server CA verification (database.py only)
 ```
 
+**Single `MongoClient` factory (`backends/mongo/client.py`).** Both the real connection
+(`database._initialize_mongodb_connection`, used by `resolve_store_backend`) and the pre-flight /
+`doctor` check (`book_utils.check_mongodb_connection`) build their client through
+`client.build_mongo_client()` + `client.ping()` — so there is exactly one `MongoClient(...)`
+construction site in `src/` and one set of TLS kwargs, and the two paths can never drift again
+(`TLS_CA_FILE` honored on both, a missing client cert failing loudly on both instead of silently
+connecting certless). Certificate validation is never disableable: `tlsAllowInvalidCertificates=False`
+and `ServerApi("1")` are hard-coded, `tls=True`+`tlsCertificateKeyFile` is set only when a cert is
+given and `tlsCAFile` only when a CA file is given. `client.ping()` re-raises every connection/auth
+failure as a redacted `MongoConnectionError` carrying only the exception class name plus pymongo
+`code`/`codeName` (e.g. `OperationFailure 8000 AtlasError`) — raw pymongo text (which can embed the
+host list or the full connection string with password) never reaches a log or the console. The
+server-selection timeout defaults to `client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS` (10 000 ms) and is
+overridable via the `MONGODB_SERVER_SELECTION_TIMEOUT_MS` env var (a blank/non-integer/non-positive
+value warns and falls back to the default).
+
 **TLS certificate rotation pipeline:** `bookscraper rotate-cert` (`commands/rotate_cert.py`, backed by
 `backends/mongo/cert_rotation.py`) issues a fresh Atlas-managed X.509 client certificate via the Atlas Admin API
 (`POST .../databaseUsers/{user}/certs`, requires a Project-Owner-scoped Atlas API Service Account: `ATLAS_CLIENT_ID` /
@@ -338,6 +354,13 @@ up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
 - **`mongo/config.py`** — `resolve_mongo_connection()`, the deterministic MongoDB auth resolver
   (`~/.bookscrapper/settings.json` when present, else the legacy env-var fallback) shared by `mongo/database.py`
   and `book_utils.py`. See Authentication configuration above.
+- **`mongo/client.py`** — the single `MongoClient` factory: `build_mongo_client()` (identical TLS kwargs on every
+  path, cert-validation never disableable, a missing client cert raising instead of silently dropping),
+  `ping()` (re-raises as a redacted `MongoConnectionError` — class name + pymongo `code`/`codeName` only, never
+  host/URI/credentials), and `resolve_server_selection_timeout_ms()` (honors `MONGODB_SERVER_SELECTION_TIMEOUT_MS`).
+  The `uri_*` X.509 helpers and `_warn_if_x509_mechanism_missing` live here and are re-exported from `database.py`.
+  Both `database._initialize_mongodb_connection` and `book_utils.check_mongodb_connection` build through it, so
+  `MongoClient(` appears exactly once in `src/`. See Single `MongoClient` factory above.
 - **`mongo/cert_rotation.py`** — Atlas Admin API client for issuing a new X.509 client certificate
   (`rotate_certificate()`, raising `RotationError` on any failure), plus the atomic cert write and
   `update_settings_after_rotation()`, which repoints `settings.json` via `config`. Returns status lines instead of

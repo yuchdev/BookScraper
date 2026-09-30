@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from pymongo import MongoClient, server_api
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # --- Global logging setup ---
 # Define basic ANSI color codes (customize as needed)
@@ -180,14 +178,30 @@ def check_local_write_permission(directory: str = ".") -> bool:
 def check_mongodb_connection() -> Optional[bool]:
     """
     Attempts to establish and ping a MongoDB Atlas connection.
-    Returns True if successful, False otherwise.
+
+    A thin pre-flight wrapper over the single :mod:`bookscraper.backends.mongo.client`
+    factory: it resolves the connection, builds the client with kwargs *identical* to the
+    real path in ``database._initialize_mongodb_connection`` (so ``TLS_CA_FILE`` is honored
+    and a missing client cert fails loudly rather than silently connecting certless), pings,
+    and always closes the client. Every failure surfaces as a redacted
+    :class:`~bookscraper.backends.mongo.client.MongoConnectionError`, so no raw pymongo text
+    (host, URI, credentials) reaches the log or console.
+
+    :returns: True if the ping succeeds, False on any configuration or connection failure.
     """
     # Local import: book_utils is imported by bookscraper.backends (via backends.mongo)
-    # before backends.mongo.config exists as an importable attribute, so importing it
-    # at module level here would be circular. Deferring until call time breaks the cycle.
+    # before backends.mongo.config exists as an importable attribute, so importing config or
+    # client at module level here would be circular. Deferring until call time breaks the cycle.
     from .backends.mongo import config
+    from .backends.mongo.client import (
+        MongoConnectionError,
+        build_mongo_client,
+        ping,
+        resolve_server_selection_timeout_ms,
+    )
 
     load_dotenv()  # Ensure .env variables are loaded
+    tls_ca_file = os.environ.get("TLS_CA_FILE")  # CA bundle for server certificate verification
     try:
         mongodb_uri, tls_cert_file = config.resolve_mongo_connection()
     except config.ConfigError as e:
@@ -204,23 +218,17 @@ def check_mongodb_connection() -> Optional[bool]:
 
     client = None
     try:
-        if tls_cert_file and os.path.exists(tls_cert_file):
-            client = MongoClient(
-                mongodb_uri,
-                tls=True,
-                tlsCertificateKeyFile=tls_cert_file,
-                server_api=server_api.ServerApi("1"),
-                serverSelectionTimeoutMS=5000,
-            )  # Added timeout
-        else:
-            client = MongoClient(
-                mongodb_uri, server_api=server_api.ServerApi("1"), serverSelectionTimeoutMS=5000
-            )  # Added timeout
-
-        client.admin.command("ping")
+        client = build_mongo_client(
+            mongodb_uri,
+            tls_cert_file,
+            tls_ca_file,
+            timeout_ms=resolve_server_selection_timeout_ms(),
+        )
+        ping(client)
         logger.info("MongoDB connection test successful.")
         return True
-    except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+    except MongoConnectionError as e:
+        # `e` is already redacted (class name + code/codeName only) - safe to interpolate.
         logger.error(f"MongoDB connection test failed: {e}")
         print_log(
             f"MongoDB Connection Error: Failed to connect to MongoDB Atlas. Please check your MONGODB_URI, TLS certificate, and network. Details: {e}",
@@ -228,14 +236,16 @@ def check_mongodb_connection() -> Optional[bool]:
         )
         return False
     except Exception as e:
-        logger.critical(f"An unexpected error occurred during MongoDB connection test: {e}", exc_info=True)
+        # Defensive: any non-pymongo failure. Log the class name only - never the raw text or
+        # exc_info, which could embed the cert path or other sensitive detail (SEC-4).
+        logger.critical(f"Unexpected error during MongoDB connection test: {type(e).__name__}.")
         print_log(
-            "MongoDB Check Error: An unexpected error occurred during connection test. Check log for full traceback.",
+            "MongoDB Check Error: Unexpected error during connection test. Check the log file.",
             "error",
         )
         return False
     finally:
-        if client:
+        if client is not None:
             client.close()
 
 

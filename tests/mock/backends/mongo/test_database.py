@@ -8,16 +8,16 @@ no real Atlas connection is ever attempted. load_dotenv is neutered so a repo-ro
 .env can't leak real values into a test.
 """
 
+import logging
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymongo.errors import (
     BulkWriteError,
-    ConnectionFailure,
-    ServerSelectionTimeoutError,
 )
 
 from bookscraper.backends.mongo import config, database
+from bookscraper.backends.mongo.client import MongoConnectionError
 from bookscraper.backends.storage import SaveSummary
 
 
@@ -34,46 +34,74 @@ def reset_globals(monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # _initialize_mongodb_connection
+#
+# The MongoClient itself is built by the single factory in client.py; database.py
+# calls build_mongo_client + ping, so these tests patch those (imported into the
+# database namespace) rather than a MongoClient constructor - there is no MongoClient
+# reference in database.py to patch anymore.
 # --------------------------------------------------------------------------- #
 class TestInitializeMongodbConnection:
     def test_config_error_returns_none_none(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: the resolver raises ConfigError, so no client is ever built.
+        Boundaries: resolve_mongo_connection raises before any factory call.
+        On failure: a malformed config still reaches the factory / network.
+        """
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
             Mock(side_effect=config.ConfigError("bad config")),
         )
-        with patch.object(database, "MongoClient") as mock_client:
+        with patch.object(database, "build_mongo_client") as mock_build:
             result = database._initialize_mongodb_connection()
 
         assert result == (None, None)
-        mock_client.assert_not_called()
+        mock_build.assert_not_called()
 
     def test_missing_uri_returns_none_none(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: the resolver yields no URI, so the factory is never called.
+        Boundaries: resolve returns (None, None).
+        On failure: a connection is attempted with an empty URI.
+        """
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
             Mock(return_value=(None, None)),
         )
-        with patch.object(database, "MongoClient") as mock_client:
+        with patch.object(database, "build_mongo_client") as mock_build:
             result = database._initialize_mongodb_connection()
 
         assert result == (None, None)
-        mock_client.assert_not_called()
+        mock_build.assert_not_called()
 
     def test_missing_cert_file_returns_none_none(self, monkeypatch, no_real_env, tmp_path) -> None:
+        """
+        Scenario: a configured client cert that does not exist aborts the connection via the
+        factory's MongoConnectionError, rather than silently connecting certless.
+        Boundaries: resolve returns a cert path that does not exist; the real factory runs.
+        On failure: the missing cert is dropped and a certless client is built.
+        """
         missing = str(tmp_path / "does_not_exist.pem")
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
             Mock(return_value=("mongodb+srv://uri", missing)),
         )
-        with patch.object(database, "MongoClient") as mock_client:
+        # Real build_mongo_client; patch the underlying MongoClient so a slip never reaches network.
+        with patch("bookscraper.backends.mongo.client.MongoClient") as mock_client:
             result = database._initialize_mongodb_connection()
 
         assert result == (None, None)
         mock_client.assert_not_called()
 
-    def test_with_cert_file_builds_tls_client_and_pings(self, monkeypatch, no_real_env, tmp_path) -> None:
+    def test_with_cert_file_builds_via_factory_and_pings(self, monkeypatch, no_real_env, tmp_path) -> None:
+        """
+        Scenario: with a valid cert the factory builds the client, ping confirms it, and the
+        indexes are ensured on the resolved collection.
+        Boundaries: resolve returns a real cert path; build + ping are stubbed.
+        On failure: the cert path is not forwarded to the factory, or ping/index setup is skipped.
+        """
         cert = tmp_path / "cert.pem"
         cert.write_text("dummy-cert")
         monkeypatch.setattr(
@@ -86,22 +114,29 @@ class TestInitializeMongodbConnection:
 
         # MagicMock so `_mongo_client[db_name][coll_name]` subscripting works.
         client_instance = MagicMock(name="client")
-        with patch.object(database, "MongoClient", return_value=client_instance) as mock_client:
-            returned_client, returned_collection = database._initialize_mongodb_connection()
+        build_spy = Mock(return_value=client_instance)
+        ping_spy = Mock()
+        monkeypatch.setattr(database, "build_mongo_client", build_spy)
+        monkeypatch.setattr(database, "ping", ping_spy)
 
-        # TLS client-cert kwargs must be present.
-        _, kwargs = mock_client.call_args
-        assert kwargs["tls"] is True
-        assert kwargs["tlsCertificateKeyFile"] == str(cert)
-        # ping was issued on the admin database.
-        client_instance.admin.command.assert_called_once_with("ping")
-        # indexes ensured on the resolved collection.
+        returned_client, returned_collection = database._initialize_mongodb_connection()
+
+        # Factory received uri + cert path; ping got the built client.
+        args, _ = build_spy.call_args
+        assert args[0] == "mongodb+srv://uri"
+        assert args[1] == str(cert)
+        ping_spy.assert_called_once_with(client_instance)
         spy_index.assert_called_once()
         assert returned_client is client_instance
         assert returned_collection is database._mongo_collection
         assert returned_collection is not None
 
-    def test_without_cert_file_builds_client_without_tls_cert_kwargs(self, monkeypatch, no_real_env) -> None:
+    def test_without_cert_file_forwards_none_cert(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: with no cert the factory is called with cert_file=None.
+        Boundaries: resolve returns (uri, None); build + ping stubbed.
+        On failure: a stray cert path is forwarded to the factory.
+        """
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
@@ -110,16 +145,24 @@ class TestInitializeMongodbConnection:
         monkeypatch.setattr(database, "ensure_indexes", Mock())
 
         client_instance = MagicMock(name="client")
-        with patch.object(database, "MongoClient", return_value=client_instance) as mock_client:
-            returned_client, returned_collection = database._initialize_mongodb_connection()
+        build_spy = Mock(return_value=client_instance)
+        monkeypatch.setattr(database, "build_mongo_client", build_spy)
+        monkeypatch.setattr(database, "ping", Mock())
 
-        _, kwargs = mock_client.call_args
-        assert "tlsCertificateKeyFile" not in kwargs
-        assert "tls" not in kwargs
+        returned_client, returned_collection = database._initialize_mongodb_connection()
+
+        args, _ = build_spy.call_args
+        assert args[1] is None
         assert returned_client is client_instance
         assert returned_collection is not None
 
-    def test_tls_ca_file_env_is_passed_through(self, monkeypatch, no_real_env) -> None:
+    def test_tls_ca_file_env_is_forwarded_to_factory(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: TLS_CA_FILE from the environment is forwarded to the factory as ca_file, so
+        the real path pins the server CA identically to the pre-flight check.
+        Boundaries: TLS_CA_FILE set; build stubbed.
+        On failure: the CA bundle is ignored on the real connection path.
+        """
         monkeypatch.setenv("TLS_CA_FILE", "/path/to/ca.pem")
         monkeypatch.setattr(
             database.config,
@@ -128,27 +171,33 @@ class TestInitializeMongodbConnection:
         )
         monkeypatch.setattr(database, "ensure_indexes", Mock())
 
-        client_instance = MagicMock(name="client")
-        with patch.object(database, "MongoClient", return_value=client_instance) as mock_client:
-            database._initialize_mongodb_connection()
+        build_spy = Mock(return_value=MagicMock(name="client"))
+        monkeypatch.setattr(database, "build_mongo_client", build_spy)
+        monkeypatch.setattr(database, "ping", Mock())
 
-        _, kwargs = mock_client.call_args
-        assert kwargs["tlsCAFile"] == "/path/to/ca.pem"
+        database._initialize_mongodb_connection()
 
-    @pytest.mark.parametrize(
-        "ping_error",
-        [ConnectionFailure("down"), ServerSelectionTimeoutError("timeout")],
-    )
-    def test_ping_connection_error_resets_globals(self, monkeypatch, no_real_env, ping_error) -> None:
+        args, _ = build_spy.call_args
+        assert args[2] == "/path/to/ca.pem"
+
+    def test_ping_connection_error_resets_globals(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: ping fails with a redacted MongoConnectionError; the globals are reset and
+        (None, None) is returned.
+        Boundaries: build succeeds, ping raises MongoConnectionError.
+        On failure: a failed connection leaves stale globals or leaks raw pymongo text.
+        """
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
             Mock(return_value=("mongodb+srv://uri", None)),
         )
-        client_instance = Mock(name="client")
-        client_instance.admin.command.side_effect = ping_error
-        with patch.object(database, "MongoClient", return_value=client_instance):
-            result = database._initialize_mongodb_connection()
+        monkeypatch.setattr(database, "build_mongo_client", Mock(return_value=MagicMock(name="client")))
+        monkeypatch.setattr(
+            database, "ping", Mock(side_effect=MongoConnectionError("OperationFailure 8000 AtlasError"))
+        )
+
+        result = database._initialize_mongodb_connection()
 
         assert result == (None, None)
         assert database._mongo_client is None
@@ -156,18 +205,52 @@ class TestInitializeMongodbConnection:
         assert database._mongo_collection is None
 
     def test_generic_exception_resets_globals(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: an unexpected non-pymongo error during init is caught defensively, globals
+        reset, and no raw exception text is logged.
+        Boundaries: build_mongo_client raises a plain RuntimeError.
+        On failure: the exception propagates or leaves stale globals.
+        """
         monkeypatch.setattr(
             database.config,
             "resolve_mongo_connection",
             Mock(return_value=("mongodb+srv://uri", None)),
         )
-        with patch.object(database, "MongoClient", side_effect=RuntimeError("boom")):
-            result = database._initialize_mongodb_connection()
+        monkeypatch.setattr(database, "build_mongo_client", Mock(side_effect=RuntimeError("boom")))
+
+        result = database._initialize_mongodb_connection()
 
         assert result == (None, None)
         assert database._mongo_client is None
         assert database._mongo_db is None
         assert database._mongo_collection is None
+
+    def test_init_failure_does_not_leak_uri_or_host(self, monkeypatch, no_real_env, caplog) -> None:
+        """
+        Scenario: ping fails; the resolved URI/host must appear in neither the logs nor the
+        print_log output on the real connection path (regression for CWE-532 leakage).
+        Boundaries: ping raises a redacted MongoConnectionError; a fake secret URI is resolved.
+        On failure: the connection URI/host reaches the persistent log or the console.
+        """
+        secret_uri = "mongodb+srv://user:pw@cluster0.example.net/db"
+        monkeypatch.setattr(
+            database.config,
+            "resolve_mongo_connection",
+            Mock(return_value=(secret_uri, None)),
+        )
+        monkeypatch.setattr(database, "build_mongo_client", Mock(return_value=MagicMock(name="client")))
+        monkeypatch.setattr(
+            database, "ping", Mock(side_effect=MongoConnectionError("OperationFailure 8000 AtlasError"))
+        )
+
+        with patch.object(database, "print_log") as mock_print, caplog.at_level(logging.DEBUG):
+            database._initialize_mongodb_connection()
+
+        printed = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
+        logged = caplog.text
+        for needle in ("cluster0.example.net", "user:pw", secret_uri):
+            assert needle not in printed
+            assert needle not in logged
 
 
 # --------------------------------------------------------------------------- #
@@ -675,75 +758,24 @@ class TestEnsureIndexes:
 
 
 # --------------------------------------------------------------------------- #
-# X.509 auth-mechanism diagnostics
+# Re-export surface
 #
-# pymongo does not infer MONGODB-X509 from a client certificate, so a cert paired
-# with a URI that never requests it yields an unauthenticated connection. These
-# cover the detection helpers and the three-way warning branch.
+# The X.509 helpers and the factory now live in client.py but are re-exported from
+# database.py so pre-existing `from ...database import ...` imports keep working. The
+# behavioral tests for those helpers live in tests/mock/backends/mongo/test_client.py.
 # --------------------------------------------------------------------------- #
-X509_URI = "mongodb+srv://cluster.example.net/db?authSource=%24external&authMechanism=MONGODB-X509"
-SCRAM_URI = "mongodb+srv://user:pw@cluster.example.net/db?retryWrites=true"
-BARE_URI = "mongodb+srv://cluster.example.net/db?retryWrites=true"
+def test_x509_and_factory_symbols_are_reexported_from_client() -> None:
+    """
+    Scenario: database.py re-exports the moved names so existing imports/patch targets
+    keep resolving to the single client.py definitions.
+    Boundaries: identity comparison against the client module's objects.
+    On failure: a stale duplicate definition drifts from the factory.
+    """
+    from bookscraper.backends.mongo import client
 
-
-@pytest.mark.parametrize(
-    "uri, expected",
-    [
-        (X509_URI, True),
-        ("mongodb+srv://c.example.net/db?authMechanism=mongodb-x509", True),  # case-insensitive
-        (SCRAM_URI, False),
-        (BARE_URI, False),
-        ("mongodb+srv://c.example.net/db?authMechanism=SCRAM-SHA-256", False),
-    ],
-)
-def test_uri_selects_x509_auth(uri, expected) -> None:
-    assert database.uri_selects_x509_auth(uri) is expected
-
-
-@pytest.mark.parametrize(
-    "uri, expected",
-    [(SCRAM_URI, True), (X509_URI, False), (BARE_URI, False)],
-)
-def test_uri_has_embedded_credentials(uri, expected) -> None:
-    assert database.uri_has_embedded_credentials(uri) is expected
-
-
-def test_x509_mechanism_present_warns_nothing() -> None:
-    with (
-        patch.object(database.module_logger, "warning") as warn,
-        patch.object(database.module_logger, "critical") as crit,
-        patch.object(database, "print_log") as printed,
-    ):
-        database._warn_if_x509_mechanism_missing(X509_URI, "/certs/x.pem")
-
-    warn.assert_not_called()
-    crit.assert_not_called()
-    printed.assert_not_called()
-
-
-def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
-    """Legacy resolution attaches the newest cert to any URI, so a working SCRAM
-    setup can pick one up incidentally - that is a warning, not a critical."""
-    with (
-        patch.object(database.module_logger, "warning") as warn,
-        patch.object(database.module_logger, "critical") as crit,
-        patch.object(database, "print_log") as printed,
-    ):
-        database._warn_if_x509_mechanism_missing(SCRAM_URI, "/certs/x.pem")
-
-    crit.assert_not_called()
-    printed.assert_not_called()
-    assert "SCRAM" in warn.call_args.args[0]
-
-
-def test_cert_without_mechanism_or_credentials_is_critical() -> None:
-    """No mechanism and no userinfo means the connection authenticates as nobody."""
-    with (
-        patch.object(database.module_logger, "critical") as crit,
-        patch.object(database, "print_log") as printed,
-    ):
-        database._warn_if_x509_mechanism_missing(BARE_URI, "/certs/x.pem")
-
-    assert "will not be authenticated" in crit.call_args.args[0]
-    assert "MONGODB-X509" in crit.call_args.args[0]
-    assert printed.call_args.args[1] == "warning"
+    assert database.uri_selects_x509_auth is client.uri_selects_x509_auth
+    assert database.uri_has_embedded_credentials is client.uri_has_embedded_credentials
+    assert database._warn_if_x509_mechanism_missing is client._warn_if_x509_mechanism_missing
+    assert database.build_mongo_client is client.build_mongo_client
+    assert database.ping is client.ping
+    assert database.MongoConnectionError is client.MongoConnectionError
