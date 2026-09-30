@@ -60,7 +60,10 @@ async def run(args: argparse.Namespace) -> None:
     """The "rotate the Atlas X.509 client certificate" workflow. Exits non-zero on any failure.
 
     With ``--check`` it reports the active certificate's expiry instead of rotating (see
-    :func:`_run_check`); otherwise it issues a new certificate and prints its expiry date.
+    :func:`_run_check`); otherwise it issues a new certificate, verifies it authenticates to
+    Atlas (unless ``--no-verify``), and prints its expiry date. If verification fails,
+    ``settings.json`` is left untouched (the previous certificate keeps working) and the command
+    exits non-zero.
     """
     # ATLAS_* credentials may live in .env rather than the real environment; --check reads no
     # ATLAS_* but still loads .env so settings.json "env"-sourced cert paths resolve.
@@ -74,7 +77,13 @@ async def run(args: argparse.Namespace) -> None:
 
     print_log("Requesting a new Atlas X.509 client certificate...", "info")
     try:
-        cert_path, settings_notes = await asyncio.to_thread(cert_rotation.rotate_certificate, args.months, output)
+        cert_path, settings_notes, verified = await asyncio.to_thread(
+            cert_rotation.rotate_certificate,
+            args.months,
+            output,
+            verify=not args.no_verify,
+            verify_attempts=args.verify_attempts,
+        )
     except cert_rotation.RotationError as e:
         print_log(f"Certificate rotation failed: {e}", "error")
         sys.exit(1)
@@ -88,3 +97,8 @@ async def run(args: argparse.Namespace) -> None:
         print_log(f"Could not read the new certificate's expiry: {e}", "warning")
     for note in settings_notes:
         print_log(note, "warning" if note.startswith("WARNING") else "info")
+
+    if not verified:
+        # Verification failed and settings.json was deliberately left untouched: exit non-zero
+        # so callers/CI notice, while the previously configured certificate keeps working.
+        sys.exit(1)

@@ -110,6 +110,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="With --check, the number of days before expiry that triggers exit code 3 (default: 30).",
     )
     rotate_parser.add_argument(
+        "--no-verify",
+        dest="no_verify",
+        action="store_true",
+        help="Skip pinging Atlas with the new certificate before repointing settings.json (for "
+        "offline or first-time setups). By default the new cert must authenticate first; if it "
+        "cannot, settings.json is left untouched and the command exits non-zero.",
+    )
+    rotate_parser.add_argument(
+        "--verify-attempts",
+        dest="verify_attempts",
+        type=int,
+        default=5,
+        help="How many times to retry the post-rotation Atlas verification ping before giving up "
+        "(default: 5); Atlas can take a short while to propagate a newly issued certificate.",
+    )
+    rotate_parser.add_argument(
         "--log-severity",
         dest="log_severity",
         choices=["debug", "info", "warning", "error"],

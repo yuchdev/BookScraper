@@ -149,8 +149,24 @@ Its position in the auth system above depends on how the app is configured:
   the new path; it deliberately never modifies your environment or `.env` on your behalf.
 - **`auth_type: "pass"`, or no rotation applicable:** the command leaves `settings.json` untouched and says so.
 
-After a successful rotation the command also prints the **new** cert's expiry date (parsed back from the
-just-written file via `cert_rotation.read_certificate_expiry()`).
+**Verify before repoint:** after the new PEM is written but *before* `settings.json` is repointed, the command
+verifies the new certificate actually authenticates to Atlas (`cert_rotation.verify_certificate()`). Verification
+builds a client **only** via `backends/mongo/client.build_mongo_client(uri, new_cert, TLS_CA_FILE)` and pings via
+`client.ping` — reusing the single client factory so it inherits the redaction contract SEC-3/4/8 (a failure surfaces
+as a `MongoConnectionError` carrying only the pymongo `code`/`codeName`, never the URI, host, DB user, cert contents,
+or Atlas response body). The URI is the **current** `config.resolve_mongo_connection()[0]`; if none is configured,
+verification is skipped with a status line. Atlas can take a short while to propagate a freshly issued cert, so a
+connection failure is retried up to `--verify-attempts N` (default `5`) times with a fixed delay, closing the client
+after every attempt. On **final** failure the command does **not** repoint `settings.json` (the previously configured
+cert keeps working), leaves the new PEM on disk, prints a `WARNING:` line naming the new path and the redacted error
+code, and exits `1`. `--no-verify` skips the whole step (repointing without a ping) for offline or first-time setups.
+If `config.resolve_mongo_connection()` itself raises `ConfigError`, rotation fails loudly (`RotationError`, exit `1`)
+without repointing rather than pinging or guessing. Pruning of superseded certs (a later subtask) will run only on
+the verification-success path.
+
+After a successful (or skipped) verification the command also prints the **new** cert's expiry date (parsed back from
+the just-written file via `cert_rotation.read_certificate_expiry()`); this line sits right after the
+`Certificate written to <path>` line and before the verification/repoint status lines.
 
 **Certificate expiry inspection (`--check`) and the pre-flight expiry warning:** certificates expire after 1-24
 months, so `bookscraper rotate-cert --check [--warn-days N]` (default `N = 30`) reports the **currently active**
@@ -242,6 +258,10 @@ uv run bookscraper search --store-backend json --max-search-pages 5
 # configuration). Unlike the two above it takes no --store-backend and never touches the book data.
 uv run bookscraper rotate-cert
 uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-manual.pem
+# By default the new cert is pinged against Atlas before settings.json is repointed; on failure
+# settings.json is left untouched and the command exits 1. Tune retries or skip the check entirely:
+uv run bookscraper rotate-cert --verify-attempts 8
+uv run bookscraper rotate-cert --no-verify              # offline / first-time setup: repoint without pinging
 
 # rotate-cert --check: report the active cert's expiry only (no Atlas contact, no ATLAS_* needed).
 # Exit 0 if >N days remain (or no x509 cert configured), 3 if within N days, 1 if expired/unreadable.

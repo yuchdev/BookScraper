@@ -29,18 +29,30 @@ import json
 import os
 import pathlib
 import re
+import time
 from datetime import UTC, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import httpx
 from cryptography import x509
 
 from ...book_utils import atomic_write_bytes
 from . import config
+from .client import MongoConnectionError, build_mongo_client, ping
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_CERT_MONTHS = 6
 MIN_CERT_MONTHS = 1
 MAX_CERT_MONTHS = 24
+
+#: Default number of post-rotation verification ping attempts (Atlas can take a short while to
+#: propagate a freshly issued user certificate). Overridable via ``--verify-attempts``.
+DEFAULT_VERIFY_ATTEMPTS = 5
+
+#: Fixed delay (seconds) between verification ping attempts.
+DEFAULT_VERIFY_DELAY_S = 6.0
 
 #: Default expiry-warning window (days) shared by ``--check`` and the pre-flight helper.
 DEFAULT_WARN_DAYS = 30
@@ -174,19 +186,90 @@ def update_settings_after_rotation(new_cert_path: pathlib.Path) -> list[str]:
     return [f"{config.SETTINGS_FILE}'s x509.cert has an unrecognized shape - leaving it untouched."]
 
 
-def rotate_certificate(
-    months: Optional[int] = None, output: Optional[pathlib.Path] = None
-) -> tuple[pathlib.Path, list[str]]:
+def verify_certificate(
+    cert_path: pathlib.Path,
+    uri: str,
+    *,
+    attempts: int = DEFAULT_VERIFY_ATTEMPTS,
+    delay_s: float = DEFAULT_VERIFY_DELAY_S,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
     """
-    Issues a new Atlas-managed X.509 client certificate and writes it to disk.
+    Confirm that the freshly written certificate at ``cert_path`` actually authenticates to
+    MongoDB Atlas, before any caller repoints ``settings.json`` at it.
+
+    The client is built **only** via :func:`client.build_mongo_client` and pinged via
+    :func:`client.ping` (never a hand-rolled ``MongoClient``), so it inherits the redaction
+    contract SEC-3/4/8: any connection/auth failure surfaces as a :class:`MongoConnectionError`
+    carrying only the exception class name plus pymongo ``code``/``codeName`` - never the URI,
+    host, DB user, cert contents, or a raw pymongo/Atlas error (ROT-11, ROT-13). The server CA
+    bundle comes from ``TLS_CA_FILE`` exactly as the real connection reads it.
+
+    Atlas can take a short while to propagate a newly issued user certificate, so a
+    :class:`MongoConnectionError` is retried up to ``attempts`` times with a fixed ``delay_s``
+    pause (``sleep`` is injectable so tests never actually wait). The client is closed after
+    **every** attempt, success or failure. On the final failed attempt the last redacted
+    :class:`MongoConnectionError` is re-raised unchanged.
+
+    :param cert_path: Path to the newly written combined key+cert PEM to verify.
+    :param uri: The resolved MongoDB connection URI to authenticate against.
+    :param attempts: Maximum number of ping attempts (clamped to at least 1).
+    :param delay_s: Seconds to wait between attempts.
+    :param sleep: Sleep callable, injectable for tests.
+    :raises MongoConnectionError: If every attempt fails; the message is already redacted.
+    """
+    ca_file = os.environ.get("TLS_CA_FILE")
+    total = max(1, attempts)
+    last_error: Optional[MongoConnectionError] = None
+    for attempt in range(1, total + 1):
+        client = None
+        try:
+            client = build_mongo_client(uri, str(cert_path), ca_file)
+            ping(client)
+            return
+        except MongoConnectionError as e:
+            last_error = e
+            if attempt < total:
+                sleep(delay_s)
+        finally:
+            if client is not None:
+                client.close()
+    # ``total >= 1`` guarantees at least one failed attempt set ``last_error`` before we get here.
+    assert last_error is not None
+    raise last_error
+
+
+def rotate_certificate(
+    months: Optional[int] = None,
+    output: Optional[pathlib.Path] = None,
+    *,
+    verify: bool = True,
+    verify_attempts: int = DEFAULT_VERIFY_ATTEMPTS,
+) -> tuple[pathlib.Path, list[str], bool]:
+    """
+    Issues a new Atlas-managed X.509 client certificate, writes it to disk, verifies it
+    authenticates, and only then repoints ``settings.json`` at it.
 
     Credentials come from the ATLAS_* environment variables (the caller is expected
     to have called load_dotenv() first). `months` and `output` take precedence over
     ATLAS_CERT_MONTHS / ATLAS_CERT_FILE, which in turn take precedence over the
     defaults.
 
-    Returns (path the certificate was written to, settings.json status lines).
-    Raises RotationError for missing/invalid configuration or an Atlas API failure.
+    After the PEM is written, and unless ``verify`` is ``False``, the new certificate is
+    pinged against the **current** resolver URI (:func:`config.resolve_mongo_connection`) via
+    :func:`verify_certificate`. If no URI is configured, verification is skipped with a status
+    line. If verification fails for good, ``settings.json`` is **not** repointed (ROT-12): the
+    new PEM is left on disk, the previously configured certificate keeps working, and the
+    returned ``verified`` flag is ``False`` so the caller exits non-zero. Only on a passing (or
+    skipped) verification is :func:`update_settings_after_rotation` called.
+
+    :param months: Certificate validity in months, or None to defer to env/default.
+    :param output: Output PEM path, or None to defer to env/default.
+    :param verify: When True (default), ping the new cert before repointing.
+    :param verify_attempts: Maximum verification ping attempts.
+    :returns: (path the certificate was written to, status lines, verification-passed flag).
+    :raises RotationError: For missing/invalid configuration, an Atlas API failure, or a
+        MongoDB configuration that cannot be resolved for verification.
     """
     client_id = _require_env("ATLAS_CLIENT_ID")
     client_secret = _require_env("ATLAS_CLIENT_SECRET")
@@ -208,7 +291,42 @@ def rotate_certificate(
         raise RotationError(f"Could not reach the Atlas API: {type(e).__name__}.") from e
 
     atomic_write(output, cert)
-    return output, update_settings_after_rotation(output)
+
+    if not verify:
+        notes = ["Verification skipped (--no-verify); repointing settings.json without pinging Atlas."]
+        return output, notes + update_settings_after_rotation(output), True
+
+    try:
+        uri = config.resolve_mongo_connection()[0]
+    except config.ConfigError as e:
+        # Cannot verify without a resolvable URI, and we will not repoint blindly. Leave the new
+        # PEM on disk and fail loudly - the previously configured cert keeps working. The
+        # ConfigError message is about settings.json shape, not credentials.
+        raise RotationError(
+            f"Cannot verify the new certificate: the MongoDB configuration could not be resolved ({e}). "
+            "Re-run with --no-verify to skip verification."
+        ) from e
+
+    if not uri:
+        notes = ["Skipping verification: no MongoDB URI is configured (nothing to ping)."]
+        return output, notes + update_settings_after_rotation(output), True
+
+    try:
+        verify_certificate(output, uri, attempts=verify_attempts)
+    except MongoConnectionError as e:
+        # Verification failed for good: do NOT repoint (ROT-12). The new PEM stays on disk and the
+        # previously configured certificate remains in use. The message carries only the redacted
+        # code/codeName (ROT-11, ROT-13) - never the URI, host, DB user, or Atlas response body.
+        note = (
+            f"WARNING: the new certificate at {output} failed verification ({e}); "
+            "settings.json left unchanged - the previously configured certificate remains in use."
+        )
+        return output, [note], False
+
+    # Verification passed: it is now safe to repoint. (Subtask 07 will prune superseded certs
+    # here, on this success-only path - never before verification succeeds, per ROT-13.)
+    notes = [f"Verified: the new certificate authenticates to MongoDB Atlas ({output.name})."]
+    return output, notes + update_settings_after_rotation(output), True
 
 
 def read_certificate_expiry(path: pathlib.Path) -> datetime:

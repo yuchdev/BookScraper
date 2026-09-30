@@ -9,7 +9,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
 | 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
-| 02.1 | X.509 certificate rotation         | 🔶 In progress | 6 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
+| 02.1 | X.509 certificate rotation         | 🔶 In progress | 7 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 25 / 94 subtasks complete.
+**Totals:** 26 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 

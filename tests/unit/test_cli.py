@@ -141,6 +141,24 @@ def test_rotate_cert_warn_days_rejects_non_integer() -> None:
         build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "soon"])
 
 
+def test_rotate_cert_verify_flags() -> None:
+    args = build_parser().parse_args(["rotate-cert", "--no-verify", "--verify-attempts", "8"])
+    assert args.no_verify is True
+    assert args.verify_attempts == 8
+    assert isinstance(args.verify_attempts, int)
+
+
+def test_rotate_cert_verify_defaults() -> None:
+    args = build_parser().parse_args(["rotate-cert"])
+    assert args.no_verify is False
+    assert args.verify_attempts == 5
+
+
+def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--verify-attempts", "many"])
+
+
 # --------------------------------------------------------------------------- #
 # detect-schema subparser
 # --------------------------------------------------------------------------- #

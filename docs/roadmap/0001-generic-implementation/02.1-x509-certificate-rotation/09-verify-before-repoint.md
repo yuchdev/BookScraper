@@ -1,7 +1,7 @@
 # 09 - Verify before repoint
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [04-settings-json-repointing.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/04-settings-json-repointing.md), [08-live-x509-rediagnosis.md](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/08-live-x509-rediagnosis.md), [Task 02.0 / 05](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/05-single-mongo-client-factory.md)
 **Role:** Security Auditor → Python Expert
 
