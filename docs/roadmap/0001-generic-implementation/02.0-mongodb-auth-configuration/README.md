@@ -27,7 +27,7 @@ Subtasks 01-03 record the delivered resolver. Subtasks 04-06 fix what's left:
 | 03 | [X.509 mechanism diagnostic](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/03-x509-mechanism-diagnostic.md)                | ✅ Complete    | -      |
 | 04 | [Honest connection logging](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/04-honest-connection-logging.md)                 | ✅ Complete    | 05     |
 | 05 | [Single MongoClient factory](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/05-single-mongo-client-factory.md)              | ✅ Complete    | -      |
-| 06 | [settings.json validation & hardening](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/06-settings-json-hardening.md)        | ⬜ Not started | -      |
+| 06 | [settings.json validation & hardening](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/06-settings-json-hardening.md)        | ✅ Complete    | -      |
 
 ## Key constraints
 

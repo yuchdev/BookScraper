@@ -42,6 +42,13 @@ _mongo_client = None
 _mongo_db = None
 _mongo_collection = None
 
+# The resolved database/collection names of the live connection, so the success line in
+# get_mongo_collection() names exactly what was connected instead of re-reading env vars
+# (which would disagree with a settings.json-driven namespace). Default to the shared
+# constants until _initialize_mongodb_connection() resolves them.
+_mongo_db_name = config.DEFAULT_DB_NAME
+_mongo_collection_name = config.DEFAULT_COLLECTION_NAME
+
 
 def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Collection]]:
     """
@@ -50,6 +57,7 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
     Sets the global _mongo_client, _mongo_db, and _mongo_collection variables.
     """
     global _mongo_client, _mongo_db, _mongo_collection
+    global _mongo_db_name, _mongo_collection_name
 
     # Initialize to None at the start for clear type handling
     _mongo_client = None
@@ -60,6 +68,10 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
     tls_ca_file = os.environ.get("TLS_CA_FILE")  # CA bundle for server certificate verification
     try:
         mongodb_uri, tls_client_cert_key_file = config.resolve_mongo_connection()
+        # Determinism: when settings.json exists, the namespace comes from it (its optional
+        # 'database' block, else the defaults); the legacy db/collection env vars are only
+        # consulted in legacy (no settings.json) mode. Resolved once here via config, not env.
+        _mongo_db_name, _mongo_collection_name = config.resolve_mongo_namespace()
     except config.ConfigError as e:
         module_logger.critical(f"Invalid MongoDB configuration: {e}")
         print_log(f"Critical Error: Invalid MongoDB configuration: {e}", "error")
@@ -96,8 +108,8 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         )
         ping(_mongo_client)
 
-        _mongo_db = _mongo_client[os.environ.get("MONGODB_DB_NAME", "bookscraper_db")]
-        _mongo_collection = _mongo_db[os.environ.get("MONGODB_COLLECTION_NAME", "books")]
+        _mongo_db = _mongo_client[_mongo_db_name]
+        _mongo_collection = _mongo_db[_mongo_collection_name]
 
         # Ensure the unique 'hash' index plus the sparse secondary lookup indexes.
         ensure_indexes(_mongo_collection)
@@ -147,9 +159,9 @@ def get_mongo_collection() -> Optional[Collection]:
             # line here too would be duplicate and contradictory. Name only the
             # database/collection, never the host or URI.
             if _mongo_collection is not None:
-                db_name = os.environ.get("MONGODB_DB_NAME", "bookscraper_db")
-                collection_name = os.environ.get("MONGODB_COLLECTION_NAME", "books")
-                success_message = f"Connection to MongoDB Atlas successful ({db_name}.{collection_name})."
+                # Name the namespace actually connected (resolved by _initialize_mongodb_connection),
+                # never the host/URI, so the success line can't disagree with the live connection.
+                success_message = f"Connection to MongoDB Atlas successful ({_mongo_db_name}.{_mongo_collection_name})."
                 print_log(success_message, "success")
                 module_logger.info(success_message)
         except Exception as e:

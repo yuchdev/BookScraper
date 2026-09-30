@@ -28,7 +28,16 @@ def reset_globals(monkeypatch):
     monkeypatch.setattr(database, "_mongo_client", None)
     monkeypatch.setattr(database, "_mongo_db", None)
     monkeypatch.setattr(database, "_mongo_collection", None)
+    monkeypatch.setattr(database, "_mongo_db_name", config.DEFAULT_DB_NAME)
+    monkeypatch.setattr(database, "_mongo_collection_name", config.DEFAULT_COLLECTION_NAME)
     monkeypatch.setattr(database, "load_dotenv", lambda *a, **k: None)
+    # Default the namespace resolver so a real _initialize never reads the real
+    # ~/.bookscrapper/settings.json; individual tests override it as needed.
+    monkeypatch.setattr(
+        database.config,
+        "resolve_mongo_namespace",
+        Mock(return_value=(config.DEFAULT_DB_NAME, config.DEFAULT_COLLECTION_NAME)),
+    )
     yield
 
 
@@ -155,6 +164,39 @@ class TestInitializeMongodbConnection:
         assert args[1] is None
         assert returned_client is client_instance
         assert returned_collection is not None
+
+    def test_namespace_from_resolver_used_for_db_and_collection(self, monkeypatch, no_real_env) -> None:
+        """
+        Scenario: the db/collection subscripts come from config.resolve_mongo_namespace, not
+        from the MONGODB_DB_NAME / MONGODB_COLLECTION_NAME env vars (determinism when
+        settings.json exists).
+        Boundaries: the resolver returns a custom namespace while the env vars name a
+        different one.
+        On failure: the connection targets the env-var namespace, contradicting settings.json.
+        """
+        monkeypatch.setenv("MONGODB_DB_NAME", "env_db")
+        monkeypatch.setenv("MONGODB_COLLECTION_NAME", "env_coll")
+        monkeypatch.setattr(
+            database.config,
+            "resolve_mongo_connection",
+            Mock(return_value=("mongodb+srv://uri", None)),
+        )
+        monkeypatch.setattr(
+            database.config,
+            "resolve_mongo_namespace",
+            Mock(return_value=("settings_db", "settings_coll")),
+        )
+        monkeypatch.setattr(database, "ensure_indexes", Mock())
+        client_instance = MagicMock(name="client")
+        monkeypatch.setattr(database, "build_mongo_client", Mock(return_value=client_instance))
+        monkeypatch.setattr(database, "ping", Mock())
+
+        database._initialize_mongodb_connection()
+
+        client_instance.__getitem__.assert_called_once_with("settings_db")
+        client_instance.__getitem__.return_value.__getitem__.assert_called_once_with("settings_coll")
+        assert database._mongo_db_name == "settings_db"
+        assert database._mongo_collection_name == "settings_coll"
 
     def test_tls_ca_file_env_is_forwarded_to_factory(self, monkeypatch, no_real_env) -> None:
         """
@@ -359,6 +401,29 @@ class TestGetMongoCollection:
         # No connection URI: neither the scheme separator nor userinfo/host markers.
         assert "://" not in message
         assert "@" not in message
+
+    def test_success_message_uses_resolved_namespace_globals(self, monkeypatch) -> None:
+        """
+        Scenario: the success line reflects the namespace _initialize resolved (stored in
+        the module globals), so it names exactly what was connected rather than a hard-coded
+        or env-derived default.
+        Boundaries: the namespace globals are set to a custom namespace; init returns a live
+        collection.
+        On failure: the message names a different db/collection than the live connection.
+        """
+        monkeypatch.setattr(database, "_mongo_db_name", "resolved_db")
+        monkeypatch.setattr(database, "_mongo_collection_name", "resolved_coll")
+        monkeypatch.setattr(
+            database,
+            "_initialize_mongodb_connection",
+            Mock(return_value=(Mock(name="client"), Mock(name="collection"))),
+        )
+        with patch.object(database, "print_log") as mock_print:
+            database.get_mongo_collection()
+
+        success_calls = [c for c in mock_print.call_args_list if c.args[1] == "success"]
+        assert len(success_calls) == 1
+        assert "resolved_db.resolved_coll" in success_calls[0].args[0]
 
 
 # --------------------------------------------------------------------------- #

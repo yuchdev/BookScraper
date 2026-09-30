@@ -1,0 +1,11 @@
+{
+  "auth_type": "x509",
+  "x509": {
+    "uri": {"source": "env", "value": "MONGODB_URI"},
+    "cert": {"source": "literal", "value": "X509-cert-example.pem"}
+  },
+  "database": {
+    "name": {"source": "literal", "value": "bookscraper_db"},
+    "collection": {"source": "literal", "value": "books"}
+  }
+}

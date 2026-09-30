@@ -77,6 +77,33 @@ X.509 (client-cert) auth — two independently-sourced fields, `uri` and `cert`:
 env/literal, env/env) are valid and behave identically as long as they resolve to the same underlying values — see
 `tests/integration/test_connection_settings.py`, which exercises all four plus both `pass` shapes.
 
+**Optional `database` block (namespace):** either shape above may add a top-level `database` block naming the target
+database/collection, resolved with the same `{"source", "value"}` mechanism as the auth fields:
+```json
+"database": {"name": {"source": "literal", "value": "bookscraper_db"},
+             "collection": {"source": "literal", "value": "books"}}
+```
+`config.resolve_mongo_namespace()` (called by `database._initialize_mongodb_connection()`, never `os.environ`
+directly) returns `(name, collection)`. When `settings.json` exists but omits the block, the defaults
+`bookscraper_db` / `books` apply and `MONGODB_DB_NAME` / `MONGODB_COLLECTION_NAME` are **not** consulted (same
+determinism as the auth resolver — settings.json is the sole source of truth). If the block is present it must define
+*both* `name` and `collection`, or resolution fails loudly with `ConfigError`. Only in legacy mode (no settings.json)
+do `MONGODB_DB_NAME` / `MONGODB_COLLECTION_NAME` apply, each falling back to the same default.
+
+**Unknown top-level keys fail loudly.** The only keys allowed at the top level are `auth_type`, `pass`, `x509`, and
+`database`; anything else (e.g. a typo like `"x059"` for `"x509"`) raises `ConfigError` listing the offending key
+name(s) — never a field value, so a mistyped block still carrying a literal URI can't leak it into the error/log.
+
+**Permission/ownership hardening (POSIX only, warnings — never aborts).** Because a `literal` URI can embed a
+password, `load_settings()` stats the file and emits a one-per-process `print_log` warning (console + run log; naming the file and the
+`chmod 600 ~/.bookscrapper/settings.json` fix) when it is group/other-readable (`mode & 0o077 != 0`), is a symlink
+(whose target could be attacker-controlled), or is not owned by the current UID. These are advisory only so existing
+setups keep working, and are skipped entirely on Windows (`os.name == "nt"`). Cert-path resolution logs only the
+resolved path (never file contents) and never opens the file.
+
+**Example file.** `docs/examples/settings.example.json` is a copy-ready x509 (env `uri` / literal `cert`) shape with
+placeholders only — no real host, user, password, or cert filename — and passes `/secret-scan`.
+
 **Legacy fallback (no settings.json):** for backward compatibility, `MONGODB_URI` / `TLS_CERT_FILE` env vars (via
 `.env` in the repo root or the real environment) are read directly, with `TLS_CERT_FILE` — if unset — falling back
 further to the newest `~/.bookscrapper/X509-cert-*.pem` by modification time (`config.get_default_tls_cert_file()`).
