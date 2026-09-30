@@ -8,7 +8,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
-| 02.0 | MongoDB auth configuration         | 🔶 In progress | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
+| 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -67,6 +67,38 @@ checks, pending Atlas access.
 Delivered: the deterministic `settings.json` resolver (six valid shapes), the legacy env fallback with a
 newest-cert glob, and the X.509 mechanism diagnostic. Open: the unconditional "connection successful" log, two
 divergent `MongoClient` construction paths, and `settings.json` permissions / namespace / unknown-key validation.
+All three are now closed (below).
+
+### Task 02.0 - MongoDB auth configuration (✅ 2026-09-30)
+
+**Delivered** (commits `7303a68`..`35b6b83`; threat model
+[2026-09-30-mongodb-auth-configuration.md](/docs/security/2026-09-30-mongodb-auth-configuration.md)):
+
+- **04** `get_mongo_collection()` prints its success line only when the collection initialised, naming just
+  `<db>.<collection>`. The CLAUDE.md known-inconsistency bullet is gone.
+- **05** New `backends/mongo/client.py` is the only place a `MongoClient` is built: `ServerApi("1")`, certificate
+  validation always on, TLS/CA kwargs only when the files are given, and a missing cert file is an error.
+  `ping()` and constructor failures re-raise `MongoConnectionError` carrying only the exception class and
+  `code`/`codeName` (Atlas 8000 still reads `OperationFailure 8000 AtlasError`). `database.py` and
+  `book_utils.check_mongodb_connection` both use it, and the pre-flight now honours `TLS_CA_FILE`.
+  `MONGODB_SERVER_SELECTION_TIMEOUT_MS` overrides the 10 s default. This closes the threat model's two HIGH
+  findings.
+- **06** `load_settings()` warns once per process, on the console and in the run log, when `settings.json` is
+  group/other-readable, a symlink, or foreign-owned (the last two are the user-ratified SEC-9 extension; POSIX
+  only, never aborts). The optional `database` block is resolved by `resolve_mongo_namespace()`; a present block
+  must define both `name` and `collection`, and env vars only apply in legacy mode. Unknown top-level keys raise
+  `ConfigError` naming only the keys. Adds `docs/examples/settings.example.json`.
+
+**Tests / gate:** 382 → 422 passed (8 integration deselected; all 8 still collect against the new APIs), 96%
+total. `config.py`, `client.py` and `database.py` are at 100%. `/verify-subtask` PASS ×3, `/secret-scan` clean.
+`security-auditor` verified the subtask-05 fix and the task close (PASS, no findings above LOW). `/pr-review`:
+feature LGTM and security PASS, so APPROVE; four non-blocking suggestions are applied in `35b6b83`.
+
+**Reconciliation note:** all of 04-06 are *consumed*. Two changes go beyond the specs' literal wording and are
+recorded here. First, 06's warnings go through `print_log`, not only the logger, because the root logger has no
+console handler. Second, `build_mongo_client` also redacts `MongoClient` constructor errors, which can embed the
+URI (SEC-8). Deferred as not worth the change now: `resolve_mongo_connection()` and `resolve_mongo_namespace()`
+each parse `settings.json`, so it is read twice per connection.
 
 ## Task 02.1 - X.509 certificate rotation
 
