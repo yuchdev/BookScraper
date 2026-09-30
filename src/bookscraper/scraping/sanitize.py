@@ -50,6 +50,11 @@ EMAIL_PLACEHOLDER = "user@example.invalid"
 # a JSON string under a prose-named key longer than this is replaced too.
 PROSE_MAX_CHARS = 200
 
+# Text shorter than this is never neutralized, even inside a prose-named container:
+# short headings/labels/field values (e.g. an O'Reilly "Book description" heading a
+# ``:has-text()`` selector keys off) must stay verbatim; only the long body collapses.
+PROSE_MIN_CHARS = 80
+
 # A ``data-*`` value longer than this is an opaque blob and is dropped regardless of
 # its name (in addition to the sensitive-name rule below).
 DATA_ATTR_MAX_CHARS = 200
@@ -614,10 +619,45 @@ def strip_tracking(html: str) -> str:
 # strip_secrets
 # --------------------------------------------------------------------------- #
 _SENSITIVE_ATTR_RE = re.compile(r"csrf|token|session|nonce", re.IGNORECASE)
-_SENSITIVE_DATA_RE = re.compile(
-    r"session|csrf|token|uid|ubid|customer|csm|state|config|props|auth|jwt|secret|api[-_]?key|\bsid\b",
-    re.IGNORECASE,
+
+# Segment-based sensitive-name matching (used for both JSON keys and data-* names).
+# A name is split on ``_ - .`` and camelCase boundaries; it is sensitive if any lowered
+# segment - or an adjacent segment pair like ``api``+``key`` - is in the relevant set.
+# This redacts ``authToken``/``api_key``/``X-CSRF-Token`` but NOT ``accepted_authors``,
+# ``author``, ``authors`` or ``sidebar`` (the substring rule wrongly hit these).
+_KEY_SPLIT_RE = re.compile(r"[_\-.]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_SENSITIVE_DATA_SEGMENTS = frozenset(
+    {
+        "session",
+        "sid",
+        "csrf",
+        "token",
+        "uid",
+        "ubid",
+        "customer",
+        "csm",
+        "state",
+        "config",
+        "props",
+        "auth",
+        "jwt",
+        "secret",
+        "apikey",
+    }
 )
+
+
+def _name_segments(name: str) -> list[str]:
+    return [part.lower() for part in _KEY_SPLIT_RE.split(name) if part]
+
+
+def _has_sensitive_segment(name: str, segments: frozenset[str]) -> bool:
+    segs = _name_segments(name)
+    if any(seg in segments for seg in segs):
+        return True
+    return any((a + b) in segments for a, b in zip(segs, segs[1:], strict=False))
+
+
 _SENSITIVE_META_RE = re.compile(
     r"csrf|token|session|cookie|geo|latitude|longitude|ip[-_]?address|ab[-_]?test|ubid|customer|nonce",
     re.IGNORECASE,
@@ -669,7 +709,7 @@ def strip_secrets(html: str) -> str:
             if _SENSITIVE_ATTR_RE.search(lowered):
                 continue
             if lowered.startswith("data-"):
-                if _SENSITIVE_DATA_RE.search(lowered):
+                if _has_sensitive_segment(name, _SENSITIVE_DATA_SEGMENTS):
                     continue
                 # R-2: drop any JSON-shaped data-* wholesale. No site_constants selector
                 # reads a JSON-valued data-*, so dropping is both simpler and strictly
@@ -752,7 +792,9 @@ def _neutralize_direct_text(el: _Element, max_chars: int) -> None:
             stripped = child.data.strip()
             if not stripped:
                 continue
-            if len(stripped) > max_chars or prose_container:
+            # Short text (headings/labels/field values) stays verbatim even in a prose
+            # container, so a `:has-text()` selector keyed off it still matches.
+            if len(stripped) > max_chars or (prose_container and len(stripped) >= PROSE_MIN_CHARS):
                 child.data = PROSE_PLACEHOLDER
 
 
@@ -765,10 +807,12 @@ def _neutralize(el: _Element, protected: set[int], max_chars: int) -> None:
                 _neutralize(child, protected, max_chars)
         _neutralize_direct_text(el, max_chars)
         return
-    # No protected descendant: if this element's aggregate text reads as prose,
-    # collapse the whole subtree to one placeholder (catches prose chunked across
-    # sub-200-char sibling spans, V-5).
-    if _is_prose_container(el) or len(_text_content(el)) > max_chars:
+    # No protected descendant: if this element's aggregate text reads as prose, collapse
+    # the whole subtree to one placeholder (catches prose chunked across sub-200-char
+    # sibling spans, V-5). A prose-named container with only short text (a heading/label)
+    # is left alone so its selector text survives.
+    aggregate_len = len(_text_content(el))
+    if aggregate_len > max_chars or (_is_prose_container(el) and aggregate_len >= PROSE_MIN_CHARS):
         el.children = [_Text(PROSE_PLACEHOLDER)]
         return
     for child in el.children:
@@ -811,9 +855,27 @@ def neutralize_prose(html: str, keep_selectors: list[str], max_chars: int = PROS
 # --------------------------------------------------------------------------- #
 # JSON sanitizers
 # --------------------------------------------------------------------------- #
-_JSON_REDACT_KEY_RE = re.compile(
-    r"email|token|session|password|secret|csrf|jwt|cookie|bearer|api[_-]?key|apikey|auth|\bsid\b",
-    re.IGNORECASE,
+# Redacted on a SEGMENT match (not a substring), so ``accepted_authors``/``author`` are
+# left intact while ``authToken``/``auth_token``/``sessionId``/``api_key``/``X-CSRF-Token``
+# still redact. ``authorization`` is treated as sensitive.
+_SENSITIVE_KEY_SEGMENTS = frozenset(
+    {
+        "email",
+        "token",
+        "session",
+        "sid",
+        "password",
+        "passwd",
+        "secret",
+        "auth",
+        "authtoken",
+        "apikey",
+        "csrf",
+        "jwt",
+        "cookie",
+        "bearer",
+        "authorization",
+    }
 )
 _JSON_PROSE_KEY_RE = re.compile(r"description|about|review|blurb|bio|abstract|synopsis", re.IGNORECASE)
 
@@ -830,7 +892,8 @@ def sanitize_json(obj: Any, _depth: int = 0) -> Any:
 
     Scenario: a Leanpub API body or a kept ld+json blob carries an email, a token, a
     long description, or a signed image URL.
-    Boundaries: keys matching email/token/session/password are redacted; string values
+    Boundaries: keys whose segments match the sensitive set (email/token/session/auth/
+    ...) are redacted - segment-matched, so ``accepted_authors`` survives; string values
     under prose-named keys longer than ~200 chars become the placeholder; URL and email
     strings anywhere are cleaned. Recursion is capped (FIX-11) - past the cap the value
     is returned as-is rather than recursing further.
@@ -841,7 +904,7 @@ def sanitize_json(obj: Any, _depth: int = 0) -> Any:
     if isinstance(obj, dict):
         cleaned: dict[Any, Any] = {}
         for key, value in obj.items():
-            if isinstance(key, str) and _JSON_REDACT_KEY_RE.search(key):
+            if isinstance(key, str) and _has_sensitive_segment(key, _SENSITIVE_KEY_SEGMENTS):
                 cleaned[key] = REDACTED_VALUE
             elif (
                 isinstance(key, str)

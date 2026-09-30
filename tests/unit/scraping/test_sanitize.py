@@ -491,11 +491,20 @@ def test_neutralize_prose_replaces_long_text_keeps_metadata() -> None:
     assert PROSE_PLACEHOLDER in out
 
 
-def test_neutralize_prose_uses_container_hint_for_short_text() -> None:
-    """A short text inside a prose-signalling container is still neutralized."""
-    out = neutralize_prose('<p class="review">Great read!</p>', [])
-    assert "Great read!" not in out
-    assert PROSE_PLACEHOLDER in out
+def test_neutralize_prose_container_hint_neutralizes_only_long_text() -> None:
+    """A prose container neutralizes its long body but keeps a short heading/label.
+
+    Short text (< ~80 chars) stays verbatim even in a prose-named container, so a
+    selector keyed off a heading still matches; the long review body still collapses.
+    """
+    short = neutralize_prose('<p class="review">Great read!</p>', [])
+    assert "Great read!" in short
+    assert PROSE_PLACEHOLDER not in short
+
+    long_body = "Great read that I would recommend to everyone learning the topic in depth. " * 2
+    long_out = neutralize_prose(f'<p class="review">{long_body}</p>', [])
+    assert long_body.strip() not in long_out
+    assert PROSE_PLACEHOLDER in long_out
 
 
 def test_neutralize_prose_keeps_short_factual_text() -> None:
@@ -529,6 +538,42 @@ def test_sanitize_json_handles_lists_and_non_string_keys() -> None:
     assert out[1][0] == EMAIL_PLACEHOLDER
     assert out[1][1] == 7
     assert out[1][2] is None
+
+
+def test_sanitize_json_key_redaction_is_segment_based() -> None:
+    """Over-redaction fix: sensitive keys are matched by SEGMENT, not substring.
+
+    Scenario: the Leanpub JSON:API key ``accepted_authors`` was redacted because its
+    name contains the substring ``auth``, which then crashed ``get_leanpub_book_details``.
+    Boundaries: ``authToken``/``auth_token``/``sessionId``/``api_key``/``X-CSRF-Token``/
+    ``authorization`` still redact; ``accepted_authors``/``author``/``authors``/
+    ``sidebar``/``id`` do not.
+    On failure: a legitimate JSON:API field is destroyed and downstream parsing breaks.
+    """
+    tok = "z" * 24
+    for sensitive in ("authToken", "auth_token", "sessionId", "api_key", "X-CSRF-Token", "authorization"):
+        assert sanitize_json({sensitive: tok})[sensitive] == REDACTED_VALUE
+    for benign in ("accepted_authors", "author", "authors", "sidebar", "id", "value"):
+        assert sanitize_json({benign: "keep-this-value"})[benign] == "keep-this-value"
+
+
+def test_sanitize_json_preserves_leanpub_accepted_authors_shape() -> None:
+    """The exact Leanpub ``relationships.accepted_authors.data`` shape survives intact.
+
+    Scenario: ``get_leanpub_book_details`` reads ``relationships.accepted_authors.data``;
+    the sanitizer must not touch that structure or its string values.
+    Boundaries: the whole nested object round-trips unchanged.
+    On failure: the Leanpub detail scrape crashes on a redacted string.
+    """
+    payload = {
+        "data": {
+            "id": "book-1",
+            "attributes": {"title": "Fluent Python", "slug": "fluentpython"},
+            "relationships": {"accepted_authors": {"data": [{"id": "a1", "type": "Author"}]}},
+        },
+        "included": [{"id": "a1", "type": "Author", "attributes": {"name": "Luciano Ramalho"}}],
+    }
+    assert sanitize_json(payload) == payload
 
 
 def test_sanitize_json_depth_cap_returns_value() -> None:
@@ -969,13 +1014,44 @@ def test_v5_long_direct_text_beside_protected_field_is_neutralized() -> None:
     assert PROSE_PLACEHOLDER in out
 
 
-def test_v5_prose_container_text_beside_protected_field_is_neutralized() -> None:
-    """V-5: short text in a prose container beside a protected field is neutralized."""
-    html = '<div class="review">Loved it<span id="keep">K</span></div>'
+def test_v5_prose_container_long_text_beside_protected_field_is_neutralized() -> None:
+    """V-5: long prose-container text beside a protected field collapses; field survives."""
+    prose = "Loved this book and would happily recommend it to any reader who is curious. " * 2
+    html = f'<div class="review">{prose}<span id="keep">K</span></div>'
     out = neutralize_prose(html, ["#keep"])
-    assert "Loved it" not in out
+    assert prose.strip() not in out
     assert "K" in out
     assert PROSE_PLACEHOLDER in out
+
+
+def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
+    """Over-neutralization fix: a short prose-named heading survives; its body collapses.
+
+    Scenario: O'Reilly's ``h2.t-description-heading:has-text("Book description") + span``
+    selector needs the heading text; neutralizing the short heading broke it.
+    Boundaries: the short "Book description" heading stays verbatim (so the selector
+    still resolves), while the long description span collapses to the placeholder.
+    On failure: the O'Reilly description golden can never match.
+    """
+    from bookscraper.scraping.sanitize import _select, _text_content
+
+    body = "Long copyrighted description sentence that must be neutralized. " * 8
+    html = (
+        '<div id="root">'
+        '<h1 class="t-title">OReilly Book Title</h1>'
+        '<h2 class="t-description-heading">Book description</h2>'
+        f"<span>{body}</span>"
+        "</div>"
+    )
+    out = neutralize_prose(html, ["h1.t-title"])
+    assert "Book description" in out
+    assert "OReilly Book Title" in out
+    assert body.strip() not in out
+    assert PROSE_PLACEHOLDER in out
+    # The description selector still resolves to the (now-neutralized) span.
+    matched = _select(_parse(out), 'h2.t-description-heading:has-text("Book description") + span')
+    assert len(matched) == 1
+    assert _text_content(matched[0]) == PROSE_PLACEHOLDER
 
 
 # --------------------------------------------------------------------------- #
