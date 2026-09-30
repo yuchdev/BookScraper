@@ -79,7 +79,6 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
 
     if not mongodb_uri:
         module_logger.critical("MONGODB_URI not found in environment variables. Cannot connect to MongoDB.")
-        # print_log("Error: MONGODB_URI not found in environment variables. Aborting MongoDB connection.", "error")
         return None, None
 
     # Log TLS file status before connection attempt
@@ -169,7 +168,8 @@ def get_mongo_collection() -> Optional[Collection]:
             # this branch is currently unreachable. It is kept for a future refactor
             # that lets init raise, and is covered by a unit test.
             print_log(
-                f"MongoDB connection: FAILED. MongoDB output will not be available: {e}",
+                # Class name only: a raw pymongo message can embed the host or URI (SEC-4).
+                f"MongoDB connection: FAILED. MongoDB output will not be available: {type(e).__name__}",
                 "error",
             )
 

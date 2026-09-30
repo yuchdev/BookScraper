@@ -458,6 +458,19 @@ class TestResolveMongoNamespace:
         with pytest.raises(ConfigError):
             config.resolve_mongo_namespace(path)
 
+    @pytest.mark.parametrize("block", [{}, "bookscraper_db", []])
+    def test_database_block_empty_or_malformed_raises(self, tmp_path, block) -> None:
+        """
+        Scenario: a 'database' key that is present but empty or not an object fails loudly -
+        present means "I'm configuring this", so silently using defaults would be a guess.
+        Boundaries: empty dict, a bare string, an empty list.
+        On failure: the typo'd/empty block resolves to bookscraper_db.books without a word.
+        """
+        path = tmp_path / "settings.json"
+        _write_settings(path, {"auth_type": "pass", "database": block})
+        with pytest.raises(ConfigError):
+            config.resolve_mongo_namespace(path)
+
     def test_legacy_mode_honors_db_name_env_vars(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
         Scenario: with no settings.json, MONGODB_DB_NAME / MONGODB_COLLECTION_NAME still drive

@@ -115,7 +115,8 @@ def _check_settings_file_security(settings_file: Path) -> None:
         _warn_once(
             f"{settings_file}:symlink",
             f"{settings_file} is a symlink; its target is trusted as your MongoDB "
-            f"credentials/config. Replace it with a regular, owner-only file. {fix}",
+            f"credentials/config. Replace it with a regular, owner-only file (chmod on a "
+            f"symlink changes its target, not the link).",
         )
     info = settings_file.stat()
     if info.st_mode & 0o077:
@@ -127,7 +128,8 @@ def _check_settings_file_security(settings_file: Path) -> None:
     if info.st_uid != os.getuid():
         _warn_once(
             f"{settings_file}:owner",
-            f"{settings_file} is not owned by the current user; it may have been planted by another account. {fix}",
+            f"{settings_file} is not owned by the current user; it may have been planted by another account. "
+            f"Recreate it as your own file (copy it, delete the original, then chmod 600 {settings_file}).",
         )
 
 
@@ -227,8 +229,10 @@ def resolve_mongo_namespace(path: Optional[Path] = None) -> Tuple[str, str]:
         )
 
     block = settings.get("database")
-    if not block:
+    if block is None:
         return DEFAULT_DB_NAME, DEFAULT_COLLECTION_NAME
+    if not isinstance(block, dict):
+        raise ConfigError("settings.json: 'database' must be an object with 'name' and 'collection'.")
 
     name_spec = block.get("name")
     collection_spec = block.get("collection")

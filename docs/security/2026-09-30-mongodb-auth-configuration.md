@@ -199,3 +199,62 @@ the connection/auth path, and are out of SEC-3/4 scope.
   would surface it, but no current pymongo error does.
 
 ### Verdict: PASS
+
+## Verification - task 02.0 close (2026-09-30)
+
+Post-implementation review of subtask 04 (honest connection logging, SEC-1/2) and subtask 06
+(settings.json hardening, SEC-9..12), verified against the as-built code (`config.py`,
+`database.py`, `docs/examples/settings.example.json`). Complements the subtask-05 section above.
+
+### Per-SEC status
+
+- **SEC-1 - PASS.** `get_mongo_collection` (`database.py:161-166`) emits the `success` line only
+  inside `if _mongo_collection is not None:`; a failed init returns `None, None` (having logged the
+  specific cause) and emits zero success lines.
+- **SEC-2 - PASS.** The success message (`database.py:164`) is
+  `Connection to MongoDB Atlas successful (<db>.<collection>)`, built from the resolved
+  `_mongo_db_name`/`_mongo_collection_name` (`database.py:45-49`, set from
+  `config.resolve_mongo_namespace()` at `database.py:71`), never the host, URI, or cert path. The
+  namespace values are db/collection identifiers, not secrets.
+- **SEC-9 - PASS (incl. ratified symlink/foreign-owner extension).**
+  `_check_settings_file_security` (`config.py:97-131`) warns on `st_mode & 0o077`, on
+  `is_symlink()`, and on `st_uid != os.getuid()`; each `_warn_once`-deduplicated per
+  `<path>:<condition>` (`config.py:85-94`), routed through `print_log` so it reaches console + log;
+  skipped on `os.name == "nt"`; warning only, never abort - existing setups keep working.
+- **SEC-10 - PASS.** `_resolve_cert_field` (`config.py:76-82`) is unchanged: absolute path as-is,
+  relative resolved under `CONFIG_DIR`; it never opens or reads the cert. The missing-cert existence
+  check lives in `client.build_mongo_client` (SEC-6) and raises without reading contents.
+- **SEC-11 - PASS.** `_validate_top_level_keys` (`config.py:134-149`) lists only unknown key *names*
+  and the allowed-key set - never a field value. The `database`-block error (`config.py:236`) names
+  no values; `resolve_mongo_connection`'s `auth_type` error and `_resolve_field`'s `source`/env-var
+  errors (`config.py:63,71,73`) echo only structural tokens / the env-var *name*, never a literal or
+  resolved secret.
+- **SEC-12 - PASS.** `docs/examples/settings.example.json` is placeholders only: `uri` via env-var
+  *name* `MONGODB_URI`, a placeholder cert filename, and the default `bookscraper_db`/`books`
+  namespace. No host, username, password, or real cert filename.
+
+### Whole-task diff sanity check (post subtask-05)
+
+No new raw pymongo `{e}` interpolation or `exc_info=True` was introduced on any
+connection/auth path. `_initialize_mongodb_connection`'s `except Exception` now logs
+`type(e).__name__` only (`database.py:119`). The `ConfigError` handler (`database.py:74-76`,
+pre-existing) interpolates a `config.ConfigError`, whose messages are secret-free by SEC-11
+(a `JSONDecodeError`-derived message carries only line/column position, not document content).
+
+### Residual risk
+
+- **LOW / self-inflicted (informational).** `resolve_mongo_namespace` resolves the optional
+  `database` block via the generic `{source,value}` mechanism, and the resolved db/collection names
+  flow into the success log line (SEC-2). An operator who (mis)places a full credentialed URI into a
+  `database.name` literal would see that value logged. This is owner-controlled config at the same
+  trust level as the `uri` field, not a new external vector; the connection would simply fail against
+  the bogus namespace. No change required.
+- **LOW / accepted (TOCTOU).** `load_settings` runs `_check_settings_file_security`
+  (`is_symlink` via lstat, then `stat` following the link) and afterwards `read_text` follows the
+  symlink again - the security-checked path and the read path are resolved independently, and a
+  symlink *is* followed on read after the warning. This is acceptable because SEC-9 is advisory-only
+  and gates no allow/deny decision: there is no control for a TOCTOU swap to bypass. Matches the
+  ratified warn-don't-abort stance. A dangling symlink is treated as "no settings" (legacy fallback)
+  since `.exists()` follows it - benign.
+
+### Verdict: PASS
