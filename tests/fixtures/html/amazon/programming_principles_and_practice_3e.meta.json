@@ -1,15 +1,15 @@
 {
   "bookscraper_version": "1.0.0",
   "bytes_raw": 1456,
-  "bytes_sanitized": 1131,
-  "captured_at": "2026-09-30T17:30:55.531314+00:00",
+  "bytes_sanitized": 1169,
+  "captured_at": "2026-10-01T06:55:08.535279+00:00",
   "chromium_version": "n/a",
   "hand_built": true,
   "kind": "detail",
   "logged_out": true,
   "reason": "Amazon served a CAPTCHA bot-wall (/errors_page/validateCaptcha) to the headless, logged-out capture; hand-built from the public product-page structure the amazon parameters.py detail selectors read (FIX-6).",
   "sanitizer_version": "1.0.0",
-  "sha256": "9c75ef7031a19340a340bfea97074a95b05891f42bc7e6352af1c47d4f78fa2b",
+  "sha256": "549033f294ec77a29739126d80ccb423c63340c2042522fb92c39ad15733c0c8",
   "site": "amazon",
   "url": "https://www.amazon.com/dp/0138308683"
 }

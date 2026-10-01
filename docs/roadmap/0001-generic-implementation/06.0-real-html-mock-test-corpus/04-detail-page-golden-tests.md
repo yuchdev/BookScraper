@@ -1,7 +1,7 @@
 # 04 - Detail-page golden tests
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (coverage criterion deferred to 03.0/03 + 06.0/06 - see status.md 2026-10-01)
 **Depends on:** [03-fixture-serving-harness.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/03-fixture-serving-harness.md)
 **Role:** Testing Expert
 

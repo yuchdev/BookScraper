@@ -12,6 +12,35 @@ import os
 
 import pytest
 
+# Enables the ``pytester`` fixture so test_detail_goldens.py can prove the --update-goldens
+# contract (rewrite-then-fail) in an isolated inline run that never touches the real goldens.
+pytest_plugins = ["pytester"]
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register ``--update-goldens`` for the detail-page golden tier (task 06.0, subtask 04).
+
+    When set, each golden test rewrites its ``<name>.expected.json`` from the *current* scraper
+    output instead of asserting against it, then deliberately fails the run with
+    ``"goldens updated - review the diff"`` so a regeneration is never silently green - the diff
+    must be reviewed and committed by hand.
+    """
+    parser.addoption(
+        "--update-goldens",
+        action="store_true",
+        default=False,
+        help=(
+            "Rewrite the detail-page *.expected.json golden files from current scraper output, "
+            "then fail the run so the diff is reviewed (never silently green)."
+        ),
+    )
+
+
+@pytest.fixture
+def update_goldens(request: pytest.FixtureRequest) -> bool:
+    """Whether ``--update-goldens`` was passed (see ``pytest_addoption``)."""
+    return bool(request.config.getoption("--update-goldens"))
+
 
 @pytest.fixture
 def isolated_config(monkeypatch, tmp_path):

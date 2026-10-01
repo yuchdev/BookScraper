@@ -355,7 +355,19 @@ mocks the client and never makes a real API call.
   `chromium` marker (registered in `pyproject.toml`, **included in the default run** — offline and fast) and pick
   their browser via the `BOOKSCRAPER_CHROMIUM_PATH` env var (a system Chromium, for macOS 13 where Playwright's
   bundled Chromium won't launch), falling back to the bundled browser and **skipping cleanly** (never failing) when
-  no Chromium is usable, so CI can install one (task 06.2).
+  no Chromium is usable, so CI can install one (task 06.2). On top of that harness,
+  `tests/mock/scraping/html/test_detail_goldens.py` is the **detail-page golden (characterization) tier**
+  (task 06.0, subtask 04): it runs the unmodified `scrape_book()` / `get_leanpub_book_details()` against every
+  non-edge-case fixture and compares the result field-by-field against a committed
+  `tests/fixtures/**/<name>.expected.json`. Goldens record what the code does **today** (including known-wrong
+  output — e.g. packtpub/oreilly currently return `(None, "FAILED")` from a `KeyError` on the missing `BASE_URL`,
+  and amazon records a raw `publication_date`, un-normalized ISBNs, and no `tags`); each such value carries a
+  `"_known_issues"` list naming the 03.0/03.1 subtask that will fix it (that key is ignored by the comparison).
+  It is split into `test_detail_golden` (the Playwright sites, `chromium`-marked) and `test_detail_golden_leanpub`
+  (the Leanpub JSON path via `httpx_corpus` only, unmarked so it runs offline without Chromium).
+  Regenerate with `uv run pytest --update-goldens` (registered in `tests/conftest.py`), which rewrites the
+  `.expected.json` files and then **fails** the run with `"goldens updated - review the diff"` so a regeneration is
+  never silently green.
 - **`tests/integration/`** — hits real MongoDB Atlas, tagged `@pytest.mark.integration` and excluded
   from the default run (`addopts = -m "not integration"` in `pyproject.toml`); run explicitly with
   `uv run pytest -m integration`. `test_connection_password.py` / `test_connection_tls.py` verify
@@ -380,8 +392,12 @@ than exhaustive per-selector coverage; everything else targets ~100%.
 `backends/local/store.py`'s `LOCAL_STORE_FILE` to `tmp_path`, so a test can never read or write the
 real `~/.bookscrapper/settings.json` (it holds real credentials) or the repo-root `books.json`.
 `no_real_env` strips MongoDB env vars for a test's duration so a prior `load_dotenv()` can't leak
-real values in. `tests/integration/conftest.py` additionally provides `require_env(name)`, which
-skips (not fails) a test when a required `.env` credential is absent.
+real values in. `tests/conftest.py` also registers the `--update-goldens` option (and matching
+`update_goldens` fixture) used by the detail-page golden tier above, and enables the `pytester`
+plugin (used by `test_update_goldens_option_rewrites_and_fails` to prove the rewrite-then-fail
+contract in an isolated run that never touches the real goldens). `tests/integration/conftest.py`
+additionally provides `require_env(name)`, which skips (not fails) a test when a required `.env`
+credential is absent.
 
 Test credentials (`tests/integration/` only) come from `TEST_MONGODB_URI_PASS` / `TEST_MONGODB_URI_TLS`,
 set in `.env` (repo root, git-ignored) — env-var only, no fallback file

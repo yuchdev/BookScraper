@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 3 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 4 / 7         | -                                                                                                      |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 31 / 94 subtasks complete.
+**Totals:** 32 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -225,3 +225,16 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   redacted Leanpub's `accepted_authors`, and the prose rule neutralized the short O'Reilly heading "Book
   description", which its selector anchors on. Fix: segment-based key matching, and never neutralize text under
   ~80 chars.
+- **2026-10-01 - Bug found by the 06.0/04 goldens (for 03.0/03):** `site_constants` has no `BASE_URL` for
+  `packtpub` or `oreilly`, but `scrape_book()` reads `site_constants[site]["BASE_URL"]` unconditionally. Every
+  Packtpub/O'Reilly detail scrape raises `KeyError`, is retried 3x and returns `(None, "FAILED")`, so
+  `scrape-urls` cannot scrape those two sites today. The goldens characterize this deliberately: the plan does
+  06.0 before 03.0, and the fix belongs to 03.0, where the goldens will then flip with a reviewed diff.
+- **2026-10-01 - Sanitizer defect found by the 06.0/04 goldens (being fixed):** the aggregate prose-collapse path
+  replaced whole subtrees with a text node, which deleted the child elements the description selectors target
+  (Amazon `.a-expander-content`), so the Amazon goldens recorded a FAILED that the fixture pipeline itself caused.
+  Fix: neutralize text only and keep every element; then regenerate the fixtures and the goldens.
+- **2026-10-01 - 06.0/04 coverage criterion (`scrape_details.py` ≥ 90%):** it is 80%. The missing lines sit behind
+  the `BASE_URL` failure above (the extraction branches for Packtpub/O'Reilly), plus edge cases planned for
+  subtask 06. The criterion is re-checked after the fixture regeneration. Anything still short is deferred to
+  03.0/03 plus 06.0/06 rather than met by inventing fixtures.

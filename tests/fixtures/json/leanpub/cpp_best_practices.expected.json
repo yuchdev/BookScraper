@@ -1,0 +1,19 @@
+{
+  "_known_issues": [
+    "fixture policy: prose neutralized (tests/fixtures/README.md) (about_the_book equals the neutralization placeholder)"
+  ],
+  "about_the_book": "Neutralized prose omitted from the public test corpus.",
+  "authors": [
+    "Jason Turner"
+  ],
+  "book_id": "103",
+  "categories": [
+    "Computer Science",
+    "C and C++"
+  ],
+  "hash": "538e2a271821d191440afd9a8d3d91a08d7d9ebc7093bf1d67cb38cc2032531c",
+  "last_published_at": "2021-06-10",
+  "site": "leanpub.com",
+  "slug": "cppbestpractices",
+  "title": "C++ Best Practices"
+}
