@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1007,
+  "bytes_sanitized": 1007,
+  "captured_at": "2026-10-01T13:16:57.168001+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "amazon/cpp_primer_5e",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from cpp_primer_5e; ISBN-10/13 rows dropped (Kindle-only) so both ISBN selectors miss and resolve to 'N/A' (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "fce513666624fa5d0f9abb9b2f369d89b59680c2f9a22d290f09ab032891d514",
+  "site": "amazon",
+  "url": "https://www.amazon.com/dp/B00LZW07P0"
+}

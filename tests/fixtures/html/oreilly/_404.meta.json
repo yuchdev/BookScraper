@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 753,
+  "bytes_sanitized": 753,
+  "captured_at": "2026-10-01T13:16:57.246137+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "oreilly/effective_modern_cpp",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from effective_modern_cpp; <title> replaced with a 404 title (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "c84ec48deabefc7b0bf718428fbd0f3eeb2cd3396eb0cdf76c76db6b3ad26b3c",
+  "site": "oreilly",
+  "url": "https://www.oreilly.com/library/view/not-found/0000000000000/"
+}

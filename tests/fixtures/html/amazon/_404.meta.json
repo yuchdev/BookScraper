@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1251,
+  "bytes_sanitized": 1251,
+  "captured_at": "2026-10-01T13:16:57.155094+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "amazon/cpp_primer_5e",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from cpp_primer_5e; <title> replaced with the amazon 404_PAGE_TITLE so the 404-detection branch fires (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "d4531e818ed80d651c554aa3903174edc4828070a55d7267c02743eaa66ea249",
+  "site": "amazon",
+  "url": "https://www.amazon.com/dp/0000000000"
+}

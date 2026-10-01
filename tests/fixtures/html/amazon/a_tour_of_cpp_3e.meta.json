@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1998505,
+  "bytes_sanitized": 37740,
+  "captured_at": "2026-10-01T13:16:59.999964+00:00",
+  "chromium_version": "147.0.7727.55",
+  "headed": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "live headed capture via system Chromium (logged out, cookie-less); the one 2026-10-01 Amazon detail attempt loaded normally (no bot wall). Subresources stripped for the offline default-deny harness.",
+  "sanitizer_version": "1.1.0",
+  "sha256": "84b97ec83480b043807cb1532504af3ceaa89ee88d11124749e2232dc2e6cdb5",
+  "site": "amazon",
+  "subresources_stripped": true,
+  "url": "https://www.amazon.com/dp/0136816487"
+}

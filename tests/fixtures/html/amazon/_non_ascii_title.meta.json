@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1295,
+  "bytes_sanitized": 1295,
+  "captured_at": "2026-10-01T13:16:57.193217+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "amazon/cpp_primer_5e",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from cpp_primer_5e; productTitle replaced with an NFC non-ASCII title so title/hash stability under Unicode is characterized (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "8929134868f84eba55e737c0df26cd2e5d872a286217c482a13cbbd6009295e1",
+  "site": "amazon",
+  "url": "https://www.amazon.com/dp/2072000000"
+}

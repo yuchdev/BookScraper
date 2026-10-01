@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 801,
+  "bytes_sanitized": 801,
+  "captured_at": "2026-10-01T13:16:57.225739+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "packtpub/mastering_the_cpp17_stl",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from mastering_the_cpp17_stl; <title> replaced with a 404 title (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "78644d890ed63ee4960567201ad25b57f726b4ead5d1459e215f801bf55a8755",
+  "site": "packtpub",
+  "url": "https://www.packtpub.com/product/not-found/0000000000000"
+}

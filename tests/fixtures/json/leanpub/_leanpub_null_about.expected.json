@@ -1,0 +1,6 @@
+{
+  "_known_issues": [
+    "03.0/05 Leanpub API detail hardening (about_the_book=null makes unescape(None) raise TypeError, caught by the broad except, so get_leanpub_book_details returns None today; 03.0/05 would succeed with an empty description)"
+  ],
+  "_scrape_status": "NONE"
+}

@@ -1,0 +1,7 @@
+{
+  "_known_issues": [
+    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED')); the READ_MORE_LINK expander / DESCRIPTION_ALT path is never reached today",
+    "fixture policy: prose neutralized (tests/fixtures/README.md) (the 'full description' behind the expander is the neutralization placeholder, not real prose)"
+  ],
+  "_scrape_status": "FAILED"
+}

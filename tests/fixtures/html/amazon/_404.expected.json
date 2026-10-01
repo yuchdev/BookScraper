@@ -1,0 +1,6 @@
+{
+  "_known_issues": [
+    "03.0/02 typed scrape result (the amazon 404_PAGE_TITLE branch fires and returns (None, 'FAILED'); 03.0/02 would return a typed NOT_FOUND status instead of the opaque FAILED tuple)"
+  ],
+  "_scrape_status": "FAILED"
+}

@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 935,
+  "bytes_sanitized": 935,
+  "captured_at": "2026-10-01T13:16:57.235565+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "packtpub/mastering_the_cpp17_stl",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from mastering_the_cpp17_stl; AUTHORS extended to 6 entries incl one duplicate, order preserved (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "52161f793b1919b213a47d22dc64158fd8f4803f3697c4c67b03d90a2b215fec",
+  "site": "packtpub",
+  "url": "https://www.packtpub.com/product/many-authors/9781800000000"
+}

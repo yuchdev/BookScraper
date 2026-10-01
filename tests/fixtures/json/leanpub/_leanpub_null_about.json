@@ -1,0 +1,36 @@
+{
+  "data": {
+    "id": "102",
+    "type": "Book",
+    "attributes": {
+      "title": "C++ Lambda Story",
+      "slug": "cpplambda",
+      "about_the_book": null,
+      "last_published_at": "2020-09-01T00:00:00Z",
+      "categories": [
+        {
+          "name": "C and C++"
+        }
+      ]
+    },
+    "relationships": {
+      "accepted_authors": {
+        "data": [
+          {
+            "id": "202",
+            "type": "Author"
+          }
+        ]
+      }
+    }
+  },
+  "included": [
+    {
+      "type": "Author",
+      "id": "202",
+      "attributes": {
+        "name": "Bartlomiej Filipek"
+      }
+    }
+  ]
+}

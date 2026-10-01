@@ -1,0 +1,6 @@
+{
+  "_known_issues": [
+    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED')); the <title> was set to a 404 title but the 404_PAGE_TITLE branch is never reached, so 03.0/02's NOT_FOUND cannot apply until 03.0/03 lands"
+  ],
+  "_scrape_status": "FAILED"
+}

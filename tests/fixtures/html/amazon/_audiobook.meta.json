@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1251,
+  "bytes_sanitized": 1251,
+  "captured_at": "2026-10-01T13:16:57.180556+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "amazon/cpp_primer_5e",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from cpp_primer_5e; publication_date row swapped for the audiobook release-date row so PUBLICATION_DATE's audiobook selector branch is exercised (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "6bf9cfc5a1cf60bf30d3540627b4b7d25d96bf564a1a8bb5fcf7ce7c9efdbe64",
+  "site": "amazon",
+  "url": "https://www.amazon.com/dp/B07KQT9F1P"
+}

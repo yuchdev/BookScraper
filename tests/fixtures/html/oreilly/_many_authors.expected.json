@@ -1,0 +1,6 @@
+{
+  "_known_issues": [
+    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED')); the 6-author (one duplicate) AUTHORS parsing is never reached today"
+  ],
+  "_scrape_status": "FAILED"
+}

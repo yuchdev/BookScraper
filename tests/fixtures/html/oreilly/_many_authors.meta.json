@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1030,
+  "bytes_sanitized": 1030,
+  "captured_at": "2026-10-01T13:16:57.272448+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "oreilly/effective_modern_cpp",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from effective_modern_cpp; AUTHORS extended to 6 author-name anchors incl one duplicate, order preserved (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "ebdacbe3966eb34a704e16728929ad8987023363344d78d6ca58c7f891ca8143",
+  "site": "oreilly",
+  "url": "https://www.oreilly.com/library/view/many-authors/9781492000000/"
+}

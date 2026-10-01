@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1194,
+  "bytes_sanitized": 1194,
+  "captured_at": "2026-10-01T13:16:57.206203+00:00",
+  "chromium_version": "n/a",
+  "derived_from": "amazon/cpp_primer_5e",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "derived from cpp_primer_5e; #productTitle element dropped so BOOK_TITLE matches nothing and scrape_book times out and retries (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "a24fdcee45fac0fa8e9124999f64a0657256714ee4cf180f854c2b7390136fcd",
+  "site": "amazon",
+  "url": "https://www.amazon.com/dp/1111111111"
+}

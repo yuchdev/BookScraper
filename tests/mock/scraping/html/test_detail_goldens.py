@@ -71,9 +71,9 @@ def _discover_cases() -> list[GoldenCase]:
             continue
         for meta in sorted(root.rglob("*.meta.json")):
             name = meta.name[: -len(".meta.json")]
-            if name.startswith("_"):  # edge-case fixtures are subtask 06's job
-                continue
-            if name.startswith("search"):  # search-page fixtures belong to subtask 05's goldens
+            # ``_``-prefixed edge-case fixtures ARE characterized here (subtask 06); only the
+            # ``search*`` page fixtures are deferred to subtask 05's own golden tier.
+            if name.startswith("search"):
                 continue
             fixture = _fixture_for_meta(meta)
             if fixture is None:
@@ -114,7 +114,16 @@ def normalize_result(result: Any) -> dict[str, Any]:
     is captured faithfully as ``{"_scrape_status": "<STATUS>"}`` so the golden records *that a
     real book scraped as FAILED*, and a future 03.0 fix turning it into a real record shows up
     as an obvious key diff rather than vanishing.
+
+    A bare ``None`` is the *other* failure shape - ``get_leanpub_book_details`` swallows a
+    not-found or a malformed response (no ``data`` key, or an ``about_the_book: null`` that
+    makes ``unescape(None)`` raise ``TypeError``) and returns ``None``. It is characterized as
+    ``{"_scrape_status": "NONE"}`` so the golden locks in *that the Leanpub parser silently
+    returns nothing today*, and the 03.0/05 fix (success with an empty description) surfaces as
+    a key diff instead of crashing ``dict(None)`` here.
     """
+    if result is None:
+        return {"_scrape_status": "NONE"}
     if isinstance(result, tuple):
         return {"_scrape_status": result[1]}
     record = dict(result)

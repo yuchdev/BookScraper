@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 5 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 6 / 7         | -                                                                                                      |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 33 / 94 subtasks complete.
+**Totals:** 34 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -248,3 +248,10 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   the Amazon search on a navigation failure (for 03.3). (4) Packtpub and O'Reilly robots.txt return 403 to a
   logged-out fetch, so they are hand-built. (5) The sanitizer gained `dib`/token-shaped URL-param stripping
   (`8972900`, v1.1.0) after `assert_clean` correctly refused the live pages.
+- **2026-10-02 - 06.0/06 results:** the first LIVE Amazon detail page (`amazon/a_tour_of_cpp_3e`, headed, no CAPTCHA
+  this time; Amazon walling is intermittent) parses title, authors, ISBNs and date, but `description` is `null`:
+  neither `DESCRIPTION` nor `DESCRIPTION_ALT` matches today's live DOM. That is real selector drift (for 03.0/04,
+  wire unused selectors and fallbacks). `scrape_details.py` coverage was re-checked at **82%** (from 80%). The
+  remaining lines sit behind the missing `BASE_URL` (03.0/03) or are dead branches, so the ≥ 90% criterion from
+  06.0/04 stays **deferred to 03.0/03**. The golden tier takes ~114 s with Chromium; `_bot_wall`/`_missing_title`
+  retry 3x, and that cost goes away with 03.2/04.

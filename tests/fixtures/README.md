@@ -127,6 +127,12 @@ Leanpub JSON:API is gone, so no detail fixture carries `"headed": true`. The **s
 tier below is different - Amazon search is not walled, so its four pages are live headed
 captures (`"headed": true`).
 
+A later, single Amazon **detail** attempt for subtask 06 (2026-10-01, system Chromium,
+logged out) loaded a **normal** product page rather than the CAPTCHA wall, so that one
+detail fixture - `html/amazon/a_tour_of_cpp_3e.html` - **is** a live headed capture
+(`"headed": true`); its subresources are stripped like the search fixtures so it serves
+cleanly in the offline default-deny harness. See the edge-case table below.
+
 | Fixture | Source | Reason | Bytes |
 |---|---|---|---|
 | `html/amazon/cpp_primer_5e.html` | hand-built | Amazon served a CAPTCHA bot-wall (headed + headless, logged out) | 1235 |
@@ -169,3 +175,33 @@ and oreilly returned HTTP 403 to the logged-out fetch and are hand-built to a ne
 | `robots/leanpub.txt` | live | fetched logged-out via httpx | 648 |
 | `robots/packtpub.txt` | hand-built | live fetch returned HTTP 403 (bot-walled) | 143 |
 | `robots/oreilly.txt` | hand-built | live fetch returned HTTP 403 (bot-walled) | 158 |
+
+### Edge-case & live detail fixtures (subtask 06, 2026-10-01)
+
+Each row of task 06's edge-case table gets a committed fixture and a golden recording
+**today's** behavior, with `_known_issues` naming the fixing roadmap subtask. All derived
+fixtures carry `"derived_from"` + `"hand_built": true` in their `.meta.json` and are built
+by re-running the named source fixture's markup (minimally changed) through the same
+`sanitize` + `assert_clean` pipeline (FIX-6). `_bot_wall` is hand-built from the known
+Amazon CAPTCHA structure; `a_tour_of_cpp_3e` is the one **live** headed detail capture (see
+above). The Packtpub/O'Reilly edge goldens characterize `FAILED` because `site_constants`
+lacks a `BASE_URL` key for those sites (real bug, roadmap 03.0/03), which raises before any
+selector runs; `_read_more_expander`'s "full description" is the neutralization placeholder
+by corpus policy, not real prose.
+
+| Fixture | Source | Reason | Bytes |
+|---|---|---|---|
+| `html/amazon/_404.html` | derived: `amazon/cpp_primer_5e` | `<title>` set to the 404_PAGE_TITLE so the 404 branch fires | 1251 |
+| `html/amazon/_bot_wall.html` | hand-built | Amazon CAPTCHA ("Robot Check") structure; no `#productTitle` so title times out, 3 retries | 316 |
+| `html/amazon/_no_isbn.html` | derived: `amazon/cpp_primer_5e` | Kindle-only: ISBN-10/13 rows dropped so both resolve to `"N/A"` | 1007 |
+| `html/amazon/_audiobook.html` | derived: `amazon/cpp_primer_5e` | publication-date row swapped for the audiobook release-date row (PUBLICATION_DATE branch) | 1251 |
+| `html/amazon/_non_ascii_title.html` | derived: `amazon/cpp_primer_5e` | NFC non-ASCII `#productTitle` (title/hash stability under Unicode) | 1295 |
+| `html/amazon/_missing_title.html` | derived: `amazon/cpp_primer_5e` | `#productTitle` dropped so BOOK_TITLE times out, 3 retries | 1194 |
+| `html/amazon/a_tour_of_cpp_3e.html` | live (headed) | one 2026-10-01 Amazon detail attempt loaded normally (no bot wall); subresources stripped | 37740 |
+| `html/packtpub/_404.html` | derived: `packtpub/mastering_the_cpp17_stl` | `<title>` set to a 404 title (FAILED via missing BASE_URL before the 404 branch) | 801 |
+| `html/packtpub/_many_authors.html` | derived: `packtpub/mastering_the_cpp17_stl` | 6 `div.authors span` authors incl one duplicate, order preserved | 935 |
+| `html/oreilly/_404.html` | derived: `oreilly/effective_modern_cpp` | `<title>` set to a 404 title (FAILED via missing BASE_URL before the 404 branch) | 753 |
+| `html/oreilly/_read_more_expander.html` | derived: `oreilly/effective_modern_cpp` | DESCRIPTION_ALT read-more-wrapper + READ_MORE_LINK expander (description neutralized) | 895 |
+| `html/oreilly/_many_authors.html` | derived: `oreilly/effective_modern_cpp` | 6 `a.author-name` authors incl one duplicate, order preserved | 1030 |
+| `json/leanpub/_404.json` | derived: `leanpub/cpp17_in_detail` | `data: null` not-found response (no-data branch -> returns None) | 18 |
+| `json/leanpub/_leanpub_null_about.json` | derived: `leanpub/cpp_lambda_story` | `about_the_book: null` -> `unescape(None)` TypeError -> returns None | 620 |

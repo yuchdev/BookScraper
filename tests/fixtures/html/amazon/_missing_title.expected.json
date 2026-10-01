@@ -1,0 +1,6 @@
+{
+  "_known_issues": [
+    "03.0/03 missing-field resilience & retry policy (the #productTitle element is absent, so BOOK_TITLE times out and scrape_book retries 3x then returns (None, 'FAILED'); 03.0/03 would return PARSE_ERROR with no retry)"
+  ],
+  "_scrape_status": "FAILED"
+}
