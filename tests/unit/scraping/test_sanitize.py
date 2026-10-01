@@ -453,6 +453,47 @@ def test_strip_url_params_passthrough_and_empty_query() -> None:
     assert strip_url_params("https://x.test/path?") == "https://x.test/path?"
 
 
+def test_amazon_search_href_token_params_stripped() -> None:
+    """Amazon search-result href: dib/dib_tag JWT token and tracking params are stripped.
+
+    Scenario: subtask-05 live Amazon SEARCH hrefs carry a JWT-shaped ``dib`` token (plus
+    ``dib_tag``) that ``assert_clean`` was correctly blocking; the sanitizer must strip it.
+    Boundaries: scheme/host/path (the /dp/<ASIN> detail path the parser reads) stay; only
+    non-sensitive params like ``keywords`` remain; the output passes ``assert_clean``.
+    On failure: a token leaks or the capture is blocked on a page with no bot wall.
+    """
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJ2IjoiMSIsInAiOiJzZWFyY2gifQ.Sf1KxwRJSMeKKF2QT4abcd"
+    href = f"/Some-Title/dp/B0ABCDEFGH/ref=sr_1_1?dib={jwt}&dib_tag=se&qid=123&sr=8-1&keywords=python"
+    out = strip_url_params(href)
+    assert out == "/Some-Title/dp/B0ABCDEFGH/ref=sr_1_1?keywords=python"
+    assert "dib" not in out
+    assert jwt not in out
+    assert "/dp/B0ABCDEFGH/" in out
+    assert_clean(out)
+
+
+def test_strip_url_params_drops_opaque_token_value_any_name() -> None:
+    """A JWT-shaped or opaque-token value is dropped whatever the param name; short /
+    single-class values under unknown names are kept (no false positive)."""
+    opaque = "A1b2C3d4E5f6G7h8X9"  # 18 chars, mixed classes
+    out = strip_url_params(f"https://x.test/p?blob={opaque}&foo=abc&n=12345&kw=python")
+    assert opaque not in out
+    assert "blob=" not in out
+    assert "foo=abc" in out  # short value, unknown name -> kept
+    assert "n=12345" in out  # single class (digits) -> kept
+    assert "kw=python" in out  # single class (lower) -> kept
+
+
+def test_strip_tracking_strips_dib_in_href() -> None:
+    """dib/dib_tag are stripped through the href path in strip_tracking too."""
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYiJ9.Sf1KxwRJSMeKKF2QT4abcd"
+    out = strip_tracking(f'<a href="https://www.amazon.com/dp/B0X/ref=x?dib={jwt}&dib_tag=se&k=v">L</a>')
+    assert jwt not in out
+    assert "dib" not in out
+    assert "k=v" in out
+    assert "/dp/B0X/" in out
+
+
 def test_strip_url_params_unparseable_returns_input(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unparseable URL is returned unchanged (best-effort)."""
 

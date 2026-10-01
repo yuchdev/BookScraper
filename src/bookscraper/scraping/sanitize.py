@@ -33,7 +33,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Bumped whenever the sanitizer rules change; recorded in every fixture's .meta.json
 # (FIX-14) so a committed fixture carries an audit trail of how it was cleaned.
-SANITIZER_VERSION = "1.0.0"
+SANITIZER_VERSION = "1.1.0"
 
 # Neutral text that replaces long prose (descriptions, reviews, blurbs, bios). It
 # deliberately contains the word "test" so the secret-scan placeholder allowlist
@@ -507,18 +507,48 @@ _STRIP_PARAM_EXACT = frozenset(
         "sid",
         "smid",
         "csm-hit",
+        "dib",
+        "dib_tag",
     }
 )
 _STRIP_PARAM_PREFIXES = ("pd_rd_", "pf_rd_", "x-amz-")
 
+# A JWT (three base64url segments). Shared with the assert_clean detector below.
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}")
+
+# An opaque token: >= 16 chars of the base64url/JWT alphabet (``/`` excluded so a decoded
+# URL path is not mistaken for a token) with no spaces and at least two character classes
+# (lower/upper/digit). Catches hydration/session tokens like Amazon's ``dib`` regardless
+# of the param name, while leaving short or single-class values (``keywords=python``, an
+# ASIN, a plain numeric id) untouched.
+_OPAQUE_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-+=.]{16,}")
+
+
+def _is_opaque_token(value: str) -> bool:
+    if not _OPAQUE_TOKEN_RE.fullmatch(value):
+        return False
+    classes = sum(bool(re.search(cls, value)) for cls in (r"[a-z]", r"[A-Z]", r"[0-9]"))
+    return classes >= 2
+
+
+def _is_sensitive_param(key: str, value: str) -> bool:
+    lowered = key.lower()
+    if lowered in _STRIP_PARAM_EXACT or any(lowered.startswith(p) for p in _STRIP_PARAM_PREFIXES):
+        return True
+    # Value-based: drop a JWT / opaque-token value whatever its param name.
+    return bool(_JWT_RE.search(value)) or _is_opaque_token(value)
+
 
 def strip_url_params(url: str) -> str:
-    """Drop tracking / signed-URL / session query params from ``url``.
+    """Drop tracking / signed-URL / session / token query params from ``url``.
 
     Scenario: a captured ``href``/``src``/``srcset``/``action`` or ld+json URL still
-    carries an AWS presigned signature or a session id.
+    carries an AWS presigned signature, a session id, or a JWT-shaped token (e.g.
+    Amazon search-result ``dib``/``dib_tag`` params).
     Boundaries: only the query string is rewritten; scheme/host/path/fragment are
-    preserved, and a URL with no query is returned unchanged.
+    preserved (the search parser reads the detail-link path / ASIN), and a URL with no
+    query is returned unchanged. A param is dropped by name (known tracking/session
+    names) or by value (JWT-shaped or opaque-token-shaped), whatever its name.
     On failure: an unparseable URL is returned unchanged (best effort).
     """
     if "?" not in url:
@@ -531,8 +561,7 @@ def strip_url_params(url: str) -> str:
         return url
     kept: list[tuple[str, str]] = []
     for key, value in parse_qsl(parts.query, keep_blank_values=True):
-        lowered = key.lower()
-        if lowered in _STRIP_PARAM_EXACT or any(lowered.startswith(p) for p in _STRIP_PARAM_PREFIXES):
+        if _is_sensitive_param(key, value):
             continue
         kept.append((key, value))
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
@@ -1034,7 +1063,7 @@ _EXTENDED_PATTERNS: dict[str, re.Pattern[str]] = {
     "Session/CSRF token value": re.compile(
         r"(?i)\b(session[-_]?id|sessionid|csrf[-_]?token|xsrf[-_]?token|ubid[-_]?\w+)\b\s*[=:]\s*\S"
     ),
-    "JWT": re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}"),
+    "JWT": _JWT_RE,
     "Signed URL param": re.compile(
         r"(?i)(x-amz-(signature|credential|security-token|expires)|key-pair-id|cloudfront-signature)"
     ),
