@@ -387,6 +387,16 @@ Playwright-DOM-heavy functions — `scrape_details.py`'s `scrape_book()` and `se
 `get_search_results_via_playwright()` — get happy-path-plus-primary-error-branch coverage rather
 than exhaustive per-selector coverage; everything else targets ~100%.
 
+The real-HTML corpus (`tests/fixtures/`, task 06.0) also drives **golden** tests through the
+offline harness: `tests/mock/scraping/html/test_detail_goldens.py` (detail pages) and
+`test_search_goldens.py` (search pages + the Leanpub search API). The search goldens run the
+unmodified `get_search_results_via_playwright` against **live-captured** Amazon search snapshots
+(Amazon search is not walled) in real headless Chromium (`@pytest.mark.chromium`, skips without a
+usable browser) and `get_leanpub_search_results_via_api` over `httpx_corpus` (unmarked, offline).
+Both goldens live in `tests/mock/scraping/html/goldens/` (outside `tests/fixtures/`, so diffable
+and not subject to the corpus orphan check) and carry `_known_issues` notes linking live
+selector/pagination drift to subtask 03.3; regenerate with `--update-goldens`.
+
 **Shared fixtures** (`tests/conftest.py`, used by `unit/` and `mock/`): `isolated_config` and
 `isolated_local_store` monkeypatch `backends/mongo/config.py`'s `CONFIG_DIR`/`SETTINGS_FILE` and
 `backends/local/store.py`'s `LOCAL_STORE_FILE` to `tmp_path`, so a test can never read or write the

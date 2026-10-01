@@ -1,0 +1,16 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1115499,
+  "bytes_sanitized": 34135,
+  "captured_at": "2026-10-01T12:47:28.090400+00:00",
+  "chromium_version": "147.0.7727.55 (system Chromium, /Applications/Chromium.app)",
+  "hand_built": false,
+  "headed": true,
+  "kind": "search",
+  "logged_out": true,
+  "sanitizer_version": "1.1.0",
+  "sha256": "329a4d7ae70c4a9ffcbe18ada058a8c11f58646d2d1ff6e8a554a3235955a2f4",
+  "site": "amazon",
+  "trimmed": "result cards trimmed to the first 8 SEARCH_BOOK_CARD matches (budget); page chrome kept",
+  "url": "https://www.amazon.com/s?i=stripbooks-intl-ship&k=python&page=2"
+}

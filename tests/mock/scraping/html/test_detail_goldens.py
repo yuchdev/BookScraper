@@ -73,6 +73,8 @@ def _discover_cases() -> list[GoldenCase]:
             name = meta.name[: -len(".meta.json")]
             if name.startswith("_"):  # edge-case fixtures are subtask 06's job
                 continue
+            if name.startswith("search"):  # search-page fixtures belong to subtask 05's goldens
+                continue
             fixture = _fixture_for_meta(meta)
             if fixture is None:
                 continue

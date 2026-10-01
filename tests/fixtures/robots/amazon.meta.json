@@ -1,0 +1,14 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 7887,
+  "bytes_sanitized": 7887,
+  "captured_at": "2026-10-01T12:44:47.875894+00:00",
+  "chromium_version": "n/a",
+  "hand_built": false,
+  "kind": "robots",
+  "logged_out": true,
+  "sanitizer_version": "1.1.0",
+  "sha256": "f62cfb6484ed7cc23380174e8cdeff3603d8815b1e022ddd4117460dd2408ba9",
+  "site": "amazon",
+  "url": "https://www.amazon.com/robots.txt"
+}

@@ -1,0 +1,167 @@
+{
+  "data": [
+    {
+      "id": "book-100",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 100",
+        "slug": "python-book-100"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-101",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 101",
+        "slug": "python-book-101"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-102",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 102",
+        "slug": "python-book-102"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-103",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 103",
+        "slug": "python-book-103"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-104",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 104",
+        "slug": "python-book-104"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-105",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 105",
+        "slug": "python-book-105"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-106",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 106",
+        "slug": "python-book-106"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "included": [
+    {
+      "type": "SimpleAuthor",
+      "id": "a1",
+      "attributes": {
+        "name": "Grace Hopper"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a2",
+      "attributes": {
+        "name": "Ada Lovelace"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a3",
+      "attributes": {
+        "name": "Alan Turing"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a4",
+      "attributes": {
+        "name": "Edsger Dijkstra"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a5",
+      "attributes": {
+        "name": "Donald Knuth"
+      }
+    }
+  ]
+}

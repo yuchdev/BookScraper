@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 36250,
+  "bytes_sanitized": 36250,
+  "captured_at": "2026-10-01T12:43:05.794658+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "api",
+  "logged_out": true,
+  "reason": "Leanpub api/v1/cache/simple_books.json search endpoint returns HTTP 404 with a non-JSON body (verified logged-out, trust_env=False, 2026-10-01); hand-built to the JSON:API shape get_leanpub_search_results_via_api expects (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "b92bb77c4386b9bba1c65e0c6e0f545d30d765b82509959bd9606449a9ee99f4",
+  "site": "leanpub",
+  "url": "https://leanpub.com/api/v1/cache/simple_books.json?bookstore=true&filter_erotica=true&include=accepted_authors&language=eng&page=1&page_size=100&search=python&searchable=true&sellable=true&sort=bestsellers_last_week&type=book"
+}

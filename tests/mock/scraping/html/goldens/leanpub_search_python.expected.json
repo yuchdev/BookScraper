@@ -1,0 +1,970 @@
+{
+  "_known_issues": [
+    "fixture provenance: the Leanpub search API (api/v1/cache/simple_books.json) returns HTTP 404 (verified logged-out 2026-10-01), so these JSON fixtures are hand-built to the JSON:API shape get_leanpub_search_results_via_api parses (tests/fixtures/README.md). They verify parser/pagination control flow, not live markup drift."
+  ],
+  "candidates": [
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-000",
+      "site": "leanpub",
+      "slug": "python-book-000",
+      "title": "Python Book 000"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-001",
+      "site": "leanpub",
+      "slug": "python-book-001",
+      "title": "Python Book 001"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-002",
+      "site": "leanpub",
+      "slug": "python-book-002",
+      "title": "Python Book 002"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-003",
+      "site": "leanpub",
+      "slug": "python-book-003",
+      "title": "Python Book 003"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-004",
+      "site": "leanpub",
+      "slug": "python-book-004",
+      "title": "Python Book 004"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-005",
+      "site": "leanpub",
+      "slug": "python-book-005",
+      "title": "Python Book 005"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-006",
+      "site": "leanpub",
+      "slug": "python-book-006",
+      "title": "Python Book 006"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-007",
+      "site": "leanpub",
+      "slug": "python-book-007",
+      "title": "Python Book 007"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-008",
+      "site": "leanpub",
+      "slug": "python-book-008",
+      "title": "Python Book 008"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-009",
+      "site": "leanpub",
+      "slug": "python-book-009",
+      "title": "Python Book 009"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-010",
+      "site": "leanpub",
+      "slug": "python-book-010",
+      "title": "Python Book 010"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-011",
+      "site": "leanpub",
+      "slug": "python-book-011",
+      "title": "Python Book 011"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-012",
+      "site": "leanpub",
+      "slug": "python-book-012",
+      "title": "Python Book 012"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-013",
+      "site": "leanpub",
+      "slug": "python-book-013",
+      "title": "Python Book 013"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-014",
+      "site": "leanpub",
+      "slug": "python-book-014",
+      "title": "Python Book 014"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-015",
+      "site": "leanpub",
+      "slug": "python-book-015",
+      "title": "Python Book 015"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-016",
+      "site": "leanpub",
+      "slug": "python-book-016",
+      "title": "Python Book 016"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-017",
+      "site": "leanpub",
+      "slug": "python-book-017",
+      "title": "Python Book 017"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-018",
+      "site": "leanpub",
+      "slug": "python-book-018",
+      "title": "Python Book 018"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-019",
+      "site": "leanpub",
+      "slug": "python-book-019",
+      "title": "Python Book 019"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-020",
+      "site": "leanpub",
+      "slug": "python-book-020",
+      "title": "Python Book 020"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-021",
+      "site": "leanpub",
+      "slug": "python-book-021",
+      "title": "Python Book 021"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-022",
+      "site": "leanpub",
+      "slug": "python-book-022",
+      "title": "Python Book 022"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-023",
+      "site": "leanpub",
+      "slug": "python-book-023",
+      "title": "Python Book 023"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-024",
+      "site": "leanpub",
+      "slug": "python-book-024",
+      "title": "Python Book 024"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-025",
+      "site": "leanpub",
+      "slug": "python-book-025",
+      "title": "Python Book 025"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-026",
+      "site": "leanpub",
+      "slug": "python-book-026",
+      "title": "Python Book 026"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-027",
+      "site": "leanpub",
+      "slug": "python-book-027",
+      "title": "Python Book 027"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-028",
+      "site": "leanpub",
+      "slug": "python-book-028",
+      "title": "Python Book 028"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-029",
+      "site": "leanpub",
+      "slug": "python-book-029",
+      "title": "Python Book 029"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-030",
+      "site": "leanpub",
+      "slug": "python-book-030",
+      "title": "Python Book 030"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-031",
+      "site": "leanpub",
+      "slug": "python-book-031",
+      "title": "Python Book 031"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-032",
+      "site": "leanpub",
+      "slug": "python-book-032",
+      "title": "Python Book 032"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-033",
+      "site": "leanpub",
+      "slug": "python-book-033",
+      "title": "Python Book 033"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-034",
+      "site": "leanpub",
+      "slug": "python-book-034",
+      "title": "Python Book 034"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-035",
+      "site": "leanpub",
+      "slug": "python-book-035",
+      "title": "Python Book 035"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-036",
+      "site": "leanpub",
+      "slug": "python-book-036",
+      "title": "Python Book 036"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-037",
+      "site": "leanpub",
+      "slug": "python-book-037",
+      "title": "Python Book 037"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-038",
+      "site": "leanpub",
+      "slug": "python-book-038",
+      "title": "Python Book 038"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-039",
+      "site": "leanpub",
+      "slug": "python-book-039",
+      "title": "Python Book 039"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-040",
+      "site": "leanpub",
+      "slug": "python-book-040",
+      "title": "Python Book 040"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-041",
+      "site": "leanpub",
+      "slug": "python-book-041",
+      "title": "Python Book 041"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-042",
+      "site": "leanpub",
+      "slug": "python-book-042",
+      "title": "Python Book 042"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-043",
+      "site": "leanpub",
+      "slug": "python-book-043",
+      "title": "Python Book 043"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-044",
+      "site": "leanpub",
+      "slug": "python-book-044",
+      "title": "Python Book 044"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-045",
+      "site": "leanpub",
+      "slug": "python-book-045",
+      "title": "Python Book 045"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-046",
+      "site": "leanpub",
+      "slug": "python-book-046",
+      "title": "Python Book 046"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-047",
+      "site": "leanpub",
+      "slug": "python-book-047",
+      "title": "Python Book 047"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-048",
+      "site": "leanpub",
+      "slug": "python-book-048",
+      "title": "Python Book 048"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-049",
+      "site": "leanpub",
+      "slug": "python-book-049",
+      "title": "Python Book 049"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-050",
+      "site": "leanpub",
+      "slug": "python-book-050",
+      "title": "Python Book 050"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-051",
+      "site": "leanpub",
+      "slug": "python-book-051",
+      "title": "Python Book 051"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-052",
+      "site": "leanpub",
+      "slug": "python-book-052",
+      "title": "Python Book 052"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-053",
+      "site": "leanpub",
+      "slug": "python-book-053",
+      "title": "Python Book 053"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-054",
+      "site": "leanpub",
+      "slug": "python-book-054",
+      "title": "Python Book 054"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-055",
+      "site": "leanpub",
+      "slug": "python-book-055",
+      "title": "Python Book 055"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-056",
+      "site": "leanpub",
+      "slug": "python-book-056",
+      "title": "Python Book 056"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-057",
+      "site": "leanpub",
+      "slug": "python-book-057",
+      "title": "Python Book 057"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-058",
+      "site": "leanpub",
+      "slug": "python-book-058",
+      "title": "Python Book 058"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-059",
+      "site": "leanpub",
+      "slug": "python-book-059",
+      "title": "Python Book 059"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-060",
+      "site": "leanpub",
+      "slug": "python-book-060",
+      "title": "Python Book 060"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-061",
+      "site": "leanpub",
+      "slug": "python-book-061",
+      "title": "Python Book 061"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-062",
+      "site": "leanpub",
+      "slug": "python-book-062",
+      "title": "Python Book 062"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-063",
+      "site": "leanpub",
+      "slug": "python-book-063",
+      "title": "Python Book 063"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-064",
+      "site": "leanpub",
+      "slug": "python-book-064",
+      "title": "Python Book 064"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-065",
+      "site": "leanpub",
+      "slug": "python-book-065",
+      "title": "Python Book 065"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-066",
+      "site": "leanpub",
+      "slug": "python-book-066",
+      "title": "Python Book 066"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-067",
+      "site": "leanpub",
+      "slug": "python-book-067",
+      "title": "Python Book 067"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-068",
+      "site": "leanpub",
+      "slug": "python-book-068",
+      "title": "Python Book 068"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-069",
+      "site": "leanpub",
+      "slug": "python-book-069",
+      "title": "Python Book 069"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-070",
+      "site": "leanpub",
+      "slug": "python-book-070",
+      "title": "Python Book 070"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-071",
+      "site": "leanpub",
+      "slug": "python-book-071",
+      "title": "Python Book 071"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-072",
+      "site": "leanpub",
+      "slug": "python-book-072",
+      "title": "Python Book 072"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-073",
+      "site": "leanpub",
+      "slug": "python-book-073",
+      "title": "Python Book 073"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-074",
+      "site": "leanpub",
+      "slug": "python-book-074",
+      "title": "Python Book 074"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-075",
+      "site": "leanpub",
+      "slug": "python-book-075",
+      "title": "Python Book 075"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-076",
+      "site": "leanpub",
+      "slug": "python-book-076",
+      "title": "Python Book 076"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-077",
+      "site": "leanpub",
+      "slug": "python-book-077",
+      "title": "Python Book 077"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-078",
+      "site": "leanpub",
+      "slug": "python-book-078",
+      "title": "Python Book 078"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-079",
+      "site": "leanpub",
+      "slug": "python-book-079",
+      "title": "Python Book 079"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-080",
+      "site": "leanpub",
+      "slug": "python-book-080",
+      "title": "Python Book 080"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-081",
+      "site": "leanpub",
+      "slug": "python-book-081",
+      "title": "Python Book 081"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-082",
+      "site": "leanpub",
+      "slug": "python-book-082",
+      "title": "Python Book 082"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-083",
+      "site": "leanpub",
+      "slug": "python-book-083",
+      "title": "Python Book 083"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-084",
+      "site": "leanpub",
+      "slug": "python-book-084",
+      "title": "Python Book 084"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-085",
+      "site": "leanpub",
+      "slug": "python-book-085",
+      "title": "Python Book 085"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-086",
+      "site": "leanpub",
+      "slug": "python-book-086",
+      "title": "Python Book 086"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-087",
+      "site": "leanpub",
+      "slug": "python-book-087",
+      "title": "Python Book 087"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-088",
+      "site": "leanpub",
+      "slug": "python-book-088",
+      "title": "Python Book 088"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-089",
+      "site": "leanpub",
+      "slug": "python-book-089",
+      "title": "Python Book 089"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-090",
+      "site": "leanpub",
+      "slug": "python-book-090",
+      "title": "Python Book 090"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-091",
+      "site": "leanpub",
+      "slug": "python-book-091",
+      "title": "Python Book 091"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-092",
+      "site": "leanpub",
+      "slug": "python-book-092",
+      "title": "Python Book 092"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-093",
+      "site": "leanpub",
+      "slug": "python-book-093",
+      "title": "Python Book 093"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-094",
+      "site": "leanpub",
+      "slug": "python-book-094",
+      "title": "Python Book 094"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-095",
+      "site": "leanpub",
+      "slug": "python-book-095",
+      "title": "Python Book 095"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-096",
+      "site": "leanpub",
+      "slug": "python-book-096",
+      "title": "Python Book 096"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-097",
+      "site": "leanpub",
+      "slug": "python-book-097",
+      "title": "Python Book 097"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-098",
+      "site": "leanpub",
+      "slug": "python-book-098",
+      "title": "Python Book 098"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-099",
+      "site": "leanpub",
+      "slug": "python-book-099",
+      "title": "Python Book 099"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-100",
+      "site": "leanpub",
+      "slug": "python-book-100",
+      "title": "Python Book 100"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-101",
+      "site": "leanpub",
+      "slug": "python-book-101",
+      "title": "Python Book 101"
+    },
+    {
+      "authors": [
+        "Alan Turing"
+      ],
+      "book_id": "book-102",
+      "site": "leanpub",
+      "slug": "python-book-102",
+      "title": "Python Book 102"
+    },
+    {
+      "authors": [
+        "Edsger Dijkstra"
+      ],
+      "book_id": "book-103",
+      "site": "leanpub",
+      "slug": "python-book-103",
+      "title": "Python Book 103"
+    },
+    {
+      "authors": [
+        "Donald Knuth"
+      ],
+      "book_id": "book-104",
+      "site": "leanpub",
+      "slug": "python-book-104",
+      "title": "Python Book 104"
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "book_id": "book-105",
+      "site": "leanpub",
+      "slug": "python-book-105",
+      "title": "Python Book 105"
+    },
+    {
+      "authors": [
+        "Ada Lovelace"
+      ],
+      "book_id": "book-106",
+      "site": "leanpub",
+      "slug": "python-book-106",
+      "title": "Python Book 106"
+    }
+  ]
+}

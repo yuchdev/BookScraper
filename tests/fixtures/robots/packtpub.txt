@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /account
+Disallow: /cart
+Disallow: /checkout
+Disallow: /search
+Allow: /
+
+Sitemap: https://www.packtpub.com/sitemap.xml

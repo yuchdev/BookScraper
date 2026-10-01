@@ -1,0 +1,24 @@
+Sitemap: https://leanpub.com/sitemap.xml
+# Since these are sitemap indexes we cannot link to them in
+# our own sitemap, search engines do not accept nested indexes
+# But multiple sitemap records here are allowed as per:
+# https://www.sitemaps.org/protocol.html#submit_robots
+Sitemap: https://leanpub.com/blog/sitemap.xml
+
+User-Agent: *
+# ShortURLS
+Disallow: /s/
+# All requires auth:
+Disallow: /account/
+Disallow: /author/
+Disallow: /purchases/
+Disallow: /organization/
+Disallow: /publisher/
+Disallow: /university/
+Disallow: /library/
+# Transactional cart page (also noindex via meta):
+Disallow: /shopping_cart
+
+
+User-agent: EasouSpider
+Disallow: /

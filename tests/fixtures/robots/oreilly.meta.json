@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 158,
+  "bytes_sanitized": 158,
+  "captured_at": "2026-10-01T12:44:47.888613+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "robots",
+  "logged_out": true,
+  "reason": "Live fetch of the robots.txt returned HTTP 403 (bot-walled to the logged-out httpx fetch, verified 2026-10-01, >=10s apart); hand-built to a neutral, representative robots.txt shape (FIX-6).",
+  "sanitizer_version": "1.1.0",
+  "sha256": "02b7405aea0c3773c66c7ada70e90a82a7c4e8d7454cb66da3c6087858f276c2",
+  "site": "oreilly",
+  "url": "https://www.oreilly.com/robots.txt"
+}

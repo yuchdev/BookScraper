@@ -1,0 +1,184 @@
+{
+  "_known_issues": [
+    "search pipeline (subtask 03.3): amazon's SEARCH_BOOK_DETAIL_LINK selector (a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal) no longer matches live result cards, so raw_href is None for every card and both url and asin come out None - even though data-asin is present on the card, it is only read inside the link branch. This is exactly the selector-drift this corpus exists to catch.",
+    "search pipeline (subtask 03.3): amazon pagination iterates range(1, SEARCH_MAXIMUM_PAGES) with no next-button handling; SEARCH_NEXT_PAGE_SELECTOR is defined but never read, so the disabled-next-button state has no effect on where scraping stops."
+  ],
+  "candidates": [
+    {
+      "asin": null,
+      "authors_from_search": "Eric Matthes",
+      "publication_date": "Jan 10, 2023",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 1,
+      "site": "amazon",
+      "title": "Python Crash Course, 3rd Edition: A Hands-On, Project-Based Introduction to Programming",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Robin Nixon",
+      "publication_date": "May 1, 2025",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 2,
+      "site": "amazon",
+      "title": "Python Programming Language: a QuickStudy Laminated Reference Guide",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Al Sweigart",
+      "publication_date": "May 20, 2025",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 3,
+      "site": "amazon",
+      "title": "Automate the Boring Stuff with Python, 3rd Edition",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Mark Lutz",
+      "publication_date": "Apr 1, 2025",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 4,
+      "site": "amazon",
+      "title": "Learning Python: Powerful Object-Oriented Programming",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "codeprowess",
+      "publication_date": "Jan 21, 2024",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 5,
+      "site": "amazon",
+      "title": "Python Programming for Beginners: The Complete Python Coding Crash Course - Boost Your Growth with an Innovative Ultra-Fast Learning Framework and Exclusive Hands-On Interactive Exercises & Projects",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Andrew Michaels",
+      "publication_date": "Jun 4, 2026",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 6,
+      "site": "amazon",
+      "title": "Python Programming for Self-Taught Beginners : The Complete Step-by-Step Guide to Learning Python\u2028with Hands-On Projects, Real-World Examples,\u2028and Full Interview Preparation",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Luciano Ramalho",
+      "publication_date": "May 10, 2022",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 7,
+      "site": "amazon",
+      "title": "Fluent Python: Clear, Concise, and Effective Programming",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Maaike van Putten, Imke van Putten",
+      "publication_date": "Feb 25, 2026",
+      "query": "python",
+      "search_page_number": 1,
+      "search_result_index": 8,
+      "site": "amazon",
+      "title": "Python Illustrated: Not another boring Python book, learn programming the fun way",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Part of: Coding & Programming - QuickStart Guides (4 books) , Robert Oliver",
+      "publication_date": "Apr 22, 2023",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 1,
+      "site": "amazon",
+      "title": "Python QuickStart Guide: The Simplified Beginner's Guide to Python Programming Using Hands-On Projects and Real-World Applications (Coding & Programming - QuickStart Guides)",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Allen B. Downey",
+      "publication_date": "Jul 2, 2024",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 2,
+      "site": "amazon",
+      "title": "Think Python: How to Think Like a Computer Scientist",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Bill Lubanovic",
+      "publication_date": "Oct 14, 2025",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 3,
+      "site": "amazon",
+      "title": "Introducing Python: Modern Computing in Simple Packages",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": null,
+      "publication_date": "Sep 5, 2026",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 4,
+      "site": "amazon",
+      "title": "Python: An Illustrated Beginner\u2019s Guide: Python Fundamentals for Beginners and New Systems Engineers: Practical Knowledge for Day-to-Day Work, Made Simple with Illustrations and Diagrams!",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Louise Erdrich",
+      "publication_date": "Mar 24, 2026",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 5,
+      "site": "amazon",
+      "title": "Python's Kiss: Stories",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Harry Percival, Bob Gregory",
+      "publication_date": "Apr 14, 2020",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 6,
+      "site": "amazon",
+      "title": "Architecture Patterns with Python: Enabling Test-Driven Development, Domain-Driven Design, and Event-Driven Microservices",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Justin Seitz, Tim Arnold",
+      "publication_date": "Apr 14, 2021",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 7,
+      "site": "amazon",
+      "title": "Black Hat Python, 2nd Edition: Python Programming for Hackers and Pentesters",
+      "url": null
+    },
+    {
+      "asin": null,
+      "authors_from_search": "Robin Nixon",
+      "publication_date": "Nov 1, 2025",
+      "query": "python",
+      "search_page_number": 2,
+      "search_result_index": 8,
+      "site": "amazon",
+      "title": "Python with Generative AI: a QuickStudy Laminated Programming Reference Guide",
+      "url": null
+    }
+  ]
+}

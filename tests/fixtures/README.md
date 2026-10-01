@@ -121,9 +121,11 @@ like captured ones.
 
 ## Provenance
 
-Every fixture in the initial corpus is **hand-built**: the one live headed attempt per
-site (2026-10-01) was blocked on all three Playwright sites, and the Leanpub JSON:API is
-gone. No live capture succeeded, so no fixture carries `"headed": true`.
+Every fixture in the initial **detail** corpus is **hand-built**: the one live headed
+attempt per site (2026-10-01) was blocked on all three Playwright detail pages, and the
+Leanpub JSON:API is gone, so no detail fixture carries `"headed": true`. The **search**
+tier below is different - Amazon search is not walled, so its four pages are live headed
+captures (`"headed": true`).
 
 | Fixture | Source | Reason | Bytes |
 |---|---|---|---|
@@ -139,3 +141,31 @@ gone. No live capture succeeded, so no fixture carries `"headed": true`.
 | `json/leanpub/cpp17_in_detail.json` | hand-built | Leanpub `api/v1/cache` JSON:API now 404; book `.json` 401 | 733 |
 | `json/leanpub/cpp_lambda_story.json` | hand-built | same Leanpub API gone | 730 |
 | `json/leanpub/cpp_best_practices.json` | hand-built | same Leanpub API gone | 733 |
+
+### Search-page & API fixtures (subtask 05, 2026-10-01)
+
+Amazon search is **not** walled (unlike its detail pages), so these four are **live** headed
+captures (system Chromium, logged out, cookie-less); `headed: true` in each `.meta.json`. Each
+search snapshot is trimmed to the first 8 `SEARCH_BOOK_CARD` matches and has its image/stylesheet
+subresources stripped (budget + offline harness), recorded as `trimmed` in meta. The live pages
+already show selector drift: `SEARCH_BOOK_DETAIL_LINK` matches zero live cards (see the amazon
+search golden's `_known_issues`). The Leanpub search API (`api/v1/cache/simple_books.json`) returns
+**HTTP 404** (verified logged-out, 2026-10-01), so its JSON fixtures are hand-built to the JSON:API
+shape; `search_python_p1.json` holds a full 100-item page so pagination continues to the short
+`search_python_last.json`. `robots/` covers all four sites: amazon/leanpub fetched live; packtpub
+and oreilly returned HTTP 403 to the logged-out fetch and are hand-built to a neutral shape.
+
+| Fixture | Source | Reason | Bytes |
+|---|---|---|---|
+| `html/amazon/search_python_p1.html` | live (headed) | Amazon search not walled; page 1, trimmed to 8 cards, subresources stripped | 39693 |
+| `html/amazon/search_python_p2.html` | live (headed) | page 2, trimmed to 8 cards | 34135 |
+| `html/amazon/search_python_last_page.html` | live (headed) | result-exhausted page (no result cards) | 9468 |
+| `html/amazon/search_no_results.html` | live (headed) | no-results page (no result cards survive sanitize) | 15 |
+| `html/amazon/search_sponsored.html` | hand-built | no captured page had an `/sspa/click` card inside a `SEARCH_BOOK_CARD` | 985 |
+| `json/leanpub/search_python_p1.json` | hand-built | Leanpub search API 404; full 100-item page (pagination continues) | 36250 |
+| `json/leanpub/search_python_last.json` | hand-built | same API gone; short 7-item page (pagination stops) | 3142 |
+| `json/leanpub/search_empty.json` | hand-built | same API gone; empty `data` array | 34 |
+| `robots/amazon.txt` | live | fetched logged-out via httpx | 7887 |
+| `robots/leanpub.txt` | live | fetched logged-out via httpx | 648 |
+| `robots/packtpub.txt` | hand-built | live fetch returned HTTP 403 (bot-walled) | 143 |
+| `robots/oreilly.txt` | hand-built | live fetch returned HTTP 403 (bot-walled) | 158 |

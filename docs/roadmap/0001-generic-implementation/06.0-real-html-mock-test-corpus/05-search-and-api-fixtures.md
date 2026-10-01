@@ -1,7 +1,7 @@
 # 05 - Search-page & API JSON fixtures
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-capture-and-sanitize-script.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/01-capture-and-sanitize-script.md)
 **Role:** Testing Expert
 
@@ -11,8 +11,9 @@
   - Amazon search: `search_python_p1`, `search_python_p2`, `search_python_last_page` (next button disabled),
     `search_no_results`, and one page containing a sponsored `/sspa/click` card (or the sponsored card extracted
     into `search_sponsored`).
-  - Leanpub search API: `search_python_p1.json` (a full 100-item page, trimmed to ≤ 20 items **with the `page_size`
-    logic preserved** by also capturing `search_python_last.json` holding < 100 items), `search_empty.json`.
+  - Leanpub search API: `search_python_p1.json` (a full 100-item page - kept at 100, minimal items, because the code
+    stops on `len(books) < 100`, so a trimmed page would end pagination after one request; amended 2026-10-02),
+    `search_python_last.json` holding < 100 items, and `search_empty.json`.
   - `robots/<site>.txt` for all four sites.
 - Golden tests in `tests/mock/scraping/html/test_search_goldens.py`:
   - `get_search_results_via_playwright(browser, "amazon", "python")` against the served pages. Expected candidate

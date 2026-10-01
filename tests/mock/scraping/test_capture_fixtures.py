@@ -106,3 +106,61 @@ def test_keep_selectors_excludes_description() -> None:
     assert site_constants["amazon"]["BOOK_TITLE"] in selectors
     assert site_constants["amazon"]["DESCRIPTION"] not in selectors
     assert site_constants["amazon"]["SEARCH_BASE_URL"] not in selectors
+
+
+def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
+    """search_selectors_for keeps the SEARCH_* CSS selectors, not the non-selector keys."""
+    selectors = capture.search_selectors_for("amazon")
+    from bookscraper.scraping.parameters import site_constants
+
+    amazon = site_constants["amazon"]
+    assert amazon["SEARCH_BOOK_CARD"] in selectors
+    assert amazon["SEARCH_TITLE"] in selectors
+    assert amazon["SEARCH_NEXT_PAGE_SELECTOR"] in selectors
+    # Non-selector SEARCH_* values (URL/API, page count, attribute NAME) are excluded.
+    assert amazon["SEARCH_BASE_URL"] not in selectors
+    assert amazon["SEARCH_ASIN_ATTRIBUTE"] not in selectors
+    assert str(amazon["SEARCH_MAXIMUM_PAGES"]) not in selectors
+    # Detail-only selectors never leak into the search keep-set.
+    assert amazon["BOOK_TITLE"] not in selectors
+
+
+def test_trim_repeated_blocks_keeps_only_first_n_matches() -> None:
+    """_trim_repeated_blocks drops all but the first N elements matching the selector."""
+    cards = "".join(f'<div class="card"><span>{i}</span></div>' for i in range(5))
+    html = f"<html><body><main>{cards}<nav class='pager'>next</nav></main></body></html>"
+
+    trimmed = capture._trim_repeated_blocks(html, ".card", 2)
+
+    assert trimmed.count('class="card"') == 2
+    # Page chrome outside the trimmed blocks is untouched.
+    assert "pager" in trimmed
+    # The surviving cards are the FIRST two (document order), not an arbitrary pair.
+    assert "<span>0</span>" in trimmed and "<span>1</span>" in trimmed
+    assert "<span>4</span>" not in trimmed
+
+
+def test_trim_repeated_blocks_returns_input_when_under_limit() -> None:
+    """A page with <= limit matches is returned unchanged (no trimming needed)."""
+    html = "<html><body><div class='card'>only</div></body></html>"
+
+    assert capture._trim_repeated_blocks(html, ".card", 8) == html
+
+
+def test_strip_subresources_removes_loaders_but_keeps_anchors() -> None:
+    """_strip_subresources removes network-triggering nodes/attrs, keeps <a href>."""
+    html = (
+        "<html><head><link rel='stylesheet' href='/s.css'></head><body>"
+        "<img src='https://img.test/x.jpg'>"
+        '<div style="background:url(https://img.test/bg.png)">x</div>'
+        "<a class='detail' href='/dp/B0ABCDEFGH'>Book</a>"
+        "</body></html>"
+    )
+
+    stripped = capture._strip_subresources(html)
+
+    assert "<img" not in stripped
+    assert "<link" not in stripped
+    assert "https://img.test" not in stripped  # style url() and img src both gone
+    # The detail anchor (loads nothing; the search parser reads its href) survives intact.
+    assert 'href="/dp/B0ABCDEFGH"' in stripped

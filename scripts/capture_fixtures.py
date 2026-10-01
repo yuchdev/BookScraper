@@ -71,6 +71,13 @@ REQUEST_DELAY_SECONDS = 2.0
 # Bounded wait for the site's title/anchor selector after domcontentloaded.
 SELECTOR_TIMEOUT_MS = 15_000
 
+# A real search-results page carries dozens of near-identical result cards; the parser's
+# control flow is fully exercised by a handful, and the full set blows the 400 KB per-file
+# budget (FIX-11). The search pipeline trims to the first N SEARCH_BOOK_CARD matches before
+# sanitizing, keeping the page chrome (pagination/no-results markers live outside the cards)
+# while dropping the redundant tail.
+MAX_SEARCH_CARDS = 8
+
 _KIND_TO_SUBDIR = {"detail": "html", "search": "html", "api": "json", "robots": "robots"}
 _KIND_TO_EXT = {"detail": "html", "search": "html", "api": "json", "robots": "txt"}
 
@@ -106,6 +113,34 @@ def description_selectors_for(site: str) -> list[str]:
     """
     entry = site_constants.get(site, {})
     return [entry[key] for key in _DESCRIPTION_KEYS if isinstance(entry.get(key), str) and entry[key]]
+
+
+# SEARCH_* keys that are NOT CSS selectors (a base URL/API, a page-count int, or an
+# attribute NAME) and so must never be fed to the selector-aware sanitizer.
+_NON_SELECTOR_SEARCH_KEYS = frozenset(
+    {"SEARCH_BASE_URL", "SEARCH_BASE_API", "SEARCH_MAXIMUM_PAGES", "SEARCH_ASIN_ATTRIBUTE"}
+)
+
+
+def search_selectors_for(site: str) -> list[str]:
+    """keep-selectors for a SEARCH-results page (``--kind search``).
+
+    The detail ``keep_selectors_for`` deliberately skips ``SEARCH_*`` keys, so feeding it a
+    search page leaves ``shrink`` with no matches and it drops the whole page. A search
+    fixture instead keeps the ``SEARCH_*`` CSS selectors the search parser reads - the book
+    card, title, authors, publication date, detail link, next-page button and no-results
+    marker - so every card survives verbatim and the selectors still resolve offline. The
+    non-selector ``SEARCH_*`` values (base URL/API, page count, the ``data-asin`` attribute
+    NAME) are skipped, since the bounded sanitizer selector parser is fail-closed on them.
+    """
+    entry = site_constants.get(site, {})
+    selectors: list[str] = []
+    for key, value in entry.items():
+        if not key.startswith("SEARCH_") or key in _NON_SELECTOR_SEARCH_KEYS:
+            continue
+        if isinstance(value, str) and value:
+            selectors.append(value)
+    return selectors
 
 
 async def _assert_logged_out(context: Any) -> None:
@@ -195,17 +230,77 @@ def _bookscraper_version() -> str:
         return "unknown"
 
 
+def _trim_repeated_blocks(html: str, selector: str, limit: int) -> str:
+    """Keep only the first ``limit`` elements matching ``selector``; drop the rest.
+
+    A pre-sanitize trim step for ``--kind search`` (see :data:`MAX_SEARCH_CARDS`): it runs
+    on the raw DOM so the card selector still matches verbatim markup, and drops whole
+    later-card subtrees via the sanitizer's own bounded parser. Page chrome outside the
+    cards (pagination/no-results markers) is untouched. A page with ``<= limit`` matches is
+    returned unchanged.
+    """
+    root = sanitize._parse(html)
+    matches = sanitize._select(root, selector)
+    if len(matches) <= limit:
+        return html
+    drop = {id(el) for el in matches[limit:]}
+    sanitize._filter_tree(root, lambda el: id(el) in drop)
+    return sanitize._serialize(root)
+
+
+_SUBRESOURCE_ELEMENTS = frozenset({"img", "source", "picture", "video", "audio", "track", "object", "embed", "link"})
+_SUBRESOURCE_ATTRS = frozenset({"src", "srcset", "poster", "data"})
+
+
+def _strip_subresources(html: str) -> str:
+    """Remove every element/attribute that would trigger a network fetch when served.
+
+    The offline golden harness (subtask 03) is default-deny: any request a served fixture
+    makes to an unmapped URL (an ``<img>``, a stylesheet ``<link>``, a ``srcset``) is
+    recorded and fails the test. A search-results snapshot the parser only reads for its
+    card/title/author/date selectors has no need of those resources, so they are dropped,
+    leaving a self-contained page that fetches nothing. Anchors (``<a href>``) are kept -
+    they load nothing and the detail-link selector reads them.
+    """
+    root = sanitize._parse(html)
+    sanitize._filter_tree(root, lambda el: sanitize._local_name(el.tag) in _SUBRESOURCE_ELEMENTS)
+    for el in sanitize._iter_elements(root):
+        kept = []
+        for name, value in el.attrs:
+            lowered = name.lower()
+            if lowered in _SUBRESOURCE_ATTRS:
+                continue
+            if lowered == "style" and value is not None and "url(" in value.lower():
+                continue
+            kept.append([name, value])
+        el.attrs = kept
+    return sanitize._serialize(root)
+
+
 def _sanitize_payload(raw: str, site: str, kind: str) -> str:
     """Route raw bytes through the pure sanitizers for its kind."""
     if kind in ("detail", "search"):
-        keep_text = keep_selectors_for(site)
-        keep_structure = description_selectors_for(site)
+        if kind == "search":
+            # A search page keeps the SEARCH_* card/title/author/date selectors; there is
+            # no long-prose description element to preserve structurally. Trim the redundant
+            # tail of result cards first (budget; the parser needs only a handful).
+            card_selector = site_constants.get(site, {}).get("SEARCH_BOOK_CARD")
+            if isinstance(card_selector, str) and card_selector:
+                raw = _trim_repeated_blocks(raw, card_selector, MAX_SEARCH_CARDS)
+            keep_text = search_selectors_for(site)
+            keep_structure: list[str] = []
+        else:
+            keep_text = keep_selectors_for(site)
+            keep_structure = description_selectors_for(site)
         # Neutralize prose (keep-text is protected verbatim; the description's prose
         # collapses to the placeholder but its elements are preserved), then shrink the
         # page to the size budget while keeping BOTH the factual elements and the
         # description element (keep-structure) so every selector still resolves.
         cleaned = sanitize.sanitize_html(raw, keep_text)
-        return sanitize.shrink(cleaned, keep_text + keep_structure)
+        shrunk = sanitize.shrink(cleaned, keep_text + keep_structure)
+        # A search snapshot is served to the offline (default-deny) harness, so it must
+        # fetch nothing: drop image/stylesheet subresources the selectors never read.
+        return _strip_subresources(shrunk) if kind == "search" else shrunk
     if kind == "api":
         try:
             data = json.loads(raw)

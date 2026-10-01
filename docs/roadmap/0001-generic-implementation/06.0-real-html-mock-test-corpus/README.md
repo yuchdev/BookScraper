@@ -24,7 +24,7 @@ intercepted, and golden files record the expected records.
 | 02 | [Corpus layout & policy](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/02-corpus-layout-and-policy.md)        | ✅ Complete    | 03         |
 | 03 | [Chromium fixture-serving harness](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/03-fixture-serving-harness.md) | ✅ Complete    | 04       |
 | 04 | [Detail-page golden tests](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/04-detail-page-golden-tests.md)      | ✅ Complete    | -          |
-| 05 | [Search-page & API JSON fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/05-search-and-api-fixtures.md) | ⬜ Not started | -         |
+| 05 | [Search-page & API JSON fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/05-search-and-api-fixtures.md) | ✅ Complete    | -         |
 | 06 | [Edge-case fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/06-edge-case-fixtures.md)                  | ⬜ Not started | -          |
 | 07 | [Fixture refresh & drift workflow](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/07-fixture-refresh-workflow.md) | ⬜ Not started | -       |
 

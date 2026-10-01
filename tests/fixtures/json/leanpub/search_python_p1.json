@@ -1,0 +1,1841 @@
+{
+  "data": [
+    {
+      "id": "book-000",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 000",
+        "slug": "python-book-000"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-001",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 001",
+        "slug": "python-book-001"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-002",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 002",
+        "slug": "python-book-002"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-003",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 003",
+        "slug": "python-book-003"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-004",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 004",
+        "slug": "python-book-004"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-005",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 005",
+        "slug": "python-book-005"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-006",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 006",
+        "slug": "python-book-006"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-007",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 007",
+        "slug": "python-book-007"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-008",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 008",
+        "slug": "python-book-008"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-009",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 009",
+        "slug": "python-book-009"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-010",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 010",
+        "slug": "python-book-010"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-011",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 011",
+        "slug": "python-book-011"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-012",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 012",
+        "slug": "python-book-012"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-013",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 013",
+        "slug": "python-book-013"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-014",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 014",
+        "slug": "python-book-014"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-015",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 015",
+        "slug": "python-book-015"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-016",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 016",
+        "slug": "python-book-016"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-017",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 017",
+        "slug": "python-book-017"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-018",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 018",
+        "slug": "python-book-018"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-019",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 019",
+        "slug": "python-book-019"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-020",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 020",
+        "slug": "python-book-020"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-021",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 021",
+        "slug": "python-book-021"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-022",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 022",
+        "slug": "python-book-022"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-023",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 023",
+        "slug": "python-book-023"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-024",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 024",
+        "slug": "python-book-024"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-025",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 025",
+        "slug": "python-book-025"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-026",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 026",
+        "slug": "python-book-026"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-027",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 027",
+        "slug": "python-book-027"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-028",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 028",
+        "slug": "python-book-028"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-029",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 029",
+        "slug": "python-book-029"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-030",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 030",
+        "slug": "python-book-030"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-031",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 031",
+        "slug": "python-book-031"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-032",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 032",
+        "slug": "python-book-032"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-033",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 033",
+        "slug": "python-book-033"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-034",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 034",
+        "slug": "python-book-034"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-035",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 035",
+        "slug": "python-book-035"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-036",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 036",
+        "slug": "python-book-036"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-037",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 037",
+        "slug": "python-book-037"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-038",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 038",
+        "slug": "python-book-038"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-039",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 039",
+        "slug": "python-book-039"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-040",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 040",
+        "slug": "python-book-040"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-041",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 041",
+        "slug": "python-book-041"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-042",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 042",
+        "slug": "python-book-042"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-043",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 043",
+        "slug": "python-book-043"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-044",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 044",
+        "slug": "python-book-044"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-045",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 045",
+        "slug": "python-book-045"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-046",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 046",
+        "slug": "python-book-046"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-047",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 047",
+        "slug": "python-book-047"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-048",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 048",
+        "slug": "python-book-048"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-049",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 049",
+        "slug": "python-book-049"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-050",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 050",
+        "slug": "python-book-050"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-051",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 051",
+        "slug": "python-book-051"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-052",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 052",
+        "slug": "python-book-052"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-053",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 053",
+        "slug": "python-book-053"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-054",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 054",
+        "slug": "python-book-054"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-055",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 055",
+        "slug": "python-book-055"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-056",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 056",
+        "slug": "python-book-056"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-057",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 057",
+        "slug": "python-book-057"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-058",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 058",
+        "slug": "python-book-058"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-059",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 059",
+        "slug": "python-book-059"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-060",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 060",
+        "slug": "python-book-060"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-061",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 061",
+        "slug": "python-book-061"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-062",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 062",
+        "slug": "python-book-062"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-063",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 063",
+        "slug": "python-book-063"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-064",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 064",
+        "slug": "python-book-064"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-065",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 065",
+        "slug": "python-book-065"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-066",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 066",
+        "slug": "python-book-066"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-067",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 067",
+        "slug": "python-book-067"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-068",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 068",
+        "slug": "python-book-068"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-069",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 069",
+        "slug": "python-book-069"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-070",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 070",
+        "slug": "python-book-070"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-071",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 071",
+        "slug": "python-book-071"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-072",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 072",
+        "slug": "python-book-072"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-073",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 073",
+        "slug": "python-book-073"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-074",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 074",
+        "slug": "python-book-074"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-075",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 075",
+        "slug": "python-book-075"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-076",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 076",
+        "slug": "python-book-076"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-077",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 077",
+        "slug": "python-book-077"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-078",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 078",
+        "slug": "python-book-078"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-079",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 079",
+        "slug": "python-book-079"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-080",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 080",
+        "slug": "python-book-080"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-081",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 081",
+        "slug": "python-book-081"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-082",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 082",
+        "slug": "python-book-082"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-083",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 083",
+        "slug": "python-book-083"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-084",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 084",
+        "slug": "python-book-084"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-085",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 085",
+        "slug": "python-book-085"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-086",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 086",
+        "slug": "python-book-086"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-087",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 087",
+        "slug": "python-book-087"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-088",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 088",
+        "slug": "python-book-088"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-089",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 089",
+        "slug": "python-book-089"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-090",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 090",
+        "slug": "python-book-090"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-091",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 091",
+        "slug": "python-book-091"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-092",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 092",
+        "slug": "python-book-092"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-093",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 093",
+        "slug": "python-book-093"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-094",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 094",
+        "slug": "python-book-094"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-095",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 095",
+        "slug": "python-book-095"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a1",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-096",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 096",
+        "slug": "python-book-096"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a2",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-097",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 097",
+        "slug": "python-book-097"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a3",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-098",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 098",
+        "slug": "python-book-098"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a4",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "book-099",
+      "type": "Book",
+      "attributes": {
+        "title": "Python Book 099",
+        "slug": "python-book-099"
+      },
+      "relationships": {
+        "accepted_authors": {
+          "data": [
+            {
+              "id": "a5",
+              "type": "SimpleAuthor"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "included": [
+    {
+      "type": "SimpleAuthor",
+      "id": "a1",
+      "attributes": {
+        "name": "Grace Hopper"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a2",
+      "attributes": {
+        "name": "Ada Lovelace"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a3",
+      "attributes": {
+        "name": "Alan Turing"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a4",
+      "attributes": {
+        "name": "Edsger Dijkstra"
+      }
+    },
+    {
+      "type": "SimpleAuthor",
+      "id": "a5",
+      "attributes": {
+        "name": "Donald Knuth"
+      }
+    }
+  ]
+}

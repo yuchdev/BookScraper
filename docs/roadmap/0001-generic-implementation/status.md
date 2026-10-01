@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 4 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 5 / 7         | -                                                                                                      |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 32 / 94 subtasks complete.
+**Totals:** 33 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -238,3 +238,13 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   the `BASE_URL` failure above (the extraction branches for Packtpub/O'Reilly), plus edge cases planned for
   subtask 06. The criterion is re-checked after the fixture regeneration. Anything still short is deferred to
   03.0/03 plus 06.0/06 rather than met by inventing fixtures.
+- **2026-10-02 - 06.0/05 findings from the first LIVE fixtures (Amazon search is not walled; detail pages are):**
+  (1) **Amazon search selector drift:** `SEARCH_BOOK_DETAIL_LINK` matches no live result card, so every candidate's
+  `url` and `asin` is `None`, which makes Amazon search effectively broken (for 03.3; the goldens characterize it).
+  (2) **Leanpub search API dead:** `/api/v1/cache/simple_books.json` returns 404 HTML. Together with the dead
+  detail API, the `search` workflow (Leanpub is the only wired site) cannot work today. This is for 03.0/05 + 03.3,
+  and it is the most consequential finding of the run so far. (3) **`search_utils.py:249`** calls
+  `logger.error(msg, "error")` with a stray positional argument, which can raise inside the logging call and abort
+  the Amazon search on a navigation failure (for 03.3). (4) Packtpub and O'Reilly robots.txt return 403 to a
+  logged-out fetch, so they are hand-built. (5) The sanitizer gained `dib`/token-shaped URL-param stripping
+  (`8972900`, v1.1.0) after `assert_clean` correctly refused the live pages.

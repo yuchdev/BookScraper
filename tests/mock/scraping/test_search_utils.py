@@ -137,13 +137,17 @@ async def test_leanpub_api_generic_exception_breaks_and_returns_empty():
 # ---------------------------------------------------------------------------
 # get_search_results_via_playwright
 #
-# Coverage note: the amazon happy path, the sponsored-link URL/ASIN extraction, the
-# "no books found" short-circuit, the two early-return guards, and the non-amazon
-# default (pass) branch are exercised below. Deliberately NOT covered (documented gap,
-# allowed by the coverage plan): multi-page pagination beyond a single page, the
-# per-card publication-date selector branch, and the per-card exception-recovery
-# `continue`. These are deep DOM/selector branches with low corpus-integrity risk and
-# high fake-DOM setup cost relative to what they verify.
+# Coverage note: the amazon happy path, the sponsored-link URL/ASIN extraction (with and
+# without a usable ``url`` param), the "no books found" short-circuit, the empty-card-list
+# break, the no-ASIN-attribute / publication-date (present / absent-selector / raising)
+# branches, the per-card exception-recovery ``continue``, the navigation-failure handler,
+# and the two early-return guards + non-amazon default (``pass``) are all exercised. Multi-
+# page pagination and the real live-markup card extraction are covered by the Chromium
+# golden tier (``tests/mock/scraping/html/test_search_goldens.py``) against the captured
+# corpus. The only remaining uncovered lines in the amazon ``case`` are the ``else`` legs
+# for *other* sites (non-amazon URL join, the leanpub author split) which are structurally
+# unreachable while that whole block lives under ``case "amazon"`` - subtask 03.3 is what
+# untangles the per-site branches.
 # ---------------------------------------------------------------------------
 
 AMAZON_LINK = "a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal"
@@ -246,3 +250,149 @@ async def test_playwright_non_amazon_default_case_returns_empty_cleanly():
     assert result == []
     # The default branch never creates a page.
     browser.new_page.assert_not_called()
+
+
+async def test_playwright_amazon_empty_card_list_breaks_and_returns_empty():
+    """wait_for_selector resolves but the card locator is empty -> break with no books."""
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert result == []
+
+
+async def test_playwright_amazon_navigation_failure_returns_empty():
+    """Characterization: a goto() failure aborts the amazon search and returns [].
+
+    The inner handler for a navigation error calls ``logger.error(msg, "error")`` (search_utils
+    line 249) with a stray positional ``"error"`` - a real product bug (subtask 03.3): the
+    logging layer rejects the extra arg, the exception escapes the inner ``except`` into the
+    function's outer handler, and the run ends with whatever was collected so far (nothing, since
+    the failure is on page 1). This locks in that a failed navigation degrades to an empty result
+    rather than crashing the caller; a 03.3 fix (drop the stray arg) would surface as a diff here.
+    """
+    card = {
+        "attrs": {"data-asin": "B0ABCDEFGH"},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0ABCDEFGH"}}]),
+            AMAZON_TITLE: FakeLocator("Recovered Book"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+    page.goto.side_effect = RuntimeError("navigation timeout")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert result == []
+
+
+async def test_playwright_amazon_sponsored_without_url_param_skips_card(monkeypatch):
+    """A sponsored /sspa/click link with no 'url' param is skipped (continue), not stored."""
+    bad_sponsored = {
+        "attrs": {},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/sspa/click?ie=UTF8&foo=1"}}]),
+            AMAZON_TITLE: FakeLocator("No URL Sponsored"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Nobody"}]),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([bad_sponsored])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert result == []
+
+
+async def test_playwright_amazon_without_asin_attribute_still_extracts_url(monkeypatch):
+    """When SEARCH_ASIN_ATTRIBUTE is absent, the book is kept with a URL but asin None."""
+    sc = copy.deepcopy(search_utils.site_constants)
+    del sc["amazon"]["SEARCH_ASIN_ATTRIBUTE"]
+    monkeypatch.setattr(search_utils, "site_constants", sc)
+
+    card = {
+        "attrs": {},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0ABCDEFGH"}}]),
+            AMAZON_TITLE: FakeLocator("No Asin Attr Book"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["url"] == "https://www.amazon.com/dp/B0ABCDEFGH"
+    assert result[0]["asin"] is None
+
+
+async def test_playwright_amazon_publication_date_selector_missing_sets_none(monkeypatch):
+    """With no SEARCH_PUBLICATION_DATE selector, publication_date is set to None."""
+    sc = copy.deepcopy(search_utils.site_constants)
+    del sc["amazon"]["SEARCH_PUBLICATION_DATE"]
+    monkeypatch.setattr(search_utils, "site_constants", sc)
+
+    card = {
+        "attrs": {"data-asin": "B0ABCDEFGH"},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0ABCDEFGH"}}]),
+            AMAZON_TITLE: FakeLocator("No Date Selector"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["publication_date"] is None
+
+
+async def test_playwright_amazon_publication_date_locator_error_sets_none():
+    """A publication-date locator that raises is caught; the field becomes None, book kept."""
+    date_selector = search_utils.site_constants["amazon"]["SEARCH_PUBLICATION_DATE"]
+    card = {
+        "attrs": {"data-asin": "B0ABCDEFGH"},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0ABCDEFGH"}}]),
+            AMAZON_TITLE: FakeLocator("Date Error Book"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+            date_selector: FakeLocator(raises=RuntimeError("bad date locator")),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["publication_date"] is None
+
+
+async def test_playwright_amazon_card_error_is_isolated_and_skips_only_that_card():
+    """A card whose link locator raises is skipped (continue); a good card still returns."""
+    bad_card = {
+        "attrs": {"data-asin": "B0BADBADBAD"},
+        "sub": {AMAZON_LINK: FakeLocator(raises=RuntimeError("boom"))},
+    }
+    good_card = {
+        "attrs": {"data-asin": "B0GOODGOOD1"},
+        "sub": {
+            AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0GOODGOOD1"}}]),
+            AMAZON_TITLE: FakeLocator("Survivor Book"),
+            AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+        },
+    }
+    page = FakePage(locators={AMAZON_CARD: FakeLocator([bad_card, good_card])}, title="Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["title"] == "Survivor Book"
