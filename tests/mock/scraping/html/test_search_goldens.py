@@ -215,6 +215,10 @@ async def test_amazon_sponsored_card_unwrapped(
 # ---------------------------------------------------------------------------
 
 
+# The two Leanpub search goldens below carry no ``loop_scope="session"`` (unlike the Chromium
+# Amazon legs above): they rely on ``asyncio_mode = "auto"`` (pyproject.toml) giving each a
+# fresh per-test event loop on purpose, since the offline ``httpx_corpus`` transport needs no
+# shared session browser.
 async def test_leanpub_search_api_golden_paginates_until_short_page(
     httpx_corpus: Any,
     update_goldens: bool,

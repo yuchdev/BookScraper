@@ -13,6 +13,7 @@ the single session-scoped browser launch. They skip cleanly when no Chromium is 
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -197,7 +198,12 @@ async def test_harness_blocks_web_sockets(chromium_browser):
     await page.goto(AMAZON_URL)
 
     await page.evaluate("() => { new WebSocket('wss://blocked.test/socket'); }")
-    await page.wait_for_timeout(300)
+    # Event-driven wait: route_web_socket records the blocked socket asynchronously, so poll
+    # the recorder with a bounded deadline instead of sleeping a fixed 300 ms (flaky/slow).
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + 5.0
+    while not any("blocked.test" in url for url in recorder.unexpected) and loop.time() < deadline:
+        await asyncio.sleep(0.02)
     await context.close()
 
     assert any("blocked.test" in url for url in recorder.unexpected)

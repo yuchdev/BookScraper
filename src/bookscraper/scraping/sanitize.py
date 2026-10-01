@@ -33,7 +33,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Bumped whenever the sanitizer rules change; recorded in every fixture's .meta.json
 # (FIX-14) so a committed fixture carries an audit trail of how it was cleaned.
-SANITIZER_VERSION = "1.1.0"
+# 1.2.0: drop Amazon per-render correlation ``data-uuid`` / ``data-csa-c-*`` attributes
+# (security CL-1).
+SANITIZER_VERSION = "1.2.0"
 
 # Neutral text that replaces long prose (descriptions, reviews, blurbs, bios). It
 # deliberately contains the word "test" so the secret-scan placeholder allowlist
@@ -286,6 +288,10 @@ def _parse_attr(inner: str, compound: _Compound) -> None:
 
 
 def _parse_has_text(text: str, i: int, compound: _Compound) -> int:
+    # A supported :has-text() argument must not contain a ``)`` or an unquoted ``,``: the
+    # parser scans to the first ``)`` here and _select splits selector groups on a bare ``,``
+    # (both below), so such an argument is misparsed - it fails closed (raises or truncates),
+    # it is never silently widened. None of the site_constants selectors use those chars.
     # text[i] == "(" immediately after ":has-text"
     end = text.find(")", i)
     if end == -1:
@@ -458,6 +464,9 @@ def _matches_sequence(el: _Element, pairs: list[tuple[str, _Compound]]) -> bool:
 def _select(root: _Element, selector: str) -> list[_Element]:
     results: list[_Element] = []
     seen: set[int] = set()
+    # Selector groups split on a bare ``,``; consequently a ``:has-text()`` argument must not
+    # contain an unquoted ``,`` (nor a ``)`` - see _parse_has_text) or it fails closed rather
+    # than matching more broadly than intended.
     for group in selector.split(","):
         group = group.strip()
         if not group:
@@ -676,6 +685,21 @@ _SENSITIVE_DATA_SEGMENTS = frozenset(
 )
 
 
+# Amazon per-page-load client-side correlation ids (security CL-1): ``data-uuid`` and the
+# ``data-csa-c-*`` component family are regenerated every render, carry no identity/session
+# value, but are non-deterministic noise that should not sit in the committed corpus. Dropped
+# by name regardless of length/value. ``data-asin`` (SEARCH_ASIN_ATTRIBUTE) is deliberately
+# NOT in this set and must survive - the search parser reads it.
+_CORRELATION_DATA_ATTRS = frozenset({"data-uuid"})
+_CORRELATION_DATA_PREFIXES = ("data-csa-c-",)
+
+
+def _is_correlation_data_attr(lowered_name: str) -> bool:
+    return lowered_name in _CORRELATION_DATA_ATTRS or any(
+        lowered_name.startswith(prefix) for prefix in _CORRELATION_DATA_PREFIXES
+    )
+
+
 def _name_segments(name: str) -> list[str]:
     return [part.lower() for part in _KEY_SPLIT_RE.split(name) if part]
 
@@ -721,8 +745,9 @@ def strip_secrets(html: str) -> str:
     Scenario: a logged-out page still echoes a CSRF token, a session/customer id in a
     ``data-*`` attribute, a cookie value in a meta tag, or an email in the markup.
     Boundaries: removes attributes whose name matches csrf/token/session/nonce; drops
-    ``data-*``/``data-a-*`` that are sensitive by name (FIX-3), JSON-shaped (R-2, no
-    selector needs a JSON-valued data-*), or over 200 chars; length-gates/strips opaque
+    ``data-*``/``data-a-*`` that are sensitive by name (FIX-3), a per-render correlation id
+    (``data-uuid``/``data-csa-c-*``, CL-1), JSON-shaped (R-2, no selector needs a
+    JSON-valued data-*), or over 200 chars; length-gates/strips opaque
     ``style`` values (V-6); strips identity/tracking ``<meta>``; replaces every email
     with a reserved address.
     On failure: never - best-effort over malformed markup.
@@ -738,6 +763,8 @@ def strip_secrets(html: str) -> str:
             if _SENSITIVE_ATTR_RE.search(lowered):
                 continue
             if lowered.startswith("data-"):
+                if _is_correlation_data_attr(lowered):
+                    continue
                 if _has_sensitive_segment(name, _SENSITIVE_DATA_SEGMENTS):
                     continue
                 # R-2: drop any JSON-shaped data-* wholesale. No site_constants selector

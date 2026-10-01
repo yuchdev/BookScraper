@@ -354,6 +354,10 @@ async def corpus_router() -> Any:
     restorations: list[Callable[[], None]] = []
 
     def install(browser: Browser, mapping: dict[str, Path]) -> Browser:
+        # One install per test is assumed: each call wraps new_page/new_context afresh and
+        # registers its own recorder + restore. The session-scoped browser is shared, but a
+        # test that calls install() more than once would stack wrappers and leave several
+        # recorders to assert at teardown - not a usage this harness supports.
         recorder = PlaywrightRecorder(CorpusMapping(mapping))
         recorders.append(recorder)
 

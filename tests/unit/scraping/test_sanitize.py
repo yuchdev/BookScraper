@@ -372,6 +372,26 @@ def test_strip_secrets_removes_long_opaque_data_attr() -> None:
     assert 'data-keep="v"' in out
 
 
+def test_strip_secrets_drops_amazon_correlation_data_attrs() -> None:
+    """CL-1: per-render ``data-uuid`` / ``data-csa-c-*`` correlation ids are dropped by name.
+
+    They are short (<200ch) and not in the sensitive-name set, so the length/segment gates miss
+    them; the explicit correlation rule drops them. ``data-asin`` (SEARCH_ASIN_ATTRIBUTE) and an
+    unrelated ``data-component-type`` must survive so the search parser keeps working.
+    """
+    html = (
+        '<div data-asin="1098131029" data-uuid="01122864-fd2d-49c6-9c2e-3b4c5d6e7f80" '
+        'data-csa-c-id="173qnz-ujifa9-w6adqd-htngc3" data-csa-c-type="item" '
+        'data-component-type="s-search-result">x</div>'
+    )
+    out = strip_secrets(html)
+    assert "data-uuid" not in out
+    assert "data-csa-c-id" not in out
+    assert "data-csa-c-type" not in out
+    assert 'data-asin="1098131029"' in out
+    assert 'data-component-type="s-search-result"' in out
+
+
 # --------------------------------------------------------------------------- #
 # FIX-4 - ld+json parsed and sanitized; other inline JSON removed
 # --------------------------------------------------------------------------- #

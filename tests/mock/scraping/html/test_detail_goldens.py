@@ -25,9 +25,11 @@ path through ``httpx_corpus`` only, so it is unmarked and runs offline regardles
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Optional
 
 import pytest
@@ -36,6 +38,24 @@ from bookscraper.scraping import scrape_details
 from bookscraper.scraping.scrape_details import get_leanpub_book_details, scrape_book
 
 from .conftest import FIXTURES_ROOT, _fixture_for_meta, corpus_mapping
+
+# Result normalization is NOT duplicated here: it lives in scripts/capture_fixtures.py as
+# ``_normalize_scrape_result`` (the single source of truth, used by --refresh's golden-drift
+# check), and this harness imports it so the two cannot drift. The script is a dev tool
+# outside the package, loaded by path with importlib - the same pattern as
+# tests/mock/scraping/test_capture_fixtures.py and tests/unit/scraping/test_fixture_drift.py.
+_CAPTURE_SCRIPT = Path(__file__).resolve().parents[4] / "scripts" / "capture_fixtures.py"
+
+
+def _load_capture_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("capture_fixtures", _CAPTURE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+normalize_result = _load_capture_module()._normalize_scrape_result
 
 # A low per-page default timeout keeps the Chromium leg fast: the only unbounded wait in
 # scrape_book is the DESCRIPTION text_content() (every other locator sets an explicit timeout),
@@ -104,33 +124,6 @@ _JSON_PARAMS = _params_for("json")
 # ---------------------------------------------------------------------------
 # Comparison / update helpers (shared with the pytester contract test)
 # ---------------------------------------------------------------------------
-
-
-def normalize_result(result: Any) -> dict[str, Any]:
-    """Turn a scraper return value into a stable, comparable dict.
-
-    A successful Playwright/Leanpub scrape is already a dict. A failure/duplicate is the
-    ``(None, "<STATUS>")`` tuple the caller type-switches on (``commands/scrape_urls.py``); it
-    is captured faithfully as ``{"_scrape_status": "<STATUS>"}`` so the golden records *that a
-    real book scraped as FAILED*, and a future 03.0 fix turning it into a real record shows up
-    as an obvious key diff rather than vanishing.
-
-    A bare ``None`` is the *other* failure shape - ``get_leanpub_book_details`` swallows a
-    not-found or a malformed response (no ``data`` key, or an ``about_the_book: null`` that
-    makes ``unescape(None)`` raise ``TypeError``) and returns ``None``. It is characterized as
-    ``{"_scrape_status": "NONE"}`` so the golden locks in *that the Leanpub parser silently
-    returns nothing today*, and the 03.0/05 fix (success with an empty description) surfaces as
-    a key diff instead of crashing ``dict(None)`` here.
-    """
-    if result is None:
-        return {"_scrape_status": "NONE"}
-    if isinstance(result, tuple):
-        return {"_scrape_status": result[1]}
-    record = dict(result)
-    # Volatile fields are normalized away so goldens stay deterministic. Nothing is volatile
-    # today; `scraped_at` is introduced by task 03.1 and dropped here pre-emptively.
-    record.pop("scraped_at", None)
-    return record
 
 
 def diff_fields(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
@@ -226,6 +219,10 @@ async def test_detail_golden_leanpub(
     Chromium. One parametrized id per fixture, kept in ``<site>/<name>`` form.
     On failure: a parsed field drifted (title/authors/slug/book_id/categories/date/hash), which
     would quietly corrupt the Leanpub half of the corpus and its dedup identity.
+
+    Unlike the Chromium leg this carries no ``loop_scope="session"``: it relies on
+    ``asyncio_mode = "auto"`` (pyproject.toml) giving it a fresh per-test event loop on
+    purpose, since the offline ``httpx_corpus`` transport needs no shared session browser.
     """
     label = f"{case.site}/{case.name}"
     httpx_corpus(corpus_mapping("json"))

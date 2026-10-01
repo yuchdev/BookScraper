@@ -291,3 +291,64 @@ New probes against the fixed code found narrower residuals (none CRITICAL/HIGH):
 All round-1 HIGH bypasses and the FIX-1/FIX-2/FIX-8 acceptance gates are satisfied; the task threat model stays
 **PASS_WITH_FOLLOWUP** (not BLOCK). The four residuals above are MEDIUM/LOW (adversarial or backstop-only, or
 mirroring the accepted API-body opaque-value limit) and should be closed with the first real capture, R-2 first.
+
+## Verification - task 06.0 close (2026-10-02)
+
+Task-close review of the committed corpus and pipeline on `milestone/0001-generic-implementation`
+(`git diff 4eaa652..HEAD`), repo PUBLIC (`yuchdev/BookScraper`). Sanitizer is v1.1.0. Covers the four
+post-sign-off sanitizer changes (`abde322` segment key-redaction + 80-char floor; `4fc97d9` text-only
+neutralization keep-structure/keep-text; `8972900` `dib`/token-shaped URL-param stripping; capture
+`_trim_repeated_blocks` / `_strip_subresources`). Harnesses `attack.py` / `attack2.py` re-run against
+current code. Secret values described by shape, never quoted.
+
+**Verdict: PASS.** No CRITICAL, HIGH, or MEDIUM. All prior round-1/round-2 bypasses (V-1..V-7, R-1..R-4)
+are closed in the committed code, the three CRITICAL acceptance gates (FIX-1/2/8) hold, and the 103-file
+committed corpus is clean under three independent scans. One LOW/informational note (ephemeral per-render
+Amazon correlation IDs) is non-identity and non-blocking.
+
+### Corpus scans (committed `tests/fixtures/`, 103 files)
+- `.claude/hooks/secret_scan.py` over every file: **clean**, 0 flagged.
+- `sanitize.assert_clean` over every payload AND every `.meta.json`: **0 failures / 103 files**.
+- Heuristic scan (emails, signed-URL params, session/csrf/cookie/token attrs, IPs, geo, A/B IDs,
+  Amazon `ue_sid`/`ue_mid`/`session-id`/`ubid-main` customer IDs, JWTs, opaque attr values >=40ch,
+  text nodes >200ch not placeholder): **no leaks**. Specifically confirmed:
+  - `session-id` / `anti-csrftoken-a2z` hidden inputs present only with `value=""` (values stripped).
+  - `bucket` hits are CSS class names (`detail-bullets-wrapper bucket`, `bucketDivider`); `geo`/`weblab`
+    hits are static capability/cache class tokens in `<html class>` (`a-geolocation`,
+    `a-aui_template_weblab_cache_333406-c`) - not geolocation values or per-user A/B treatments.
+  - No `ue_sid`/`ue_mid`/`ubid-main`/`x-main`/`at-main`/`session-token`/`csm-hit`/`x-amz-*` values anywhere.
+  - Live detail page `a_tour_of_cpp_3e.html`: **0 `<script>` elements**, no ld+json, no opaque blobs; the
+    only 40-200ch attr values are DOM ids / `ref=`-stripped href paths (static layout tokens).
+  - No prose text nodes over 200 chars that aren't `PROSE_PLACEHOLDER`.
+
+### [LOW] CL-1 Ephemeral per-render Amazon correlation IDs survive in search fixtures
+- Vector / evidence: `tests/fixtures/html/amazon/search_python_p1.html` (and `p2`, `search_python_last_page`)
+  carry `data-uuid="01122864-fd2d-49c6-..."` (36-char UUIDs) and `data-csa-c-id="173qnz-ujifa9-w6adqd-htngc3"`
+  (~27ch) on result cards. Short (<200ch) and not in the sensitive-name set (`session|csrf|token|uid|ubid|customer|csm`),
+  so the FIX-3 gate leaves them.
+- Impact: none to identity. Capture was logged-out (FIX-1, `logged_out: true` in all 38 metas); these are
+  client-side click-stream component correlation IDs regenerated each page load, not user/session/customer IDs.
+  They add non-determinism noise to the fixtures but leak nothing. CWE-200 (informational).
+- Mitigation (optional, non-blocking): add `data-uuid`/`data-csa-c-id` to the capture's zeroed-attr list, or
+  gate opaque `data-*` values at a lower length. Hand to `python-expert` only if corpus cleanliness is wanted.
+- RESOLVED (2026-10-02, sanitizer v1.2.0): `strip_secrets` now drops `data-uuid` and the `data-csa-c-*` family
+  by name regardless of length (`_is_correlation_data_attr`); `data-asin` (`SEARCH_ASIN_ATTRIBUTE`) is preserved.
+  The four affected fixtures (`a_tour_of_cpp_3e`, `search_python_p1`/`p2`/`last_page`) were re-sanitized over their
+  existing bytes (sanitize is idempotent — second pass byte-identical) and their `.meta.json`
+  sha256/bytes_sanitized/sanitizer_version updated; search goldens unchanged.
+
+### FIX one-liners (as committed)
+- FIX-1 (CRITICAL) PASS - `_assert_logged_out` runs immediately before `page.content()`; all 38 metas record `logged_out: true`.
+- FIX-2 (CRITICAL) PASS - `assert_clean` runs on payload AND meta at the only write path (`_write_fixture:460-461`), not `--force`-bypassable; extended detectors (cookie/session/CSRF/JWT/signed-URL/email) verified live.
+- FIX-3 (HIGH) PASS - hidden-input/session/csrf values stripped to empty; short/JSON `data-*` dropped or JSON-redacted (attack.py #2, attack2.py B1/B2/B2c/B3). Residual CL-1 (LOW).
+- FIX-4 (HIGH) PASS - no non-ld+json scripts survive; live detail page has 0 `<script>`; `</script>` breakout `<`-encoded (attack.py #3, attack2.py C1).
+- FIX-5 (HIGH) PASS - `X-Amz-*`/CloudFront/`session-id`/`sid`/`smid` + `dib`/token-shaped params stripped from href/src/srcset (attack.py #10/#11); no signed-URL params in corpus.
+- FIX-6 (HIGH) PASS - hand-built/derived fixtures run the same sanitize+assert_clean; `--apply` refuses to overwrite a hand-built fixture with a walled page; `test_meta_sha256_matches_file` guards hand edits.
+- FIX-7 (HIGH) PASS - robots fetched logged-out/unauthenticated and sanitized; committed `robots/*.txt` are plain policy text, metas record `logged_out: true`.
+- FIX-8 (CRITICAL) PASS - harness is default-deny: unmapped Playwright routes `route.abort()`, httpx `MockTransport` raises `OfflineNetworkError`, web sockets closed; teardown fails the test naming URLs; dedicated tests assert an unmapped request fails.
+- FIX-9 (MEDIUM) PASS - corpus route re-appended after production `route_handler` at page AND context level; `test_harness_takes_precedence_over_production_route_handler` + context variant prove no document falls through to `continue_()`.
+- FIX-10 (MEDIUM) PASS - `--refresh` writes only to a `mkdtemp` temp dir; `--apply` is the sole in-tree write path and re-runs `sanitize`+`assert_clean`+budgets via `_write_fixture`; `--apply` without `--refresh` errors; capture refuses overwrite without `--force`.
+- FIX-11 (MEDIUM) PASS - per-file 400KB and whole-corpus 15MB budgets enforced at capture (`_write_fixture`); browser DOM snapshot and httpx body size-capped before sanitize; parser depth bound 200.
+- FIX-12 (MEDIUM) PASS (policy) - `tests/fixtures/README.md` states interoperability-testing rationale, "minimum needed," and the caps; a_tour raw 1.95MB -> 37KB sanitized.
+- FIX-13 (LOW) PASS - `*.html -diff` compensated by `test_meta_sha256_matches_file`, CI secret-scan, and diffable `*.expected.json` goldens.
+- FIX-14 (LOW) PASS - every meta carries `logged_out: true` and `sanitizer_version: "1.1.0"`.

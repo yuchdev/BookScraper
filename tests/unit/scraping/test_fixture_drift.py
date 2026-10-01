@@ -271,6 +271,34 @@ async def test_refresh_apply_refuses_wall(
     assert fixture.read_bytes() == before  # hand-built fixture untouched
 
 
+async def test_refresh_apply_refuses_wall_for_live_fixture(
+    temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Scenario: ``--apply`` refuses to overwrite a LIVE (non-hand-built) fixture with a wall.
+
+    Boundaries: the fixture is not ``hand_built``; the recapture returns a CAPTCHA wall. The
+    refusal must apply to every fixture, not only hand-built ones, so the live fixture on disk
+    stays exactly as-is and the report says REFUSED.
+    On failure: a bot-wall page would launder into the corpus over a good live fixture - the
+    FIX-6/FIX-10 "a walled recapture never overwrites a good fixture" boundary, previously
+    enforced only for hand-built fixtures.
+    """
+    fixture = _make_detail_fixture(temp_corpus, name="live_walled", body=_DETAIL_HTML, hand_built=False)
+    before = fixture.read_bytes()
+
+    async def _fake_capture(url: str, site: str, kind: str) -> str:
+        return _WALL_HTML
+
+    monkeypatch.setattr(capture, "_refresh_capture", _fake_capture)
+
+    rc = await capture.run_refresh(argparse.Namespace(site="amazon", apply=True))
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "REFUSED" in out and "walled page" in out
+    assert fixture.read_bytes() == before  # live fixture untouched despite --apply
+
+
 async def test_refresh_apply_writes_clean_recapture(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

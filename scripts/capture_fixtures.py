@@ -563,7 +563,11 @@ async def _refresh_capture(url: str, site: str, kind: str) -> str:
 
 
 def _normalize_scrape_result(result: Any) -> dict[str, Any]:
-    """Mirror the golden harness's ``normalize_result`` (kept in sync by hand).
+    """Single source of truth for golden-result normalization (imported by the harness).
+
+    The subtask-04 golden tier (``tests/mock/scraping/html/test_detail_goldens.py``) imports
+    this as ``normalize_result`` rather than keeping its own copy, so ``--refresh``'s
+    golden-drift check here and that golden tier cannot diverge.
 
     A dict scrape is returned minus the volatile ``scraped_at``; a ``(None, STATUS)``
     tuple becomes ``{"_scrape_status": STATUS}``; a bare ``None`` becomes
@@ -732,10 +736,11 @@ async def refresh_fixture(ref: FixtureRef, tmp_dir: Path, apply: bool) -> tuple[
             lines.append(f"    golden drift: could not evaluate ({type(exc).__name__}: {exc})")
 
     if apply:
-        if hand_built and wall_reason:
-            lines.append(
-                f"    --apply REFUSED: would overwrite a hand-built fixture with a walled page ({wall_reason})"
-            )
+        if wall_reason:
+            # Refuse for EVERY fixture (live or hand-built): a bot-wall/CAPTCHA recapture must
+            # never overwrite a good fixture, even a live-sourced one (FIX-6/FIX-10).
+            built = "hand-built " if hand_built else ""
+            lines.append(f"    --apply REFUSED: would overwrite a {built}fixture with a walled page ({wall_reason})")
         else:
             meta = _build_meta(
                 ref.meta["url"], ref.site, ref.kind, new_raw, new_sanitized, ref.meta.get("chromium_version", "unknown")
