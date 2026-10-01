@@ -397,6 +397,13 @@ Both goldens live in `tests/mock/scraping/html/goldens/` (outside `tests/fixture
 and not subject to the corpus orphan check) and carry `_known_issues` notes linking live
 selector/pagination drift to subtask 03.3; regenerate with `--update-goldens`.
 
+When a target changes its markup, `scripts/capture_fixtures.py --refresh --site <site>` re-captures
+that site's fixtures into a temp dir and reports selector/golden drift (`--apply` is the sole in-tree
+write path, re-running sanitize + `assert_clean` + budgets; it refuses to overwrite a hand-built
+fixture with a walled page). Its pure comparison helper `compare_selector_matches` is unit-tested in
+`tests/unit/scraping/test_fixture_drift.py`. The full runbook is
+[`docs/test/html-fixtures.md`](docs/test/html-fixtures.md).
+
 **Shared fixtures** (`tests/conftest.py`, used by `unit/` and `mock/`): `isolated_config` and
 `isolated_local_store` monkeypatch `backends/mongo/config.py`'s `CONFIG_DIR`/`SETTINGS_FILE` and
 `backends/local/store.py`'s `LOCAL_STORE_FILE` to `tmp_path`, so a test can never read or write the

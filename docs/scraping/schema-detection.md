@@ -199,3 +199,11 @@ them.
 In practice the two compose: run `detect-schema` to get a validated draft, then use the
 manual loop's step 5 (`scrape-urls` end-to-end against `--store-backend json`) to confirm
 the selectors you applied produce correct data in `books.json`.
+
+### Driving selector updates from the fixture corpus
+
+When drift is detected by the real-HTML mock corpus rather than a live run, the
+[HTML fixture refresh & drift workflow](../test/html-fixtures.md) is the companion runbook:
+`scripts/capture_fixtures.py --refresh` re-captures a site's fixtures and reports which
+selectors drifted, and its step-by-step feeds those snapshots into `detect-schema`
+(via the planned `--html-file` offline mode) and then `pytest --update-goldens`.

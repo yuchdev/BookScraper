@@ -38,6 +38,7 @@ import asyncio
 import hashlib
 import json
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from importlib import metadata
@@ -310,6 +311,105 @@ def _sanitize_payload(raw: str, site: str, kind: str) -> str:
     return sanitize.sanitize_text(raw)
 
 
+# --------------------------------------------------------------------------- #
+# Refresh / drift workflow (subtask 07)
+# --------------------------------------------------------------------------- #
+
+# Politeness for the refresh re-capture: >= 10 s between requests to the same site
+# (the production headed-capture policy, tests/fixtures/README.md). This is the only
+# rate control on the refresh path; FIX-7 (logged out, no proxy/creds) is inherited
+# from the capture code paths it reuses (_capture_html / _fetch_body).
+REFRESH_REQUEST_DELAY_SECONDS = 10.0
+
+# Known bot-wall / anti-bot markers seen across the four sites (lower-cased substrings):
+# Amazon CAPTCHA ("Robot Check", /errors/validateCaptcha, "Enter the characters you see
+# below"), Cloudflare interstitials ("Just a moment...", "Attention Required", the
+# cf-chl challenge chunk), and PerimeterX. Used by --apply to refuse overwriting a
+# hand-built fixture with a walled page (threat model FIX-6/FIX-10).
+_WALL_MARKERS = (
+    "validatecaptcha",
+    "robot check",
+    "enter the characters you see below",
+    "type the characters you see in this image",
+    "just a moment",
+    "attention required",
+    "cf-chl",
+    "px-captcha",
+    "/errors/validatecaptcha",
+)
+
+
+def drift_selectors_for(site: str, kind: str) -> dict[str, str]:
+    """Map ``{field_key: css_selector}`` of the selectors to drift-check for ``kind``.
+
+    For a ``detail`` snapshot this is every ``site_constants[site]`` detail selector the
+    parser reads (title/authors/ISBN/date/tags AND the description), minus the
+    non-selector keys (``BASE_URL``, the ``404_PAGE_TITLE`` title string, the ``*_API``
+    endpoints) and the ``SEARCH_*`` family. For a ``search`` snapshot it is the
+    ``SEARCH_*`` CSS selectors (the non-selector ``SEARCH_*`` values - base URL/API, page
+    count, the ``data-asin`` attribute NAME - are excluded). ``api``/``robots`` kinds have
+    no CSS selectors and yield an empty map.
+    """
+    entry = site_constants.get(site, {})
+    result: dict[str, str] = {}
+    if kind == "search":
+        for key, value in entry.items():
+            if not key.startswith("SEARCH_") or key in _NON_SELECTOR_SEARCH_KEYS:
+                continue
+            if isinstance(value, str) and value:
+                result[key] = value
+    elif kind == "detail":
+        skip = {"BASE_URL", "404_PAGE_TITLE"}
+        for key, value in entry.items():
+            if key in skip or key.startswith("SEARCH_") or key.endswith("_API"):
+                continue
+            if isinstance(value, str) and value:
+                result[key] = value
+    return result
+
+
+def count_selector_matches(html: str, selectors: dict[str, str]) -> dict[str, int]:
+    """Count how many elements each selector matches in ``html`` (offline, no browser).
+
+    Uses the sanitizer's own bounded ``_select`` - the same parser the capture pipeline
+    already counts cards with (:func:`_trim_repeated_blocks`) - so drift counting stays
+    offline, deterministic and Chromium-free: the fixtures are already-sanitized static
+    DOM snapshots and the selectors are plain CSS ``_select`` fully supports.
+    """
+    root = sanitize._parse(html)
+    return {field: len(sanitize._select(root, sel)) for field, sel in selectors.items()}
+
+
+def compare_selector_matches(old_counts: dict[str, int], new_counts: dict[str, int]) -> list[str]:
+    """Return the field names whose selector drifted from ``>=1`` matches to ``0`` (DRIFT).
+
+    Pure helper (unit-tested in ``tests/unit/scraping/test_fixture_drift.py``): a selector
+    that matched something in the old snapshot and nothing in the new one is exactly the
+    markup drift this corpus exists to catch. A field that stays ``0``, stays matched, or is
+    new to ``new_counts`` is not a drift. Result is sorted for a stable report.
+    """
+    drifted = [field for field, old in old_counts.items() if old >= 1 and new_counts.get(field, 0) == 0]
+    return sorted(drifted)
+
+
+def detect_wall(html: str, title_selector: Optional[str]) -> Optional[str]:
+    """Return a reason string if ``html`` looks like a bot-wall/CAPTCHA, else ``None``.
+
+    A wall is either a known marker substring (``_WALL_MARKERS``) or the site's title
+    selector being absent from the DOM (a real detail page always carries it). ``--apply``
+    uses this to refuse overwriting a hand-built fixture with a walled page (FIX-6/FIX-10).
+    """
+    lowered = html.lower()
+    for marker in _WALL_MARKERS:
+        if marker in lowered:
+            return f"wall marker {marker!r} present"
+    if title_selector:
+        root = sanitize._parse(html)
+        if not sanitize._select(root, title_selector):
+            return f"title selector {title_selector!r} absent"
+    return None
+
+
 def _build_meta(url: str, site: str, kind: str, raw: str, sanitized: str, chromium_version: str) -> dict[str, Any]:
     return {
         "url": url,
@@ -381,20 +481,332 @@ async def run_capture(args: argparse.Namespace) -> Path:
     return _write_fixture(args.site, args.kind, args.name, sanitized, meta, args.force)
 
 
+# --------------------------------------------------------------------------- #
+# Refresh orchestration (subtask 07)
+# --------------------------------------------------------------------------- #
+
+
+class FixtureRef:
+    """One committed fixture of a site, resolved from its ``.meta.json``.
+
+    A plain class (not a ``@dataclass``) so the script still imports cleanly under the
+    importlib-by-path loader the tests use, which does not register the module in
+    ``sys.modules`` (dataclass annotation resolution needs that).
+    """
+
+    def __init__(
+        self,
+        *,
+        site: str,
+        kind: str,  # detail | search | api | robots (from the meta)
+        name: str,
+        fixture_path: Path,
+        meta_path: Path,
+        expected_path: Optional[Path],  # sibling golden, if any
+        meta: dict[str, Any],
+    ) -> None:
+        self.site = site
+        self.kind = kind
+        self.name = name
+        self.fixture_path = fixture_path
+        self.meta_path = meta_path
+        self.expected_path = expected_path
+        self.meta = meta
+
+
+def _iter_site_fixtures(site: str) -> list[FixtureRef]:
+    """Resolve every committed fixture of ``site`` (html, json and robots subdirs)."""
+    refs: list[FixtureRef] = []
+    search_dirs = [
+        FIXTURE_ROOT / "html" / site,
+        FIXTURE_ROOT / "json" / site,
+        FIXTURE_ROOT / "robots",
+    ]
+    for subdir in search_dirs:
+        if not subdir.exists():
+            continue
+        for meta_path in sorted(subdir.rglob("*.meta.json")):
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if meta.get("site") != site:
+                continue
+            base = meta_path.name[: -len(".meta.json")]
+            ext = _KIND_TO_EXT.get(meta.get("kind", ""), "")
+            fixture_path = meta_path.parent / f"{base}.{ext}"
+            if not fixture_path.exists():
+                continue
+            expected = meta_path.parent / f"{base}.expected.json"
+            refs.append(
+                FixtureRef(
+                    site=site,
+                    kind=meta["kind"],
+                    name=base,
+                    fixture_path=fixture_path,
+                    meta_path=meta_path,
+                    expected_path=expected if expected.exists() else None,
+                    meta=meta,
+                )
+            )
+    return refs
+
+
+async def _refresh_capture(url: str, site: str, kind: str) -> str:
+    """Re-capture ``url`` through the capture code paths (FIX-7), rate-limited.
+
+    A thin seam over ``_capture_html`` / ``_fetch_body`` so refresh reuses the exact
+    logged-out, cookie-less, proxy-less fetch the one-off capture uses; tests monkeypatch
+    this to return a tweaked fixture copy instead of hitting the network.
+    """
+    time.sleep(REFRESH_REQUEST_DELAY_SECONDS)
+    if kind in ("detail", "search"):
+        return await _capture_html(url, site)
+    return _fetch_body(url)
+
+
+def _normalize_scrape_result(result: Any) -> dict[str, Any]:
+    """Mirror the golden harness's ``normalize_result`` (kept in sync by hand).
+
+    A dict scrape is returned minus the volatile ``scraped_at``; a ``(None, STATUS)``
+    tuple becomes ``{"_scrape_status": STATUS}``; a bare ``None`` becomes
+    ``{"_scrape_status": "NONE"}`` - so a golden diff reads identically to subtask 04's.
+    """
+    if result is None:
+        return {"_scrape_status": "NONE"}
+    if isinstance(result, tuple):
+        return {"_scrape_status": result[1]}
+    record = dict(result)
+    record.pop("scraped_at", None)
+    return record
+
+
+async def _golden_result_for_snapshot(ref: FixtureRef, snapshot: str) -> dict[str, Any]:
+    """Run the production parser over the new snapshot and return the normalized record.
+
+    ``api`` (Leanpub JSON) runs ``get_leanpub_book_details`` through an offline
+    ``httpx.MockTransport`` - no browser. ``detail`` runs ``scrape_book`` against a
+    headless Chromium that is served the snapshot for every document request (every other
+    request aborted), reusing the production navigation path. Raises on any failure so the
+    caller can report "golden drift: could not evaluate".
+    """
+    url = ref.meta["url"]
+    if ref.kind == "api":
+        from bookscraper.scraping.scrape_details import get_leanpub_book_details
+
+        transport = httpx.MockTransport(
+            lambda _req: httpx.Response(
+                200, content=snapshot.encode("utf-8"), headers={"content-type": "application/json"}
+            )
+        )
+        real_async_client = httpx.AsyncClient
+
+        def factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+            kwargs.setdefault("transport", transport)
+            return real_async_client(*args, **kwargs)
+
+        original = httpx.AsyncClient
+        httpx.AsyncClient = factory  # type: ignore[misc,assignment]
+        try:
+            result = await get_leanpub_book_details(url)
+        finally:
+            httpx.AsyncClient = original  # type: ignore[misc]
+        return _normalize_scrape_result(result)
+
+    from bookscraper.scraping.scrape_details import scrape_book
+
+    body = snapshot.encode("utf-8")
+
+    async def _serve(route: Any) -> None:
+        if route.request.resource_type == "document":
+            await route.fulfill(status=200, body=body, headers={"content-type": "text/html; charset=utf-8"})
+        else:
+            await route.abort()
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=HEADLESS_BROWSER)
+        try:
+            original_new_page = browser.new_page
+
+            async def _wrapped_new_page(*args: Any, **kwargs: Any) -> Any:
+                page = await original_new_page(*args, **kwargs)
+                original_route = page.route
+                await original_route("**/*", _serve)
+
+                async def _wrapped_route(pattern: Any, handler: Any, **kw: Any) -> None:
+                    await original_route(pattern, handler, **kw)
+                    await original_route("**/*", _serve)
+
+                page.route = _wrapped_route  # type: ignore[method-assign]
+                return page
+
+            browser.new_page = _wrapped_new_page  # type: ignore[method-assign]
+            result = await scrape_book(url, browser, ref.site, storage_backend=None)
+        finally:
+            await browser.close()
+    return _normalize_scrape_result(result)
+
+
+def _golden_drift_lines(ref: FixtureRef, expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
+    """Field-by-field golden diff lines, ignoring the golden's ``_known_issues`` key."""
+    exp = {k: v for k, v in expected.items() if k != "_known_issues"}
+    lines: list[str] = []
+    for key in sorted(set(exp) | set(actual)):
+        if key not in actual:
+            lines.append(f"      {key}: in golden, MISSING from scrape")
+        elif key not in exp:
+            lines.append(f"      {key}: produced by scrape, ABSENT from golden")
+        elif exp[key] != actual[key]:
+            lines.append(f"      {key}: golden={exp[key]!r} != scrape={actual[key]!r}")
+    return lines
+
+
+async def refresh_fixture(ref: FixtureRef, tmp_dir: Path, apply: bool) -> tuple[list[str], bool]:
+    """Refresh one fixture: report drift, write the new snapshot ONLY to ``tmp_dir``.
+
+    Returns ``(report_lines, drift_found)``. Writes into ``tests/fixtures`` only when
+    ``apply`` is set and the capture is not refused (hand-built + walled). Derived/hand-built
+    fixtures with no live source are not re-captured; their selector-drift check runs against
+    the CURRENT fixture (useful after a ``parameters.py`` edit).
+    """
+    lines = [f"  {ref.kind}/{ref.name}"]
+    drift_found = False
+    old_text = ref.fixture_path.read_text(encoding="utf-8")
+    hand_built = bool(ref.meta.get("hand_built"))
+    derived_from = ref.meta.get("derived_from")
+    selectors = drift_selectors_for(ref.site, ref.kind)
+
+    # Derived fixtures have no real page to re-capture from.
+    if derived_from:
+        lines.append(f"    hand-built (derived from {derived_from}): no live source; no capture attempted")
+        if selectors:
+            old_counts = count_selector_matches(old_text, selectors)
+            zero = sorted(f for f, c in old_counts.items() if c == 0)
+            if zero:
+                drift_found = True
+                lines.append(f"    ZERO-MATCH on current fixture (check after a parameters.py edit): {zero}")
+            else:
+                lines.append(f"    selectors all match the current fixture ({len(selectors)} checked)")
+        return lines, drift_found
+
+    # Live or base-hand-built: one capture attempt from meta.url.
+    try:
+        new_raw = await _refresh_capture(ref.meta["url"], ref.site, ref.kind)
+    except Exception as exc:  # noqa: BLE001 - any fetch failure is reported, never raised
+        lines.append(f"    capture FAILED ({type(exc).__name__}: {exc}); fixture left unchanged")
+        return lines, drift_found
+
+    new_sanitized = _sanitize_payload(new_raw, ref.site, ref.kind)
+    tmp_path = tmp_dir / ref.fixture_path.name
+    tmp_path.write_text(new_sanitized, encoding="utf-8")
+
+    old_sha = ref.meta.get("sha256")
+    new_sha = hashlib.sha256(new_sanitized.encode("utf-8")).hexdigest()
+    lines.append(f"    sha256 {'CHANGED' if old_sha != new_sha else 'unchanged'} (temp: {tmp_path})")
+
+    wall_reason = (
+        detect_wall(new_sanitized, site_constants.get(ref.site, {}).get("BOOK_TITLE")) if ref.kind == "detail" else None
+    )
+    if wall_reason:
+        lines.append(f"    WALL detected: {wall_reason}")
+
+    if selectors:
+        old_counts = count_selector_matches(old_text, selectors)
+        new_counts = count_selector_matches(new_sanitized, selectors)
+        drift = compare_selector_matches(old_counts, new_counts)
+        if drift:
+            drift_found = True
+            lines.append(f"    SELECTOR DRIFT ({len(drift)}): " + ", ".join(f"{f} {old_counts[f]}->0" for f in drift))
+        else:
+            lines.append(f"    no selector drift ({len(selectors)} selectors checked)")
+
+    if ref.expected_path is not None and ref.kind in ("detail", "api"):
+        try:
+            actual = await _golden_result_for_snapshot(ref, new_sanitized)
+            expected = json.loads(ref.expected_path.read_text(encoding="utf-8"))
+            gdiff = _golden_drift_lines(ref, expected, actual)
+            if gdiff:
+                drift_found = True
+                lines.append("    GOLDEN DRIFT:")
+                lines.extend(gdiff)
+            else:
+                lines.append("    no golden drift")
+        except Exception as exc:  # noqa: BLE001 - golden drift is best-effort (needs a browser for html)
+            lines.append(f"    golden drift: could not evaluate ({type(exc).__name__}: {exc})")
+
+    if apply:
+        if hand_built and wall_reason:
+            lines.append(
+                f"    --apply REFUSED: would overwrite a hand-built fixture with a walled page ({wall_reason})"
+            )
+        else:
+            meta = _build_meta(
+                ref.meta["url"], ref.site, ref.kind, new_raw, new_sanitized, ref.meta.get("chromium_version", "unknown")
+            )
+            if ref.kind in ("detail", "search") and not HEADLESS_BROWSER:
+                meta["headed"] = True
+            # _write_fixture re-runs the sanitize budgets + assert_clean on the payload AND
+            # the meta before writing (FIX-10): the only in-tree write path, never silent.
+            written = _write_fixture(ref.site, ref.kind, ref.name, new_sanitized, meta, force=True)
+            lines.append(f"    --apply wrote {written}")
+
+    return lines, drift_found
+
+
+async def run_refresh(args: argparse.Namespace) -> int:
+    """Re-capture every fixture of ``--site`` into a temp dir and print a drift report."""
+    refs = _iter_site_fixtures(args.site)
+    if not refs:
+        print(f"no fixtures found for site {args.site!r}", file=sys.stderr)
+        return 1
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"bookscraper_refresh_{args.site}_"))
+    print(f"refresh: {len(refs)} fixture(s) for {args.site}; snapshots -> {tmp_dir}")
+    if args.apply:
+        print("--apply: the only in-tree write path; each write re-runs sanitize + assert_clean + budgets (FIX-10)")
+    else:
+        print("(report only; --refresh writes nothing into tests/fixtures without --apply)")
+
+    any_drift = False
+    for ref in refs:
+        lines, drift = await refresh_fixture(ref, tmp_dir, args.apply)
+        any_drift = any_drift or drift
+        print("\n".join(lines))
+
+    print(f"\nsummary: {'DRIFT found' if any_drift else 'no drift'}; temp snapshots in {tmp_dir}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Capture and sanitize a page into the test corpus.")
     parser.add_argument("--site", required=True, choices=["amazon", "packtpub", "leanpub", "oreilly"])
-    parser.add_argument("--kind", required=True, choices=["detail", "search", "api", "robots"])
-    parser.add_argument("--url", required=True, help="The URL to capture.")
-    parser.add_argument("--name", required=True, help="Fixture base name (no extension).")
+    parser.add_argument("--kind", choices=["detail", "search", "api", "robots"], help="Capture kind (one-off capture).")
+    parser.add_argument("--url", help="The URL to capture (one-off capture).")
+    parser.add_argument("--name", help="Fixture base name, no extension (one-off capture).")
     parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing fixture (never bypasses assert_clean)."
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Re-capture every fixture of --site into a temp dir and report drift (no --kind/--url/--name).",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="With --refresh: write the refreshed snapshots into tests/fixtures (the only in-tree write path).",
     )
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.refresh:
+        return asyncio.run(run_refresh(args))
+    if args.apply:
+        print("--apply is only valid together with --refresh.", file=sys.stderr)
+        return 2
+    missing = [flag for flag, value in (("--kind", args.kind), ("--url", args.url), ("--name", args.name)) if not value]
+    if missing:
+        print(f"one-off capture requires {', '.join(missing)} (or pass --refresh).", file=sys.stderr)
+        return 2
     try:
         path = asyncio.run(run_capture(args))
     except CaptureError as exc:

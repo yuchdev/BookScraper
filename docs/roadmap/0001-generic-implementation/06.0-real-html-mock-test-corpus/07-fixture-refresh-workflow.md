@@ -1,7 +1,7 @@
 # 07 - Fixture refresh & drift workflow
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Docs Writer → Scraping Expert
 
 ## Requirements

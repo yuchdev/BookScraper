@@ -80,7 +80,9 @@ uv run python scripts/capture_fixtures.py --site leanpub --kind api \
 
 See subtask 01 (`docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/01-capture-and-sanitize-script.md`)
 for the capture/sanitize tool and subtask 07 (…/07-fixture-refresh-workflow.md) for the
-refresh/drift workflow.
+refresh/drift workflow. The operational runbook for detecting drift and refreshing
+fixtures (`--refresh` / `--apply`) is
+[`docs/test/html-fixtures.md`](../../docs/test/html-fixtures.md).
 
 **macOS 13 platform note.** Playwright 1.63 refuses to download or launch its bundled
 Chromium on macOS 13, so on such a machine point the capture at a locally installed

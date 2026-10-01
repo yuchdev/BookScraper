@@ -26,7 +26,7 @@ intercepted, and golden files record the expected records.
 | 04 | [Detail-page golden tests](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/04-detail-page-golden-tests.md)      | ✅ Complete    | -          |
 | 05 | [Search-page & API JSON fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/05-search-and-api-fixtures.md) | ✅ Complete    | -         |
 | 06 | [Edge-case fixtures](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/06-edge-case-fixtures.md)                  | ✅ Complete    | -          |
-| 07 | [Fixture refresh & drift workflow](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/07-fixture-refresh-workflow.md) | ⬜ Not started | -       |
+| 07 | [Fixture refresh & drift workflow](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/07-fixture-refresh-workflow.md) | ✅ Complete    | -       |
 
 ## Key constraints
 

@@ -15,6 +15,7 @@
 
 - [Developer guides](dev/) — setup, conventions, and contribution guides
 - [Test guides](test/) — testing strategy and tier documentation
+  - [`test/html-fixtures.md`](test/html-fixtures.md) — real-HTML fixture corpus refresh & drift workflow
 
 ## Runbooks
 
