@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
-| 06.0 | Real-HTML mock test corpus         | 🔶 In progress | 7 / 7         | -                                                                                                      |
+| 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
@@ -152,6 +152,51 @@ Delivered per [ADR 0002](/docs/adr/0002-ai-assisted-schema-detection.md): Playwr
 cross-sample DOM validation → diff report, propose-only and fail-loudly. Open: current model default plus a token
 budget and prompt caching, search-page support, offline `--html-file`/`--replay` mode with golden tests, a JSON
 report with a drift exit code, and prompt-injection hardening.
+
+## Task 06.0 - Real-HTML mock test corpus
+
+### Task 06.0 - Real-HTML mock test corpus (✅ 2026-10-02)
+
+**Delivered** (commits `ec37a9c`..`99b1bf3`; threat model
+[2026-09-30-real-html-test-corpus.md](/docs/security/2026-09-30-real-html-test-corpus.md); maintainer runbook
+[html-fixtures.md](/docs/test/html-fixtures.md)):
+
+- **01** `scraping/sanitize.py`, a stdlib-parser sanitizer with no new dependency. Its hand-written fail-closed
+  selector engine supports Playwright `:has-text()` and raises on anything unsupported. It does text-only prose
+  neutralization (the public-repo policy), strips tracking, signed-URL and token params (`dib`), drops JSON-shaped
+  and correlation `data-*`, and has an `assert_clean` that scans the bytes, the concatenated text and a
+  whitespace-stripped view. `scripts/capture_fixtures.py` captures in a logged-out, cookie-asserted context. The
+  security auditor signed it off after two attack rounds (V-1..V-7, R-1..R-4), and later sanitizer fixes re-ran
+  both attack harnesses.
+- **02** Corpus layout, a policy README with a provenance table, `.gitattributes`, and corpus-integrity tests (meta,
+  orphans, budgets, sha256).
+- **03** A default-deny Chromium harness: page- and context-level routes, service workers blocked, WebSockets
+  closed, httpx `MockTransport`, and `BOOKSCRAPER_CHROMIUM_PATH` for macOS 13. No app code changed.
+- **04** Detail goldens with `--update-goldens` (rewrite and fail) and `_known_issues` links to the fixing subtasks.
+- **05** Search and API fixtures and goldens, including the **first live fixtures** (Amazon search, two robots
+  files). `search_utils.py` is at 98%.
+- **06** Edge-case fixtures (13) and the first live Amazon detail page.
+- **07** `--refresh` drift report, with `--apply` as the only in-tree write path, which refuses wall pages.
+
+**Tests / gate:** 488 → 661 passed with Chromium (630 + 31 skipped without it), 98% total, `sanitize.py` 100%.
+`/verify-subtask` PASS ×5 and PARTIAL ×2 (04 and 05; deviations logged and ratified above). `/pr-review`: feature
+LGTM and security PASS (the 103-file corpus scanned clean three ways), so APPROVE. The follow-ups are applied in
+`99b1bf3`.
+
+**Deferred / open:** the `scrape_details.py` ≥ 90% criterion (82%) is deferred to 03.0/03, the `BASE_URL` fix.
+The provenance is mostly hand-built: Amazon/Packt/O'Reilly detail pages are walled intermittently, and the Leanpub
+APIs are gone. Hand-built fixtures don't detect markup drift; the live ones do. `--refresh` exits 0 on drift, and
+a non-zero exit is left to 06.2/05.
+
+**Findings routed to later tasks:**
+- missing `BASE_URL` for packtpub/oreilly → 03.0/03;
+- live Amazon `DESCRIPTION` drift → 03.0/04;
+- Amazon search detail-link drift → 03.3;
+- dead Leanpub detail and search APIs → 03.0/05 + 03.3;
+- the `search_utils.py:249` logger misuse → 03.3.
+
+**Reconciliation note:** all seven subtask specs are *consumed*. 05's spec text was amended (a full 100-item
+Leanpub page), and 02's success criterion was met with a ratified hand-built corpus.
 
 ## Task 06.1 - 90% coverage gate
 
