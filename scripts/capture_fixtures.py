@@ -79,16 +79,18 @@ class CaptureError(Exception):
     """A capture that must abort with no file written."""
 
 
+_DESCRIPTION_KEYS = ("DESCRIPTION", "DESCRIPTION_ALT")
+
+
 def keep_selectors_for(site: str) -> list[str]:
-    """Detail selectors whose extracted metadata must survive prose neutralization.
+    """keep-TEXT selectors: factual metadata that must survive verbatim.
 
     Everything the site's ``site_constants`` detail entry extracts EXCEPT the
-    description (and non-selector endpoint/URL keys). Passing description-less selectors
-    keeps the description element in the DOM but lets its long text collapse to the
-    neutral placeholder.
+    description (and non-selector endpoint/URL keys). ``neutralize_prose`` protects these
+    subtrees so title/authors/ISBN/date/tags keep their exact text.
     """
     entry = site_constants.get(site, {})
-    skip_exact = {"DESCRIPTION", "DESCRIPTION_ALT", "BASE_URL", "404_PAGE_TITLE"}
+    skip_exact = {*_DESCRIPTION_KEYS, "BASE_URL", "404_PAGE_TITLE"}
     selectors: list[str] = []
     for key, value in entry.items():
         if key in skip_exact or key.startswith("SEARCH_") or key.endswith("_API"):
@@ -96,6 +98,14 @@ def keep_selectors_for(site: str) -> list[str]:
         if isinstance(value, str) and value:
             selectors.append(value)
     return selectors
+
+
+def description_selectors_for(site: str) -> list[str]:
+    """keep-STRUCTURE selectors: the description element must survive ``shrink`` (so its
+    selector still matches) even though its prose text is neutralized to the placeholder.
+    """
+    entry = site_constants.get(site, {})
+    return [entry[key] for key in _DESCRIPTION_KEYS if isinstance(entry.get(key), str) and entry[key]]
 
 
 async def _assert_logged_out(context: Any) -> None:
@@ -188,7 +198,14 @@ def _bookscraper_version() -> str:
 def _sanitize_payload(raw: str, site: str, kind: str) -> str:
     """Route raw bytes through the pure sanitizers for its kind."""
     if kind in ("detail", "search"):
-        return sanitize.sanitize_html(raw, keep_selectors_for(site))
+        keep_text = keep_selectors_for(site)
+        keep_structure = description_selectors_for(site)
+        # Neutralize prose (keep-text is protected verbatim; the description's prose
+        # collapses to the placeholder but its elements are preserved), then shrink the
+        # page to the size budget while keeping BOTH the factual elements and the
+        # description element (keep-structure) so every selector still resolves.
+        cleaned = sanitize.sanitize_html(raw, keep_text)
+        return sanitize.shrink(cleaned, keep_text + keep_structure)
     if kind == "api":
         try:
             data = json.loads(raw)

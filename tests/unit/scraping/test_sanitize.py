@@ -1024,6 +1024,29 @@ def test_v5_prose_container_long_text_beside_protected_field_is_neutralized() ->
     assert PROSE_PLACEHOLDER in out
 
 
+def test_v5_prose_chunked_into_sub_80_char_spans_is_neutralized() -> None:
+    """V-5 (re-fix): prose split into many <80-char sibling spans still collapses.
+
+    Scenario: a description <div> holds ten 60-char <span> sentences; each is individually
+    under the 80-char floor, so per-node neutralization alone would leak them verbatim.
+    Boundaries: aggregate detection fires on the div; exactly one placeholder results, no
+    original sentence survives, and the div and all ten spans remain in the DOM.
+    On failure: copyrighted prose reaches the public repo by being chunked small.
+    """
+    from bookscraper.scraping.sanitize import _select
+
+    sentence = "Each of these sentences is exactly sixty characters long okay!"  # ~60 chars
+    assert len(sentence) < sanitize.PROSE_MIN_CHARS
+    spans = "".join(f"<span>{sentence}</span>" for _ in range(10))
+    html = f'<div class="description">{spans}</div>'
+    out = neutralize_prose(html, [])
+    assert out.count(PROSE_PLACEHOLDER) == 1
+    assert sentence not in out
+    root = _parse(out)
+    assert len(_select(root, "div.description")) == 1
+    assert len(_select(root, "div.description span")) == 10
+
+
 def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
     """Over-neutralization fix: a short prose-named heading survives; its body collapses.
 
@@ -1052,6 +1075,132 @@ def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
     matched = _select(_parse(out), 'h2.t-description-heading:has-text("Book description") + span')
     assert len(matched) == 1
     assert _text_content(matched[0]) == PROSE_PLACEHOLDER
+
+
+def _keep_text_for(site: str) -> list[str]:
+    """Detail selectors a capture protects verbatim: all except the description."""
+    from bookscraper.scraping.parameters import site_constants
+
+    skip = {"DESCRIPTION", "DESCRIPTION_ALT", "BASE_URL", "404_PAGE_TITLE"}
+    out = []
+    for key, value in site_constants[site].items():
+        if key in skip or key.startswith("SEARCH_") or key.endswith("_API"):
+            continue
+        if isinstance(value, str) and value:
+            out.append(value)
+    return out
+
+
+# Per-site representative markup: factual fields (verbatim) + a long description body.
+_SITE_DESCRIPTION_MARKUP = {
+    "amazon": {
+        "html": (
+            '<div id="dp">'
+            '<span id="productTitle">Fluent Python</span>'
+            '<div class="author"><a class="a-link-normal">Luciano Ramalho</a></div>'
+            '<div id="rpi-attribute-book_details-isbn13"><div class="rpi-attribute-value"><span>9781492056355</span></div></div>'
+            '<div id="rpi-attribute-book_details-publication_date"><div class="rpi-attribute-value"><span>April 1, 2022</span></div></div>'
+            '<div id="bookDescription_feature_div"><div class="a-expander-content"><span>'
+            + ("A long copyrighted marketing description of the book. " * 8)
+            + "</span></div></div>"
+            "</div>"
+        ),
+        "verbatim": {
+            "BOOK_TITLE": "Fluent Python",
+            "AUTHORS": "Luciano Ramalho",
+            "ISBN13": "9781492056355",
+            "PUBLICATION_DATE": "April 1, 2022",
+        },
+    },
+    "packtpub": {
+        "html": (
+            "<div>"
+            '<h1 class="product-title">Learn Python</h1>'
+            '<div class="authors"><span>Jane Author</span></div>'
+            '<div class="product-page-rhs desktop">'
+            '<span class="product-details-section-key">ISBN-13 :</span>'
+            '<span class="product-details-section-value">9781800000000</span>'
+            '<span class="product-details-section-key">Publication date :</span>'
+            '<span class="product-details-section-value">May 2023</span>'
+            "</div>"
+            '<div class="product-book-content-details">'
+            "<h2>Description</h2>"
+            '<div class="content-text">' + ("A long copyrighted book description body here. " * 8) + "</div>"
+            "</div>"
+            "</div>"
+        ),
+        "verbatim": {
+            "BOOK_TITLE": "Learn Python",
+            "AUTHORS": "Jane Author",
+            "ISBN13": "9781800000000",
+            "PUBLICATION_DATE": "May 2023",
+        },
+    },
+    "oreilly": {
+        "html": (
+            '<div id="root">'
+            '<h1 class="t-title">OReilly Python</h1>'
+            '<a class="author-name">Sam Writer</a>'
+            "<ul>"
+            '<li>ISBN: <span class="value t-isbn">9780123456789</span></li>'
+            '<li>Release date: <span class="value">June 2021</span></li>'
+            "</ul>"
+            '<h2 class="t-description-heading">Book description</h2>'
+            "<span>" + ("A long copyrighted book description body here. " * 8) + "</span>"
+            "</div>"
+        ),
+        "verbatim": {
+            "BOOK_TITLE": "OReilly Python",
+            "AUTHORS": "Sam Writer",
+            "ISBN13": "9780123456789",
+            "PUBLICATION_DATE": "June 2021",
+        },
+    },
+    "leanpub": {
+        "html": (
+            "<div>"
+            '<h1 class="book-hero__title ltr">Leanpub Python</h1>'
+            '<div class="avatar-with-name__name">Chris Maker</div>'
+            '<div class="about-book__content">' + ("A long copyrighted book description body here. " * 8) + "</div>"
+            "</div>"
+        ),
+        "verbatim": {
+            "BOOK_TITLE": "Leanpub Python",
+            "AUTHORS": "Chris Maker",
+        },
+    },
+}
+
+
+def test_description_selectors_survive_sanitize_for_all_sites() -> None:
+    """Golden fix: every site's DESCRIPTION selector still matches after sanitize_html.
+
+    Scenario: subtask 04 goldens recorded a scrape FAILED because neutralization deleted
+    the description element (and its parents), so the selector could never match.
+    Boundaries: for all four sites the DESCRIPTION selector resolves and its element's
+    text is the placeholder; TITLE/AUTHORS/ISBN/date selectors resolve with text verbatim.
+    On failure: the fixture pipeline itself causes a false scrape failure.
+    """
+    from bookscraper.scraping.parameters import site_constants
+    from bookscraper.scraping.sanitize import _select, _text_content
+
+    for site, spec in _SITE_DESCRIPTION_MARKUP.items():
+        keep_text = _keep_text_for(site)
+        out = sanitize_html(spec["html"], keep_text)
+        root = _parse(out)
+
+        # Factual selectors still match, text verbatim.
+        for key, expected in spec["verbatim"].items():
+            selector = site_constants[site][key]
+            matched = _select(root, selector)
+            assert matched, f"{site}.{key} selector lost after sanitize"
+            assert expected in _text_content(matched[0]), f"{site}.{key} text changed"
+
+        # DESCRIPTION selector still matches, element kept, text neutralized.
+        desc_selector = site_constants[site]["DESCRIPTION"]
+        desc = _select(root, desc_selector)
+        assert desc, f"{site} DESCRIPTION selector lost after sanitize"
+        assert _text_content(desc[0]) == PROSE_PLACEHOLDER, f"{site} description not neutralized"
 
 
 # --------------------------------------------------------------------------- #

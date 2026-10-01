@@ -781,63 +781,89 @@ def _is_prose_container(el: _Element) -> bool:
     return False
 
 
-def _contains_protected(el: _Element, protected: set[int]) -> bool:
-    return any(id(descendant) in protected for descendant in _iter_elements(el))
+def _nonprotected_text(el: _Element, protected: set[int]) -> str:
+    """Whitespace-normalized text of ``el``'s subtree, excluding protected (keep-text +
+    script/style) descendants - the basis for the aggregate prose decision."""
+    parts: list[str] = []
+
+    def walk(node: _Element) -> None:
+        for child in node.children:
+            if isinstance(child, _Text):
+                parts.append(child.data)
+            elif id(child) not in protected:
+                walk(child)
+
+    walk(el)
+    return " ".join("".join(parts).split())
 
 
-def _neutralize_direct_text(el: _Element, max_chars: int) -> None:
-    prose_container = _is_prose_container(el)
+def _collapse_text_to_placeholder(el: _Element, protected: set[int]) -> None:
+    """Neutralize ``el``'s prose by TEXT ONLY: the first non-protected, non-empty text
+    node in the subtree becomes the placeholder and every other non-protected text node
+    is blanked. Every element, attribute and sibling is kept (so a description selector
+    still resolves), and protected keep-text subtrees are never touched."""
+    placed = False
+
+    def walk(node: _Element) -> None:
+        nonlocal placed
+        for child in node.children:
+            if isinstance(child, _Text):
+                if not placed and child.data.strip():
+                    child.data = PROSE_PLACEHOLDER
+                    placed = True
+                else:
+                    child.data = ""
+            elif id(child) not in protected:
+                walk(child)
+
+    walk(el)
+
+
+def _neutralize(el: _Element, protected: set[int]) -> None:
+    """Post-order aggregate neutralization.
+
+    Children are processed first, so neutralization happens at the SMALLEST qualifying
+    element: once a deep description subtree collapses to the (short) placeholder, an
+    ancestor whose remaining non-protected text is mostly factual no longer qualifies and
+    its sibling factual text is left intact. An element qualifies when its aggregate
+    non-protected text is long (> ~200) or it is a prose-signalling container with >= ~80
+    chars - then its subtree text collapses to one placeholder while all elements stay.
+    """
     for child in el.children:
-        if isinstance(child, _Text):
-            stripped = child.data.strip()
-            if not stripped:
-                continue
-            # Short text (headings/labels/field values) stays verbatim even in a prose
-            # container, so a `:has-text()` selector keyed off it still matches.
-            if len(stripped) > max_chars or (prose_container and len(stripped) >= PROSE_MIN_CHARS):
-                child.data = PROSE_PLACEHOLDER
-
-
-def _neutralize(el: _Element, protected: set[int], max_chars: int) -> None:
-    # Called only on elements that are neither protected nor inside a protected subtree.
-    if _contains_protected(el, protected):
-        # Cannot collapse wholesale (would clobber a factual field); descend instead.
-        for child in el.children:
-            if isinstance(child, _Element) and id(child) not in protected:
-                _neutralize(child, protected, max_chars)
-        _neutralize_direct_text(el, max_chars)
+        if isinstance(child, _Element) and id(child) not in protected:
+            _neutralize(child, protected)
+    aggregate = _nonprotected_text(el, protected)
+    length = len(aggregate)
+    if length == 0:
         return
-    # No protected descendant: if this element's aggregate text reads as prose, collapse
-    # the whole subtree to one placeholder (catches prose chunked across sub-200-char
-    # sibling spans, V-5). A prose-named container with only short text (a heading/label)
-    # is left alone so its selector text survives.
-    aggregate_len = len(_text_content(el))
-    if aggregate_len > max_chars or (_is_prose_container(el) and aggregate_len >= PROSE_MIN_CHARS):
-        el.children = [_Text(PROSE_PLACEHOLDER)]
-        return
-    for child in el.children:
-        if isinstance(child, _Element):
-            _neutralize(child, protected, max_chars)
-    _neutralize_direct_text(el, max_chars)
+    if length > PROSE_MAX_CHARS or (_is_prose_container(el) and length >= PROSE_MIN_CHARS):
+        _collapse_text_to_placeholder(el, protected)
 
 
-def neutralize_prose(html: str, keep_selectors: list[str], max_chars: int = PROSE_MAX_CHARS) -> str:
+def neutralize_prose(html: str, keep_selectors: list[str]) -> str:
     """Replace long/free-form prose with a neutral placeholder, keeping factual metadata.
 
-    How "prose" is decided: an element reads as prose when its aggregate collapsed text
-    content (its own and descendant text, excluding script/style) exceeds ``max_chars``
-    (~200), OR it signals prose by id/class (description, review, about, bio, blurb,
-    editorial, synopsis, summary, comment, abstract). Using the *aggregate* length means
-    prose split across several short sibling spans is still caught (V-5). Any element
-    matched by ``keep_selectors`` (and its subtree) is preserved verbatim - the caller
-    passes every detail selector EXCEPT the description, so the description element stays
-    in the DOM (its selector still matches) but its long text collapses to the
-    placeholder. Script/style subtrees are also protected so a sanitized ld+json blob is
-    never mistaken for prose.
+    How "prose" is decided (on the AGGREGATE text of a subtree, excluding protected
+    keep-text and script/style): an element qualifies when that aggregate is long
+    (> ~200 chars) OR it is a prose-signalling container (id/class: description, review,
+    about, bio, blurb, editorial, synopsis, summary, comment, abstract) with >= ~80
+    chars. The aggregate basis catches prose chunked across many short sibling text nodes
+    (V-5); the decision is made at the smallest qualifying element so a factual sibling is
+    never wiped, and a short standalone heading (e.g. a 16-char "Book description") stays
+    verbatim because its own aggregate is under the threshold.
+
+    Neutralization is TEXT-ONLY: the first non-protected text node of a qualifying subtree
+    becomes the placeholder and the rest are blanked; no element, attribute or sibling is
+    removed, so a description selector (including a ``:has-text()`` heading anchor and a
+    ``+ sibling`` value) still matches the kept element. Any element matched by
+    ``keep_selectors`` (and its subtree) is preserved verbatim; the caller passes every
+    detail selector EXCEPT the description, so factual fields keep their exact text while
+    the description body collapses. Script/style subtrees are protected too.
 
     Scenario: the public repo must not carry copyrighted descriptions/reviews.
-    Boundaries: short factual values (title, authors, ISBN, dates) are untouched.
-    On failure: never - a page with no prose is returned unchanged.
+    Boundaries: short factual values (title, authors, ISBN, dates) are untouched, and the
+    description element stays in the DOM with its selector still matching.
+    On failure: never - a page with no long text is returned unchanged.
     """
     root = _parse(html)
     protected: set[int] = set()
@@ -848,7 +874,7 @@ def neutralize_prose(html: str, keep_selectors: list[str], max_chars: int = PROS
         for el in _select(root, selector):
             for descendant in _iter_elements(el):
                 protected.add(id(descendant))
-    _neutralize(root, protected, max_chars)
+    _neutralize(root, protected)
     return _serialize(root)
 
 
