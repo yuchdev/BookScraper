@@ -32,6 +32,7 @@ async def run(args: argparse.Namespace) -> None:
             args.url,
             model=args.model,
             max_input_tokens=args.max_input_tokens,
+            page_type=args.page_type,
         )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")

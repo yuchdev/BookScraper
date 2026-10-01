@@ -194,11 +194,37 @@ uv run bookscraper detect-schema \
 python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/.../"
 ```
 
-Flags: `--site {amazon,packtpub,leanpub,oreilly}` (required), `--url URL` (required,
-repeatable - pass it more than once to validate proposals across multiple pages, up to 5),
-`--model <id>` (optional, overrides `ANTHROPIC_MODEL` and the `claude-sonnet-5` default),
-`--max-input-tokens <n>` (optional, default 40000), `--output <path>` (optional), and
-`--log-severity {debug,info,warning,error}` like the other subcommands.
+Flags: `--site {amazon,packtpub,leanpub,oreilly}` (required), `--page-type {detail,search}`
+(optional, default `detail`), `--url URL` (required, repeatable - pass it more than once to
+validate proposals across multiple pages, up to 5), `--model <id>` (optional, overrides
+`ANTHROPIC_MODEL` and the `claude-sonnet-5` default), `--max-input-tokens <n>` (optional,
+default 40000), `--output <path>` (optional), and `--log-severity {debug,info,warning,error}`
+like the other subcommands.
+
+### Detail pages vs. search pages (`--page-type`)
+
+By default the tool proposes selectors for a book **detail** page (`BOOK_TITLE`, `AUTHORS`,
+`ISBN10`/`ISBN13`, `PUBLICATION_DATE`, `DESCRIPTION`, `TAGS`, ...). Pass `--page-type search`
+with a search-results URL to propose and validate the `SEARCH_*` selectors instead - the
+least-verified part of `parameters.py`:
+
+```bash
+uv run bookscraper detect-schema --site amazon --page-type search \
+  --url "https://www.amazon.com/s?k=python"
+```
+
+A search-results page is a list of repeated book **cards**. The tool treats the
+card-container field (`SEARCH_BOOK_CARD` / `SEARCH_RESULT_ITEM_SELECTOR`) and the
+pagination / no-results fields (`SEARCH_NEXT_PAGE_SELECTOR`, `SEARCH_NO_RESULTS_TEXT`,
+`SEARCH_NO_BOOKS_FOUND`) as **page-level**, and every other `SEARCH_*` field (title,
+authors, detail link, publication date, rating) as **card-relative** - evaluated inside a
+single card. The prompt tells Claude the same, so it proposes card-relative selectors for
+those fields. The non-selector `SEARCH_*` constants (the base search URL/API, the page-count
+integer, and the `data-asin` attribute NAME) are excluded. Validation enumerates the cards on
+each sample page and reports, per card-relative selector, the card count and the fraction of
+cards the selector matched; a selector matching **fewer than 80%** of the cards on any sample
+page is flagged `!! PARTIAL`. Everything else - the propose-never-apply boundary, the usage
+line, the fail-loud behavior - is identical to a detail run.
 
 ### Reading the report
 

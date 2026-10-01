@@ -193,6 +193,14 @@ def build_parser() -> argparse.ArgumentParser:
         "across multiple sample pages (recommended).",
     )
     detect_schema_parser.add_argument(
+        "--page-type",
+        dest="page_type",
+        choices=["detail", "search"],
+        default="detail",
+        help="Which page kind to propose selectors for: the book 'detail' page (default) or a "
+        "'search'-results listing page (the card-container and card-relative SEARCH_* selectors).",
+    )
+    detect_schema_parser.add_argument(
         "--model",
         dest="model",
         default=None,

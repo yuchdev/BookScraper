@@ -42,7 +42,7 @@ from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..book_utils import print_log
-from .parameters import HEADLESS_BROWSER, USER_AGENTS, site_constants
+from .parameters import HEADLESS_BROWSER, NON_SELECTOR_SEARCH_KEYS, USER_AGENTS, site_constants
 from .scrape_details import route_handler
 
 module_logger = logging.getLogger("schema_detection")
@@ -82,6 +82,23 @@ MAX_API_RETRIES = 1
 # never be proposed/validated as such: the site base URL and the 404-title sentinel.
 _NON_SELECTOR_KEYS = frozenset({"BASE_URL", "404_PAGE_TITLE"})
 
+# Search-page selector classification (used only by ``--page-type search``).
+#
+# The card-container selector is PAGE-LEVEL: ``page.locator(...).all()`` finds the result
+# cards. Only one of these two keys is present per site (Amazon/Leanpub use
+# ``SEARCH_BOOK_CARD``; Packtpub/O'Reilly use ``SEARCH_RESULT_ITEM_SELECTOR``).
+SEARCH_CARD_KEYS = frozenset({"SEARCH_BOOK_CARD", "SEARCH_RESULT_ITEM_SELECTOR"})
+# SEARCH_* selectors evaluated against the whole page rather than inside a single card:
+# the card container itself plus the pagination button and the "no results" markers
+# (which live outside the cards, per search_utils.get_search_results_via_playwright).
+SEARCH_PAGE_LEVEL_KEYS = SEARCH_CARD_KEYS | frozenset(
+    {"SEARCH_NEXT_PAGE_SELECTOR", "SEARCH_NO_RESULTS_TEXT", "SEARCH_NO_BOOKS_FOUND"}
+)
+# A card-relative selector matching fewer than this fraction of the cards on a sample page
+# is flagged *partial* (the drift this subtask exists to catch: a per-card selector that
+# only resolves on some cards).
+CARD_MATCH_THRESHOLD = 0.8
+
 
 class SchemaDetectionError(Exception):
     """Raised on any unrecoverable schema-detection failure (missing API key, page-load
@@ -113,6 +130,30 @@ def detail_selector_fields(entry: dict) -> list[str]:
     return fields
 
 
+def search_selector_fields(entry: dict) -> list[str]:
+    """Return the search-results-page CSS-selector field names in a ``site_constants`` entry.
+
+    Keeps every ``SEARCH_*`` key EXCEPT the non-selector constants in
+    ``NON_SELECTOR_SEARCH_KEYS`` (the base search URL/API, the page-count integer, and the
+    ``data-asin`` attribute NAME). The remaining keys are the card-container selector
+    (``SEARCH_BOOK_CARD`` / ``SEARCH_RESULT_ITEM_SELECTOR``), the card-relative field
+    selectors (title/authors/detail-link/publication-date/rating), and the page-level
+    pagination / no-results selectors - all genuine CSS selectors, including
+    ``SEARCH_NO_RESULTS_TEXT`` / ``SEARCH_NO_BOOKS_FOUND`` whose names belie that they
+    select an element. This is the search-page counterpart of ``detail_selector_fields``
+    and shares its non-selector classification with ``scripts/capture_fixtures.py`` via
+    ``parameters.NON_SELECTOR_SEARCH_KEYS``.
+    """
+    fields: list[str] = []
+    for key in entry:
+        if not key.startswith("SEARCH_"):
+            continue
+        if key in NON_SELECTOR_SEARCH_KEYS:
+            continue
+        fields.append(key)
+    return fields
+
+
 def prune_html(html: str, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
     """Strip an HTML document down to a compact, LLM-friendly snapshot.
 
@@ -136,7 +177,7 @@ def prune_html(html: str, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
     return text
 
 
-def build_instruction_block(site: str, field_names: list[str]) -> str:
+def build_instruction_block(site: str, field_names: list[str], page_type: str = "detail") -> str:
     """Build the *static* instruction block sent to Claude as the cacheable prefix.
 
     Contains only the site name, the field list, and the output contract - no per-page
@@ -145,14 +186,36 @@ def build_instruction_block(site: str, field_names: list[str]) -> str:
     is sent separately as the user message). Asks for a JSON object keyed by the *existing*
     field names (so Claude proposes values for known keys, not new keys), each value an
     object with a ``selector`` and a short ``rationale``. Pure string assembly.
+
+    ``page_type`` selects the wording: ``"detail"`` (the default) targets a single book
+    detail page; ``"search"`` targets a search-results listing and additionally explains
+    the card-relative semantics - the card-container field
+    (``SEARCH_BOOK_CARD`` / ``SEARCH_RESULT_ITEM_SELECTOR``) and the pagination/no-results
+    fields are page-level, while every other field is evaluated *inside a single card*.
     """
     fields_block = "\n".join(f"  - {name}" for name in field_names)
+    if page_type == "search":
+        intro = (
+            f"You are helping maintain a web scraper's CSS-selector schema for the "
+            f"'{site}' book SEARCH-RESULTS page.\n\n"
+            "This is a listing page made of many repeated book 'cards'. The card-container "
+            "field (SEARCH_BOOK_CARD or SEARCH_RESULT_ITEM_SELECTOR) is PAGE-LEVEL and must "
+            "match each result card on the page; the pagination and no-results fields "
+            "(SEARCH_NEXT_PAGE_SELECTOR / SEARCH_NO_RESULTS_TEXT / SEARCH_NO_BOOKS_FOUND) "
+            "are page-level too. Every OTHER field (title, authors, detail link, "
+            "publication date, rating) is evaluated INSIDE a single card, so its selector "
+            "must be correct when queried relative to one card element, not the whole page.\n\n"
+            "You will be given a pruned HTML snapshot of one sample search-results page. "
+        )
+    else:
+        intro = (
+            f"You are helping maintain a web scraper's CSS-selector schema for the "
+            f"'{site}' book detail page.\n\n"
+            "You will be given a pruned HTML snapshot of one sample detail page. "
+        )
     return (
-        f"You are helping maintain a web scraper's CSS-selector schema for the "
-        f"'{site}' book detail page.\n\n"
-        "You will be given a pruned HTML snapshot of one sample detail page. For each of "
-        "the following fields, propose the most robust CSS selector that Playwright's "
-        "`page.locator(selector)` could use to extract that field's value from the page. "
+        intro + "For each of the following fields, propose the most robust CSS selector that "
+        "Playwright's `page.locator(selector)` could use to extract that field's value. "
         "Prefer stable `id` and `data-*` attributes over fragile auto-generated class "
         "chains. If a field genuinely has no corresponding element on the page, use null "
         "for its selector.\n\n"
@@ -247,7 +310,10 @@ def format_diff_report(
     For each proposed field it shows the current vs. proposed selector (diff-style
     ``-``/``+`` when they differ, ``=`` when identical), the per-URL live-DOM validation
     result, and an explicit inconsistency warning where a selector matched on some sample
-    URLs but not others. Pure formatting - all live data is precomputed in ``validation``.
+    URLs but not others. For a search-page run a card-relative field's per-URL result
+    additionally carries the card count and the fraction of cards it matched; a field that
+    matched fewer than ``CARD_MATCH_THRESHOLD`` of the cards on any sample page is flagged
+    *partial*. Pure formatting - all live data is precomputed in ``validation``.
     """
     lines: list[str] = []
     lines.append(f"Schema-detection proposals for site '{site}'")
@@ -260,6 +326,7 @@ def format_diff_report(
     lines.append("=" * 72)
 
     inconsistent_fields: list[str] = []
+    partial_fields: list[str] = []
 
     for field in proposals:
         current_value = current.get(field, "<field not currently present>")
@@ -268,6 +335,7 @@ def format_diff_report(
         field_validation = validation.get(field, {})
         per_url = field_validation.get("per_url", [])
         consistent = field_validation.get("consistent", True)
+        partial = field_validation.get("partial", False)
 
         lines.append("")
         lines.append(f"### {field}")
@@ -283,31 +351,61 @@ def format_diff_report(
 
         lines.append("    validation:")
         for result in per_url:
-            if result.get("matched"):
-                snippet = result.get("snippet", "")
-                snippet_note = f' text="{snippet}"' if snippet else ""
-                lines.append(f"      [MATCH] {result['url']} ({result.get('count', 0)} element(s)){snippet_note}")
-            else:
-                note = result.get("snippet", "")
-                note_str = f" ({note})" if note else ""
-                lines.append(f"      [ no  ] {result['url']} (0 elements){note_str}")
+            lines.append("      " + _format_validation_result(result))
 
         if not consistent:
             inconsistent_fields.append(field)
             lines.append(
                 "    !! INCONSISTENT across sample URLs - matched on some pages but not others. Review before applying."
             )
+        if partial:
+            partial_fields.append(field)
+            lines.append(
+                "    !! PARTIAL - matched fewer than 80% of the cards on at least one sample URL. "
+                "Review before applying."
+            )
 
     lines.append("")
     lines.append("=" * 72)
+    summary: list[str] = []
     if inconsistent_fields:
-        lines.append(
+        summary.append(
             f"WARNING: {len(inconsistent_fields)} field(s) validated inconsistently "
             f"across sample URLs: {', '.join(inconsistent_fields)}"
         )
+    if partial_fields:
+        summary.append(
+            f"WARNING: {len(partial_fields)} card-relative selector(s) matched under 80% of the "
+            f"cards on at least one sample URL: {', '.join(partial_fields)}"
+        )
+    if summary:
+        lines.extend(summary)
     else:
         lines.append("All proposed selectors validated consistently across the sample URLs.")
     return "\n".join(lines)
+
+
+def _format_validation_result(result: dict[str, Any]) -> str:
+    """Render one per-URL validation line for the report.
+
+    A card-relative result (carrying a ``fraction``) is shown as ``matched/total cards``
+    plus a percentage; every other result keeps the detail-page ``N element(s)`` form so
+    the detail report is byte-identical to before. Pure formatting.
+    """
+    url = result["url"]
+    snippet = result.get("snippet", "")
+    tag = "[MATCH]" if result.get("matched") else "[ no  ]"
+    if "fraction" in result:
+        card_count = result.get("card_count", 0)
+        match_count = result.get("match_count", 0)
+        pct = round(result["fraction"] * 100)
+        snippet_note = f' text="{snippet}"' if snippet else ""
+        return f"{tag} {url} ({match_count}/{card_count} cards matched, {pct}%){snippet_note}"
+    if result.get("matched"):
+        snippet_note = f' text="{snippet}"' if snippet else ""
+        return f"{tag} {url} ({result.get('count', 0)} element(s)){snippet_note}"
+    note_str = f" ({snippet})" if snippet else ""
+    return f"{tag} {url} (0 elements){note_str}"
 
 
 def resolve_model(cli_model: Optional[str]) -> str:
@@ -520,43 +618,141 @@ async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_
     return prune_html(html, max_chars=max_chars)
 
 
+async def _validate_page_level_field(
+    selector: Optional[str],
+    samples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Re-query one page-level selector against every sample page's live DOM.
+
+    Returns ``{"per_url": [{"url", "matched", "count", "snippet"}...], "consistent": bool}``.
+    The field is *consistent* when every sample agrees on whether it matched (all hit or all
+    miss). A null proposal records a miss; a selector Playwright rejects records a miss and
+    is logged - a bad selector must never abort the run. The single sink for a proposed
+    selector is ``page.locator(sel).count()`` / ``.first.text_content()`` (AIS-4).
+    """
+    per_url: list[dict[str, Any]] = []
+    for sample in samples:
+        url = sample["url"]
+        page = sample["page"]
+        if not selector:
+            # A null proposal cannot match anything; record a miss with a note.
+            per_url.append({"url": url, "matched": False, "count": 0, "snippet": "null selector"})
+            continue
+        try:
+            locator = page.locator(selector)
+            count = await locator.count()
+            snippet = ""
+            if count:
+                text = await locator.first.text_content()
+                snippet = (text or "").strip()[:80]
+            per_url.append({"url": url, "matched": count > 0, "count": count, "snippet": snippet})
+        except Exception as exc:  # noqa: BLE001 - a bad selector must not abort the run
+            module_logger.warning("Selector %r failed on %s: %s", selector, url, exc)
+            per_url.append({"url": url, "matched": False, "count": 0, "snippet": "query error"})
+
+    matched_flags = {result["matched"] for result in per_url}
+    return {"per_url": per_url, "consistent": len(matched_flags) <= 1}
+
+
 async def validate_across_samples(
     proposals: dict[str, dict[str, Any]],
     samples: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Re-query every proposed selector against each sample page's live DOM.
+    """Re-query every proposed detail-page selector against each sample page's live DOM.
 
     ``samples`` is a list of ``{"url": str, "page": <playwright Page>}``. Returns
     ``{field: {"per_url": [{"url", "matched", "count", "snippet"}...], "consistent": bool}}``.
     A field is *consistent* when every sample page agrees on whether it matched (all hit
     or all miss); a mixed result is flagged rather than silently resolved.
     """
+    return {
+        field: await _validate_page_level_field(proposal["selector"], samples) for field, proposal in proposals.items()
+    }
+
+
+async def _validate_card_relative_field(
+    selector: Optional[str],
+    samples: list[dict[str, Any]],
+    cards_per_sample: list[list[Any]],
+) -> dict[str, Any]:
+    """Re-query one card-relative selector *inside each card* of every sample page.
+
+    For each sample it records the card count, how many cards the selector matched, and the
+    resulting fraction. ``matched`` is True only when there is at least one card and the
+    fraction is at least ``CARD_MATCH_THRESHOLD``; any sample below that (including a page
+    with no cards, or a null selector) sets the field's ``partial`` flag. The only sink for
+    the selector is ``card.locator(sel).count()`` / ``.first.text_content()`` (AIS-4).
+    """
+    per_url: list[dict[str, Any]] = []
+    partial = False
+    for sample, cards in zip(samples, cards_per_sample, strict=True):
+        card_count = len(cards)
+        match_count = 0
+        snippet = ""
+        if selector:
+            for card in cards:
+                try:
+                    sub = card.locator(selector)
+                    count = await sub.count()
+                    if count > 0 and not snippet:
+                        text = await sub.first.text_content()
+                        snippet = (text or "").strip()[:80]
+                except Exception as exc:  # noqa: BLE001 - a bad selector must not abort the run
+                    module_logger.warning("Card-relative selector %r failed on %s: %s", selector, sample["url"], exc)
+                    count = 0
+                if count > 0:
+                    match_count += 1
+        fraction = (match_count / card_count) if card_count else 0.0
+        matched = card_count > 0 and fraction >= CARD_MATCH_THRESHOLD
+        if not matched:
+            partial = True
+        per_url.append(
+            {
+                "url": sample["url"],
+                "matched": matched,
+                "card_count": card_count,
+                "match_count": match_count,
+                "fraction": fraction,
+                "snippet": snippet,
+            }
+        )
+    return {"per_url": per_url, "consistent": True, "partial": partial}
+
+
+async def validate_search_across_samples(
+    proposals: dict[str, dict[str, Any]],
+    samples: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Re-query every proposed search-page selector against each sample page's live DOM.
+
+    The card-container field (``SEARCH_CARD_KEYS``) and the page-level pagination/no-results
+    fields (``SEARCH_PAGE_LEVEL_KEYS``) are validated against the whole page like the detail
+    path. Every other field is *card-relative*: the cards are enumerated once per sample with
+    the proposed card selector (``page.locator(card).all()``) and the selector is then
+    queried inside each card, reporting the per-sample match fraction. Returns the same
+    per-field shape as ``validate_across_samples``, with card-relative fields additionally
+    carrying ``card_count`` / ``match_count`` / ``fraction`` per URL and a ``partial`` flag.
+    """
+    card_field = next((key for key in proposals if key in SEARCH_CARD_KEYS), None)
+    card_selector = proposals[card_field]["selector"] if card_field else None
+
+    cards_per_sample: list[list[Any]] = []
+    for sample in samples:
+        cards: list[Any] = []
+        if card_selector:
+            try:
+                cards = await sample["page"].locator(card_selector).all()
+            except Exception as exc:  # noqa: BLE001 - a bad card selector must not abort the run
+                module_logger.warning("Card selector %r failed on %s: %s", card_selector, sample["url"], exc)
+                cards = []
+        cards_per_sample.append(cards)
+
     results: dict[str, dict[str, Any]] = {}
     for field, proposal in proposals.items():
-        selector = proposal["selector"]
-        per_url: list[dict[str, Any]] = []
-        for sample in samples:
-            url = sample["url"]
-            page = sample["page"]
-            if not selector:
-                # A null proposal cannot match anything; record a miss with a note.
-                per_url.append({"url": url, "matched": False, "count": 0, "snippet": "null selector"})
-                continue
-            try:
-                locator = page.locator(selector)
-                count = await locator.count()
-                snippet = ""
-                if count:
-                    text = await locator.first.text_content()
-                    snippet = (text or "").strip()[:80]
-                per_url.append({"url": url, "matched": count > 0, "count": count, "snippet": snippet})
-            except Exception as exc:  # noqa: BLE001 - a bad selector must not abort the run
-                module_logger.warning("Selector %r failed on %s: %s", selector, url, exc)
-                per_url.append({"url": url, "matched": False, "count": 0, "snippet": "query error"})
-
-        matched_flags = {result["matched"] for result in per_url}
-        consistent = len(matched_flags) <= 1
-        results[field] = {"per_url": per_url, "consistent": consistent}
+        if field in SEARCH_PAGE_LEVEL_KEYS:
+            results[field] = await _validate_page_level_field(proposal["selector"], samples)
+        else:
+            results[field] = await _validate_card_relative_field(proposal["selector"], samples, cards_per_sample)
     return results
 
 
@@ -565,15 +761,19 @@ async def detect_schema(
     urls: list[str],
     model: Optional[str] = None,
     max_input_tokens: int = MAX_INPUT_TOKENS,
+    page_type: str = "detail",
 ) -> tuple[str, str]:
     """Run the full detect -> validate -> report pipeline, returning ``(report, usage_line)``.
 
     One request is sent per sample URL (capped at ``MAX_SAMPLE_URLS``), sharing a cacheable
     instruction block; the per-page proposal sets are merged and validated against every sample
-    page's live DOM. Raises ``SchemaDetectionError`` (never returns partial output) on: too many
-    sample URLs, an unknown site, a missing ``ANTHROPIC_API_KEY``, an empty model ID, a prompt
-    that will not fit the token budget, a page-load failure, or a malformed/truncated/refused AI
-    response.
+    page's live DOM. ``page_type`` selects the field set and validation: ``"detail"`` (default)
+    proposes selectors for the detail-page fields and validates them page-level; ``"search"``
+    proposes selectors for the ``SEARCH_*`` fields and validates each card-relative selector as a
+    per-card match fraction (see ``validate_search_across_samples``). Raises
+    ``SchemaDetectionError`` (never returns partial output) on: too many sample URLs, an unknown
+    site, a missing ``ANTHROPIC_API_KEY``, an empty model ID, a prompt that will not fit the token
+    budget, a page-load failure, or a malformed/truncated/refused AI response.
     """
     if site not in site_constants:
         raise SchemaDetectionError(f"Unknown site '{site}'. Known sites: {', '.join(sorted(site_constants))}.")
@@ -595,11 +795,11 @@ async def detect_schema(
         )
 
     current = site_constants[site]
-    fields = detail_selector_fields(current)
+    fields = search_selector_fields(current) if page_type == "search" else detail_selector_fields(current)
     if not fields:
-        raise SchemaDetectionError(f"No detail-page selector fields defined for site '{site}'.")
+        raise SchemaDetectionError(f"No {page_type}-page selector fields defined for site '{site}'.")
 
-    instruction_block = build_instruction_block(site, fields)
+    instruction_block = build_instruction_block(site, fields, page_type=page_type)
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS_BROWSER)
@@ -629,7 +829,10 @@ async def detect_schema(
                 usages.append(usage)
 
             proposals = _merge_proposals(per_url_proposals, fields)
-            validation = await validate_across_samples(proposals, samples)
+            if page_type == "search":
+                validation = await validate_search_across_samples(proposals, samples)
+            else:
+                validation = await validate_across_samples(proposals, samples)
         finally:
             await browser.close()
 

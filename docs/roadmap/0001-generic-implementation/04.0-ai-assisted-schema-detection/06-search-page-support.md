@@ -1,7 +1,7 @@
 # 06 - Search-page selector support
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (offline success criterion verified in 07)
 **Role:** Scraping Expert
 
 ## Context

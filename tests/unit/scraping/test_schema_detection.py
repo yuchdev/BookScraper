@@ -23,6 +23,7 @@ from bookscraper.scraping.schema_detection import (
     format_usage_line,
     prune_html,
     resolve_model,
+    search_selector_fields,
     validate_ai_response,
 )
 
@@ -57,6 +58,67 @@ def test_detail_selector_fields_on_real_leanpub_entry() -> None:
     assert not any(f.startswith("SEARCH_") for f in fields)
     assert "SINGLE_BOOK_API" not in fields
     assert "BASE_URL" not in fields
+
+
+# --------------------------------------------------------------------------- #
+# search_selector_fields
+# --------------------------------------------------------------------------- #
+def test_search_selector_fields_selects_card_and_card_relative_keys() -> None:
+    """Scenario: search_selector_fields keeps the card + card-relative + page-level SEARCH_*
+    selectors but drops the URL/API/numeric/attribute-name constants.
+
+    Boundaries: pure classification over a dict; no network.
+    On failure: a non-selector SEARCH_* value (a base URL or the data-asin attribute name)
+    would be fed to the model/validator as if it were a selector.
+    """
+    fields = search_selector_fields(parameters.site_constants["amazon"])
+    # Card container (page-level) and card-relative field selectors are kept.
+    assert "SEARCH_BOOK_CARD" in fields
+    assert "SEARCH_TITLE" in fields
+    assert "SEARCH_AUTHORS" in fields
+    assert "SEARCH_BOOK_DETAIL_LINK" in fields
+    # Page-level pagination / no-results selectors are kept (they ARE selectors).
+    assert "SEARCH_NEXT_PAGE_SELECTOR" in fields
+    assert "SEARCH_NO_RESULTS_TEXT" in fields
+    # Non-selector constants are excluded.
+    assert "SEARCH_BASE_URL" not in fields
+    assert "SEARCH_ASIN_ATTRIBUTE" not in fields
+    assert "SEARCH_MAXIMUM_PAGES" not in fields
+    # Detail-page selectors never leak into the search set.
+    assert "BOOK_TITLE" not in fields
+
+
+def test_search_selector_fields_result_item_sites() -> None:
+    """Scenario: the SEARCH_RESULT_ITEM_SELECTOR sites (packtpub/oreilly) keep their card key.
+
+    Boundaries: pure classification over the real packtpub entry.
+    On failure: a site using SEARCH_RESULT_ITEM_SELECTOR would have no card key to enumerate.
+    """
+    fields = search_selector_fields(parameters.site_constants["packtpub"])
+    assert "SEARCH_RESULT_ITEM_SELECTOR" in fields
+    assert "SEARCH_RATING_SELECTOR" in fields
+    assert "SEARCH_BASE_URL" not in fields
+
+
+# --------------------------------------------------------------------------- #
+# build_instruction_block - search variant
+# --------------------------------------------------------------------------- #
+def test_search_prompt_explains_card_relative_semantics() -> None:
+    """Scenario: the search prompt variant explains card-relative vs page-level semantics.
+
+    Boundaries: pure string assembly; no network.
+    On failure: the model would propose page-level selectors for per-card fields.
+    """
+    block = build_instruction_block("amazon", ["SEARCH_BOOK_CARD", "SEARCH_TITLE"], page_type="search")
+    assert "SEARCH-RESULTS" in block
+    assert "SEARCH_BOOK_CARD" in block
+    assert "SEARCH_RESULT_ITEM_SELECTOR" in block
+    assert "PAGE-LEVEL" in block
+    assert "INSIDE a single card" in block
+    # The detail variant carries none of the card-relative semantics.
+    detail = build_instruction_block("amazon", ["BOOK_TITLE"])
+    assert "INSIDE a single card" not in detail
+    assert "SEARCH-RESULTS" not in detail
 
 
 # --------------------------------------------------------------------------- #
@@ -242,6 +304,45 @@ def test_format_diff_report_all_consistent_summary() -> None:
         validation={"BOOK_TITLE": _validation(True, [True])},
     )
     assert "validated consistently" in report
+
+
+def test_format_diff_report_renders_card_fraction_and_flags_partial() -> None:
+    """Scenario: a search report renders per-card fractions and flags a sub-80% field partial.
+
+    Boundaries: pure formatting over a search-shaped validation dict (fraction/card_count).
+    On failure: a card-relative selector matching only some cards would look fully valid.
+    """
+    validation = {
+        "SEARCH_TITLE": {
+            "per_url": [
+                {"url": "u0", "matched": True, "card_count": 8, "match_count": 8, "fraction": 1.0, "snippet": "T"}
+            ],
+            "consistent": True,
+            "partial": False,
+        },
+        "SEARCH_AUTHORS": {
+            "per_url": [
+                {"url": "u0", "matched": False, "card_count": 8, "match_count": 4, "fraction": 0.5, "snippet": ""}
+            ],
+            "consistent": True,
+            "partial": True,
+        },
+    }
+    report = format_diff_report(
+        site="amazon",
+        urls=["u0"],
+        proposals={
+            "SEARCH_TITLE": {"selector": ".t", "rationale": "card title"},
+            "SEARCH_AUTHORS": {"selector": ".a", "rationale": "card authors"},
+        },
+        current={"SEARCH_TITLE": ".t", "SEARCH_AUTHORS": ".a"},
+        validation=validation,
+    )
+    assert "8/8 cards matched, 100%" in report
+    assert "4/8 cards matched, 50%" in report
+    assert "!! PARTIAL" in report
+    assert "WARNING: 1 card-relative selector(s) matched under 80%" in report
+    assert "SEARCH_AUTHORS" in report
 
 
 def test_format_diff_report_handles_field_not_currently_present() -> None:

@@ -26,6 +26,7 @@ def _args(**overrides) -> SimpleNamespace:
         "output": None,
         "model": None,
         "max_input_tokens": 40000,
+        "page_type": "detail",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -43,10 +44,33 @@ async def test_run_prints_report_and_usage_line(capsys) -> None:
     ):
         await detect_schema.run(args)
 
-    detect.assert_awaited_once_with("amazon", ["https://x/1"], model="claude-sonnet-5", max_input_tokens=12345)
+    detect.assert_awaited_once_with(
+        "amazon", ["https://x/1"], model="claude-sonnet-5", max_input_tokens=12345, page_type="detail"
+    )
     out = capsys.readouterr().out
     assert "THE REPORT" in out
     assert "Anthropic usage: model=claude-sonnet-5 requests=1" in out
+
+
+async def test_run_threads_search_page_type(capsys) -> None:
+    """Scenario: --page-type search is forwarded verbatim to detect_schema.
+
+    Boundaries: detect_schema is mocked; only the wiring of page_type is asserted.
+    On failure: a search run would silently fall back to detail-page selectors.
+    """
+    args = _args(page_type="search")
+    with (
+        patch.object(detect_schema, "load_dotenv", MagicMock()),
+        patch.object(
+            detect_schema,
+            "detect_schema",
+            new=AsyncMock(return_value=("SEARCH REPORT", "usage line")),
+        ) as detect,
+    ):
+        await detect_schema.run(args)
+
+    detect.assert_awaited_once_with("amazon", ["https://x/1"], model=None, max_input_tokens=40000, page_type="search")
+    assert "SEARCH REPORT" in capsys.readouterr().out
 
 
 async def test_run_exits_one_on_detection_error() -> None:

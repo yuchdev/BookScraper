@@ -204,6 +204,8 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
             "claude-sonnet-5",
             "--max-input-tokens",
             "25000",
+            "--page-type",
+            "search",
             "--output",
             "report.txt",
             "--log-severity",
@@ -215,8 +217,19 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
     assert args.url == ["https://www.amazon.com/dp/1", "https://www.amazon.com/dp/2"]
     assert args.model == "claude-sonnet-5"
     assert args.max_input_tokens == 25000
+    assert args.page_type == "search"
     assert args.output == "report.txt"
     assert args.log_severity == "debug"
+
+
+def test_cli_page_type_defaults_to_detail() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert args.page_type == "detail"
+
+
+def test_detect_schema_rejects_unknown_page_type() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--page-type", "api"])
 
 
 def test_detect_schema_model_defaults_to_none() -> None:

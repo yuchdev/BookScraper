@@ -53,7 +53,12 @@ from playwright.async_api import async_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from bookscraper.scraping import sanitize  # noqa: E402
-from bookscraper.scraping.parameters import HEADLESS_BROWSER, USER_AGENTS, site_constants  # noqa: E402
+from bookscraper.scraping.parameters import (  # noqa: E402
+    HEADLESS_BROWSER,
+    NON_SELECTOR_SEARCH_KEYS,
+    USER_AGENTS,
+    site_constants,
+)
 from bookscraper.scraping.scrape_details import route_handler  # noqa: E402
 
 # Repo root -> tests/fixtures/{html,json,robots}/<site>/
@@ -117,10 +122,10 @@ def description_selectors_for(site: str) -> list[str]:
 
 
 # SEARCH_* keys that are NOT CSS selectors (a base URL/API, a page-count int, or an
-# attribute NAME) and so must never be fed to the selector-aware sanitizer.
-_NON_SELECTOR_SEARCH_KEYS = frozenset(
-    {"SEARCH_BASE_URL", "SEARCH_BASE_API", "SEARCH_MAXIMUM_PAGES", "SEARCH_ASIN_ATTRIBUTE"}
-)
+# attribute NAME) and so must never be fed to the selector-aware sanitizer. Aliased from
+# the single source of truth in ``parameters`` so this script and ``schema_detection``
+# share one classification and can never disagree.
+_NON_SELECTOR_SEARCH_KEYS = NON_SELECTOR_SEARCH_KEYS
 
 
 def search_selectors_for(site: str) -> list[str]:

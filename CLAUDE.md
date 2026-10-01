@@ -309,16 +309,28 @@ python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.co
 otherwise-manual loop of figuring out a site's CSS selectors when its markup drifts — see
 `docs/scraping/schema-detection.md` (full manual-and-automated writeup) and
 `docs/adr/0002-ai-assisted-schema-detection.md` (design rationale). It takes `--site
-{amazon,packtpub,leanpub,oreilly}`, one or more repeatable `--url` sample detail pages, an optional `--output`,
-`--model` and `--max-input-tokens`, and `--log-severity` like the other subcommands; it does **not** take
-`--store-backend`.
+{amazon,packtpub,leanpub,oreilly}`, `--page-type {detail,search}` (default `detail`), one or more repeatable `--url`
+sample pages, an optional `--output`, `--model` and `--max-input-tokens`, and `--log-severity` like the other
+subcommands; it does **not** take `--store-backend`.
 
 The pipeline: load each URL with Playwright (reusing `scrape_details.route_handler` document-only blocking) → prune
 each page to an LLM-sized HTML snapshot → ask Claude (official `anthropic` SDK, `ANTHROPIC_API_KEY` read straight
-from the environment/`.env`) to propose a CSS selector + rationale per existing `site_constants[site]` detail-field
+from the environment/`.env`) to propose a CSS selector + rationale per existing `site_constants[site]` field
 → re-query every proposal against **each** sample page's live DOM, flagging any field that matches on some sample
 URLs but not others → emit a diff-style report to stdout (and to `--output` if given), followed by a one-line usage
 summary.
+
+`--page-type` picks the field set and validation. `detail` (the default) proposes selectors for the detail-page
+fields (`detail_selector_fields`, excluding every `SEARCH_*` key) and validates each page-level. `search` proposes
+selectors for the `SEARCH_*` fields (`search_selector_fields`, i.e. all `SEARCH_*` keys minus the non-selector
+constants in `parameters.NON_SELECTOR_SEARCH_KEYS` — `SEARCH_BASE_URL`/`SEARCH_BASE_API`/`SEARCH_MAXIMUM_PAGES`/
+`SEARCH_ASIN_ATTRIBUTE`; note `SEARCH_NO_RESULTS_TEXT`/`SEARCH_NO_BOOKS_FOUND` ARE kept, they select the no-results
+marker element). The search prompt variant explains the **card-relative** semantics: the card container
+(`SEARCH_BOOK_CARD`/`SEARCH_RESULT_ITEM_SELECTOR`) and the pagination/no-results selectors are page-level, every other
+`SEARCH_*` field is evaluated inside each card. Search validation enumerates the cards per sample and reports, per
+card-relative selector, the card count and the fraction of cards it matched — under 80% is flagged *partial*.
+`parameters.NON_SELECTOR_SEARCH_KEYS` is the single source of truth this classification shares with
+`scripts/capture_fixtures.py` so the two can't drift.
 
 Model, budget and cost controls (subtask 04.0/05): the default model is **`claude-sonnet-5`** (precedence `--model`
 flag > `ANTHROPIC_MODEL` env > default; an empty ID is rejected). Sonnet 5 runs adaptive thinking by default and

@@ -531,3 +531,191 @@ async def test_detect_schema_unknown_site() -> None:
 async def test_detect_schema_no_urls() -> None:
     with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
         await sd.detect_schema("amazon", [])
+
+
+# --------------------------------------------------------------------------- #
+# validate_search_across_samples (card-relative fractions)
+# --------------------------------------------------------------------------- #
+def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_sel="NEXT", content="<html></html>"):
+    """A FakePage for a search-results page: ``n_cards`` cards, ``n_title`` of which carry a
+    card-relative title element, plus a page-level next-page selector."""
+    cards = []
+    for i in range(n_cards):
+        subs = {title_sel: FakeLocator(f"Book {i}")} if i < n_title else {}
+        cards.append({"text": f"card {i}", "sub": subs})
+    locators = {card_sel: FakeLocator(cards), next_sel: FakeLocator(["Next"])}
+    return FakePage(locators=locators, content=content)
+
+
+def _search_proposals():
+    return {
+        "SEARCH_BOOK_CARD": {"selector": "CARD", "rationale": "card container"},
+        "SEARCH_TITLE": {"selector": "TITLE", "rationale": "card title"},
+        "SEARCH_NEXT_PAGE_SELECTOR": {"selector": "NEXT", "rationale": "pagination"},
+    }
+
+
+async def test_search_validation_reports_card_count_and_match_fraction() -> None:
+    """Scenario: each card-relative selector reports the card count and per-sample match fraction.
+
+    Boundaries: FakePage enumerates 8 cards; the title selector matches all of them.
+    On failure: a fully-matching per-card selector would not report its 8/8 fraction.
+    """
+    samples = [{"url": "u0", "page": _search_page(n_title=8)}]
+    result = await sd.validate_search_across_samples(_search_proposals(), samples)
+
+    # Card container (page-level) sees all 8 cards.
+    assert result["SEARCH_BOOK_CARD"]["per_url"][0]["count"] == 8
+    assert result["SEARCH_BOOK_CARD"]["per_url"][0]["matched"] is True
+    # Card-relative title matched every card.
+    title = result["SEARCH_TITLE"]["per_url"][0]
+    assert title["card_count"] == 8
+    assert title["match_count"] == 8
+    assert title["fraction"] == 1.0
+    assert title["matched"] is True
+    assert result["SEARCH_TITLE"]["partial"] is False
+    assert title["snippet"] == "Book 0"
+    # Page-level pagination selector validated against the whole page.
+    assert result["SEARCH_NEXT_PAGE_SELECTOR"]["per_url"][0]["matched"] is True
+
+
+async def test_card_relative_selector_below_80_percent_flagged_partial() -> None:
+    """Scenario: a card-relative selector matching under 80% of cards is flagged partial.
+
+    Boundaries: 8 cards, only 5 carry the title element -> fraction 0.625.
+    On failure: a per-card selector that silently misses a third of the cards looks valid.
+    """
+    samples = [{"url": "u0", "page": _search_page(n_cards=8, n_title=5)}]
+    result = await sd.validate_search_across_samples(_search_proposals(), samples)
+
+    title = result["SEARCH_TITLE"]["per_url"][0]
+    assert title["card_count"] == 8
+    assert title["match_count"] == 5
+    assert title["fraction"] == 0.625
+    assert title["matched"] is False
+    assert result["SEARCH_TITLE"]["partial"] is True
+
+
+async def test_search_validation_card_relative_query_error_counts_as_miss() -> None:
+    """Scenario: a card-relative selector Playwright rejects on a card counts as a miss, never aborts.
+
+    Boundaries: one card's title locator raises; the run must continue and flag partial.
+    On failure: a hostile/garbage selector would abort the whole validation.
+    """
+    card = {"text": "card", "sub": {"TITLE": FakeLocator([], raises=ValueError("bad selector"))}}
+    page = FakePage(locators={"CARD": FakeLocator([card]), "NEXT": FakeLocator(["Next"])})
+    samples = [{"url": "u0", "page": page}]
+    result = await sd.validate_search_across_samples(_search_proposals(), samples)
+
+    title = result["SEARCH_TITLE"]["per_url"][0]
+    assert title["match_count"] == 0
+    assert result["SEARCH_TITLE"]["partial"] is True
+
+
+async def test_search_validation_null_card_relative_selector_is_partial() -> None:
+    """Scenario: a null card-relative proposal matches no card and is flagged partial.
+
+    Boundaries: cards exist, but the title proposal's selector is None.
+    On failure: a null per-card selector would silently appear to validate.
+    """
+    proposals = _search_proposals()
+    proposals["SEARCH_TITLE"] = {"selector": None, "rationale": "not found"}
+    samples = [{"url": "u0", "page": _search_page(n_cards=4, n_title=4)}]
+    result = await sd.validate_search_across_samples(proposals, samples)
+
+    title = result["SEARCH_TITLE"]["per_url"][0]
+    assert title["card_count"] == 4
+    assert title["match_count"] == 0
+    assert result["SEARCH_TITLE"]["partial"] is True
+
+
+async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
+    """Scenario: a null card-container proposal yields zero cards, so card-relative fields are partial.
+
+    Boundaries: the SEARCH_BOOK_CARD proposal's selector is None.
+    On failure: card-relative validation would crash instead of reporting zero cards.
+    """
+    proposals = _search_proposals()
+    proposals["SEARCH_BOOK_CARD"] = {"selector": None, "rationale": "not found"}
+    samples = [{"url": "u0", "page": _search_page()}]
+    result = await sd.validate_search_across_samples(proposals, samples)
+
+    assert result["SEARCH_TITLE"]["per_url"][0]["card_count"] == 0
+    assert result["SEARCH_TITLE"]["partial"] is True
+    # The card container field itself records a null-selector miss.
+    assert result["SEARCH_BOOK_CARD"]["per_url"][0]["snippet"] == "null selector"
+
+
+async def test_search_validation_bad_card_selector_does_not_abort() -> None:
+    """Scenario: a card-container selector whose enumeration raises yields zero cards, not a crash.
+
+    Boundaries: page.locator(card).all() raises; card-relative fields must still report.
+    On failure: a bad card selector would abort the whole search validation.
+    """
+
+    class _RaisingAllPage:
+        def locator(self, selector):
+            loc = MagicMock()
+            loc.all = AsyncMock(side_effect=RuntimeError("all boom"))
+            loc.count = AsyncMock(return_value=0)
+            first = MagicMock()
+            first.text_content = AsyncMock(return_value="")
+            loc.first = first
+            return loc
+
+    samples = [{"url": "u0", "page": _RaisingAllPage()}]
+    result = await sd.validate_search_across_samples(_search_proposals(), samples)
+
+    assert result["SEARCH_TITLE"]["per_url"][0]["card_count"] == 0
+    assert result["SEARCH_TITLE"]["partial"] is True
+
+
+async def test_search_validation_no_card_field_in_proposals() -> None:
+    """Scenario: proposals with no card-container key still validate card-relative fields (zero cards).
+
+    Boundaries: only a card-relative field is proposed; next((card key)) is None.
+    On failure: the missing-card-field branch would raise a KeyError.
+    """
+    proposals = {"SEARCH_TITLE": {"selector": "TITLE", "rationale": "title"}}
+    samples = [{"url": "u0", "page": _search_page()}]
+    result = await sd.validate_search_across_samples(proposals, samples)
+
+    assert result["SEARCH_TITLE"]["per_url"][0]["card_count"] == 0
+    assert result["SEARCH_TITLE"]["partial"] is True
+
+
+# --------------------------------------------------------------------------- #
+# detect_schema - search page_type end to end
+# --------------------------------------------------------------------------- #
+async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
+    """Scenario: page_type='search' proposes SEARCH_* selectors and validates per-card fractions.
+
+    Boundaries: Playwright faked, anthropic mocked; two sample search pages.
+    On failure: a search run would use detail-page selectors or skip card-fraction validation.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    # Page 1: title on all 8 cards; page 2: title on only 4 of 8 -> partial.
+    pages = iter([_search_page(n_cards=8, n_title=8), _search_page(n_cards=8, n_title=4)])
+    browser = FakeBrowser(page_factory=lambda *a, **k: next(pages))
+    proposals_json = json.dumps(
+        {
+            "SEARCH_BOOK_CARD": {"selector": "CARD", "rationale": "card container"},
+            "SEARCH_TITLE": {"selector": "TITLE", "rationale": "card title"},
+            "SEARCH_NEXT_PAGE_SELECTOR": {"selector": "NEXT", "rationale": "pagination"},
+        }
+    )
+
+    with (
+        patch.object(sd, "async_playwright", build_playwright_factory(browser)),
+        patch.object(sd, "call_anthropic", MagicMock(return_value=(proposals_json, _fake_usage()))) as call_ai,
+    ):
+        report, usage_line = await sd.detect_schema("amazon", ["https://x/1", "https://x/2"], page_type="search")
+
+    # The instruction block sent is the search variant (card-relative semantics).
+    instruction_arg = call_ai.call_args.args[0]
+    assert "INSIDE a single card" in instruction_arg
+    assert "cards matched" in report
+    assert "!! PARTIAL" in report
+    assert "requests=2" in usage_line
+    browser.close.assert_awaited_once()
