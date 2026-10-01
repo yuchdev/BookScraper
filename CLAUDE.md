@@ -344,6 +344,18 @@ mocks the client and never makes a real API call.
   `backends/mongo/cert_rotation.py`'s Atlas API calls (`httpx.post` mocked), `backends/storage.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
   `scraping/schema_detection.py` (Playwright faked, `anthropic` client mocked — never a real API call),
   `commands/scrape_urls.py`, `commands/search.py`, `commands/rotate_cert.py`, `commands/detect_schema.py`, and `main.py`.
+  `tests/mock/scraping/html/` is the **offline fixture-serving harness** (task 06.0): its `conftest.py` turns the
+  committed `tests/fixtures/` corpus (real captured/hand-built HTML + Leanpub JSON, mapped by each fixture's
+  `.meta.json` `url`) into a default-deny offline environment for the *unmodified* scraper. `corpus_router(browser,
+  mapping)` wraps a real headless Chromium so every page serves the mapped corpus bytes and **aborts + records +
+  fails the test** on any unmapped request (threat model FIX-8), with corpus routes installed *after* the production
+  `route_handler` so they take precedence and an unmapped document is never `route.continue_()`d to the network
+  (FIX-9); `httpx_corpus(mapping)` does the same for the Leanpub httpx path by injecting an `httpx.MockTransport`
+  (no production change — a same-signature `httpx.AsyncClient` factory). The Chromium-backed tests carry the
+  `chromium` marker (registered in `pyproject.toml`, **included in the default run** — offline and fast) and pick
+  their browser via the `BOOKSCRAPER_CHROMIUM_PATH` env var (a system Chromium, for macOS 13 where Playwright's
+  bundled Chromium won't launch), falling back to the bundled browser and **skipping cleanly** (never failing) when
+  no Chromium is usable, so CI can install one (task 06.2).
 - **`tests/integration/`** — hits real MongoDB Atlas, tagged `@pytest.mark.integration` and excluded
   from the default run (`addopts = -m "not integration"` in `pyproject.toml`); run explicitly with
   `uv run pytest -m integration`. `test_connection_password.py` / `test_connection_tls.py` verify

@@ -1,7 +1,7 @@
 # 03 - Chromium fixture-serving harness
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-corpus-layout-and-policy.md](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/02-corpus-layout-and-policy.md)
 **Role:** Testing Expert
 

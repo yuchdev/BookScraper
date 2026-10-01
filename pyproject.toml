@@ -42,5 +42,6 @@ dev = [
 addopts = "-m \"not integration\""
 markers = [
     "integration: hits a real external service (MongoDB Atlas); requires real credentials, excluded by default",
+    "chromium: runs the offline corpus harness in real headless Chromium; offline and fast, included by default (CI installs Chromium via task 06.2), skips cleanly when no browser is usable",
 ]
 asyncio_mode = "auto"
