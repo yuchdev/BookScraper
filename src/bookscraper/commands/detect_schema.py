@@ -2,9 +2,11 @@
 
 Unlike `scrape-urls`/`search` this command never touches book storage (no
 `resolve_store_backend()` call) and, unlike anything else in the package, it never
-writes to `parameters.py`. It loads sample detail-page URLs, asks Claude to propose
-selectors, validates them against each page's live DOM, and prints a diff-style report
-for a human to apply by hand (optionally also writing it to `--output`).
+writes to `parameters.py`. It loads sample pages (live `--url`s or fully offline local
+`--html-file`s), asks Claude - or a recorded `--replay` file, offline with no API key - to
+propose selectors, validates them against each page's live DOM, and prints a diff-style report
+for a human to apply by hand (optionally also writing it to `--output`). `--record` captures a
+live run's responses for a maintainer to curate into a replay file.
 
 See `scraping/schema_detection.py` for the pipeline and
 `docs/scraping/schema-detection.md` for the full manual-and-automated workflow writeup.
@@ -29,10 +31,13 @@ async def run(args: argparse.Namespace) -> None:
     try:
         report, usage_line = await detect_schema(
             args.site,
-            args.url,
+            urls=args.url,
+            html_files=args.html_file,
             model=args.model,
             max_input_tokens=args.max_input_tokens,
             page_type=args.page_type,
+            replay=args.replay,
+            record=args.record,
         )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")

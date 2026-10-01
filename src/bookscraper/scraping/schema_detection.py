@@ -23,6 +23,16 @@ applies. It also fails loudly - a missing ``ANTHROPIC_API_KEY``, a page-load fai
 or a malformed/non-JSON AI response each raise ``SchemaDetectionError`` rather than
 producing partial or guessed output.
 
+Offline modes (AIS-9, an acceptance gate): the sample pages can come from committed local
+HTML files (``html_files=``) instead of live URLs - each is read with a size cap (AIS-11),
+loaded into Chromium via ``set_content`` with **every** request aborted (no network at all),
+and pruned deterministically from the file bytes. And the model step can be served from a
+recorded ``replay=`` file (responses keyed by ``sha256`` of the exact prompt the code builds):
+in replay mode no Anthropic client is ever constructed and no ``ANTHROPIC_API_KEY`` is
+required, so the whole pipeline runs in CI with zero network and no key; a prompt missing from
+the replay file fails loudly. ``record=`` writes the per-prompt responses of a live run back
+out for a maintainer to curate into a replay file (never the API key).
+
 Import direction: this lives under ``scraping/`` and imports only from ``scraping/`` and
 ``book_utils`` - never from ``commands/`` or ``backends/`` (no storage is involved).
 """
@@ -30,15 +40,17 @@ Import direction: this lives under ``scraping/`` and imports only from ``scrapin
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import random
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 import anthropic
-from playwright.async_api import Page, async_playwright
+from playwright.async_api import Browser, Page, Route, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..book_utils import print_log
@@ -77,6 +89,11 @@ MAX_SAMPLE_URLS = 5
 # At most one retry on a transient SDK error. The anthropic client's own ``max_retries`` is set to
 # this same value so there is exactly one retry layer, never stacked unbounded retries.
 MAX_API_RETRIES = 1
+
+# AIS-11: hard cap on a single ``--html-file`` payload, aligned with the 06.0 corpus's 400 KB
+# per-file budget (``tests/fixtures/README.md``). A file over this - or missing/unreadable/not
+# valid UTF-8 - fails loudly rather than being read into memory and ``set_content``'d.
+HTML_FILE_MAX_BYTES = 400 * 1024
 
 # Keys in a site_constants entry that are NOT detail-page CSS selectors and so should
 # never be proposed/validated as such: the site base URL and the 404-title sentinel.
@@ -440,6 +457,33 @@ def format_usage_line(model: str, usages: list[Any], request_count: int) -> str:
     )
 
 
+def prompt_hash(instruction_block: str, snapshot_block: str) -> str:
+    """Return the ``sha256`` key for a prompt, used to index the ``--replay``/``--record`` file.
+
+    The key is the hex ``sha256`` of the exact prompt the live path would send - the static
+    instruction block and the per-page snapshot block joined the same way ``build_prompt``
+    joins them. Both the runtime (replay lookup / record write) and the maintenance script that
+    generates a replay file compute the key through this one function and ``build_snapshot_block``
+    so the two can never drift. Pure: no I/O, no network.
+    """
+    prompt = f"{instruction_block}\n\n{snapshot_block}"
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def format_replay_usage_line(model: str, replayed: int) -> str:
+    """Format the usage line for an offline ``--replay`` run: zero tokens, ``N`` replayed.
+
+    No Anthropic request is made in replay mode, so there is no real token usage to report;
+    the line mirrors ``format_usage_line``'s shape (all token counts zero) and names how many
+    recorded responses were served. Pure formatting; carries no key.
+    """
+    return (
+        f"Anthropic usage: model={model} requests=0 replayed={replayed} "
+        f"input_tokens=0 cache_read_input_tokens=0 cache_creation_input_tokens=0 "
+        f"output_tokens=0 (offline replay; no API call, no tokens spent)"
+    )
+
+
 def _merge_proposals(
     per_url_proposals: list[dict[str, dict[str, Any]]],
     field_names: list[str],
@@ -618,6 +662,114 @@ async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_
     return prune_html(html, max_chars=max_chars)
 
 
+async def _block_all_requests(route: Route) -> None:
+    """Abort every request (default-deny), used for ``--html-file`` pages.
+
+    Unlike ``route_handler`` (which blocks only non-document subresources and lets the
+    document continue to the network), a ``set_content`` page has no document fetch and must
+    make **no** network call at all (AIS-9), so this aborts everything - document, subresource,
+    anything a loaded fixture might try to pull.
+    """
+    await route.abort()
+
+
+def _read_html_file(path: str) -> str:
+    """Read a local ``--html-file`` as UTF-8 text, enforcing the AIS-11 size cap.
+
+    Fails loudly (``SchemaDetectionError``) on a missing, oversized, or non-UTF-8/unreadable
+    path rather than silently skipping it: the file is caller-supplied but its *content* is
+    untrusted markup, so an oversized/binary file must never be read into memory and fed to
+    ``set_content``.
+    """
+    file_path = Path(path)
+    try:
+        size = file_path.stat().st_size
+    except OSError as exc:
+        raise SchemaDetectionError(f"Cannot access --html-file '{path}': {exc}") from exc
+    if size > HTML_FILE_MAX_BYTES:
+        raise SchemaDetectionError(
+            f"--html-file '{path}' is {size} bytes, over the {HTML_FILE_MAX_BYTES}-byte cap. "
+            "Reduce it to the minimum markup the selectors need (see the 06.0 corpus budget)."
+        )
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SchemaDetectionError(f"Cannot read --html-file '{path}' as UTF-8 text: {exc}") from exc
+
+
+async def load_html_file_page(
+    browser: Browser,
+    path: str,
+    max_chars: int = DEFAULT_HTML_BUDGET,
+) -> tuple[Page, str]:
+    """Load a local ``--html-file`` into a new, fully offline Chromium page for validation.
+
+    Reads the file (size-capped UTF-8, AIS-11), opens a page with **all** requests aborted
+    (AIS-9: default-deny *before* ``set_content``, so any subresource a fixture references is
+    blocked, not fetched), sets the markup, and returns ``(page, pruned_html)``. The pruned
+    snapshot is derived from the file bytes (not from ``page.content()``) so it - and therefore
+    the replay ``sha256`` key - is deterministic and independent of the Chromium build.
+    """
+    raw_html = _read_html_file(path)
+    page = await browser.new_page()
+    await page.route("**/*", _block_all_requests)
+    await page.set_content(raw_html, wait_until="domcontentloaded")
+    return page, prune_html(raw_html, max_chars=max_chars)
+
+
+def load_replay_file(path: str) -> dict[str, str]:
+    """Load a ``--replay`` file: a JSON object of ``{sha256(prompt): raw_model_response}``.
+
+    Keys beginning with ``_`` (e.g. a ``_provenance`` note on a hand-authored file) are
+    ignored, so a recording can carry documentation alongside its hash-keyed entries. Fails
+    loudly on a missing/unreadable path or a payload that is not a JSON object.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SchemaDetectionError(f"Cannot read --replay file '{path}': {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SchemaDetectionError(f"--replay file '{path}' is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SchemaDetectionError(f"--replay file '{path}' must be a JSON object keyed by prompt hash.")
+    return {key: value for key, value in data.items() if not key.startswith("_")}
+
+
+def replay_lookup(replay: dict[str, str], instruction_block: str, snapshot_block: str) -> str:
+    """Return the recorded response for a prompt, or fail loudly if it is not recorded (AIS-9).
+
+    A missing entry is a hard error ("no recorded response") - never a silent fall-through to a
+    live API call - so an offline run that drifts from its recordings fails rather than spending.
+    """
+    key = prompt_hash(instruction_block, snapshot_block)
+    if key not in replay:
+        raise SchemaDetectionError(
+            f"No recorded response in the --replay file for prompt hash {key}. "
+            "The prompt changed (site fields, page content, or page_type) or the recording is "
+            "stale; refresh it with --record against a live run."
+        )
+    return replay[key]
+
+
+def write_record_file(path: str, recorded: dict[str, str]) -> None:
+    """Write a ``--record`` file: ``{sha256(prompt): raw_model_response}`` from a live run.
+
+    For maintainers refreshing the committed replay recordings. Carries a ``_provenance`` note
+    and the hash-keyed responses only - never the ``ANTHROPIC_API_KEY`` (it is never part of a
+    prompt or a response) and never any live token figure. Writes solely to ``path``.
+    """
+    payload: dict[str, str] = {
+        "_provenance": "recorded from a live detect-schema run; review before committing as a replay fixture",
+    }
+    payload.update(recorded)
+    try:
+        Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise SchemaDetectionError(f"Cannot write --record file '{path}': {exc}") from exc
+
+
 async def _validate_page_level_field(
     selector: Optional[str],
     samples: list[dict[str, Any]],
@@ -756,43 +908,80 @@ async def validate_search_across_samples(
     return results
 
 
+def _resolve_sample_sources(
+    urls: Optional[list[str]],
+    html_files: Optional[list[str]],
+) -> tuple[list[str], bool]:
+    """Resolve the sample source list, enforcing "exactly one of urls / html_files".
+
+    Returns ``(labels, from_files)`` - the list of URLs or file paths and whether they are local
+    files. Raises ``SchemaDetectionError`` if neither or both are given, if the chosen list is
+    empty, or if it exceeds ``MAX_SAMPLE_URLS`` (the cap applies to ``--html-file`` too, so an
+    offline run cannot sidestep the per-run ceiling).
+    """
+    urls = urls or []
+    html_files = html_files or []
+    if urls and html_files:
+        raise SchemaDetectionError("Pass either --url or --html-file sample pages, not both.")
+    labels, from_files = (html_files, True) if html_files else (urls, False)
+    if not labels:
+        raise SchemaDetectionError("At least one sample --url or --html-file is required.")
+    if len(labels) > MAX_SAMPLE_URLS:
+        kind = "--html-file paths" if from_files else "sample URLs"
+        raise SchemaDetectionError(
+            f"Too many {kind} ({len(labels)}); the per-run cap is {MAX_SAMPLE_URLS}. Reduce the number of sample pages."
+        )
+    return labels, from_files
+
+
 async def detect_schema(
     site: str,
-    urls: list[str],
+    urls: Optional[list[str]] = None,
+    html_files: Optional[list[str]] = None,
     model: Optional[str] = None,
     max_input_tokens: int = MAX_INPUT_TOKENS,
     page_type: str = "detail",
+    replay: Optional[str] = None,
+    record: Optional[str] = None,
 ) -> tuple[str, str]:
     """Run the full detect -> validate -> report pipeline, returning ``(report, usage_line)``.
 
-    One request is sent per sample URL (capped at ``MAX_SAMPLE_URLS``), sharing a cacheable
-    instruction block; the per-page proposal sets are merged and validated against every sample
-    page's live DOM. ``page_type`` selects the field set and validation: ``"detail"`` (default)
-    proposes selectors for the detail-page fields and validates them page-level; ``"search"``
-    proposes selectors for the ``SEARCH_*`` fields and validates each card-relative selector as a
-    per-card match fraction (see ``validate_search_across_samples``). Raises
-    ``SchemaDetectionError`` (never returns partial output) on: too many sample URLs, an unknown
-    site, a missing ``ANTHROPIC_API_KEY``, an empty model ID, a prompt that will not fit the token
-    budget, a page-load failure, or a malformed/truncated/refused AI response.
+    Sample pages come from either live ``urls`` or local ``html_files`` (exactly one, each capped
+    at ``MAX_SAMPLE_URLS``). One response is obtained per sample - from a live Anthropic request,
+    or, when ``replay`` names a recording, served offline by prompt ``sha256`` (AIS-9: no client
+    is constructed and no ``ANTHROPIC_API_KEY`` is required; a missing entry fails loudly). The
+    per-page proposal sets are merged and validated against every sample page's live DOM.
+    ``page_type`` selects the field set/validation: ``"detail"`` (default) validates page-level;
+    ``"search"`` validates each card-relative selector as a per-card match fraction. ``record``,
+    on a live run, writes the per-prompt responses back out for a maintainer to curate.
+
+    Offline note (AIS-9/AIS-10): in replay mode there is no client, so the ``count_tokens``
+    pre-flight budget is skipped entirely (nothing is sent to bound); the usage line reports zero
+    tokens and the replayed count. Raises ``SchemaDetectionError`` (never partial output) on: an
+    unknown site, no/both/too-many sample sources, a missing ``ANTHROPIC_API_KEY`` (live only), an
+    empty model ID, a missing/oversized/unreadable ``--html-file``, a prompt that will not fit the
+    token budget (live only), a page-load failure, a missing replay entry, or a
+    malformed/truncated/refused AI response.
     """
     if site not in site_constants:
         raise SchemaDetectionError(f"Unknown site '{site}'. Known sites: {', '.join(sorted(site_constants))}.")
-    if not urls:
-        raise SchemaDetectionError("At least one sample --url is required.")
-    if len(urls) > MAX_SAMPLE_URLS:
-        raise SchemaDetectionError(
-            f"Too many sample URLs ({len(urls)}); the per-run cap is {MAX_SAMPLE_URLS}. "
-            "Reduce the number of --url arguments."
-        )
 
-    # Resolve the model (and reject an empty ID) before any network or API call.
+    labels, from_files = _resolve_sample_sources(urls, html_files)
+
+    # Resolve the model (and reject an empty ID) before any browser, network, or API call.
     resolved_model = resolve_model(model)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise SchemaDetectionError(
-            "ANTHROPIC_API_KEY is not set. Export it (or add it to .env) before running detect-schema."
-        )
+    offline = replay is not None
+    replay_map: dict[str, str] = load_replay_file(replay) if offline else {}
+
+    api_key: Optional[str] = None
+    if not offline:
+        # AIS-9: the key is only required - and only read - on the live path.
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise SchemaDetectionError(
+                "ANTHROPIC_API_KEY is not set. Export it (or add it to .env) before running detect-schema."
+            )
 
     current = site_constants[site]
     fields = search_selector_fields(current) if page_type == "search" else detail_selector_fields(current)
@@ -804,29 +993,40 @@ async def detect_schema(
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS_BROWSER)
         samples: list[dict[str, Any]] = []
+        recorded: dict[str, str] = {}
         try:
-            for url in urls:
-                page = await browser.new_page()
-                pruned_html = await fetch_pruned_html(url, page)
-                samples.append({"url": url, "page": page, "pruned_html": pruned_html})
+            for label in labels:
+                if from_files:
+                    # AIS-9/AIS-11: size-capped read, loaded with every request aborted.
+                    page, pruned_html = await load_html_file_page(browser, label)
+                else:
+                    page = await browser.new_page()
+                    pruned_html = await fetch_pruned_html(label, page)
+                samples.append({"url": label, "page": page, "pruned_html": pruned_html})
 
-            # One request per sample page, each sharing the cacheable instruction block; collect
-            # every response's proposals and usage. The merged proposals are then validated against
-            # ALL sample pages' live DOM (a selector that matches one page's markup can be a false
-            # positive - cross-URL validation is what catches that).
+            # One response per sample page, each sharing the cacheable instruction block; collect
+            # every response's proposals (and live usage). The merged proposals are then validated
+            # against ALL sample pages' live DOM (a selector matching one page's markup can be a
+            # false positive - cross-URL validation is what catches that).
             per_url_proposals: list[dict[str, dict[str, Any]]] = []
             usages: list[Any] = []
             for sample in samples:
-                raw_reply, usage = await asyncio.to_thread(
-                    call_anthropic,
-                    instruction_block,
-                    build_snapshot_block(sample["pruned_html"]),
-                    api_key,
-                    resolved_model,
-                    max_input_tokens,
-                )
+                snapshot_block = build_snapshot_block(sample["pruned_html"])
+                if offline:
+                    raw_reply = replay_lookup(replay_map, instruction_block, snapshot_block)
+                else:
+                    raw_reply, usage = await asyncio.to_thread(
+                        call_anthropic,
+                        instruction_block,
+                        snapshot_block,
+                        api_key,
+                        resolved_model,
+                        max_input_tokens,
+                    )
+                    usages.append(usage)
+                    if record is not None:
+                        recorded[prompt_hash(instruction_block, snapshot_block)] = raw_reply
                 per_url_proposals.append(validate_ai_response(raw_reply, fields))
-                usages.append(usage)
 
             proposals = _merge_proposals(per_url_proposals, fields)
             if page_type == "search":
@@ -836,7 +1036,14 @@ async def detect_schema(
         finally:
             await browser.close()
 
+    if record is not None and not offline:
+        write_record_file(record, recorded)
+
     print_log(f"Received {len(proposals)} selector proposal(s) for '{site}'.", "info")
-    report = format_diff_report(site, urls, proposals, current, validation)
-    usage_line = format_usage_line(resolved_model, usages, len(usages))
+    report = format_diff_report(site, labels, proposals, current, validation)
+    usage_line = (
+        format_replay_usage_line(resolved_model, len(samples))
+        if offline
+        else format_usage_line(resolved_model, usages, len(usages))
+    )
     return report, usage_line

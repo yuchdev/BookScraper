@@ -1,7 +1,7 @@
 # 07 - Offline mode & golden tests
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 06.0](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md)
 **Role:** Testing Expert → Python Expert
 

@@ -131,6 +131,7 @@ class FakePage:
         self.title = AsyncMock(return_value=title)
         self.content = AsyncMock(return_value=content)
         self.goto = AsyncMock()
+        self.set_content = AsyncMock()
         self.close = AsyncMock()
         self.route = AsyncMock()
         self.set_extra_http_headers = AsyncMock()

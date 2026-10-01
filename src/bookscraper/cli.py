@@ -183,14 +183,26 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Which site's detail-page schema to propose selectors for.",
     )
-    detect_schema_parser.add_argument(
+    # Exactly one sample source is required: live URLs (--url) or local HTML files
+    # (--html-file, the fully offline path). argparse enforces the mutual exclusion and the
+    # "one of them" requirement.
+    sample_source = detect_schema_parser.add_mutually_exclusive_group(required=True)
+    sample_source.add_argument(
         "--url",
         dest="url",
         action="append",
-        required=True,
         metavar="URL",
         help="A sample detail-page URL for the chosen site. Repeat --url to validate proposals "
-        "across multiple sample pages (recommended).",
+        "across multiple sample pages (recommended). Mutually exclusive with --html-file.",
+    )
+    sample_source.add_argument(
+        "--html-file",
+        dest="html_file",
+        action="append",
+        metavar="PATH",
+        help="A local HTML file to use as a sample page instead of fetching a URL. Loaded fully "
+        "offline (no network, no API key needed when paired with --replay). Repeatable; "
+        "mutually exclusive with --url.",
     )
     detect_schema_parser.add_argument(
         "--page-type",
@@ -213,6 +225,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=40000,
         help="Pre-flight input-token budget per request; an over-budget prompt is re-pruned toward "
         "a 10000-character HTML floor and abandoned if it still will not fit (default: 40000).",
+    )
+    detect_schema_parser.add_argument(
+        "--replay",
+        dest="replay",
+        default=None,
+        help="Path to a JSON file of recorded AI responses keyed by sha256(prompt). When given, "
+        "no Anthropic request is made and ANTHROPIC_API_KEY is not required (fully offline); a "
+        "prompt missing from the file is a hard error.",
+    )
+    detect_schema_parser.add_argument(
+        "--record",
+        dest="record",
+        default=None,
+        help="Path to write this live run's AI responses (keyed by sha256(prompt)) for later "
+        "--replay. Ignored in replay mode; never contains the API key.",
     )
     detect_schema_parser.add_argument(
         "--output",

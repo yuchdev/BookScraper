@@ -270,3 +270,50 @@ def test_detect_schema_output_defaults_to_none() -> None:
 def test_detect_schema_log_severity_defaults_to_info() -> None:
     args = build_parser().parse_args(["detect-schema", "--site", "packtpub", "--url", "https://x/1"])
     assert args.log_severity == "info"
+
+
+def test_html_file_and_url_are_mutually_exclusive() -> None:
+    """Scenario: --url and --html-file cannot be combined; one of them is required.
+
+    Boundaries: pure argparse; the mutually exclusive group enforces both halves.
+    On failure: a run could mix live and offline sources, or neither, with no clear source.
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--html-file", "a.html"]
+        )
+    # Neither given is also an error (the group is required).
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["detect-schema", "--site", "amazon"])
+
+
+def test_detect_schema_html_file_is_repeatable_into_a_list() -> None:
+    args = build_parser().parse_args(
+        ["detect-schema", "--site", "amazon", "--html-file", "a.html", "--html-file", "b.html"]
+    )
+    assert args.html_file == ["a.html", "b.html"]
+    assert args.url is None
+
+
+def test_detect_schema_replay_and_record_default_to_none() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert args.replay is None
+    assert args.record is None
+
+
+def test_detect_schema_replay_and_record_parse() -> None:
+    args = build_parser().parse_args(
+        [
+            "detect-schema",
+            "--site",
+            "amazon",
+            "--html-file",
+            "a.html",
+            "--replay",
+            "r.json",
+            "--record",
+            "rec.json",
+        ]
+    )
+    assert args.replay == "r.json"
+    assert args.record == "rec.json"

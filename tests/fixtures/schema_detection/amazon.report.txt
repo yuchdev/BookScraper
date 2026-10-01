@@ -1,0 +1,113 @@
+Schema-detection proposals for site 'amazon'
+Sample URLs (4):
+  - <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html
+  - <FIXTURES>/html/amazon/cpp_primer_5e.html
+  - <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html
+  - <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html
+
+NOTE: This is a proposal only. Nothing has been written to parameters.py.
+Review each field below and apply desired changes to site_constants by hand.
+========================================================================
+
+### BOOK_TITLE
+  = (unchanged) '#productTitle'
+    rationale: current site_constants selector for BOOK_TITLE
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Tour of C++, A (C++ In-Depth Series)"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="C++ Primer"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="Programming: Principles and Practice Using C++"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="The C++ Programming Language"
+
+### AUTHORS
+  = (unchanged) '.author a.a-link-normal'
+    rationale: current site_constants selector for AUTHORS
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Bjarne Stroustrup"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (3 element(s)) text="Stanley B. Lippman"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="Bjarne Stroustrup"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="Bjarne Stroustrup"
+
+### AUTHORS_ALT
+  = (unchanged) '#bylineInfo .a-link-normal'
+    rationale: current site_constants selector for AUTHORS_ALT
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Bjarne Stroustrup"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (3 element(s)) text="Stanley B. Lippman"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="Bjarne Stroustrup"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="Bjarne Stroustrup"
+
+### ASIN_DETAIL_PAGE_SELECTOR
+  = (unchanged) '#regulatoryDeposit_feature_div'
+    rationale: current site_constants selector for ASIN_DETAIL_PAGE_SELECTOR
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s))
+      [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (0 elements)
+    !! INCONSISTENT across sample URLs - matched on some pages but not others. Review before applying.
+
+### ISBN10
+  = (unchanged) '#rpi-attribute-book_details-isbn10 .rpi-attribute-value span'
+    rationale: current site_constants selector for ISBN10
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="0136816487"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="0321714113"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="0138308683"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="0321563840"
+
+### ISBN13
+  = (unchanged) '#rpi-attribute-book_details-isbn13 .rpi-attribute-value span'
+    rationale: current site_constants selector for ISBN13
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="978-0136816485"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="978-0321714114"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="978-0138308681"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="978-0321563842"
+
+### PUBLICATION_DATE
+  = (unchanged) '#rpi-attribute-book_details-publication_date .rpi-attribute-value span, #rpi-attribute-audiobook_details-release-date .rpi-attribute-value span'
+    rationale: current site_constants selector for PUBLICATION_DATE
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="September 24, 2022"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="August 16, 2012"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="April 23, 2024"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="May 19, 2013"
+
+### DESCRIPTION
+  = (unchanged) '#bookDescription_feature_div .a-expander-content'
+    rationale: current site_constants selector for DESCRIPTION
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s))
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+
+### DESCRIPTION_ALT
+  = (unchanged) '#productDescription p'
+    rationale: current site_constants selector for DESCRIPTION_ALT
+    validation:
+      [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (0 elements)
+
+### TAGS
+  = (unchanged) '#detailBulletsWrapper_feature_div ul.zg_hrsr a'
+    rationale: current site_constants selector for TAGS
+    validation:
+      [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (3 element(s)) text="C++ Programming Language"
+      [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (2 element(s)) text="C++ Programming"
+      [MATCH] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (2 element(s)) text="C++ Programming"
+      [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (2 element(s)) text="C++ Programming"
+
+### DETAILS_BUTTON
+  = (unchanged) "a.a-expander-header:has-text('Product details'), a.a-expander-header:has-text('See more product details'), a.a-expander-header:has-text('Product information')"
+    rationale: current site_constants selector for DETAILS_BUTTON
+    validation:
+      [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (0 elements)
+
+========================================================================
+WARNING: 1 field(s) validated inconsistently across sample URLs: ASIN_DETAIL_PAGE_SELECTOR

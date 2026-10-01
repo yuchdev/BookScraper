@@ -23,10 +23,13 @@ def _args(**overrides) -> SimpleNamespace:
     base = {
         "site": "amazon",
         "url": ["https://x/1"],
+        "html_file": None,
         "output": None,
         "model": None,
         "max_input_tokens": 40000,
         "page_type": "detail",
+        "replay": None,
+        "record": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -45,7 +48,14 @@ async def test_run_prints_report_and_usage_line(capsys) -> None:
         await detect_schema.run(args)
 
     detect.assert_awaited_once_with(
-        "amazon", ["https://x/1"], model="claude-sonnet-5", max_input_tokens=12345, page_type="detail"
+        "amazon",
+        urls=["https://x/1"],
+        html_files=None,
+        model="claude-sonnet-5",
+        max_input_tokens=12345,
+        page_type="detail",
+        replay=None,
+        record=None,
     )
     out = capsys.readouterr().out
     assert "THE REPORT" in out
@@ -69,8 +79,47 @@ async def test_run_threads_search_page_type(capsys) -> None:
     ):
         await detect_schema.run(args)
 
-    detect.assert_awaited_once_with("amazon", ["https://x/1"], model=None, max_input_tokens=40000, page_type="search")
+    detect.assert_awaited_once_with(
+        "amazon",
+        urls=["https://x/1"],
+        html_files=None,
+        model=None,
+        max_input_tokens=40000,
+        page_type="search",
+        replay=None,
+        record=None,
+    )
     assert "SEARCH REPORT" in capsys.readouterr().out
+
+
+async def test_run_threads_offline_html_file_replay_record(capsys) -> None:
+    """Scenario: --html-file / --replay / --record are forwarded verbatim to detect_schema.
+
+    Boundaries: detect_schema is mocked; only the offline-mode wiring is asserted.
+    On failure: an offline run could silently fetch live URLs or require an API key.
+    """
+    args = _args(url=None, html_file=["a.html", "b.html"], replay="r.json", record="rec.json")
+    with (
+        patch.object(detect_schema, "load_dotenv", MagicMock()),
+        patch.object(
+            detect_schema,
+            "detect_schema",
+            new=AsyncMock(return_value=("OFFLINE REPORT", "usage line")),
+        ) as detect,
+    ):
+        await detect_schema.run(args)
+
+    detect.assert_awaited_once_with(
+        "amazon",
+        urls=None,
+        html_files=["a.html", "b.html"],
+        model=None,
+        max_input_tokens=40000,
+        page_type="detail",
+        replay="r.json",
+        record="rec.json",
+    )
+    assert "OFFLINE REPORT" in capsys.readouterr().out
 
 
 async def test_run_exits_one_on_detection_error() -> None:

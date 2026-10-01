@@ -42,16 +42,31 @@ def _is_expected(path: Path) -> bool:
     return path.name.endswith(_EXPECTED_SUFFIX)
 
 
-def _payload_files() -> list[Path]:
-    """Fixture payloads: HTML/JSON/txt bytes under html|json|robots, not meta/golden.
+# The subtask-07 ``schema_detection/`` subtree holds DERIVED artifacts, not captured pages:
+# hand-authored ``--replay`` recordings and ``.report.txt`` goldens (see tests/fixtures/README.md).
+# They carry no ``.meta.json``/``sha256`` provenance - that integrity model is for captured-page
+# bytes - so they are excluded from the captured-corpus payload checks below. The size budget
+# (``_all_files``) still covers them.
+_NON_CAPTURE_DIRS = frozenset({"schema_detection"})
 
-    README.md and any dotfile are not fixtures.
+
+def _is_captured_corpus(path: Path) -> bool:
+    """False for files under a non-capture subtree (e.g. the subtask-07 schema_detection/ dir)."""
+    return not any(part in _NON_CAPTURE_DIRS for part in path.relative_to(FIXTURES_DIR).parts)
+
+
+def _payload_files() -> list[Path]:
+    """Captured-page payloads: HTML/JSON/txt bytes under html|json|robots, not meta/golden.
+
+    README.md, any dotfile, and derived (non-capture) subtrees are not captured fixtures.
     """
     payloads: list[Path] = []
     for path in _all_files():
         if _is_meta(path) or _is_expected(path):
             continue
         if path.name == "README.md" or path.name.startswith("."):
+            continue
+        if not _is_captured_corpus(path):
             continue
         payloads.append(path)
     return payloads

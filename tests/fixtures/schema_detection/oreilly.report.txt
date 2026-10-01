@@ -1,0 +1,92 @@
+Schema-detection proposals for site 'oreilly'
+Sample URLs (3):
+  - <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html
+  - <FIXTURES>/html/oreilly/effective_modern_cpp.html
+  - <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html
+
+NOTE: This is a proposal only. Nothing has been written to parameters.py.
+Review each field below and apply desired changes to site_constants by hand.
+========================================================================
+
+### BOOK_TITLE
+  = (unchanged) 'h1.t-title'
+    rationale: current site_constants selector for BOOK_TITLE
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="C++ In a Nutshell"
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="Effective Modern C++"
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="Practical C++ Metaprogramming"
+
+### AUTHORS
+  = (unchanged) 'a.author-name'
+    rationale: current site_constants selector for AUTHORS
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="Ray Lischner"
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="Scott Meyers"
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (2 element(s)) text="Edouard Alligand"
+
+### AUTHORS_ALT
+  = (unchanged) "a[data-toggle='tooltip']"
+    rationale: current site_constants selector for AUTHORS_ALT
+    validation:
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements)
+
+### ISBN10
+  = (unchanged) None
+    rationale: current site_constants selector for ISBN10
+    validation:
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements) (null selector)
+
+### ISBN13
+  = (unchanged) 'li:has-text("ISBN:") > span.value.t-isbn'
+    rationale: current site_constants selector for ISBN13
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="9780596002985"
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="9781491903995"
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="9781492042778"
+
+### PUBLICATION_DATE
+  = (unchanged) 'li:has-text("Release date:") > span.value'
+    rationale: current site_constants selector for PUBLICATION_DATE
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="May 2003"
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="November 2014"
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="August 2016"
+
+### DESCRIPTION
+  = (unchanged) 'h2.t-description-heading:has-text("Book description") + span'
+    rationale: current site_constants selector for DESCRIPTION
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+
+### DESCRIPTION_ALT
+  = (unchanged) 'div.read-more-wrapper'
+    rationale: current site_constants selector for DESCRIPTION_ALT
+    validation:
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements)
+
+### TAGS
+  = (unchanged) '.topic-link'
+    rationale: current site_constants selector for TAGS
+    validation:
+      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (2 element(s)) text="C++"
+      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (2 element(s)) text="C++"
+      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (2 element(s)) text="C++"
+
+### READ_MORE_LINK
+  = (unchanged) 'a.read-more-link'
+    rationale: current site_constants selector for READ_MORE_LINK
+    validation:
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements)
+
+========================================================================
+All proposed selectors validated consistently across the sample URLs.

@@ -141,10 +141,15 @@ owns) and the config resolver's "fail loudly rather than silently guess" philoso
 Each of these exits non-zero with a clear error and produces **no** partial or guessed
 output:
 
-- More than 5 sample `--url`s are passed (rejected before any network or API call).
-- `ANTHROPIC_API_KEY` is not set, or the resolved model ID is empty (see Configuration below).
-- A sample page fails to load (timeout or navigation error).
-- The built prompt exceeds `--max-input-tokens` even after pruning to the 10000-character floor.
+- More than 5 sample `--url`s (or `--html-file`s) are passed, or both kinds are passed together, or
+  neither is (rejected before any network or API call).
+- `ANTHROPIC_API_KEY` is not set (live runs only; not required with `--replay`), or the resolved
+  model ID is empty (see Configuration below).
+- A sample page fails to load (timeout or navigation error), or an `--html-file` is missing,
+  oversized (> 400 KB), or not valid UTF-8.
+- The built prompt exceeds `--max-input-tokens` even after pruning to the 10000-character floor
+  (live runs only).
+- A `--replay` file is missing/unreadable/not a JSON object, or a run's prompt is not recorded in it.
 - Claude returns a malformed or non-JSON response, or stops with `max_tokens` (truncated) or `refusal`.
 
 ### Configuration
@@ -195,11 +200,57 @@ python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.co
 ```
 
 Flags: `--site {amazon,packtpub,leanpub,oreilly}` (required), `--page-type {detail,search}`
-(optional, default `detail`), `--url URL` (required, repeatable - pass it more than once to
-validate proposals across multiple pages, up to 5), `--model <id>` (optional, overrides
-`ANTHROPIC_MODEL` and the `claude-sonnet-5` default), `--max-input-tokens <n>` (optional,
-default 40000), `--output <path>` (optional), and `--log-severity {debug,info,warning,error}`
-like the other subcommands.
+(optional, default `detail`), **exactly one of `--url URL` or `--html-file PATH`** (required,
+both repeatable - pass more than once to validate across multiple pages, up to 5), `--model <id>`
+(optional, overrides `ANTHROPIC_MODEL` and the `claude-sonnet-5` default), `--max-input-tokens
+<n>` (optional, default 40000), `--replay <path>` / `--record <path>` (optional, see Offline
+modes below), `--output <path>` (optional), and `--log-severity {debug,info,warning,error}` like
+the other subcommands.
+
+### Offline modes: `--html-file`, `--replay`, `--record`
+
+The tool can run **fully offline - no network and no API key** - which is how it runs in CI (the
+golden tests in `tests/mock/scraping/html/test_schema_detection_goldens.py`). CI never makes a
+live Anthropic call; the automation is offline-only.
+
+- **`--html-file PATH`** (repeatable, mutually exclusive with `--url`) uses a local HTML file as a
+  sample page instead of fetching a URL. The file is read with a size cap (400 KB, aligned with
+  the fixture-corpus per-file budget) as UTF-8 - a missing, oversized, or non-UTF-8 path fails
+  loudly - and loaded into Chromium via `page.set_content()` with **every** request aborted
+  (default-deny), so nothing is fetched. The pruned snapshot is derived from the file bytes, so
+  it (and the replay key below) is deterministic and independent of the Chromium build.
+- **`--replay PATH`** serves the model step from a recorded JSON file of
+  `{sha256(prompt): raw_model_response}` instead of calling Claude. In replay mode **no Anthropic
+  client is constructed and `ANTHROPIC_API_KEY` is not required**; the pre-flight token-count is
+  skipped (there is no client to count with) and the usage line reports zero tokens and the
+  replayed count. A prompt missing from the file is a hard error ("no recorded response") - never
+  a silent fall-through to a live call. Keys beginning with `_` (e.g. a `_provenance` note) are
+  ignored by the loader.
+- **`--record PATH`** writes a live run's responses (keyed by `sha256(prompt)`) back out for a
+  maintainer to curate into a replay file. It is ignored in replay mode and **never** contains the
+  API key.
+
+The committed replay recordings under `tests/fixtures/schema_detection/<site>.replay.json` are
+**hand-authored** (plausible model JSON following the exact `validate_ai_response` output
+contract, carrying a `_provenance: "hand-authored; not a recorded live model response"` note);
+their keys are generated from the real prompt builders by
+`scripts/generate_schema_replays.py` (never hand-computed). The `.report.txt` goldens beside them
+are regenerated with `uv run pytest --update-goldens` (which rewrites then fails so the diff is
+reviewed). Both are derived artifacts, not captured pages, so they are exempt from the
+captured-corpus `.meta.json`/sha256 integrity checks (see `tests/fixtures/README.md`).
+
+```bash
+# Fully offline: local sample files + a recorded replay, no key, no network.
+uv run bookscraper detect-schema --site amazon \
+  --html-file tests/fixtures/html/amazon/cpp_primer_5e.html \
+  --html-file tests/fixtures/html/amazon/a_tour_of_cpp_3e.html \
+  --replay tests/fixtures/schema_detection/amazon.replay.json
+
+# Maintainer refresh: a live run that records its responses for a future --replay.
+uv run bookscraper detect-schema --site amazon \
+  --url "https://www.amazon.com/dp/0136816487" \
+  --record tests/fixtures/schema_detection/amazon.recorded.json
+```
 
 ### Detail pages vs. search pages (`--page-type`)
 
@@ -256,4 +307,4 @@ When drift is detected by the real-HTML mock corpus rather than a live run, the
 [HTML fixture refresh & drift workflow](../test/html-fixtures.md) is the companion runbook:
 `scripts/capture_fixtures.py --refresh` re-captures a site's fixtures and reports which
 selectors drifted, and its step-by-step feeds those snapshots into `detect-schema`
-(via the planned `--html-file` offline mode) and then `pytest --update-goldens`.
+(via the `--html-file`/`--replay` offline mode above) and then `pytest --update-goldens`.

@@ -1,0 +1,84 @@
+Schema-detection proposals for site 'packtpub'
+Sample URLs (3):
+  - <FIXTURES>/html/packtpub/cpp_windows_programming.html
+  - <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html
+  - <FIXTURES>/html/packtpub/software_architecture_with_cpp.html
+
+NOTE: This is a proposal only. Nothing has been written to parameters.py.
+Review each field below and apply desired changes to site_constants by hand.
+========================================================================
+
+### BOOK_TITLE
+  = (unchanged) 'h1.product-title'
+    rationale: current site_constants selector for BOOK_TITLE
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="C++ Windows Programming"
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Mastering the C++17 STL"
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (1 element(s)) text="Software Architecture with C++"
+
+### AUTHORS
+  = (unchanged) 'div.authors span'
+    rationale: current site_constants selector for AUTHORS
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="Stefan Bjornander"
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Arthur O'Dwyer"
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (2 element(s)) text="Adrian Ostrowski"
+
+### AUTHORS_ALT
+  = (unchanged) '.product-page-author a'
+    rationale: current site_constants selector for AUTHORS_ALT
+    validation:
+      [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements)
+      [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements)
+      [ no  ] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (0 elements)
+
+### ISBN10
+  = (unchanged) None
+    rationale: current site_constants selector for ISBN10
+    validation:
+      [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (0 elements) (null selector)
+
+### ISBN13
+  = (unchanged) "div.product-page-rhs.desktop span.product-details-section-key:has-text('ISBN-13 :') + span.product-details-section-value"
+    rationale: current site_constants selector for ISBN13
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="9781786464224"
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="9781787126824"
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (1 element(s)) text="9781838554590"
+
+### TAGS
+  = (unchanged) 'div.product-page-rhs.desktop a'
+    rationale: current site_constants selector for TAGS
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (2 element(s)) text="C++"
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (2 element(s)) text="C++"
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (2 element(s)) text="C++"
+
+### PUBLICATION_DATE
+  = (unchanged) "div.product-page-rhs.desktop span.product-details-section-key:has-text('Publication date :') + span.product-details-section-value"
+    rationale: current site_constants selector for PUBLICATION_DATE
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="September 2016"
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="September 2017"
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (1 element(s)) text="April 2021"
+
+### DESCRIPTION
+  = (unchanged) ".product-book-content-details h2:has-text('Description') + div.content-text"
+    rationale: current site_constants selector for DESCRIPTION
+    validation:
+      [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [MATCH] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+
+### READ_MORE_LINK
+  = (unchanged) ''
+    rationale: current site_constants selector for READ_MORE_LINK
+    validation:
+      [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/packtpub/software_architecture_with_cpp.html (0 elements) (null selector)
+
+========================================================================
+All proposed selectors validated consistently across the sample URLs.

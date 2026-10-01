@@ -31,7 +31,7 @@ pages, CI-friendly, and safe against hostile page content.
 | 04 | [Diff report & `detect-schema` command](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/04-diff-report-and-command.md) | ✅ Complete | 05-09 |
 | 05 | [Model default & token budget](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/05-model-default-and-token-budget.md) | ✅ Complete    | -    |
 | 06 | [Search-page selector support](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/06-search-page-support.md)          | ✅ Complete    | -      |
-| 07 | [Offline mode & golden tests](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/07-offline-mode-and-golden-tests.md)  | ⬜ Not started | 08     |
+| 07 | [Offline mode & golden tests](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/07-offline-mode-and-golden-tests.md)  | ✅ Complete    | 08     |
 | 08 | [JSON report & drift exit code](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/08-json-report-and-drift-check.md)  | ⬜ Not started | -      |
 | 09 | [Prompt-injection hardening](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/09-prompt-injection-hardening.md)      | ⬜ Not started | -      |
 

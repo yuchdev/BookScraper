@@ -354,6 +354,29 @@ failure, or a malformed/non-JSON AI response each raise `SchemaDetectionError`, 
 a non-zero exit, never partial output. `anthropic` is a direct dependency in `pyproject.toml`; the test suite always
 mocks the client and never makes a real API call.
 
+**Offline modes (automation is OFFLINE-ONLY; CI makes no live Anthropic call).** The whole pipeline can run with
+**zero network and no API key**, which is how the golden tests run in CI:
+- `--html-file PATH` (repeatable, mutually exclusive with `--url`) uses a local HTML file as a sample page. It is
+  read with a 400 KB size cap (aligned with the fixture-corpus per-file budget) as UTF-8 — missing/oversized/non-UTF-8
+  fails loudly — and loaded via `page.set_content()` with **every** request aborted (default-deny, stricter than
+  `route_handler`: even document/subresource requests are blocked). The pruned snapshot comes from the file bytes, so
+  it (and the replay key below) is deterministic and Chromium-build-independent.
+- `--replay PATH` serves the model step from a recorded JSON file of `{sha256(prompt): raw_response}`; in replay mode
+  **no Anthropic client is constructed and `ANTHROPIC_API_KEY` is not required**, the `count_tokens` pre-flight is
+  skipped, and the usage line reports zero tokens / N replayed. A prompt missing from the file is a hard error (no
+  silent fall-through to a live call). Loader ignores `_`-prefixed keys.
+- `--record PATH` writes a live run's responses (keyed by `sha256(prompt)`) for a maintainer to curate into a replay
+  file; ignored in replay mode, never contains the key.
+
+The committed replay recordings `tests/fixtures/schema_detection/<site>.replay.json` are **hand-authored** (plausible
+model JSON following the exact `validate_ai_response` output contract, carrying a `_provenance` note), with keys
+generated from the real prompt builders by `scripts/generate_schema_replays.py` (never hand-computed); the
+`.report.txt` goldens beside them are regenerated with `pytest --update-goldens` (rewrite-then-fail). These are
+derived artifacts, not captured pages, so `tests/unit/test_fixture_corpus.py` exempts the `schema_detection/` subtree
+from the `.meta.json`/sha256 integrity checks. The golden/pruner-regression tests
+(`tests/mock/scraping/html/test_schema_detection_goldens.py`) carry the `chromium` marker and skip cleanly without a
+browser.
+
 ## Testing
 
 `tests/` is a real pytest suite in three tiers, mirroring `src/bookscraper`'s subpackages:

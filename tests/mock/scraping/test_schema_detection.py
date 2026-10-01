@@ -15,6 +15,7 @@ import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import schema_detection as sd
+from bookscraper.scraping.parameters import site_constants
 from tests.mock.scraping.playwright_fakes import (
     FakeBrowser,
     FakeLocator,
@@ -23,6 +24,16 @@ from tests.mock.scraping.playwright_fakes import (
 )
 
 MODULE = "bookscraper.scraping.schema_detection"
+
+
+def _detail_replay_for(content: str, response_json: str, site: str = "amazon") -> dict[str, str]:
+    """Build a replay mapping whose single key is the exact prompt hash the detail pipeline
+    will compute for a page whose ``content()`` is ``content`` - using the real prompt builders
+    so the test can never drift from the runtime's key derivation."""
+    fields = sd.detail_selector_fields(site_constants[site])
+    instruction_block = sd.build_instruction_block(site, fields, page_type="detail")
+    snapshot_block = sd.build_snapshot_block(sd.prune_html(content))
+    return {sd.prompt_hash(instruction_block, snapshot_block): response_json}
 
 
 def _fake_usage(
@@ -719,3 +730,282 @@ async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
     assert "!! PARTIAL" in report
     assert "requests=2" in usage_line
     browser.close.assert_awaited_once()
+
+
+# --------------------------------------------------------------------------- #
+# Offline helpers: prompt_hash / replay files / record files / html-file read
+# (task 04.0 subtask 07; AIS-9 / AIS-11 / AIS-14)
+# --------------------------------------------------------------------------- #
+def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
+    """Scenario: prompt_hash is a stable sha256 of instruction + blank line + snapshot.
+
+    Boundaries: pure hashing; the same inputs always yield the same 64-char hex key.
+    On failure: a drifting key would strand every committed replay recording.
+    """
+    key = sd.prompt_hash("INSTRUCTION", "SNAPSHOT")
+    assert key == sd.prompt_hash("INSTRUCTION", "SNAPSHOT")
+    assert len(key) == 64 and all(c in "0123456789abcdef" for c in key)
+    assert sd.prompt_hash("INSTRUCTION", "OTHER") != key
+
+
+def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> None:
+    """Scenario: the replay usage line reports zero tokens and the replayed count, no key.
+
+    Boundaries: pure formatting.
+    On failure: a replay run would imply live token spend it never incurred.
+    """
+    line = sd.format_replay_usage_line("claude-sonnet-5", 3)
+    assert "requests=0" in line
+    assert "replayed=3" in line
+    assert "input_tokens=0" in line
+    assert "offline replay" in line
+    assert "$" not in line
+
+
+def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
+    """Scenario: load_replay_file drops _-prefixed keys (e.g. a _provenance note).
+
+    Boundaries: real file I/O via tmp_path.
+    On failure: a provenance note would be treated as a prompt hash and never match.
+    """
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps({"_provenance": "hand-authored", "abc123": "{}"}), encoding="utf-8")
+    loaded = sd.load_replay_file(str(path))
+    assert loaded == {"abc123": "{}"}
+
+
+def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
+    with pytest.raises(sd.SchemaDetectionError, match="Cannot read --replay file"):
+        sd.load_replay_file(str(tmp_path / "nope.json"))
+
+
+def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
+    path = tmp_path / "bad.json"
+    path.write_text("not json", encoding="utf-8")
+    with pytest.raises(sd.SchemaDetectionError, match="not valid JSON"):
+        sd.load_replay_file(str(path))
+
+
+def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
+    path = tmp_path / "arr.json"
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    with pytest.raises(sd.SchemaDetectionError, match="must be a JSON object"):
+        sd.load_replay_file(str(path))
+
+
+def test_replay_lookup_returns_recorded_response() -> None:
+    replay = {sd.prompt_hash("I", "S"): '{"BOOK_TITLE": {"selector": "#t"}}'}
+    assert sd.replay_lookup(replay, "I", "S") == '{"BOOK_TITLE": {"selector": "#t"}}'
+
+
+def test_replay_lookup_missing_prompt_fails_loudly() -> None:
+    """Scenario: a prompt absent from the replay map is a hard error, never a live fallthrough.
+
+    Boundaries: pure dict lookup.
+    On failure: a drifted offline run would silently reach for the live API (AIS-9 violation).
+    """
+    with pytest.raises(sd.SchemaDetectionError, match="No recorded response"):
+        sd.replay_lookup({}, "I", "S")
+
+
+def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) -> None:
+    """Scenario: write_record_file persists hash->response plus a provenance note, no key.
+
+    Boundaries: real file I/O via tmp_path; the fake key must appear nowhere.
+    On failure: a leaked key in a committed recording is a credential disclosure (AIS-8).
+    """
+    path = tmp_path / "rec.json"
+    sd.write_record_file(str(path), {"deadbeef": '{"BOOK_TITLE": {"selector": "#t"}}'})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["deadbeef"] == '{"BOOK_TITLE": {"selector": "#t"}}'
+    assert "_provenance" in data
+    assert "sk-ant" not in path.read_text(encoding="utf-8")
+
+
+def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
+    with patch.object(sd.Path, "write_text", side_effect=OSError("read-only")):
+        with pytest.raises(sd.SchemaDetectionError, match="Cannot write --record file"):
+            sd.write_record_file(str(tmp_path / "rec.json"), {})
+
+
+async def test_block_all_requests_aborts() -> None:
+    """Scenario: the html-file route handler aborts every request (default-deny, AIS-9).
+
+    Boundaries: a fake Route; assert abort() is awaited and continue_() never is.
+    On failure: a set_content page could fetch a subresource and leave the offline boundary.
+    """
+    route = MagicMock()
+    route.abort = AsyncMock()
+    route.continue_ = AsyncMock()
+    await sd._block_all_requests(route)
+    route.abort.assert_awaited_once()
+    route.continue_.assert_not_called()
+
+
+def test_read_html_file_reads_utf8(tmp_path) -> None:
+    path = tmp_path / "p.html"
+    path.write_text("<h1>Tïtle</h1>", encoding="utf-8")
+    assert sd._read_html_file(str(path)) == "<h1>Tïtle</h1>"
+
+
+def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
+    with pytest.raises(sd.SchemaDetectionError, match="Cannot access --html-file"):
+        sd._read_html_file(str(tmp_path / "nope.html"))
+
+
+def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
+    """Scenario: a file over the AIS-11 size cap fails loudly before being read into memory.
+
+    Boundaries: the cap is monkeypatched tiny so a small file trips it (no huge fixture needed).
+    On failure: an oversized/binary file read + set_content is a memory/parse DoS.
+    """
+    path = tmp_path / "big.html"
+    path.write_text("x" * 100, encoding="utf-8")
+    with patch.object(sd, "HTML_FILE_MAX_BYTES", 10):
+        with pytest.raises(sd.SchemaDetectionError, match="over the 10-byte cap"):
+            sd._read_html_file(str(path))
+
+
+def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
+    path = tmp_path / "bin.html"
+    path.write_bytes(b"\xff\xfe\x00\x01not utf8")
+    with pytest.raises(sd.SchemaDetectionError, match="as UTF-8 text"):
+        sd._read_html_file(str(path))
+
+
+# --------------------------------------------------------------------------- #
+# detect_schema - source resolution (urls vs html_files)
+# --------------------------------------------------------------------------- #
+async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    with pytest.raises(sd.SchemaDetectionError, match="either --url or --html-file"):
+        await sd.detect_schema("amazon", urls=["https://x/1"], html_files=["/tmp/a.html"])
+
+
+async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
+        await sd.detect_schema("amazon")
+
+
+async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    too_many = [f"/tmp/{i}.html" for i in range(sd.MAX_SAMPLE_URLS + 1)]
+    with pytest.raises(sd.SchemaDetectionError, match="--html-file paths"):
+        await sd.detect_schema("amazon", html_files=too_many)
+
+
+# --------------------------------------------------------------------------- #
+# detect_schema - replay mode (AIS-9: no key, no client constructed, no network)
+# --------------------------------------------------------------------------- #
+async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
+    """Scenario: a replay run with NO ANTHROPIC_API_KEY succeeds and constructs no client.
+
+    Boundaries: the key is deleted and sd.anthropic.Anthropic is wired to raise if ever
+    constructed; call_anthropic is left real so any live attempt would blow up.
+    On failure: a silent fall-through to a live API call (cost + key requirement) - the
+    Boundary-4 / AIS-9 violation this gate exists to prevent.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    content = "<html><h1 id='productTitle'>Book One</h1></html>"
+    response = json.dumps({"BOOK_TITLE": {"selector": "#productTitle", "rationale": "stable id"}})
+    replay_path = tmp_path / "amazon.replay.json"
+    replay_path.write_text(json.dumps({"_provenance": "test", **_detail_replay_for(content, response)}), encoding="utf-8")
+
+    page = FakePage(locators={"#productTitle": FakeLocator("Book One")}, content=content)
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with (
+        patch.object(sd, "async_playwright", build_playwright_factory(browser)),
+        patch.object(sd, "anthropic") as mock_anthropic,
+    ):
+        mock_anthropic.Anthropic.side_effect = AssertionError("no client may be constructed in replay mode")
+        report, usage_line = await sd.detect_schema("amazon", urls=["https://x/1"], replay=str(replay_path))
+
+    assert "#productTitle" in report
+    assert "[MATCH]" in report
+    assert "replayed=1" in usage_line
+    mock_anthropic.Anthropic.assert_not_called()
+    browser.close.assert_awaited_once()
+
+
+async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None:
+    """Scenario: a replay file that lacks the run's prompt hash fails loudly, no live call.
+
+    Boundaries: the replay file is a valid-but-unrelated recording; no key is set.
+    On failure: a stale recording would silently trigger live spend (AIS-9).
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    replay_path = tmp_path / "stale.replay.json"
+    replay_path.write_text(json.dumps({"unrelated_hash": "{}"}), encoding="utf-8")
+
+    page = FakePage(locators={"#productTitle": FakeLocator("X")}, content="<h1 id='productTitle'>X</h1>")
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        with pytest.raises(sd.SchemaDetectionError, match="No recorded response"):
+            await sd.detect_schema("amazon", urls=["https://x/1"], replay=str(replay_path))
+    browser.close.assert_awaited_once()
+
+
+async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tmp_path) -> None:
+    """Scenario: html_files + replay drives the pipeline fully offline through load_html_file_page.
+
+    Boundaries: FakePage (with set_content) stands in for Chromium; no key, no client.
+    On failure: the from-files branch or the set_content load path would not be exercised offline.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    content = "<html><h1 id='productTitle'>From File</h1></html>"
+    html_path = tmp_path / "book.html"
+    html_path.write_text(content, encoding="utf-8")
+    response = json.dumps({"BOOK_TITLE": {"selector": "#productTitle", "rationale": "id"}})
+    replay_path = tmp_path / "amazon.replay.json"
+    replay_path.write_text(json.dumps(_detail_replay_for(content, response)), encoding="utf-8")
+
+    page = FakePage(locators={"#productTitle": FakeLocator("From File")}, content=content)
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        report, usage_line = await sd.detect_schema(
+            "amazon", html_files=[str(html_path)], replay=str(replay_path)
+        )
+
+    assert "#productTitle" in report
+    assert str(html_path) in report  # the file path is the sample label
+    assert "replayed=1" in usage_line
+    page.set_content.assert_awaited_once()
+    page.route.assert_awaited()  # the default-deny route was installed
+
+
+# --------------------------------------------------------------------------- #
+# detect_schema - record mode (mocked client; AIS-8 no key in the file)
+# --------------------------------------------------------------------------- #
+async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_path) -> None:
+    """Scenario: a live run with --record writes {sha256(prompt): response}, no key in the file.
+
+    Boundaries: call_anthropic is mocked (no real network); the record file is read back.
+    On failure: a broken record path would strand maintainers unable to refresh replays, or
+    leak the key into a committed artifact (AIS-8).
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-XXXX")
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    content = "<html><h1 id='productTitle'>Rec</h1></html>"
+    response = json.dumps({"BOOK_TITLE": {"selector": "#productTitle", "rationale": "id"}})
+    record_path = tmp_path / "rec.json"
+
+    page = FakePage(locators={"#productTitle": FakeLocator("Rec")}, content=content)
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with (
+        patch.object(sd, "async_playwright", build_playwright_factory(browser)),
+        patch.object(sd, "call_anthropic", MagicMock(return_value=(response, _fake_usage()))),
+    ):
+        await sd.detect_schema("amazon", urls=["https://x/1"], record=str(record_path))
+
+    data = json.loads(record_path.read_text(encoding="utf-8"))
+    expected_key = next(iter(_detail_replay_for(content, response)))
+    assert data[expected_key] == response
+    assert "sk-ant-test-XXXX" not in record_path.read_text(encoding="utf-8")
