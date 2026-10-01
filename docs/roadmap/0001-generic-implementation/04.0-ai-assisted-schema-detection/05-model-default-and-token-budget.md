@@ -1,7 +1,7 @@
 # 05 - Model default & token budget
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Python Expert
 
 ## Context

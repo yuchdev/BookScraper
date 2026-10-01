@@ -6,16 +6,23 @@ selection, and diff-report formatting. The Playwright/anthropic-driven pieces ar
 covered in tests/mock/scraping/test_schema_detection.py.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from bookscraper.scraping import parameters
 from bookscraper.scraping.schema_detection import (
+    DEFAULT_MODEL,
     SchemaDetectionError,
+    _merge_proposals,
     _strip_code_fences,
+    build_instruction_block,
     build_prompt,
     detail_selector_fields,
     format_diff_report,
+    format_usage_line,
     prune_html,
+    resolve_model,
     validate_ai_response,
 )
 
@@ -246,3 +253,148 @@ def test_format_diff_report_handles_field_not_currently_present() -> None:
         validation={"NEW_FIELD": _validation(True, [True])},
     )
     assert "field not currently present" in report
+
+
+# --------------------------------------------------------------------------- #
+# build_instruction_block / build_prompt - caching split
+# --------------------------------------------------------------------------- #
+def test_build_instruction_block_has_no_per_page_content() -> None:
+    """Scenario: the cacheable static block carries the contract but no HTML snapshot.
+
+    Boundaries: pure string assembly; no network.
+    On failure: per-page content in the cached prefix would defeat cross-URL caching.
+    """
+    block = build_instruction_block("amazon", ["BOOK_TITLE", "AUTHORS"])
+    assert "amazon" in block
+    assert "BOOK_TITLE" in block
+    assert "AUTHORS" in block
+    assert "JSON" in block
+    assert "Pruned HTML snapshot" not in block
+
+
+def test_build_prompt_combines_instruction_and_snapshot() -> None:
+    """Scenario: build_prompt is the instruction block followed by the snapshot block.
+
+    Boundaries: pure string assembly.
+    On failure: the combined debug view would drop one of the two halves.
+    """
+    prompt = build_prompt("amazon", ["BOOK_TITLE"], "<h1>Snapshot</h1>")
+    assert build_instruction_block("amazon", ["BOOK_TITLE"]) in prompt
+    assert "<h1>Snapshot</h1>" in prompt
+
+
+# --------------------------------------------------------------------------- #
+# resolve_model - precedence flag > env > default, empty rejected
+# --------------------------------------------------------------------------- #
+def test_model_precedence_flag_env_default(monkeypatch) -> None:
+    """Scenario: --model beats ANTHROPIC_MODEL beats the compiled-in default.
+
+    Boundaries: only os.environ is touched (via monkeypatch); no network.
+    On failure: a pinned model could be silently ignored.
+    """
+    monkeypatch.setenv("ANTHROPIC_MODEL", "env-model")
+    assert resolve_model("flag-model") == "flag-model"
+    assert resolve_model(None) == "env-model"
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    assert resolve_model(None) == DEFAULT_MODEL
+    assert DEFAULT_MODEL == "claude-sonnet-5"
+
+
+def test_empty_model_id_rejected(monkeypatch) -> None:
+    """Scenario: an empty/whitespace model ID (flag or env) is rejected.
+
+    Boundaries: only os.environ is touched; no network.
+    On failure: an empty model would reach the API as a confusing 400.
+    """
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    with pytest.raises(SchemaDetectionError, match="must not be empty"):
+        resolve_model("")
+    with pytest.raises(SchemaDetectionError, match="must not be empty"):
+        resolve_model("   ")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "")
+    with pytest.raises(SchemaDetectionError, match="must not be empty"):
+        resolve_model(None)
+
+
+# --------------------------------------------------------------------------- #
+# format_usage_line - sums across responses, no prices, no key
+# --------------------------------------------------------------------------- #
+class _Usage:
+    """Minimal stand-in for an anthropic usage object."""
+
+    def __init__(self, inp: int, cread: int, ccreate: int, out: int) -> None:
+        self.input_tokens = inp
+        self.cache_read_input_tokens = cread
+        self.cache_creation_input_tokens = ccreate
+        self.output_tokens = out
+
+
+def test_usage_line_sums_tokens_across_requests() -> None:
+    """Scenario: the usage line sums every field across all responses with no price.
+
+    Boundaries: pure formatting over plain usage objects.
+    On failure: a per-request figure or a stale price would mislead the operator.
+    """
+    usages = [_Usage(1000, 0, 500, 10), _Usage(100, 900, 0, 12), _Usage(100, 900, 0, 8)]
+    line = format_usage_line("claude-sonnet-5", usages, len(usages))
+    assert "model=claude-sonnet-5" in line
+    assert "requests=3" in line
+    assert "input_tokens=1200" in line
+    assert "cache_read_input_tokens=1800" in line
+    assert "cache_creation_input_tokens=500" in line
+    assert "output_tokens=30" in line
+    assert "$" not in line
+
+
+def test_usage_line_tolerates_missing_usage_fields() -> None:
+    """Scenario: a usage object missing cache fields is treated as zero, never crashing.
+
+    Boundaries: pure formatting; usage lacks the cache attributes entirely.
+    On failure: an older/partial usage shape would raise mid-report.
+    """
+    line = format_usage_line("m", [SimpleNamespace(input_tokens=5, output_tokens=2)], 1)
+    assert "input_tokens=5" in line
+    assert "cache_read_input_tokens=0" in line
+    assert "output_tokens=2" in line
+
+
+# --------------------------------------------------------------------------- #
+# _merge_proposals - first non-null wins; null fallback; absent field dropped
+# --------------------------------------------------------------------------- #
+def test_merge_proposals_first_non_null_selector_wins() -> None:
+    """Scenario: the first page proposing a non-null selector for a field wins.
+
+    Boundaries: pure dict merge; no network.
+    On failure: a later page's weaker selector could override a good earlier one.
+    """
+    per_url = [
+        {"BOOK_TITLE": {"selector": None, "rationale": "absent here"}},
+        {"BOOK_TITLE": {"selector": "#t", "rationale": "found here"}},
+    ]
+    merged = _merge_proposals(per_url, ["BOOK_TITLE"])
+    assert merged["BOOK_TITLE"]["selector"] == "#t"
+
+
+def test_merge_proposals_falls_back_to_null_when_no_page_matches() -> None:
+    """Scenario: a field null on every page keeps a null proposal (the fallback branch).
+
+    Boundaries: pure dict merge.
+    On failure: a field no page could locate would silently vanish from the report.
+    """
+    per_url = [
+        {"ISBN10": {"selector": None, "rationale": "not present"}},
+        {"ISBN10": {"selector": None, "rationale": "still not present"}},
+    ]
+    merged = _merge_proposals(per_url, ["ISBN10"])
+    assert merged["ISBN10"]["selector"] is None
+
+
+def test_merge_proposals_drops_field_absent_from_every_page() -> None:
+    """Scenario: a field no page returned at all is omitted from the merged set.
+
+    Boundaries: pure dict merge.
+    On failure: a phantom field with no proposal could reach the report.
+    """
+    merged = _merge_proposals([{"BOOK_TITLE": {"selector": "#t", "rationale": ""}}], ["BOOK_TITLE", "TAGS"])
+    assert "TAGS" not in merged
+    assert merged["BOOK_TITLE"]["selector"] == "#t"

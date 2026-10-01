@@ -291,6 +291,7 @@ uv run bookscraper rotate-cert --check --warn-days 14
 # detection below.
 uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029"
 uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
+uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029" --model claude-sonnet-5 --max-input-tokens 30000
 
 # Without `uv run` (inside an activated .venv), or via `python -m` directly:
 python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
@@ -308,15 +309,31 @@ python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.co
 otherwise-manual loop of figuring out a site's CSS selectors when its markup drifts — see
 `docs/scraping/schema-detection.md` (full manual-and-automated writeup) and
 `docs/adr/0002-ai-assisted-schema-detection.md` (design rationale). It takes `--site
-{amazon,packtpub,leanpub,oreilly}`, one or more repeatable `--url` sample detail pages, an optional `--output`, and
-`--log-severity` like the other subcommands; it does **not** take `--store-backend`.
+{amazon,packtpub,leanpub,oreilly}`, one or more repeatable `--url` sample detail pages, an optional `--output`,
+`--model` and `--max-input-tokens`, and `--log-severity` like the other subcommands; it does **not** take
+`--store-backend`.
 
 The pipeline: load each URL with Playwright (reusing `scrape_details.route_handler` document-only blocking) → prune
 each page to an LLM-sized HTML snapshot → ask Claude (official `anthropic` SDK, `ANTHROPIC_API_KEY` read straight
-from the environment/`.env`, optional `ANTHROPIC_MODEL` override) to propose a CSS selector + rationale per existing
-`site_constants[site]` detail-field → re-query every proposal against **each** sample page's live DOM, flagging any
-field that matches on some sample URLs but not others → emit a diff-style report to stdout (and to `--output` if
-given).
+from the environment/`.env`) to propose a CSS selector + rationale per existing `site_constants[site]` detail-field
+→ re-query every proposal against **each** sample page's live DOM, flagging any field that matches on some sample
+URLs but not others → emit a diff-style report to stdout (and to `--output` if given), followed by a one-line usage
+summary.
+
+Model, budget and cost controls (subtask 04.0/05): the default model is **`claude-sonnet-5`** (precedence `--model`
+flag > `ANTHROPIC_MODEL` env > default; an empty ID is rejected). Sonnet 5 runs adaptive thinking by default and
+thinking tokens count toward `max_tokens`, so `DEFAULT_MAX_TOKENS` is `16000` (not 2048) and no sampling params or
+`budget_tokens` are sent; a `max_tokens` or `refusal` stop reason raises rather than being parsed. Each run sends
+**one request per sample URL**, sharing a cacheable static instruction block (site + field list + output contract)
+while the per-page snapshot is the uncached user message — note the static block is below Sonnet 5's 1024-token
+minimum cacheable prefix, so the marker is harmless but will not actually cache. A per-request **pre-flight token
+budget** (`MAX_INPUT_TOKENS` = 40000, overridable via `--max-input-tokens`) counts tokens with the SDK's
+`count_tokens`; an over-budget prompt is re-pruned toward a 10000-character HTML floor and abandoned
+(`SchemaDetectionError`, nothing sent) if it still will not fit. Hard cost ceilings: **≤ 5 sample URLs per run**
+(rejected before any network/API call) and **one retry** on a transient error (the client's `max_retries` matched to
+that, never stacked). The closing usage line reports model, summed input / cache-read / cache-creation / output
+tokens and the request count — **no prices, and never the API key**; SDK errors surface only the exception class and
+HTTP status, never the response body.
 
 Two hard rules mirror the project's existing conventions: it **never writes `parameters.py`** (propose, never
 auto-apply — a human applies changes by hand, the same "automation proposes, a human/deterministic step decides"

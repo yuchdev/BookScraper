@@ -114,12 +114,18 @@ For a given `--site` and one or more sample `--url`s, the tool
    stripped, whitespace collapsed, truncated to a size budget) fit to hand to an LLM.
 2. **Asks Claude** (via the official `anthropic` SDK) to propose a CSS selector for each
    field already present in `site_constants[site]`, returned as JSON keyed by those
-   existing field names, with a one-line rationale each.
+   existing field names, with a one-line rationale each. One request is sent per sample
+   URL (sharing a cacheable static instruction block), each fitted to a pre-flight
+   input-token budget; the per-page proposal sets are then merged (first non-null selector
+   per field wins).
 3. **Validates every proposal against each sample page's live DOM** - reporting per
    field/per URL whether it matched, how many elements, and a text snippet, and flagging any
    field that matches on some sample URLs but not others rather than silently picking one.
 4. **Emits a diff-style report** (to stdout, and to `--output <path>` if given) comparing
-   the proposals to the current `site_constants[site]` values.
+   the proposals to the current `site_constants[site]` values, followed by a one-line
+   **usage summary**: the model, the summed input / cache-read / cache-creation / output
+   tokens across every request, and the request count. It carries no prices (they change,
+   and a stale figure would mislead) and never the API key.
 
 ### The hard boundary: propose, never apply
 
@@ -135,9 +141,11 @@ owns) and the config resolver's "fail loudly rather than silently guess" philoso
 Each of these exits non-zero with a clear error and produces **no** partial or guessed
 output:
 
-- `ANTHROPIC_API_KEY` is not set (see Configuration below).
+- More than 5 sample `--url`s are passed (rejected before any network or API call).
+- `ANTHROPIC_API_KEY` is not set, or the resolved model ID is empty (see Configuration below).
 - A sample page fails to load (timeout or navigation error).
-- Claude returns a malformed or non-JSON response.
+- The built prompt exceeds `--max-input-tokens` even after pruning to the 10000-character floor.
+- Claude returns a malformed or non-JSON response, or stops with `max_tokens` (truncated) or `refusal`.
 
 ### Configuration
 
@@ -148,9 +156,24 @@ repo root):
 ANTHROPIC_API_KEY="<your-anthropic-api-key>"
 ```
 
-Optionally, `ANTHROPIC_MODEL` pins/overrides the model used. Unlike the MongoDB
-credentials, this key is **not** read through `~/.bookscrapper/settings.json` - it is a
+The model defaults to **`claude-sonnet-5`**, resolved with precedence `--model` flag >
+`ANTHROPIC_MODEL` env var > default (an empty ID is rejected). Unlike the MongoDB
+credentials, the key is **not** read through `~/.bookscrapper/settings.json` - it is a
 standalone dev-tool credential, not a runtime auth path.
+
+Sonnet 5 runs adaptive thinking by default and those thinking tokens count against
+`max_tokens`, so the answer budget is raised to 16000 and a `max_tokens` (truncated) or
+`refusal` stop reason is treated as a hard failure rather than parsed. No sampling
+parameters or `budget_tokens` are sent (Sonnet 5 rejects them).
+
+**Cost controls.** A run is capped at **5 sample URLs** (rejected before any network or
+API call) and makes **one request per URL**, each sharing a cacheable static instruction
+block. Before each request a pre-flight token count enforces `--max-input-tokens`
+(default 40000): an over-budget prompt is re-pruned toward a 10000-character HTML floor
+and, if it still will not fit, abandoned with an error rather than sent. A transient API
+error is retried at most once (the SDK's own retries are set to match, so retries never
+stack). SDK errors surface only the exception class and HTTP status, never the response
+body.
 
 ### Usage
 
@@ -172,9 +195,10 @@ python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.co
 ```
 
 Flags: `--site {amazon,packtpub,leanpub,oreilly}` (required), `--url URL` (required,
-repeatable - pass it more than once to validate proposals across multiple pages),
-`--output <path>` (optional), and `--log-severity {debug,info,warning,error}` like the
-other subcommands.
+repeatable - pass it more than once to validate proposals across multiple pages, up to 5),
+`--model <id>` (optional, overrides `ANTHROPIC_MODEL` and the `claude-sonnet-5` default),
+`--max-input-tokens <n>` (optional, default 40000), `--output <path>` (optional), and
+`--log-severity {debug,info,warning,error}` like the other subcommands.
 
 ### Reading the report
 

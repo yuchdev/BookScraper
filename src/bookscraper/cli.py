@@ -193,6 +193,20 @@ def build_parser() -> argparse.ArgumentParser:
         "across multiple sample pages (recommended).",
     )
     detect_schema_parser.add_argument(
+        "--model",
+        dest="model",
+        default=None,
+        help="Anthropic model ID to use (default: ANTHROPIC_MODEL, else claude-sonnet-5). An empty value is rejected.",
+    )
+    detect_schema_parser.add_argument(
+        "--max-input-tokens",
+        dest="max_input_tokens",
+        type=int,
+        default=40000,
+        help="Pre-flight input-token budget per request; an over-budget prompt is re-pruned toward "
+        "a 10000-character HTML floor and abandoned if it still will not fit (default: 40000).",
+    )
+    detect_schema_parser.add_argument(
         "--output",
         dest="output",
         default=None,

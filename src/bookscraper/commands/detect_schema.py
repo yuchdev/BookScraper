@@ -27,7 +27,12 @@ async def run(args: argparse.Namespace) -> None:
     load_dotenv()
 
     try:
-        report = await detect_schema(args.site, args.url)
+        report, usage_line = await detect_schema(
+            args.site,
+            args.url,
+            model=args.model,
+            max_input_tokens=args.max_input_tokens,
+        )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")
         sys.exit(1)
@@ -36,6 +41,9 @@ async def run(args: argparse.Namespace) -> None:
     # lines go through print_log like the rest of the CLI.
     sys.stdout.write(report + "\n")
     sys.stdout.flush()
+
+    # One-line usage summary (model, token counts, request count - no prices, no key).
+    print_log(usage_line, "info")
 
     if args.output:
         try:

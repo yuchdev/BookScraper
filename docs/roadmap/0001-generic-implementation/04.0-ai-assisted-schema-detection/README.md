@@ -29,7 +29,7 @@ pages, CI-friendly, and safe against hostile page content.
 | 02 | [Anthropic client & response validation](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/02-anthropic-client-and-validation.md) | ✅ Complete | 03 |
 | 03 | [Cross-sample DOM validation](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/03-cross-sample-dom-validation.md)   | ✅ Complete    | 04     |
 | 04 | [Diff report & `detect-schema` command](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/04-diff-report-and-command.md) | ✅ Complete | 05-09 |
-| 05 | [Model default & token budget](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/05-model-default-and-token-budget.md) | ⬜ Not started | -    |
+| 05 | [Model default & token budget](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/05-model-default-and-token-budget.md) | ✅ Complete    | -    |
 | 06 | [Search-page selector support](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/06-search-page-support.md)          | ⬜ Not started | -      |
 | 07 | [Offline mode & golden tests](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/07-offline-mode-and-golden-tests.md)  | ⬜ Not started | 08     |
 | 08 | [JSON report & drift exit code](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/08-json-report-and-drift-check.md)  | ⬜ Not started | -      |

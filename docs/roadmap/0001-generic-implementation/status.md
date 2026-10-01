@@ -14,7 +14,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
-| 04.0 | AI-assisted schema detection       | 🔶 In progress | 4 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
+| 04.0 | AI-assisted schema detection       | 🔶 In progress | 5 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 35 / 94 subtasks complete.
+**Totals:** 36 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -300,3 +300,25 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   remaining lines sit behind the missing `BASE_URL` (03.0/03) or are dead branches, so the ≥ 90% criterion from
   06.0/04 stays **deferred to 03.0/03**. The golden tier takes ~114 s with Chromium; `_bot_wall`/`_missing_title`
   retry 3x, and that cost goes away with 03.2/04.
+- **2026-10-02 - Task 04.0 threat model:** [2026-10-02-ai-schema-detection.md](/docs/security/2026-10-02-ai-schema-detection.md)
+  (AIS-1..16, no CRITICAL). Hard gates: AIS-3 (nothing writes `parameters.py` or `src/`) and AIS-9 (offline modes
+  make zero network calls and need no API key).
+- **2026-10-02 - Task 04.0 decisions (user-ratified):**
+  - `detect-schema` runs **offline-only in automation**: the CI scheduled drift audit (06.2/05) uses only
+    `--html-file` on the corpus, replay goldens or `--check-current-only`, with no network, no key and no spend.
+    Live and Anthropic runs stay manual.
+  - **Cost ceiling:** ≤ 5 sample URLs per run, at most 1 retry on a transient error, and a 40k input-token budget
+    per request.
+  - Following the earlier corpus policy, any recording or replay file that embeds page HTML passes the 06.0
+    sanitize/prose pipeline before entering the public repo (AIS-14). Prompt-caching the static field-name list
+    is fine, because it is already public in `parameters.py`.
+  - **04.0/05 model:** the spec names the Sonnet tier, so the default is `claude-sonnet-5`; model facts came from
+    the `claude-api` skill. Sonnet 5 runs adaptive thinking by default and thinking counts toward `max_tokens`, so
+    the 2048 cap rises to about 16000, and the `refusal`/`max_tokens` stop reasons are handled explicitly.
+- **2026-10-02 - 04.0/05 deviations (orchestrator-recorded, not user-ratified):** (1) `detect-schema` now sends
+  one request per sample URL, merged first-non-null, instead of one request for sample 0 only. The spec's own
+  success criterion needs this, and it fits the ratified per-URL cost cap. (2) The cacheable static instruction
+  block is only about 230 tokens, below Sonnet 5's 1024-token cache minimum (per the `claude-api` skill), so it
+  will not actually cache on the real API. The spec's "requests 2-3 report cached tokens > 0" holds only under
+  mocks. Padding the prompt to the minimum would cost more than caching saves, so it is left as is; revisit if
+  the static block grows.

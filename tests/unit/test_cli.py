@@ -200,6 +200,10 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
             "https://www.amazon.com/dp/1",
             "--url",
             "https://www.amazon.com/dp/2",
+            "--model",
+            "claude-sonnet-5",
+            "--max-input-tokens",
+            "25000",
             "--output",
             "report.txt",
             "--log-severity",
@@ -209,8 +213,20 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
     assert args.command == "detect-schema"
     assert args.site == "amazon"
     assert args.url == ["https://www.amazon.com/dp/1", "https://www.amazon.com/dp/2"]
+    assert args.model == "claude-sonnet-5"
+    assert args.max_input_tokens == 25000
     assert args.output == "report.txt"
     assert args.log_severity == "debug"
+
+
+def test_detect_schema_model_defaults_to_none() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert args.model is None
+
+
+def test_detect_schema_max_input_tokens_defaults_to_40000() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert args.max_input_tokens == 40000
 
 
 def test_detect_schema_url_is_repeatable_into_a_list() -> None:
