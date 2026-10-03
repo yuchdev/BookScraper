@@ -174,7 +174,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Propose CSS-selector updates for a site's detail page via Playwright + Claude.",
         description="Load one or more sample detail-page URLs, ask Claude to propose CSS selectors "
         "for the fields in site_constants[site], validate them against each page's live DOM, and "
-        "print a diff-style report. Never writes to parameters.py; needs ANTHROPIC_API_KEY.",
+        "print a diff-style report (or JSON with --format json). Never writes to parameters.py; "
+        "needs ANTHROPIC_API_KEY (not with --replay/--check-current-only). Exit codes: 0 all "
+        "current selectors matched; 4 at least one current selector matched on no sample (drift); "
+        "1 any error.",
     )
     detect_schema_parser.add_argument(
         "--site",
@@ -240,6 +243,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to write this live run's AI responses (keyed by sha256(prompt)) for later "
         "--replay. Ignored in replay mode; never contains the API key.",
+    )
+    detect_schema_parser.add_argument(
+        "--format",
+        dest="format",
+        choices=["text", "json"],
+        default="text",
+        help="Report format: 'text' (the diff-style report, default) or 'json' (a machine-readable "
+        "CI artifact; stdout stays a single JSON document, status lines go to stderr).",
+    )
+    detect_schema_parser.add_argument(
+        "--check-current-only",
+        dest="check_current_only",
+        action="store_true",
+        help="Skip the AI step entirely and only re-query the current site_constants selectors "
+        "against the samples (cheap, keyless; makes no AI call and - with --html-file - no network "
+        "call). Each field is classified ok/broken/fallback_unused/absent_optional; exit 4 only if "
+        "a needed (non-optional, non-fallback) selector matched on no sample. Basis for a scheduled "
+        "drift job.",
     )
     detect_schema_parser.add_argument(
         "--output",

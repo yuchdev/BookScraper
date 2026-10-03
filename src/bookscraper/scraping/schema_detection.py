@@ -54,7 +54,13 @@ from playwright.async_api import Browser, Page, Route, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..book_utils import print_log
-from .parameters import HEADLESS_BROWSER, NON_SELECTOR_SEARCH_KEYS, USER_AGENTS, site_constants
+from .parameters import (
+    HEADLESS_BROWSER,
+    NON_SELECTOR_SEARCH_KEYS,
+    OPTIONAL_SELECTOR_KEYS,
+    USER_AGENTS,
+    site_constants,
+)
 from .scrape_details import route_handler
 
 module_logger = logging.getLogger("schema_detection")
@@ -115,6 +121,20 @@ SEARCH_PAGE_LEVEL_KEYS = SEARCH_CARD_KEYS | frozenset(
 # is flagged *partial* (the drift this subtask exists to catch: a per-card selector that
 # only resolves on some cards).
 CARD_MATCH_THRESHOLD = 0.8
+
+# AIS-12: rationale is model-authored (page-influenced) untrusted text; it is truncated to this
+# many characters in BOTH the text and JSON reports so a hostile page cannot pad the artifact.
+# DOM snippets are bounded to 80 characters at capture (``.strip()[:80]``), matching the text
+# report that already does so.
+RATIONALE_MAX_CHARS = 200
+
+# AIS-13: strip ESC (``\x1b``) and every C0 (``\x00``-``\x1f``) / C1 (``\x80``-``\x9f``) /
+# DEL (``\x7f``) control character from EVERY untrusted string placed in a report - rationale,
+# proposed selector, DOM text snippets, and sample identifiers - so a hostile page/model string
+# can neither emit terminal escape/ANSI sequences into stdout/``--output`` nor corrupt a JSON
+# CI artifact. Printable bytes (including the leftover ``[31m`` of a stripped ``\x1b[31m``) are
+# kept verbatim; only the dangerous control bytes are removed.
+_UNTRUSTED_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class SchemaDetectionError(Exception):
@@ -310,9 +330,28 @@ def validate_ai_response(raw_text: str, field_names: list[str]) -> dict[str, dic
     return proposals
 
 
+def sanitize_untrusted(value: Optional[str]) -> Optional[str]:
+    """Strip ESC and C0/C1/DEL control characters from one untrusted report string (AIS-13).
+
+    The single place control-char/ANSI stripping is applied, so the text report, the JSON
+    report, and every untrusted field (rationale, proposed selector, DOM snippet, sample
+    identifier) are sanitized identically. ``None`` passes through unchanged; all other
+    values are returned with only their control bytes removed - printable content, including
+    the leftover ``[31m`` of a neutered ``\\x1b[31m`` sequence, is preserved verbatim.
+    """
+    if value is None:
+        return None
+    return _UNTRUSTED_CONTROL_RE.sub("", value)
+
+
+def _clean_rationale(value: Optional[str]) -> str:
+    """Return a rationale sanitized (AIS-13) and truncated to ``RATIONALE_MAX_CHARS`` (AIS-12)."""
+    return (sanitize_untrusted(value) or "")[:RATIONALE_MAX_CHARS]
+
+
 def _fmt_selector(value: Optional[str]) -> str:
-    """Render a selector value (possibly None) for the diff report."""
-    return "None" if value is None else repr(value)
+    """Render a selector value (possibly None) for the diff report, sanitized (AIS-13)."""
+    return "None" if value is None else repr(sanitize_untrusted(value))
 
 
 def format_diff_report(
@@ -321,6 +360,7 @@ def format_diff_report(
     proposals: dict[str, dict[str, Any]],
     current: dict[str, Any],
     validation: dict[str, dict[str, Any]],
+    statuses: Optional[dict[str, str]] = None,
 ) -> str:
     """Build the human-facing report string.
 
@@ -331,12 +371,17 @@ def format_diff_report(
     additionally carries the card count and the fraction of cards it matched; a field that
     matched fewer than ``CARD_MATCH_THRESHOLD`` of the cards on any sample page is flagged
     *partial*. Pure formatting - all live data is precomputed in ``validation``.
+
+    When ``statuses`` is given (``{field: ok|broken|fallback_unused|absent_optional}`` from
+    :func:`compute_field_statuses`) each field shows a ``status:`` line reflecting the CURRENT
+    selector's drift classification; omitted callers get the pre-status report unchanged.
     """
+    statuses = statuses or {}
     lines: list[str] = []
     lines.append(f"Schema-detection proposals for site '{site}'")
     lines.append(f"Sample URLs ({len(urls)}):")
     for url in urls:
-        lines.append(f"  - {url}")
+        lines.append(f"  - {sanitize_untrusted(url)}")
     lines.append("")
     lines.append("NOTE: This is a proposal only. Nothing has been written to parameters.py.")
     lines.append("Review each field below and apply desired changes to site_constants by hand.")
@@ -348,7 +393,7 @@ def format_diff_report(
     for field in proposals:
         current_value = current.get(field, "<field not currently present>")
         proposed_value = proposals[field]["selector"]
-        rationale = proposals[field]["rationale"]
+        rationale = _clean_rationale(proposals[field]["rationale"])
         field_validation = validation.get(field, {})
         per_url = field_validation.get("per_url", [])
         consistent = field_validation.get("consistent", True)
@@ -365,6 +410,8 @@ def format_diff_report(
             lines.append(f"  + proposed: {_fmt_selector(proposed_value)}")
         if rationale:
             lines.append(f"    rationale: {rationale}")
+        if field in statuses:
+            lines.append(f"    status: {statuses[field]}")
 
         lines.append("    validation:")
         for result in per_url:
@@ -409,8 +456,8 @@ def _format_validation_result(result: dict[str, Any]) -> str:
     plus a percentage; every other result keeps the detail-page ``N element(s)`` form so
     the detail report is byte-identical to before. Pure formatting.
     """
-    url = result["url"]
-    snippet = result.get("snippet", "")
+    url = sanitize_untrusted(result["url"])
+    snippet = sanitize_untrusted(result.get("snippet", ""))
     tag = "[MATCH]" if result.get("matched") else "[ no  ]"
     if "fraction" in result:
         card_count = result.get("card_count", 0)
@@ -423,6 +470,241 @@ def _format_validation_result(result: dict[str, Any]) -> str:
         return f"{tag} {url} ({result.get('count', 0)} element(s)){snippet_note}"
     note_str = f" ({snippet})" if snippet else ""
     return f"{tag} {url} (0 elements){note_str}"
+
+
+# --------------------------------------------------------------------------- #
+# Current-selector re-query + JSON report (subtask 08).
+# --------------------------------------------------------------------------- #
+def _per_sample_counts(field_validation: dict[str, Any]) -> dict[str, int]:
+    """Return ``{sample_label: match_count}`` for one field's validation result.
+
+    Works for both detail/page-level results (which carry ``count``, the number of matched
+    elements) and search card-relative results (which carry ``match_count``, the number of
+    cards the selector matched). Sample labels are sanitized (AIS-13) since they may be
+    page-derived identifiers. Pure.
+    """
+    counts: dict[str, int] = {}
+    for entry in field_validation.get("per_url", []):
+        label = sanitize_untrusted(entry["url"]) or ""
+        counts[label] = int(entry.get("match_count", entry.get("count", 0)))
+    return counts
+
+
+# Per-field drift statuses (user-ratified rule, 2026-10-02). A CURRENT selector is:
+#   - "ok"               : a non-empty selector that matched at least one sample.
+#   - "broken"           : a non-empty, non-optional selector that matched NO sample (for a
+#                          card-relative field: zero cards across every sample) AND, if it is an
+#                          ``*_ALT`` fallback, its primary is ALSO broken. The only gating status.
+#   - "fallback_unused"  : an ``*_ALT`` fallback that matched no sample while its primary is healthy
+#                          (the fallback simply was not needed on these pages - not drift).
+#   - "absent_optional"  : an ``OPTIONAL_SELECTOR_KEYS`` key, or a field the site leaves unset
+#                          (null/empty selector), that matched no sample - optional by design.
+FIELD_STATUS_OK = "ok"
+FIELD_STATUS_BROKEN = "broken"
+FIELD_STATUS_FALLBACK_UNUSED = "fallback_unused"
+FIELD_STATUS_ABSENT_OPTIONAL = "absent_optional"
+
+_ALT_SUFFIX = "_ALT"
+
+
+def _selector_is_set(selector: Any) -> bool:
+    """Whether a current selector value is a non-empty string (i.e. the site actually sets one)."""
+    return isinstance(selector, str) and bool(selector)
+
+
+def _matched_somewhere(field_validation: dict[str, Any]) -> bool:
+    """Whether a selector matched at least one element on at least one sample page.
+
+    For a card-relative search field this is whether at least one card matched on some sample
+    (``_per_sample_counts`` carries ``match_count`` there). Pure.
+    """
+    return any(count > 0 for count in _per_sample_counts(field_validation).values())
+
+
+def _primary_is_broken(
+    primary: str,
+    fields: list[str],
+    current_proposals: dict[str, dict[str, Any]],
+    current_validation: dict[str, dict[str, Any]],
+) -> bool:
+    """Whether an ``*_ALT`` field's primary selector is itself broken (so the fallback gates too).
+
+    The primary is broken when it is in the field set, has a non-empty selector, matched no sample,
+    and is not itself optional. Pure.
+    """
+    if primary not in fields:
+        return False
+    selector = current_proposals.get(primary, {}).get("selector")
+    if not _selector_is_set(selector):
+        return False
+    if primary in OPTIONAL_SELECTOR_KEYS:
+        return False
+    return not _matched_somewhere(current_validation.get(primary, {}))
+
+
+def compute_field_statuses(
+    fields: list[str],
+    current_proposals: dict[str, dict[str, Any]],
+    current_validation: dict[str, dict[str, Any]],
+) -> dict[str, str]:
+    """Classify every CURRENT selector field as ok / broken / fallback_unused / absent_optional.
+
+    Implements the user-ratified primary/fallback + explicit-OPTIONAL drift rule (see the status
+    constants above). Only ``broken`` gates CI. Pure - shared by the JSON report, the text report,
+    and the exit-code decision so all three can never disagree.
+    """
+    statuses: dict[str, str] = {}
+    for field in fields:
+        selector = current_proposals.get(field, {}).get("selector")
+        if not _selector_is_set(selector):
+            # The site sets no selector for this field - nothing to extract, never gating.
+            statuses[field] = FIELD_STATUS_ABSENT_OPTIONAL
+            continue
+        if _matched_somewhere(current_validation.get(field, {})):
+            statuses[field] = FIELD_STATUS_OK
+            continue
+        # A real selector that matched nothing: classify the non-match.
+        if field.endswith(_ALT_SUFFIX):
+            primary = field[: -len(_ALT_SUFFIX)]
+            if primary in fields:
+                statuses[field] = (
+                    FIELD_STATUS_BROKEN
+                    if _primary_is_broken(primary, fields, current_proposals, current_validation)
+                    else FIELD_STATUS_FALLBACK_UNUSED
+                )
+                continue
+        if field in OPTIONAL_SELECTOR_KEYS:
+            statuses[field] = FIELD_STATUS_ABSENT_OPTIONAL
+        else:
+            statuses[field] = FIELD_STATUS_BROKEN
+    return statuses
+
+
+def count_current_broken(
+    fields: list[str],
+    current_proposals: dict[str, dict[str, Any]],
+    current_validation: dict[str, dict[str, Any]],
+) -> int:
+    """Count the CURRENT selector fields that have genuinely drifted (status ``broken``).
+
+    Shared by the drift exit-code decision and the JSON report's ``summary.current_broken`` so the
+    two can never disagree. A ``fallback_unused`` or ``absent_optional`` field is NOT counted. Pure.
+    """
+    statuses = compute_field_statuses(fields, current_proposals, current_validation)
+    return sum(1 for status in statuses.values() if status == FIELD_STATUS_BROKEN)
+
+
+def format_json_report(
+    site: str,
+    page_type: str,
+    model: Optional[str],
+    labels: list[str],
+    fields: list[str],
+    proposals: dict[str, dict[str, Any]],
+    current: dict[str, Any],
+    validation: dict[str, dict[str, Any]],
+    current_proposals: dict[str, dict[str, Any]],
+    current_validation: dict[str, dict[str, Any]],
+    *,
+    check_current_only: bool,
+) -> str:
+    """Serialize the machine-readable JSON report (subtask 08), one object per CI consumer.
+
+    The schema is stable across modes (same keys always present). Every untrusted string -
+    proposed selector, rationale, DOM snippets (via ``_per_sample_counts`` labels), and sample
+    identifiers - is sanitized (AIS-13); rationale is additionally truncated (AIS-12). The
+    report never carries the API key (AIS-8) or any HTML (AIS-12): only bounded match counts.
+
+    ``current_matches`` re-queries each **current** selector so a consumer sees which existing
+    selectors have already broken, and each field carries a ``status`` (``ok`` / ``broken`` /
+    ``fallback_unused`` / ``absent_optional``, see :func:`compute_field_statuses`);
+    ``summary.current_broken`` counts only ``broken`` fields (the drift that exits 4). In
+    ``check_current_only`` mode there is no AI step, so each field's
+    ``proposed``/``rationale``/``changed`` and the top-level ``model`` and ``summary.changed`` are
+    ``null``, ``matches`` is an empty object (no proposed selector is evaluated), and
+    ``consistent`` reflects the **current** selector. Pure formatting.
+    """
+    fields_out: list[dict[str, Any]] = []
+    changed_count = 0
+    inconsistent_count = 0
+    current_broken_count = 0
+    statuses = compute_field_statuses(fields, current_proposals, current_validation)
+
+    for field in fields:
+        current_sel = current.get(field)
+        if not isinstance(current_sel, str):
+            current_sel = None
+        cur_val = current_validation.get(field, {})
+        current_matches = _per_sample_counts(cur_val)
+        status = statuses.get(field, FIELD_STATUS_OK)
+        if status == FIELD_STATUS_BROKEN:
+            current_broken_count += 1
+
+        if check_current_only:
+            proposed: Optional[str] = None
+            rationale: Optional[str] = None
+            changed: Optional[bool] = None
+            matches: dict[str, int] = {}
+            consistent = bool(cur_val.get("consistent", True))
+        else:
+            proposal = proposals.get(field)
+            field_val = validation.get(field, {})
+            if proposal is None:
+                proposed = None
+                rationale = None
+                changed = None
+                matches = {}
+                consistent = True
+            else:
+                proposed = sanitize_untrusted(proposal.get("selector"))
+                rationale = _clean_rationale(proposal.get("rationale"))
+                changed = proposed != current_sel
+                if changed:
+                    changed_count += 1
+                matches = _per_sample_counts(field_val)
+                consistent = bool(field_val.get("consistent", True))
+
+        if not consistent:
+            inconsistent_count += 1
+
+        fields_out.append(
+            {
+                "name": field,
+                "current": current_sel,
+                "proposed": proposed,
+                "changed": changed,
+                "rationale": rationale,
+                "matches": matches,
+                "consistent": consistent,
+                "current_matches": current_matches,
+                "status": status,
+            }
+        )
+
+    payload = {
+        "site": site,
+        "page_type": page_type,
+        "model": model,
+        "samples": [sanitize_untrusted(label) for label in labels],
+        "fields": fields_out,
+        "summary": {
+            "changed": None if check_current_only else changed_count,
+            "inconsistent": inconsistent_count,
+            "current_broken": current_broken_count,
+        },
+    }
+    return json.dumps(payload, indent=2)
+
+
+def format_check_only_usage_line(sample_count: int) -> str:
+    """Format the usage line for a ``--check-current-only`` run: no AI call, no tokens, no key.
+
+    Mirrors the shape of the other usage lines but states plainly that no model was consulted,
+    so a CI log never implies spend a keyless drift check never incurred. Pure formatting.
+    """
+    return (
+        f"Schema check (current selectors only): no AI call, no API key required, {sample_count} sample(s) evaluated."
+    )
 
 
 def resolve_model(cli_model: Optional[str]) -> str:
@@ -934,6 +1216,31 @@ def _resolve_sample_sources(
     return labels, from_files
 
 
+async def _validate_for_page_type(
+    proposal_set: dict[str, dict[str, Any]],
+    samples: list[dict[str, Any]],
+    page_type: str,
+) -> dict[str, dict[str, Any]]:
+    """Validate a proposal set against every sample's live DOM, picking the page-type strategy."""
+    if page_type == "search":
+        return await validate_search_across_samples(proposal_set, samples)
+    return await validate_across_samples(proposal_set, samples)
+
+
+def _build_current_proposals(fields: list[str], current: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Build a proposal-shaped view of the CURRENT ``site_constants`` selectors for re-querying.
+
+    Each field's ``selector`` is its current value if that is a string, else ``None`` (a field the
+    site leaves unset). Rationale is empty - these are not AI proposals. Used both to re-query the
+    current selectors (``current_matches`` / drift detection) and, in ``--check-current-only``
+    mode, as the proposals the text report renders.
+    """
+    return {
+        field: {"selector": current.get(field) if isinstance(current.get(field), str) else None, "rationale": ""}
+        for field in fields
+    }
+
+
 async def detect_schema(
     site: str,
     urls: Optional[list[str]] = None,
@@ -943,8 +1250,10 @@ async def detect_schema(
     page_type: str = "detail",
     replay: Optional[str] = None,
     record: Optional[str] = None,
-) -> tuple[str, str]:
-    """Run the full detect -> validate -> report pipeline, returning ``(report, usage_line)``.
+    report_format: str = "text",
+    check_current_only: bool = False,
+) -> tuple[str, str, int]:
+    """Run the full detect -> validate -> report pipeline, returning ``(report, usage_line, exit_code)``.
 
     Sample pages come from either live ``urls`` or local ``html_files`` (exactly one, each capped
     at ``MAX_SAMPLE_URLS``). One response is obtained per sample - from a live Anthropic request,
@@ -954,6 +1263,21 @@ async def detect_schema(
     ``page_type`` selects the field set/validation: ``"detail"`` (default) validates page-level;
     ``"search"`` validates each card-relative selector as a per-card match fraction. ``record``,
     on a live run, writes the per-prompt responses back out for a maintainer to curate.
+
+    Regardless of mode the pipeline **also** re-queries each CURRENT ``site_constants`` selector
+    against every sample and classifies it (:func:`compute_field_statuses`:
+    ``ok``/``broken``/``fallback_unused``/``absent_optional``), so the report shows which existing
+    selectors have genuinely drifted. The returned ``exit_code`` is ``4`` when at least one field is
+    ``broken`` (a non-empty, non-optional selector matching no sample, whose ``*_ALT`` primary - if
+    any - is also broken), else ``0``; an unused fallback or an optional/unset selector never gates.
+    The caller maps a raised ``SchemaDetectionError`` to ``1``.
+
+    ``report_format`` picks the report text: ``"text"`` (the diff report) or ``"json"`` (a
+    machine-readable CI artifact, see :func:`format_json_report`). ``check_current_only`` (AIS-9
+    hard gate) skips the AI step **entirely** - no model is resolved, no ``ANTHROPIC_API_KEY`` is
+    read, no Anthropic client is constructed and no ``count_tokens`` pre-flight runs - and only the
+    current selectors are evaluated; paired with ``--html-file`` it makes zero network calls, the
+    basis for a scheduled drift job.
 
     Offline note (AIS-9/AIS-10): in replay mode there is no client, so the ``count_tokens``
     pre-flight budget is skipped entirely (nothing is sent to bound); the usage line reports zero
@@ -968,20 +1292,23 @@ async def detect_schema(
 
     labels, from_files = _resolve_sample_sources(urls, html_files)
 
-    # Resolve the model (and reject an empty ID) before any browser, network, or API call.
-    resolved_model = resolve_model(model)
-
-    offline = replay is not None
-    replay_map: dict[str, str] = load_replay_file(replay) if offline else {}
-
+    # AIS-9 hard gate: in check-current-only mode no model is resolved, no key is read, no client
+    # is constructed and no replay file is consulted - the AI step is skipped in full.
+    offline = replay is not None and not check_current_only
+    resolved_model: Optional[str] = None
+    replay_map: dict[str, str] = {}
     api_key: Optional[str] = None
-    if not offline:
-        # AIS-9: the key is only required - and only read - on the live path.
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise SchemaDetectionError(
-                "ANTHROPIC_API_KEY is not set. Export it (or add it to .env) before running detect-schema."
-            )
+    if not check_current_only:
+        # Resolve the model (and reject an empty ID) before any browser, network, or API call.
+        resolved_model = resolve_model(model)
+        replay_map = load_replay_file(replay) if offline else {}
+        if not offline:
+            # AIS-9: the key is only required - and only read - on the live path.
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise SchemaDetectionError(
+                    "ANTHROPIC_API_KEY is not set. Export it (or add it to .env) before running detect-schema."
+                )
 
     current = site_constants[site]
     fields = search_selector_fields(current) if page_type == "search" else detail_selector_fields(current)
@@ -989,11 +1316,15 @@ async def detect_schema(
         raise SchemaDetectionError(f"No {page_type}-page selector fields defined for site '{site}'.")
 
     instruction_block = build_instruction_block(site, fields, page_type=page_type)
+    current_proposals = _build_current_proposals(fields, current)
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS_BROWSER)
         samples: list[dict[str, Any]] = []
         recorded: dict[str, str] = {}
+        proposals: dict[str, dict[str, Any]] = {}
+        validation: dict[str, dict[str, Any]] = {}
+        usages: list[Any] = []
         try:
             for label in labels:
                 if from_files:
@@ -1004,46 +1335,72 @@ async def detect_schema(
                     pruned_html = await fetch_pruned_html(label, page)
                 samples.append({"url": label, "page": page, "pruned_html": pruned_html})
 
-            # One response per sample page, each sharing the cacheable instruction block; collect
-            # every response's proposals (and live usage). The merged proposals are then validated
-            # against ALL sample pages' live DOM (a selector matching one page's markup can be a
-            # false positive - cross-URL validation is what catches that).
-            per_url_proposals: list[dict[str, dict[str, Any]]] = []
-            usages: list[Any] = []
-            for sample in samples:
-                snapshot_block = build_snapshot_block(sample["pruned_html"])
-                if offline:
-                    raw_reply = replay_lookup(replay_map, instruction_block, snapshot_block)
-                else:
-                    raw_reply, usage = await asyncio.to_thread(
-                        call_anthropic,
-                        instruction_block,
-                        snapshot_block,
-                        api_key,
-                        resolved_model,
-                        max_input_tokens,
-                    )
-                    usages.append(usage)
-                    if record is not None:
-                        recorded[prompt_hash(instruction_block, snapshot_block)] = raw_reply
-                per_url_proposals.append(validate_ai_response(raw_reply, fields))
+            if not check_current_only:
+                # One response per sample page, each sharing the cacheable instruction block;
+                # collect every response's proposals (and live usage). The merged proposals are
+                # then validated against ALL sample pages' live DOM (a selector matching one page's
+                # markup can be a false positive - cross-URL validation is what catches that).
+                per_url_proposals: list[dict[str, dict[str, Any]]] = []
+                for sample in samples:
+                    snapshot_block = build_snapshot_block(sample["pruned_html"])
+                    if offline:
+                        raw_reply = replay_lookup(replay_map, instruction_block, snapshot_block)
+                    else:
+                        raw_reply, usage = await asyncio.to_thread(
+                            call_anthropic,
+                            instruction_block,
+                            snapshot_block,
+                            api_key,
+                            resolved_model,
+                            max_input_tokens,
+                        )
+                        usages.append(usage)
+                        if record is not None:
+                            recorded[prompt_hash(instruction_block, snapshot_block)] = raw_reply
+                    per_url_proposals.append(validate_ai_response(raw_reply, fields))
 
-            proposals = _merge_proposals(per_url_proposals, fields)
-            if page_type == "search":
-                validation = await validate_search_across_samples(proposals, samples)
-            else:
-                validation = await validate_across_samples(proposals, samples)
+                proposals = _merge_proposals(per_url_proposals, fields)
+                validation = await _validate_for_page_type(proposals, samples, page_type)
+
+            # Always re-query the CURRENT selectors so the report can flag already-broken drift.
+            current_validation = await _validate_for_page_type(current_proposals, samples, page_type)
         finally:
             await browser.close()
 
-    if record is not None and not offline:
+    if record is not None and not offline and not check_current_only:
         write_record_file(record, recorded)
 
-    print_log(f"Received {len(proposals)} selector proposal(s) for '{site}'.", "info")
-    report = format_diff_report(site, labels, proposals, current, validation)
-    usage_line = (
-        format_replay_usage_line(resolved_model, len(samples))
-        if offline
-        else format_usage_line(resolved_model, usages, len(usages))
-    )
-    return report, usage_line
+    statuses = compute_field_statuses(fields, current_proposals, current_validation)
+    exit_code = 4 if any(status == FIELD_STATUS_BROKEN for status in statuses.values()) else 0
+
+    if check_current_only:
+        print_log(f"Checked {len(fields)} current selector(s) for '{site}'.", "info")
+        report_proposals, report_validation = current_proposals, current_validation
+    else:
+        print_log(f"Received {len(proposals)} selector proposal(s) for '{site}'.", "info")
+        report_proposals, report_validation = proposals, validation
+
+    if report_format == "json":
+        report = format_json_report(
+            site,
+            page_type,
+            resolved_model,
+            labels,
+            fields,
+            proposals,
+            current,
+            validation,
+            current_proposals,
+            current_validation,
+            check_current_only=check_current_only,
+        )
+    else:
+        report = format_diff_report(site, labels, report_proposals, current, report_validation, statuses)
+
+    if check_current_only:
+        usage_line = format_check_only_usage_line(len(samples))
+    elif offline:
+        usage_line = format_replay_usage_line(resolved_model, len(samples))
+    else:
+        usage_line = format_usage_line(resolved_model, usages, len(usages))
+    return report, usage_line, exit_code

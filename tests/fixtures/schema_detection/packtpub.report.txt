@@ -11,6 +11,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### BOOK_TITLE
   = (unchanged) 'h1.product-title'
     rationale: current site_constants selector for BOOK_TITLE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="C++ Windows Programming"
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Mastering the C++17 STL"
@@ -19,6 +20,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### AUTHORS
   = (unchanged) 'div.authors span'
     rationale: current site_constants selector for AUTHORS
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="Stefan Bjornander"
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Arthur O'Dwyer"
@@ -27,6 +29,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### AUTHORS_ALT
   = (unchanged) '.product-page-author a'
     rationale: current site_constants selector for AUTHORS_ALT
+    status: fallback_unused
     validation:
       [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements)
       [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements)
@@ -35,6 +38,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### ISBN10
   = (unchanged) None
     rationale: current site_constants selector for ISBN10
+    status: absent_optional
     validation:
       [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements) (null selector)
       [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements) (null selector)
@@ -43,6 +47,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### ISBN13
   = (unchanged) "div.product-page-rhs.desktop span.product-details-section-key:has-text('ISBN-13 :') + span.product-details-section-value"
     rationale: current site_constants selector for ISBN13
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="9781786464224"
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="9781787126824"
@@ -51,6 +56,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### TAGS
   = (unchanged) 'div.product-page-rhs.desktop a'
     rationale: current site_constants selector for TAGS
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (2 element(s)) text="C++"
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (2 element(s)) text="C++"
@@ -59,6 +65,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### PUBLICATION_DATE
   = (unchanged) "div.product-page-rhs.desktop span.product-details-section-key:has-text('Publication date :') + span.product-details-section-value"
     rationale: current site_constants selector for PUBLICATION_DATE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="September 2016"
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="September 2017"
@@ -67,6 +74,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### DESCRIPTION
   = (unchanged) ".product-book-content-details h2:has-text('Description') + div.content-text"
     rationale: current site_constants selector for DESCRIPTION
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/packtpub/cpp_windows_programming.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
       [MATCH] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
@@ -75,6 +83,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### READ_MORE_LINK
   = (unchanged) ''
     rationale: current site_constants selector for READ_MORE_LINK
+    status: absent_optional
     validation:
       [ no  ] <FIXTURES>/html/packtpub/cpp_windows_programming.html (0 elements) (null selector)
       [ no  ] <FIXTURES>/html/packtpub/mastering_the_cpp17_stl.html (0 elements) (null selector)

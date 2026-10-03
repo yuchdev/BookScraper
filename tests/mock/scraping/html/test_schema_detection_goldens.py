@@ -25,10 +25,11 @@ HARD RULE honored here: fixture HTML bodies are never read or printed - they flo
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -111,7 +112,7 @@ async def _run_detect_schema(
     monkeypatch.setattr(sd, "async_playwright", MagicMock(return_value=cm))
 
     try:
-        report, usage_line = await sd.detect_schema(
+        report, usage_line, _exit = await sd.detect_schema(
             site,
             html_files=[str(p) for p in fixtures],
             replay=str(replay),
@@ -226,6 +227,186 @@ async def test_html_file_mode_makes_no_network_request(
     # The corpus_router fixture asserts "no unexpected request" at teardown; a clean report here
     # plus that assertion is the offline proof.
     assert "Schema-detection proposals" in report
+
+
+# --------------------------------------------------------------------------- #
+# CI-gate: --check-current-only drift runs per site (subtask 08 success criterion)
+# --------------------------------------------------------------------------- #
+def _is_hand_built(fixture: Path) -> bool:
+    """Whether a fixture's ``.meta.json`` marks it hand-built (vs a live headed capture)."""
+    meta = fixture.with_suffix("").with_suffix(".meta.json")
+    if not meta.exists():
+        return False
+    return bool(json.loads(meta.read_text(encoding="utf-8")).get("hand_built"))
+
+
+async def _run_check_current_only(
+    chromium_browser: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    site: str,
+    fixtures: list[Path],
+    page_type: str = "detail",
+) -> tuple[int, list[str]]:
+    """Run ``detect_schema --check-current-only --format json`` offline; return (exit_code, broken).
+
+    No AI client is constructed and no key is set (``check_current_only`` makes no AI call); the
+    shared session browser is lent to ``detect_schema`` and its ``close`` neutralized for the call.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+
+    original_close = chromium_browser.close
+    chromium_browser.close = AsyncMock()  # type: ignore[method-assign]
+    fake_pw = MagicMock()
+    fake_pw.chromium.launch = AsyncMock(return_value=chromium_browser)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=fake_pw)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(sd, "async_playwright", MagicMock(return_value=cm))
+
+    try:
+        with (
+            patch.object(sd, "anthropic") as mock_anthropic,
+            patch.object(sd, "call_anthropic", MagicMock(side_effect=AssertionError("no AI call"))),
+        ):
+            mock_anthropic.Anthropic.side_effect = AssertionError("no client in check-current-only mode")
+            report, _usage, exit_code = await sd.detect_schema(
+                site,
+                html_files=[str(p) for p in fixtures],
+                check_current_only=True,
+                report_format="json",
+                page_type=page_type,
+            )
+    finally:
+        chromium_browser.close = original_close  # type: ignore[method-assign]
+
+    data = json.loads(report)
+    broken = sorted(f["name"] for f in data["fields"] if f["status"] == "broken")
+    return exit_code, broken
+
+
+@pytest.mark.chromium
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("site", DETAIL_SITES)
+async def test_ci_gate_hand_built_detail_set_exits_zero(
+    site: str,
+    chromium_browser: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scenario: --check-current-only over a site's HAND-BUILT detail fixtures exits 0 (CI gate).
+
+    Boundaries: only hand-built fixtures (the live amazon capture is excluded - it may legitimately
+    drift and is reported separately); fully offline, no AI, no key.
+    On failure: the drift rule mis-flags a fallback/optional selector as broken, so the scheduled
+    offline CI gate would be red on a healthy schema - the exact failure this subtask must prevent.
+    """
+    fixtures = [f for f in _detail_fixtures(site) if _is_hand_built(f)]
+    assert fixtures, f"{site} must have >= 1 hand-built detail fixture for the CI gate"
+    exit_code, broken = await _run_check_current_only(chromium_browser, monkeypatch, site=site, fixtures=fixtures)
+    assert exit_code == 0, f"{site} hand-built set unexpectedly gated as drift: broken={broken}"
+    assert broken == []
+
+
+@pytest.mark.chromium
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ci_gate_live_amazon_detail_reported(
+    chromium_browser: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Scenario: the LIVE amazon capture is RECORDED, not forced (real drift is legitimate here).
+
+    Boundaries: the single live ``a_tour_of_cpp_3e`` fixture; offline, no AI.
+    On failure: only a crash fails this - a 0 or 4 result is reported for a human to read, since a
+    genuinely-drifted NEEDED field on the live page is a real finding, not a test bug.
+    """
+    live = FIXTURES_ROOT / "html" / "amazon" / "a_tour_of_cpp_3e.html"
+    exit_code, broken = await _run_check_current_only(chromium_browser, monkeypatch, site="amazon", fixtures=[live])
+    with capsys.disabled():
+        print(f"\n[CI-gate RECORD] amazon live a_tour_of_cpp_3e: exit={exit_code} broken={broken}")
+    assert exit_code in (0, 4)
+
+
+@pytest.mark.chromium
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ci_gate_amazon_search_reported(
+    chromium_browser: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Scenario: amazon --page-type search over p1/p2 is RECORDED (06.0 found real card drift).
+
+    Boundaries: the two live amazon search fixtures; offline, no AI.
+    On failure: only a crash fails this - a 4 (SEARCH_BOOK_DETAIL_LINK matching no live card) is a
+    real, expected finding and is reported, not asserted away.
+    """
+    fixtures = [
+        FIXTURES_ROOT / "html" / "amazon" / "search_python_p1.html",
+        FIXTURES_ROOT / "html" / "amazon" / "search_python_p2.html",
+    ]
+    exit_code, broken = await _run_check_current_only(
+        chromium_browser, monkeypatch, site="amazon", fixtures=fixtures, page_type="search"
+    )
+    with capsys.disabled():
+        print(f"\n[CI-gate RECORD] amazon search p1/p2: exit={exit_code} broken={broken}")
+    assert exit_code in (0, 4)
+
+
+# --------------------------------------------------------------------------- #
+# AIS-9: --check-current-only + --html-file makes zero network requests (subtask 08)
+# --------------------------------------------------------------------------- #
+@pytest.mark.chromium
+@pytest.mark.asyncio(loop_scope="session")
+async def test_check_current_only_html_file_makes_no_network_request(
+    chromium_browser: Any,
+    corpus_router: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scenario: --check-current-only + --html-file issues NO network request and no AI call (AIS-9).
+
+    Boundaries: the run goes through the default-deny corpus recorder with an EMPTY mapping, so any
+    request fails the test at teardown; no API key is set and sd.anthropic.Anthropic / call_anthropic
+    raise if ever reached. The JSON report is parsed to confirm the drift schema is emitted.
+    On failure: a keyless/offline drift check leaked a network fetch or reached for the live API.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+
+    browser = corpus_router(chromium_browser, {})
+    original_close = browser.close
+    browser.close = AsyncMock()  # type: ignore[method-assign]
+    fake_pw = MagicMock()
+    fake_pw.chromium.launch = AsyncMock(return_value=browser)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=fake_pw)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(sd, "async_playwright", MagicMock(return_value=cm))
+
+    fixtures = _detail_fixtures("amazon")[:1]
+    try:
+        with (
+            patch.object(sd, "anthropic") as mock_anthropic,
+            patch.object(sd, "call_anthropic", MagicMock(side_effect=AssertionError("no AI call"))) as call_ai,
+        ):
+            mock_anthropic.Anthropic.side_effect = AssertionError("no client in check-current-only mode")
+            report, usage_line, exit_code = await sd.detect_schema(
+                "amazon",
+                html_files=[str(p) for p in fixtures],
+                check_current_only=True,
+                report_format="json",
+            )
+        mock_anthropic.Anthropic.assert_not_called()
+        call_ai.assert_not_called()
+    finally:
+        browser.close = original_close  # type: ignore[method-assign]
+
+    data = json.loads(report)
+    assert data["site"] == "amazon"
+    assert data["model"] is None
+    assert data["summary"]["changed"] is None
+    assert "no AI call" in usage_line
+    assert exit_code in (0, 4)  # the committed fixture carries drifted selectors; either is valid
 
 
 # --------------------------------------------------------------------------- #

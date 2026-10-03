@@ -1,7 +1,7 @@
 # 08 - JSON report & drift exit code
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [07-offline-mode-and-golden-tests.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/07-offline-mode-and-golden-tests.md)
 **Role:** Python Expert
 

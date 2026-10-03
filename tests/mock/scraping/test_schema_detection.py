@@ -419,7 +419,7 @@ async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None
         patch.object(sd, "async_playwright", build_playwright_factory(browser)),
         patch.object(sd, "call_anthropic", MagicMock(return_value=(proposals_json, _fake_usage()))) as call_ai,
     ):
-        report, usage_line = await sd.detect_schema("amazon", ["https://x/1", "https://x/2"])
+        report, usage_line, _exit = await sd.detect_schema("amazon", ["https://x/1", "https://x/2"])
 
     assert "#productTitle" in report
     assert "[MATCH]" in report
@@ -459,7 +459,7 @@ async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) 
         patch.object(sd, "async_playwright", build_playwright_factory(browser)),
         patch.object(sd, "call_anthropic", MagicMock(side_effect=usages)) as call_ai,
     ):
-        _, usage_line = await sd.detect_schema("amazon", ["https://x/1", "https://x/2", "https://x/3"])
+        _, usage_line, _exit = await sd.detect_schema("amazon", ["https://x/1", "https://x/2", "https://x/3"])
 
     assert call_ai.call_count == 3
     assert "requests=3" in usage_line
@@ -721,7 +721,7 @@ async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
         patch.object(sd, "async_playwright", build_playwright_factory(browser)),
         patch.object(sd, "call_anthropic", MagicMock(return_value=(proposals_json, _fake_usage()))) as call_ai,
     ):
-        report, usage_line = await sd.detect_schema("amazon", ["https://x/1", "https://x/2"], page_type="search")
+        report, usage_line, _exit = await sd.detect_schema("amazon", ["https://x/1", "https://x/2"], page_type="search")
 
     # The instruction block sent is the search variant (card-relative semantics).
     instruction_arg = call_ai.call_args.args[0]
@@ -911,7 +911,9 @@ async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
     content = "<html><h1 id='productTitle'>Book One</h1></html>"
     response = json.dumps({"BOOK_TITLE": {"selector": "#productTitle", "rationale": "stable id"}})
     replay_path = tmp_path / "amazon.replay.json"
-    replay_path.write_text(json.dumps({"_provenance": "test", **_detail_replay_for(content, response)}), encoding="utf-8")
+    replay_path.write_text(
+        json.dumps({"_provenance": "test", **_detail_replay_for(content, response)}), encoding="utf-8"
+    )
 
     page = FakePage(locators={"#productTitle": FakeLocator("Book One")}, content=content)
     browser = FakeBrowser(page_factory=lambda *a, **k: page)
@@ -921,7 +923,7 @@ async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
         patch.object(sd, "anthropic") as mock_anthropic,
     ):
         mock_anthropic.Anthropic.side_effect = AssertionError("no client may be constructed in replay mode")
-        report, usage_line = await sd.detect_schema("amazon", urls=["https://x/1"], replay=str(replay_path))
+        report, usage_line, _exit = await sd.detect_schema("amazon", urls=["https://x/1"], replay=str(replay_path))
 
     assert "#productTitle" in report
     assert "[MATCH]" in report
@@ -969,7 +971,7 @@ async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tm
     browser = FakeBrowser(page_factory=lambda *a, **k: page)
 
     with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
-        report, usage_line = await sd.detect_schema(
+        report, usage_line, _exit = await sd.detect_schema(
             "amazon", html_files=[str(html_path)], replay=str(replay_path)
         )
 
@@ -1009,3 +1011,114 @@ async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_p
     expected_key = next(iter(_detail_replay_for(content, response)))
     assert data[expected_key] == response
     assert "sk-ant-test-XXXX" not in record_path.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# detect_schema - JSON format + check-current-only + drift exit codes (subtask 08)
+# --------------------------------------------------------------------------- #
+def _tiny_site(selector="#t"):
+    """A one-field site_constants entry so a FakePage can make every current selector match/miss."""
+    return {"tiny": {"BASE_URL": "https://x", "BOOK_TITLE": selector}}
+
+
+async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> None:
+    """Scenario: --check-current-only constructs no client, needs no key, makes no AI call (AIS-9).
+
+    Boundaries: the key is deleted; sd.anthropic.Anthropic and call_anthropic both raise if ever
+    reached; an --html-file sample drives the fully offline path.
+    On failure: a keyless drift check would silently require the key or spend on a live call.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    content = "<html><h1 id='productTitle'>Book</h1></html>"
+    html_path = tmp_path / "b.html"
+    html_path.write_text(content, encoding="utf-8")
+    page = FakePage(locators={"#productTitle": FakeLocator("Book")}, content=content)
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with (
+        patch.object(sd, "async_playwright", build_playwright_factory(browser)),
+        patch.object(sd, "anthropic") as mock_anthropic,
+        patch.object(sd, "call_anthropic", MagicMock(side_effect=AssertionError("no AI call in check-current-only"))) as call_ai,
+    ):
+        mock_anthropic.Anthropic.side_effect = AssertionError("no client in check-current-only mode")
+        report, usage_line, exit_code = await sd.detect_schema(
+            "amazon", html_files=[str(html_path)], check_current_only=True
+        )
+
+    mock_anthropic.Anthropic.assert_not_called()
+    call_ai.assert_not_called()
+    assert "no AI call" in usage_line
+    assert "Schema-detection proposals" in report
+    assert exit_code in (0, 4)
+    browser.close.assert_awaited_once()
+
+
+async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> None:
+    """Scenario: a run where every current selector matches a sample returns exit 0.
+
+    Boundaries: a one-field site whose selector the FakePage carries; check-current-only (no AI).
+    On failure: a healthy schema would wrongly trip the drift exit code.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(sd, "site_constants", _tiny_site("#t"))
+    page = FakePage(locators={"#t": FakeLocator("Title")}, content="<h1 id='t'>Title</h1>")
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        _report, usage_line, exit_code = await sd.detect_schema("tiny", urls=["u0"], check_current_only=True)
+
+    assert exit_code == 0
+    assert "no AI call" in usage_line
+    browser.close.assert_awaited_once()
+
+
+async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
+    """Scenario: a current selector matching on no sample yields exit 4 (drift).
+
+    Boundaries: a one-field site whose selector the FakePage does NOT carry; check-current-only.
+    On failure: drift would go unnoticed and a scheduled CI job could not gate on it.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(sd, "site_constants", _tiny_site("#gone"))
+    page = FakePage(locators={}, content="<html></html>")
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        _report, _usage, exit_code = await sd.detect_schema("tiny", urls=["u0"], check_current_only=True)
+
+    assert exit_code == 4
+    browser.close.assert_awaited_once()
+
+
+async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path) -> None:
+    """Scenario: --format json on an offline replay run emits the documented JSON schema + exit code.
+
+    Boundaries: FakePage + hand-built replay; no key, no client.
+    On failure: a CI drift artifact would be malformed, or the exit code would be dropped.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    content = "<html><h1 id='productTitle'>Book One</h1></html>"
+    response = json.dumps({"BOOK_TITLE": {"selector": "#productTitle", "rationale": "stable id"}})
+    replay_path = tmp_path / "amazon.replay.json"
+    replay_path.write_text(json.dumps(_detail_replay_for(content, response)), encoding="utf-8")
+    page = FakePage(locators={"#productTitle": FakeLocator("Book One")}, content=content)
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        report, usage_line, exit_code = await sd.detect_schema(
+            "amazon", urls=["https://x/1"], replay=str(replay_path), report_format="json"
+        )
+
+    data = json.loads(report)
+    assert data["site"] == "amazon"
+    assert data["page_type"] == "detail"
+    assert data["model"] == sd.DEFAULT_MODEL
+    title = next(f for f in data["fields"] if f["name"] == "BOOK_TITLE")
+    assert title["proposed"] == "#productTitle"
+    assert title["matches"] == {"https://x/1": 1}
+    assert "current_broken" in data["summary"]
+    assert exit_code in (0, 4)
+    assert "replayed=1" in usage_line
+    browser.close.assert_awaited_once()

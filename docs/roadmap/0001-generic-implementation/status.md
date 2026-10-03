@@ -14,7 +14,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
-| 04.0 | AI-assisted schema detection       | 🔶 In progress | 7 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
+| 04.0 | AI-assisted schema detection       | 🔶 In progress | 8 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 38 / 94 subtasks complete.
+**Totals:** 39 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -322,3 +322,19 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   will not actually cache on the real API. The spec's "requests 2-3 report cached tokens > 0" holds only under
   mocks. Padding the prompt to the minimum would cost more than caching saves, so it is left as is; revisit if
   the static block grows.
+- **2026-10-04 - 04.0/08 drift rule (user-ratified):** `--check-current-only` treats `X_ALT` as broken only when
+  its primary `X` is also broken. The keys in the explicit `OPTIONAL_SELECTOR_KEYS` set in `parameters.py`
+  (`DETAILS_BUTTON`, `READ_MORE_LINK`, `ASIN_DETAIL_PAGE_SELECTOR`, `SEARCH_NEXT_PAGE_SELECTOR`,
+  `SEARCH_NO_RESULTS_TEXT`, `SEARCH_NO_BOOKS_FOUND`) are reported `absent_optional` and never gate. Each field
+  gets a `status` of ok | broken | fallback_unused | absent_optional, and exit 4 means at least one field is broken.
+  CI-gate runs: the hand-built amazon, packtpub and oreilly detail sets exit 0 (asserted); live amazon search exits
+  4 on `SEARCH_BOOK_DETAIL_LINK` (real drift, recorded).
+- **2026-10-04 - Follow-ups from 04.0/08:**
+  1. **Drift is count-based.** A gating selector that matches an element which is present but EMPTY counts as
+     `ok`. The live amazon `DESCRIPTION` matches an empty element, so the check passes although the scraper gets
+     no description. Checking for non-empty text on gating fields would catch this (for 03.0/04 or a later
+     04.0 iteration).
+  2. **The real CLI ignores `BOOKSCRAPER_CHROMIUM_PATH`**, which only the test harness reads, and the bundled
+     Playwright Chromium won't launch on macOS 13. So on this machine no browser-based command (`scrape-urls`,
+     `detect-schema --url/--html-file`) can run outside the tests. Route to 05.0/03 (browser flags): add a
+     Chromium executable-path option.

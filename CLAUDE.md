@@ -310,8 +310,9 @@ otherwise-manual loop of figuring out a site's CSS selectors when its markup dri
 `docs/scraping/schema-detection.md` (full manual-and-automated writeup) and
 `docs/adr/0002-ai-assisted-schema-detection.md` (design rationale). It takes `--site
 {amazon,packtpub,leanpub,oreilly}`, `--page-type {detail,search}` (default `detail`), one or more repeatable `--url`
-sample pages, an optional `--output`, `--model` and `--max-input-tokens`, and `--log-severity` like the other
-subcommands; it does **not** take `--store-backend`.
+sample pages, an optional `--output`, `--model` and `--max-input-tokens`, `--format {text,json}` (default `text`) and
+`--check-current-only` (see JSON report & drift exit codes below), and `--log-severity` like the other subcommands; it
+does **not** take `--store-backend`.
 
 The pipeline: load each URL with Playwright (reusing `scrape_details.route_handler` document-only blocking) → prune
 each page to an LLM-sized HTML snapshot → ask Claude (official `anthropic` SDK, `ANTHROPIC_API_KEY` read straight
@@ -376,6 +377,31 @@ derived artifacts, not captured pages, so `tests/unit/test_fixture_corpus.py` ex
 from the `.meta.json`/sha256 integrity checks. The golden/pruner-regression tests
 (`tests/mock/scraping/html/test_schema_detection_goldens.py`) carry the `chromium` marker and skip cleanly without a
 browser.
+
+**JSON report & drift exit codes (subtask 04.0/08).** Every run — text or JSON, AI or check-only — **also re-queries
+each current `site_constants` selector** against the samples (`current_matches`) and classifies it with a per-field
+`status` via `compute_field_statuses()`, so the report shows which existing selectors have genuinely broken, and
+`detect_schema()` returns `(report, usage_line, exit_code)`. The user-ratified drift rule (2026-10-02): `status` is
+`ok` (matched somewhere), `broken` (non-empty, non-optional selector matching no sample — for an `*_ALT` fallback,
+only when its primary `X` (suffix stripped) is ALSO broken), `fallback_unused` (an `*_ALT` whose primary is healthy),
+or `absent_optional` (a key in `parameters.OPTIONAL_SELECTOR_KEYS` — `DETAILS_BUTTON`/`READ_MORE_LINK`/
+`ASIN_DETAIL_PAGE_SELECTOR`/`SEARCH_NEXT_PAGE_SELECTOR`/`SEARCH_NO_RESULTS_TEXT`/`SEARCH_NO_BOOKS_FOUND` — or a field
+the site leaves unset). `summary.current_broken` counts **only** `broken`. Exit codes: `0` nothing `broken`; `4`
+**drift** — at least one `broken` field; `1` any error (`SchemaDetectionError`). `OPTIONAL_SELECTOR_KEYS` is kept
+minimal: anything the scraper NEEDS to extract a record (title, authors, ISBN-13, publication date, description, the
+search card + its title/detail-link) stays gating. `commands/detect_schema.py`
+propagates exit `4` via `sys.exit(4)` the same way `rotate-cert --check` propagates `3` (`main.py` lets it bubble
+through `asyncio.run`). `--format {text,json}` (default `text`) picks the report: `json` emits a machine-readable
+document (see `format_json_report`) and keeps **stdout a single parseable JSON object** for a CI drift job, routing
+every human status line to stderr. `--check-current-only` (AIS-9 hard gate) skips the AI step **entirely** — no model
+resolved, no `ANTHROPIC_API_KEY` read, no Anthropic client constructed, no `count_tokens` pre-flight — and evaluates
+only the current selectors; paired with `--html-file` it makes **zero** network calls, the basis for the OFFLINE-ONLY
+scheduled drift job (status.md 2026-10-02). In its JSON each field's `proposed`/`rationale`/`changed` and the
+top-level `model`/`summary.changed` are `null` and `matches` is `{}`. Security: the JSON carries no key and no page
+HTML (AIS-8/AIS-12) — only bounded match counts, ≤80-char DOM snippets, and a rationale truncated to 200 chars; and
+`sanitize_untrusted()` is the single place that strips ESC/ANSI and C0/C1/DEL control characters from **every**
+untrusted string (rationale, proposed selector, DOM snippets, sample identifiers) in **both** the text and JSON
+reports (AIS-13).
 
 ## Testing
 

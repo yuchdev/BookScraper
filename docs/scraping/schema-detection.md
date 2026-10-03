@@ -204,8 +204,9 @@ Flags: `--site {amazon,packtpub,leanpub,oreilly}` (required), `--page-type {deta
 both repeatable - pass more than once to validate across multiple pages, up to 5), `--model <id>`
 (optional, overrides `ANTHROPIC_MODEL` and the `claude-sonnet-5` default), `--max-input-tokens
 <n>` (optional, default 40000), `--replay <path>` / `--record <path>` (optional, see Offline
-modes below), `--output <path>` (optional), and `--log-severity {debug,info,warning,error}` like
-the other subcommands.
+modes below), `--format {text,json}` (optional, default `text`, see JSON report & drift exit
+codes below), `--check-current-only` (optional, see below), `--output <path>` (optional), and
+`--log-severity {debug,info,warning,error}` like the other subcommands.
 
 ### Offline modes: `--html-file`, `--replay`, `--record`
 
@@ -277,12 +278,82 @@ cards the selector matched; a selector matching **fewer than 80%** of the cards 
 page is flagged `!! PARTIAL`. Everything else - the propose-never-apply boundary, the usage
 line, the fail-loud behavior - is identical to a detail run.
 
+### JSON report & drift exit codes (`--format json`, `--check-current-only`)
+
+Every run - text or JSON, AI or check-only - **also re-queries each current `site_constants`
+selector** against the samples and classifies it, so the report shows which existing selectors
+have genuinely broken (`current_matches` plus a per-field `status`). Each field's `status` is one
+of:
+
+- **`ok`** - a non-empty selector that matched at least one sample (for a card-relative search
+  field: at least one card on some sample).
+- **`broken`** - a non-empty, **non-optional** selector that matched *no* sample, and - if it is an
+  `*_ALT` fallback - whose primary is *also* broken. This is the only status that gates CI.
+- **`fallback_unused`** - an `*_ALT` fallback that matched no sample while its primary
+  (the key with the `_ALT` suffix stripped, e.g. `DESCRIPTION` for `DESCRIPTION_ALT`) is healthy.
+  The alternate markup simply was not needed on these pages - not drift.
+- **`absent_optional`** - a key in `OPTIONAL_SELECTOR_KEYS` (`src/bookscraper/scraping/parameters.py`
+  - interaction/expander affordances, the ASIN auxiliary block, pagination, and empty-results
+  markers), or a field the site leaves unset (null/empty selector, e.g. Leanpub's `ISBN10`), that
+  matched no sample. Optional by design.
+
+The **drift rule** (user-ratified 2026-10-02) is deliberately narrow so a scheduled offline gate
+is tripped only by real breakage: a fallback is not drift while its primary works, and an explicit
+OPTIONAL set (interaction/pagination/conditional selectors) never gates. Anything the scraper
+*needs* to extract a record (title, authors, ISBN-13, publication date, description, the search
+card + its title/detail-link) is **not** optional and stays gating.
+
+The command's exit code reflects the statuses:
+
+- **`0`** - no field is `broken` (every needed selector matched somewhere).
+- **`4`** - **drift**: at least one field is `broken`. `summary.current_broken` counts exactly
+  those fields.
+- **`1`** - any error (a `SchemaDetectionError`, as before).
+
+Exit `4` propagates the same way `rotate-cert --check` propagates its exit `3`, so a scheduled CI
+job can gate on it.
+
+**`--format json`** emits a machine-readable document instead of the diff text. stdout stays a
+single parseable JSON object (every human status line - usage, completion, drift notice - goes to
+stderr), so a CI drift job can `json.loads` stdout directly. Shape:
+
+```json
+{"site": "amazon", "page_type": "detail", "model": "claude-sonnet-5", "samples": ["..."],
+ "fields": [{"name": "ISBN13", "current": "...", "proposed": "...", "changed": true,
+             "rationale": "...", "matches": {"<sample>": 1}, "consistent": true,
+             "current_matches": {"<sample>": 0}, "status": "broken"}],
+ "summary": {"changed": 2, "inconsistent": 1, "current_broken": 1}}
+```
+
+`matches` is the *proposed* selector's per-sample match count; `current_matches` the *current*
+selector's; `status` is the drift classification above and `summary.current_broken` counts only
+`broken` fields. The JSON carries no API key and no page HTML - only bounded match counts, DOM snippets
+(≤80 chars), and a rationale truncated to 200 chars; every untrusted string (rationale, proposed
+selector, snippets, sample identifiers) is stripped of ANSI/ESC and C0/C1 control characters before
+serialization, so a hostile page/model string can neither inject terminal escapes nor corrupt the
+artifact (the same stripping is applied to the text report).
+
+**`--check-current-only`** skips the AI step **entirely** - no model is resolved, no
+`ANTHROPIC_API_KEY` is read, no Anthropic client is constructed and no token-count pre-flight runs -
+and evaluates only the current selectors. It is cheap and keyless; paired with `--html-file` it
+makes **zero** network calls, which is why it is the basis for a scheduled drift job. In its JSON
+output each field's `proposed`/`rationale`/`changed` and the top-level `model` and `summary.changed`
+are `null`, `matches` is an empty object (no proposed selector is evaluated), and `consistent`
+reflects the current selector.
+
+```bash
+# Offline, keyless CI drift gate: exit 4 means a current selector has broken.
+uv run bookscraper detect-schema --site amazon --check-current-only --format json \
+  --html-file tests/fixtures/html/amazon/a_tour_of_cpp_3e.html
+```
+
 ### Reading the report
 
 For each field the report shows the current value versus the proposed selector (a `-`/`+`
-diff when they differ, `=` when identical), the proposal's rationale, and the per-URL
-live-DOM validation (`[MATCH]`/`[ no ]` with element counts and a text snippet). A field
-that matched inconsistently across sample URLs is flagged with `!! INCONSISTENT` and summed
+diff when they differ, `=` when identical), the proposal's rationale, a `status:` line (the
+current-selector drift classification above - `ok`/`broken`/`fallback_unused`/`absent_optional`),
+and the per-URL live-DOM validation (`[MATCH]`/`[ no ]` with element counts and a text snippet). A
+field that matched inconsistently across sample URLs is flagged with `!! INCONSISTENT` and summed
 up in a closing `WARNING:` line - treat those as needing a closer look before you apply
 them.
 

@@ -12,6 +12,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### BOOK_TITLE
   = (unchanged) '#productTitle'
     rationale: current site_constants selector for BOOK_TITLE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Tour of C++, A (C++ In-Depth Series)"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="C++ Primer"
@@ -21,6 +22,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### AUTHORS
   = (unchanged) '.author a.a-link-normal'
     rationale: current site_constants selector for AUTHORS
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Bjarne Stroustrup"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (3 element(s)) text="Stanley B. Lippman"
@@ -30,6 +32,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### AUTHORS_ALT
   = (unchanged) '#bylineInfo .a-link-normal'
     rationale: current site_constants selector for AUTHORS_ALT
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="Bjarne Stroustrup"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (3 element(s)) text="Stanley B. Lippman"
@@ -39,6 +42,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### ASIN_DETAIL_PAGE_SELECTOR
   = (unchanged) '#regulatoryDeposit_feature_div'
     rationale: current site_constants selector for ASIN_DETAIL_PAGE_SELECTOR
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s))
       [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
@@ -49,6 +53,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### ISBN10
   = (unchanged) '#rpi-attribute-book_details-isbn10 .rpi-attribute-value span'
     rationale: current site_constants selector for ISBN10
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="0136816487"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="0321714113"
@@ -58,6 +63,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### ISBN13
   = (unchanged) '#rpi-attribute-book_details-isbn13 .rpi-attribute-value span'
     rationale: current site_constants selector for ISBN13
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="978-0136816485"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="978-0321714114"
@@ -67,6 +73,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### PUBLICATION_DATE
   = (unchanged) '#rpi-attribute-book_details-publication_date .rpi-attribute-value span, #rpi-attribute-audiobook_details-release-date .rpi-attribute-value span'
     rationale: current site_constants selector for PUBLICATION_DATE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s)) text="September 24, 2022"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="August 16, 2012"
@@ -76,6 +83,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### DESCRIPTION
   = (unchanged) '#bookDescription_feature_div .a-expander-content'
     rationale: current site_constants selector for DESCRIPTION
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (1 element(s))
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
@@ -85,6 +93,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### DESCRIPTION_ALT
   = (unchanged) '#productDescription p'
     rationale: current site_constants selector for DESCRIPTION_ALT
+    status: fallback_unused
     validation:
       [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements)
       [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
@@ -94,6 +103,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### TAGS
   = (unchanged) '#detailBulletsWrapper_feature_div ul.zg_hrsr a'
     rationale: current site_constants selector for TAGS
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (3 element(s)) text="C++ Programming Language"
       [MATCH] <FIXTURES>/html/amazon/cpp_primer_5e.html (2 element(s)) text="C++ Programming"
@@ -103,6 +113,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### DETAILS_BUTTON
   = (unchanged) "a.a-expander-header:has-text('Product details'), a.a-expander-header:has-text('See more product details'), a.a-expander-header:has-text('Product information')"
     rationale: current site_constants selector for DETAILS_BUTTON
+    status: absent_optional
     validation:
       [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements)
       [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)

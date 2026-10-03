@@ -4,9 +4,15 @@ Unlike `scrape-urls`/`search` this command never touches book storage (no
 `resolve_store_backend()` call) and, unlike anything else in the package, it never
 writes to `parameters.py`. It loads sample pages (live `--url`s or fully offline local
 `--html-file`s), asks Claude - or a recorded `--replay` file, offline with no API key - to
-propose selectors, validates them against each page's live DOM, and prints a diff-style report
-for a human to apply by hand (optionally also writing it to `--output`). `--record` captures a
+propose selectors, validates them against each page's live DOM, and prints a report - a diff-style
+text report (default) or, with `--format json`, a machine-readable JSON document for a CI drift job
+- for a human to apply by hand (optionally also writing it to `--output`). `--record` captures a
 live run's responses for a maintainer to curate into a replay file.
+
+`--check-current-only` skips the AI step entirely (no key, no client, no network when paired with
+`--html-file`) and only re-queries the current `site_constants` selectors against the samples. Exit
+codes: `0` everything consistent and no current selector broken; `4` at least one current selector
+matched on no sample (drift); `1` any error. Exit 4 propagates like rotate-cert's exit 3.
 
 See `scraping/schema_detection.py` for the pipeline and
 `docs/scraping/schema-detection.md` for the full manual-and-automated workflow writeup.
@@ -29,7 +35,7 @@ async def run(args: argparse.Namespace) -> None:
     load_dotenv()
 
     try:
-        report, usage_line = await detect_schema(
+        report, usage_line, exit_code = await detect_schema(
             args.site,
             urls=args.url,
             html_files=args.html_file,
@@ -38,18 +44,29 @@ async def run(args: argparse.Namespace) -> None:
             page_type=args.page_type,
             replay=args.replay,
             record=args.record,
+            report_format=args.format,
+            check_current_only=args.check_current_only,
         )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")
         sys.exit(1)
 
-    # The report body goes to stdout verbatim (it is the tool's primary output); status
-    # lines go through print_log like the rest of the CLI.
+    json_format = args.format == "json"
+
+    # The report body is the tool's primary output and goes to stdout verbatim. For --format json
+    # stdout must stay a single parseable JSON document for a CI drift job, so every human status
+    # line (usage, completion, drift notice) is routed to stderr instead of print_log's stdout.
     sys.stdout.write(report + "\n")
     sys.stdout.flush()
 
+    def _status(message: str, level: str) -> None:
+        if json_format:
+            print(message, file=sys.stderr)
+        else:
+            print_log(message, level)
+
     # One-line usage summary (model, token counts, request count - no prices, no key).
-    print_log(usage_line, "info")
+    _status(usage_line, "info")
 
     if args.output:
         try:
@@ -58,9 +75,19 @@ async def run(args: argparse.Namespace) -> None:
         except OSError as exc:
             print_log(f"Error: could not write report to '{args.output}': {exc}", "error")
             sys.exit(1)
-        print_log(f"Report written to {args.output}", "success")
+        _status(f"Report written to {args.output}", "success")
 
-    print_log(
+    if exit_code == 4:
+        # Drift: at least one current selector matched on no sample page. Exit 4 so a scheduled
+        # CI drift job notices, the same way rotate-cert --check propagates its exit 3.
+        _status(
+            "Schema drift detected: at least one current selector matched on no sample page. "
+            "Review the report and refresh site_constants in parameters.py by hand.",
+            "warning",
+        )
+        sys.exit(4)
+
+    _status(
         "Schema detection complete. Review the proposals above and apply desired changes "
         "to site_constants in parameters.py by hand - nothing was written automatically.",
         "success",

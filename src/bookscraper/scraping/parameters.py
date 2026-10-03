@@ -40,6 +40,34 @@ NON_SELECTOR_SEARCH_KEYS = frozenset(
     {"SEARCH_BASE_URL", "SEARCH_BASE_API", "SEARCH_MAXIMUM_PAGES", "SEARCH_ASIN_ATTRIBUTE"}
 )
 
+# Selector keys that may legitimately match NO element on a healthy page - interaction/expander
+# affordances, auxiliary blocks the record can be built without, and conditionally-present search
+# markers. ``detect-schema``'s drift check (``--check-current-only``) reports these as
+# ``absent_optional`` rather than ``broken`` and never exits 4 on them, so a scheduled CI gate is
+# not tripped by a selector that is optional by design. Anything the scraper NEEDS to extract a
+# record (title, authors, ISBN-13, publication date, description, the search card + its title /
+# detail-link) is deliberately NOT here and stays gating. Kept minimal and checked against every
+# site's ``site_constants`` entry below.
+OPTIONAL_SELECTOR_KEYS = frozenset(
+    {
+        # Detail-page interaction/expander affordances: clicking them only reveals content that is
+        # already in the DOM (or available via a fallback), so their absence is not record drift.
+        "DETAILS_BUTTON",  # amazon "Product details" expander button
+        "READ_MORE_LINK",  # packtpub/oreilly description "read more" expander
+        # Auxiliary amazon block used only as one way to locate the ASIN; the ASIN also comes from
+        # the page URL / search ``data-asin``, so the detail-page block is not required.
+        "ASIN_DETAIL_PAGE_SELECTOR",
+        # Search pagination: a listing's last (or only) page legitimately has no "next" control, so
+        # a non-match is an expected terminal condition, not drift. Pagination is navigational, not
+        # part of extracting any single record.
+        "SEARCH_NEXT_PAGE_SELECTOR",
+        # Empty-results markers: present ONLY on a zero-results search page, so on a populated
+        # sample page they correctly match nothing.
+        "SEARCH_NO_RESULTS_TEXT",
+        "SEARCH_NO_BOOKS_FOUND",
+    }
+)
+
 # Ensure these match the keys in site_constants.
 # SITES_TO_SCRAPE = ["amazon", "leanpub", "packtpub", "oreilly"]
 # SITES_TO_SCRAPE = ["amazon", "leanpub"]

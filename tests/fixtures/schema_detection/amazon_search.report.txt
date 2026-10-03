@@ -10,6 +10,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_BOOK_CARD
   = (unchanged) '[data-component-type="s-search-result"]'
     rationale: current site_constants selector for SEARCH_BOOK_CARD
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/search_python_p1.html (8 element(s)) text="Python Crash Course, 3rd Edition: A Hands-On, Project-Based Introduction to Prog"
       [MATCH] <FIXTURES>/html/amazon/search_python_p2.html (8 element(s)) text="Python QuickStart Guide: The Simplified Beginner's Guide to Python Programming U"
@@ -17,6 +18,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_TITLE
   = (unchanged) 'h2.a-size-medium.a-spacing-none.a-color-base.a-text-normal > span'
     rationale: current site_constants selector for SEARCH_TITLE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/search_python_p1.html (8/8 cards matched, 100%) text="Python Crash Course, 3rd Edition: A Hands-On, Project-Based Introduction to Prog"
       [MATCH] <FIXTURES>/html/amazon/search_python_p2.html (8/8 cards matched, 100%) text="Python QuickStart Guide: The Simplified Beginner's Guide to Python Programming U"
@@ -24,6 +26,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_AUTHORS
   = (unchanged) 'div.a-row.a-size-base.a-color-secondary div.a-row > a.a-link-normal'
     rationale: current site_constants selector for SEARCH_AUTHORS
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/search_python_p1.html (8/8 cards matched, 100%) text="Eric Matthes"
       [MATCH] <FIXTURES>/html/amazon/search_python_p2.html (7/8 cards matched, 88%) text="Part of: Coding & Programming - QuickStart Guides (4 books)"
@@ -31,6 +34,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_PUBLICATION_DATE
   = (unchanged) 'div.a-row.a-size-base.a-color-secondary div.a-row > span.a-size-base.a-color-secondary.a-text-normal'
     rationale: current site_constants selector for SEARCH_PUBLICATION_DATE
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/search_python_p1.html (8/8 cards matched, 100%) text="Jan 10, 2023"
       [MATCH] <FIXTURES>/html/amazon/search_python_p2.html (8/8 cards matched, 100%) text="Apr 22, 2023"
@@ -38,6 +42,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_BOOK_DETAIL_LINK
   = (unchanged) 'a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal'
     rationale: current site_constants selector for SEARCH_BOOK_DETAIL_LINK
+    status: broken
     validation:
       [ no  ] <FIXTURES>/html/amazon/search_python_p1.html (0/8 cards matched, 0%)
       [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0/8 cards matched, 0%)
@@ -46,6 +51,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_NEXT_PAGE_SELECTOR
   = (unchanged) '.s-pagination-next'
     rationale: current site_constants selector for SEARCH_NEXT_PAGE_SELECTOR
+    status: ok
     validation:
       [MATCH] <FIXTURES>/html/amazon/search_python_p1.html (1 element(s)) text="Next"
       [MATCH] <FIXTURES>/html/amazon/search_python_p2.html (1 element(s)) text="Next"
@@ -53,6 +59,7 @@ Review each field below and apply desired changes to site_constants by hand.
 ### SEARCH_NO_RESULTS_TEXT
   = (unchanged) 'div.s-no-results-box h1.a-size-large'
     rationale: current site_constants selector for SEARCH_NO_RESULTS_TEXT
+    status: absent_optional
     validation:
       [ no  ] <FIXTURES>/html/amazon/search_python_p1.html (0 elements)
       [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0 elements)

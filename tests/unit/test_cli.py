@@ -317,3 +317,30 @@ def test_detect_schema_replay_and_record_parse() -> None:
     )
     assert args.replay == "r.json"
     assert args.record == "rec.json"
+
+
+def test_detect_schema_format_defaults_to_text() -> None:
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert args.format == "text"
+    assert args.check_current_only is False
+
+
+def test_detect_schema_format_json_parses() -> None:
+    args = build_parser().parse_args(
+        ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "json"]
+    )
+    assert args.format == "json"
+
+
+def test_detect_schema_rejects_unknown_format() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "yaml"]
+        )
+
+
+def test_detect_schema_check_current_only_flag_sets_true() -> None:
+    args = build_parser().parse_args(
+        ["detect-schema", "--site", "amazon", "--html-file", "a.html", "--check-current-only"]
+    )
+    assert args.check_current_only is True
