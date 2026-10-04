@@ -51,6 +51,7 @@ from typing import Any, Optional
 
 import anthropic
 from playwright.async_api import Browser, Page, Route, async_playwright
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..book_utils import print_log
@@ -1021,7 +1022,7 @@ def _fit_snapshot_to_budget(
                 system=[{"type": "text", "text": instruction_block}],
                 messages=[{"role": "user", "content": current}],
             ).input_tokens
-        except Exception as exc:  # noqa: BLE001 - deliberately uniform, body-free failure surface
+        except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
             raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
         if tokens <= max_input_tokens:
             return current
@@ -1054,7 +1055,7 @@ def call_anthropic(
     """
     try:
         client = anthropic.Anthropic(api_key=api_key, max_retries=MAX_API_RETRIES)
-    except Exception as exc:  # noqa: BLE001 - deliberately uniform, body-free failure surface
+    except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
         raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
     fitted = _fit_snapshot_to_budget(client, model, instruction_block, snapshot, max_input_tokens)
     try:
@@ -1070,7 +1071,7 @@ def call_anthropic(
             ],
             messages=[{"role": "user", "content": fitted}],
         )
-    except Exception as exc:  # noqa: BLE001 - deliberately uniform, body-free failure surface
+    except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
         raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
     _check_stop_reason(message)
     return _extract_text(message), getattr(message, "usage", None)
@@ -1090,7 +1091,7 @@ async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_
         html = await page.content()
     except PlaywrightTimeoutError as exc:
         raise SchemaDetectionError(f"Timed out loading sample URL '{url}': {exc}") from exc
-    except Exception as exc:  # noqa: BLE001
+    except PlaywrightError as exc:
         raise SchemaDetectionError(f"Failed to load sample URL '{url}': {exc}") from exc
     return prune_html(html, max_chars=max_chars)
 
@@ -1242,7 +1243,10 @@ async def _validate_page_level_field(
                 text = await _bounded_eval(locator.first.text_content())
                 snippet = (text or "").strip()[:80]
             per_url.append({"url": url, "matched": count > 0, "count": count, "snippet": snippet})
-        except Exception as exc:  # noqa: BLE001 - a bad selector must not abort the run
+        except (PlaywrightError, asyncio.TimeoutError) as exc:
+            # A selector Playwright rejects (PlaywrightError) or one that overruns the
+            # AIS-7 wall-clock bound (TimeoutError from _bounded_eval) records a miss; a
+            # bad selector must never abort the run.
             module_logger.warning("Selector %r failed on %s: %s", selector, url, exc)
             per_url.append({"url": url, "matched": False, "count": 0, "snippet": "query error"})
 
@@ -1293,7 +1297,9 @@ async def _validate_card_relative_field(
                     if count > 0 and not snippet:
                         text = await _bounded_eval(sub.first.text_content())
                         snippet = (text or "").strip()[:80]
-                except Exception as exc:  # noqa: BLE001 - a bad selector must not abort the run
+                except (PlaywrightError, asyncio.TimeoutError) as exc:
+                    # A rejected selector or a bounded-eval timeout counts as no match for
+                    # this card; a bad selector must never abort the run.
                     module_logger.warning("Card-relative selector %r failed on %s: %s", selector, sample["url"], exc)
                     count = 0
                 if count > 0:
@@ -1342,7 +1348,9 @@ async def validate_search_across_samples(
         if card_selector:
             try:
                 cards = await _bounded_eval(sample["page"].locator(card_selector).all())
-            except Exception as exc:  # noqa: BLE001 - a bad card selector must not abort the run
+            except (PlaywrightError, asyncio.TimeoutError) as exc:
+                # A rejected card selector or a bounded-eval timeout yields no cards for
+                # this sample; a bad card selector must never abort the run.
                 module_logger.warning("Card selector %r failed on %s: %s", card_selector, sample["url"], exc)
                 cards = []
         # Bound the page-controlled card count before any per-card query work (auditor caveat).

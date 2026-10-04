@@ -101,9 +101,9 @@ def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(t
 
         def _writerow(row):
             if row.get("url") == "https://leanpub.com/bad":
-                # A non-ValueError error hits the inner `except Exception` guard;
-                # the loop must keep going and still write the remaining rows.
-                raise RuntimeError("row serialization exploded")
+                # A non-ValueError csv.Error hits the inner per-row guard; the loop
+                # must keep going and still write the remaining rows.
+                raise csv.Error("row serialization exploded")
             return original_writerow(row)
 
         writer.writerow = _writerow
@@ -130,8 +130,8 @@ def test_save_failed_urls_ioerror_is_swallowed(tmp_path) -> None:
 
 def test_save_failed_urls_generic_exception_is_swallowed(tmp_path) -> None:
     target = tmp_path / "failed_urls.csv"
-    # DictWriter construction itself explodes => outer `except Exception` catches it.
-    with patch(f"{MODULE}.csv.DictWriter", side_effect=RuntimeError("boom")):
+    # DictWriter construction itself raises a csv.Error => the outer guard catches it.
+    with patch(f"{MODULE}.csv.DictWriter", side_effect=csv.Error("boom")):
         save_failed_urls_to_csv(
             [{"url": "u", "site": "leanpub", "error": "e"}],
             filename=str(target),

@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from pymongo.errors import (
     BulkWriteError,
+    PyMongoError,
 )
 
 from bookscraper.backends.mongo import config, database
@@ -597,7 +598,7 @@ class TestSaveBooksToMongodb:
         On failure: the exception propagates out of save_books instead of being summarized.
         """
         collection = Mock(name="collection")
-        collection.insert_many.side_effect = RuntimeError("connection lost")
+        collection.insert_many.side_effect = PyMongoError("connection lost")
         books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(3)]
 
         with patch.object(database, "print_log"):
@@ -627,7 +628,7 @@ class TestCheckAmazonAsinExists:
 
     def test_find_one_exception_returns_false(self) -> None:
         collection = Mock()
-        collection.find_one.side_effect = RuntimeError("boom")
+        collection.find_one.side_effect = PyMongoError("boom")
         assert database.check_amazon_asin_exists_in_db("B00X", collection) is False
 
 
@@ -649,7 +650,7 @@ class TestCheckBookExists:
 
     def test_find_one_exception_returns_false(self) -> None:
         collection = Mock()
-        collection.find_one.side_effect = RuntimeError("boom")
+        collection.find_one.side_effect = PyMongoError("boom")
         assert database.check_book_exists_in_db("abc", collection) is False
 
 
@@ -689,7 +690,7 @@ class TestUpdateBookIsbn:
 
     def test_update_one_exception_returns_false(self) -> None:
         collection = Mock()
-        collection.update_one.side_effect = RuntimeError("boom")
+        collection.update_one.side_effect = PyMongoError("boom")
         result = database.update_book_isbn(collection, "abc", new_isbn10="111")
         assert result is False
 
@@ -724,7 +725,7 @@ class TestEnsureUniqueIndexOnHash:
 
     def test_exception_is_caught(self) -> None:
         collection = Mock()
-        collection.index_information.side_effect = RuntimeError("boom")
+        collection.index_information.side_effect = PyMongoError("boom")
         # Must not propagate.
         database.ensure_unique_index_on_hash(collection)
 
@@ -774,7 +775,7 @@ class TestEnsureIndexes:
 
         def create_index(field, **kwargs):
             if field == "asin":
-                raise RuntimeError("boom")
+                raise PyMongoError("boom")
 
         collection.create_index.side_effect = create_index
 
@@ -817,7 +818,7 @@ class TestEnsureIndexes:
         an unreadable collection.
         """
         collection = Mock()
-        collection.index_information.side_effect = RuntimeError("boom")
+        collection.index_information.side_effect = PyMongoError("boom")
         database.ensure_indexes(collection)
         collection.create_index.assert_not_called()
 

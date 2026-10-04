@@ -48,7 +48,7 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
                     writer.writerow(item)
                 except ValueError as ve:
                     module_logger.error(f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}")
-                except Exception as e:
+                except csv.Error as e:
                     module_logger.error(
                         f"Unexpected error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {e}",
                         exc_info=True,
@@ -58,7 +58,7 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
     except IOError as e:
         module_logger.error(f"I/O error saving failed URLs to CSV {filename}: {e}")
         print_log(f"Error saving failed URLs to {filename}: {e}", "error")
-    except Exception as e:
+    except csv.Error as e:
         module_logger.critical(
             f"An unexpected error occurred while saving failed URLs to CSV {filename}: {e}",
             exc_info=True,
@@ -190,7 +190,7 @@ async def run(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         print_log("Scraping interrupted by user.", "warning")
         module_logger.warning("Application interrupted by user.")
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - top-level isolation boundary: any unhandled failure in the search/scrape orchestration is logged and the run still writes diagnostics, saves what it has, and closes the backend
         module_logger.critical(f"An unhandled error occurred in main execution: {e}", exc_info=True)
         print_log(f"Critical error in main execution. Check logs: {e}", "error")
 

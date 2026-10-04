@@ -103,9 +103,10 @@ def print_log(text: str, status: str = "info") -> None:
     try:
         sys.stdout.write(colored_text + "\n")
         sys.stdout.flush()  # Ensure it's written immediately
-    except Exception as e:
-        # Fallback if direct console print fails (e.g., non-compatible terminal),
-        # log it uncolored via the logger.
+    except (OSError, ValueError) as e:
+        # Fallback if direct console print fails: a broken pipe / closed stream (OSError),
+        # a write to an already-closed stdout (ValueError), or an encoding failure
+        # (UnicodeEncodeError, a ValueError subclass). Log it uncolored via the logger.
         logger.error(
             f"Failed to print colored message to console directly: {e}. Original message: {clean_text}", exc_info=False
         )
@@ -169,7 +170,7 @@ def check_local_write_permission(directory: str = ".") -> bool:
             "error",
         )
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - defensive isolation boundary: the probe must never propagate; a unit test raises RuntimeError to prove it
         logger.error(f"An unexpected error occurred during local write permission test: {e}", exc_info=True)
         print_log("An unexpected error occurred during local write permission test. Check log for details.", "error")
         return False
@@ -235,7 +236,7 @@ def check_mongodb_connection() -> Optional[bool]:
             "error",
         )
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure must surface as a class name only, never raw text
         # Defensive: any non-pymongo failure. Log the class name only - never the raw text or
         # exc_info, which could embed the cert path or other sensitive detail (SEC-4).
         logger.critical(f"Unexpected error during MongoDB connection test: {type(e).__name__}.")
@@ -296,7 +297,7 @@ def extract_year_from_date(date_string: str) -> Optional[int]:
         )
         return None
 
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - defensive isolation boundary: strptime only raises ValueError (handled inline), so this catches an unexpected non-ValueError without propagating
         logger.error(f"Error in extract_year_from_date for '{date_string}': {e}", exc_info=True)
         return None
 
@@ -333,6 +334,9 @@ def hash_book(title: str = "", authors: Optional[list] = None, year: Optional[in
         hash_object.update(combined_fields.encode("utf-8"))
         return hash_object.hexdigest()
 
-    except Exception as e:
+    except AttributeError as e:
+        # A non-string title (e.g. None) makes `title.strip()` raise AttributeError;
+        # return the "" sentinel rather than propagating, so an incomplete record never
+        # crashes a batch.
         logger.error(f"Error hashing book (title: '{title}', authors: {authors}, year: {year}): {e}")
         return ""

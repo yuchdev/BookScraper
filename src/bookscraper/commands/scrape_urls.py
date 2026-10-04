@@ -44,7 +44,7 @@ def save_failed_urls_to_csv(
         )
         logger.info(f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}")
 
-    except Exception as e:
+    except (OSError, csv.Error) as e:
         logger.error(
             f"Error saving failed/duplicate URLs to CSV ({filename}): {e}",
             exc_info=True,
@@ -73,7 +73,7 @@ def save_other_links_to_csv(other_links: list[str], filename: str = "other_links
         )
         logger.info(f"Successfully saved {len(other_links)} 'other' links to {filename}")
 
-    except Exception as e:
+    except (OSError, csv.Error) as e:
         logger.error(f"Error saving 'other' links to CSV ({filename}): {e}", exc_info=True)
         print_log(
             f"Error: Could not write 'other' links to CSV file {filename}. Details: {e}",

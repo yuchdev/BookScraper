@@ -11,6 +11,8 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import search_utils
 from bookscraper.scraping.search_utils import (
@@ -281,7 +283,7 @@ async def test_playwright_amazon_navigation_failure_returns_empty():
         },
     }
     page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
-    page.goto.side_effect = RuntimeError("navigation timeout")
+    page.goto.side_effect = PlaywrightTimeoutError("navigation timeout")
     browser = FakeBrowser(page=page)
 
     result = await get_search_results_via_playwright(browser, "amazon", "python")
@@ -363,7 +365,7 @@ async def test_playwright_amazon_publication_date_locator_error_sets_none():
             AMAZON_LINK: FakeLocator([{"attrs": {"href": "/dp/B0ABCDEFGH"}}]),
             AMAZON_TITLE: FakeLocator("Date Error Book"),
             AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
-            date_selector: FakeLocator(raises=RuntimeError("bad date locator")),
+            date_selector: FakeLocator(raises=PlaywrightError("bad date locator")),
         },
     }
     page = FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")

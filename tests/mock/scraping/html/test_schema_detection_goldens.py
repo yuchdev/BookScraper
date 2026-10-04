@@ -32,6 +32,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from playwright.async_api import Error as PlaywrightError
 
 from bookscraper.scraping import schema_detection as sd
 from bookscraper.scraping.parameters import site_constants
@@ -430,7 +431,8 @@ async def _count_matches(browser: Any, html: str, selectors: dict[str, str]) -> 
         for field, selector in selectors.items():
             try:
                 counts[field] = await page.locator(selector).count()
-            except Exception:  # noqa: BLE001 - a selector Playwright rejects simply does not count
+            except PlaywrightError:
+                # A selector Playwright rejects simply does not count.
                 counts[field] = 0
         return counts
     finally:

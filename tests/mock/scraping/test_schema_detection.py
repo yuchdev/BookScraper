@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import schema_detection as sd
@@ -338,7 +339,7 @@ async def test_fetch_pruned_html_raises_on_timeout() -> None:
 
 async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
     page = FakePage()
-    page.goto = AsyncMock(side_effect=RuntimeError("connection refused"))
+    page.goto = AsyncMock(side_effect=PlaywrightError("connection refused"))
     with pytest.raises(sd.SchemaDetectionError, match="Failed to load"):
         await sd.fetch_pruned_html("https://x/book", page)
 
@@ -387,7 +388,7 @@ async def test_validate_across_samples_null_selector_is_miss() -> None:
 
 
 async def test_validate_across_samples_bad_selector_does_not_abort() -> None:
-    page = FakePage(locators={"::bad::": FakeLocator([], raises=ValueError("bad selector"))})
+    page = FakePage(locators={"::bad::": FakeLocator([], raises=PlaywrightError("bad selector"))})
     samples = [{"url": "u1", "page": page}]
     proposals = {"TAGS": {"selector": "::bad::", "rationale": ""}}
 
@@ -584,7 +585,7 @@ async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None
 async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     bad_page = FakePage()
-    bad_page.goto = AsyncMock(side_effect=RuntimeError("connection refused"))
+    bad_page.goto = AsyncMock(side_effect=PlaywrightError("connection refused"))
     browser = FakeBrowser(page_factory=lambda *a, **k: bad_page)
 
     with (
@@ -695,7 +696,7 @@ async def test_search_validation_card_relative_query_error_counts_as_miss() -> N
     Boundaries: one card's title locator raises; the run must continue and flag partial.
     On failure: a hostile/garbage selector would abort the whole validation.
     """
-    card = {"text": "card", "sub": {"TITLE": FakeLocator([], raises=ValueError("bad selector"))}}
+    card = {"text": "card", "sub": {"TITLE": FakeLocator([], raises=PlaywrightError("bad selector"))}}
     page = FakePage(locators={"CARD": FakeLocator([card]), "NEXT": FakeLocator(["Next"])})
     samples = [{"url": "u0", "page": page}]
     result = await sd.validate_search_across_samples(_search_proposals(), samples)
@@ -749,7 +750,7 @@ async def test_search_validation_bad_card_selector_does_not_abort() -> None:
     class _RaisingAllPage:
         def locator(self, selector):
             loc = MagicMock()
-            loc.all = AsyncMock(side_effect=RuntimeError("all boom"))
+            loc.all = AsyncMock(side_effect=PlaywrightError("all boom"))
             loc.count = AsyncMock(return_value=0)
             first = MagicMock()
             first.text_content = AsyncMock(return_value="")

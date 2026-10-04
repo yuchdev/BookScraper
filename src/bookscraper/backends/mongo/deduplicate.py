@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 from ...book_utils import print_log
 from .database import get_mongo_collection
@@ -52,7 +53,7 @@ def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection
             )
         return is_duplicate
 
-    except Exception as e:
+    except PyMongoError as e:
         module_logger.error(f"Error checking for Leanpub book in DB by ({log_identifier}): {e}", exc_info=True)
         print_log(f"Error: Error checking for Leanpub book in DB by ({log_identifier}): {e}", "error")
         return False

@@ -15,6 +15,7 @@ from urllib.parse import (
 
 import httpx
 from playwright.async_api import Browser
+from playwright.async_api import Error as PlaywrightError
 
 from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
@@ -133,7 +134,7 @@ async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
                     f"Failed to decode JSON response for page {current_page}. Response content: {response.text[:200]}..."
                 )
                 break  # Break the loop on JSON parsing errors
-            except Exception as e:
+            except Exception as e:  # noqa: X002 - per-page isolation boundary: an HTTP-status (raise_for_status) or malformed-structure failure ends pagination and returns the books accumulated so far
                 print_log(
                     f"An unexpected error occurred while processing page {current_page}: {e}",
                     "error",
@@ -245,7 +246,7 @@ async def get_search_results_via_playwright(
                         await page.wait_for_load_state("networkidle", timeout=60000)
                         actual_url_after_goto = page.url
                         logger.info(f"Actual URL after navigation for page {current_page_num}: {actual_url_after_goto}")
-                    except Exception as e:
+                    except PlaywrightError as e:
                         logger.error(
                             f"Failed to navigate to page {current_page_num}: {e}",
                             "error",
@@ -370,7 +371,7 @@ async def get_search_results_via_playwright(
                                     book_data["publication_date"] = (
                                         await date_element.text_content() if await date_element.count() > 0 else None
                                     )
-                                except Exception as e:
+                                except PlaywrightError as e:
                                     logger.warning(
                                         f"Could not extract publication date for a book on {site_name} using selector '{publication_date_selector}'. Error: {e}"
                                     )
@@ -384,7 +385,7 @@ async def get_search_results_via_playwright(
                                 f"Extracted: {book_data.get('title')} by {book_data.get('authors_from_search')} ({site_name}) (URL: {book_data.get('url')}, ASIN: {book_data.get('asin')})"
                             )
 
-                        except Exception as e:
+                        except Exception as e:  # noqa: X002 - per-card isolation boundary: one malformed card (Playwright, URL-parse, indexing, or missing-attribute error) must skip only that card, not abort the page
                             logger.error(
                                 f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}): {e}",
                                 exc_info=True,
@@ -402,7 +403,7 @@ async def get_search_results_via_playwright(
                 # to which the encoded query can be directly appended.
                 pass
 
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - top-level isolation boundary: any unhandled failure logs critical and returns the preliminary books gathered so far rather than crashing the search
         logger.critical(
             f"An unhandled error occurred during search on {site_name} for query '{query}': {e}",
             exc_info=True,

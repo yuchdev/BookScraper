@@ -8,6 +8,8 @@ propagating. The collection is a plain Mock - no real MongoDB involved.
 
 from unittest.mock import Mock, patch
 
+from pymongo.errors import PyMongoError
+
 from bookscraper.backends.mongo import deduplicate
 
 
@@ -57,6 +59,6 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_find_one_exception_returns_false(self) -> None:
         collection = Mock()
-        collection.find_one.side_effect = RuntimeError("boom")
+        collection.find_one.side_effect = PyMongoError("boom")
         result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
         assert result is False

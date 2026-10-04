@@ -10,6 +10,7 @@ from pymongo.collection import Collection
 from pymongo.errors import (
     BulkWriteError,
     InvalidDocument,
+    PyMongoError,
 )
 
 if TYPE_CHECKING:
@@ -126,7 +127,7 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         _mongo_db = None
         _mongo_collection = None
         return None, None
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure on the connection path must surface as a class name only, never raw text
         # Defensive: any non-pymongo failure here. Log only the exception CLASS NAME - never
         # the raw text and never exc_info=True, since an OS/other exception may embed the
         # cert path or other sensitive detail (SEC-4).
@@ -163,7 +164,7 @@ def get_mongo_collection() -> Optional[Collection]:
                 success_message = f"Connection to MongoDB Atlas successful ({_mongo_db_name}.{_mongo_collection_name})."
                 print_log(success_message, "success")
                 module_logger.info(success_message)
-        except Exception as e:
+        except Exception as e:  # noqa: X002 - security redaction boundary: a future init that raises must surface as a class name only, never raw text
             # Defensive: _initialize_mongodb_connection() catches everything today, so
             # this branch is currently unreachable. It is kept for a future refactor
             # that lets init raise, and is covered by a unit test.
@@ -267,7 +268,7 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
                     num_duplicates += 1
                 else:
                     num_errors += 1
-        except Exception as e:
+        except PyMongoError as e:
             module_logger.error(f"MongoDB bulk insertion failed: {e}", exc_info=True)
             print_log(f"Error: MongoDB bulk insertion failed: {e}", "error")
             num_errors += len(docs)
@@ -296,7 +297,7 @@ def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collect
             module_logger.info(f"ASIN {asin} found in MongoDB Atlas database. Skipping detailed scrape.")
         return is_duplicate
 
-    except Exception as e:
+    except PyMongoError as e:
         module_logger.error(
             f"Error checking for duplicate Amazon book in DB by ASIN: {e}",
             exc_info=True,
@@ -324,7 +325,7 @@ def check_book_exists_in_db(book_hash: str, mongo_collection: Optional[Collectio
 
     try:
         return books_collection.find_one({"hash": book_hash}) is not None
-    except Exception as e:
+    except PyMongoError as e:
         module_logger.error(f"Error checking for duplicate book in DB: {e}", exc_info=True)
         print_log(f"Error: Error checking for duplicate book in DB: {e}", "error")
         return False
@@ -371,7 +372,7 @@ def update_book_isbn(
                 "warning",
             )
             return False
-    except Exception as e:
+    except PyMongoError as e:
         module_logger.error(f"Error updating ISBNs for hash '{book_hash}': {e}", exc_info=True)
         print_log(f"Error: Error updating ISBNs for hash '{book_hash}': {e}", "error")
         return False
@@ -418,7 +419,7 @@ def ensure_indexes(books_collection: Collection) -> None:
             print_log("Ensured unique index on 'hash' field.", "info")
         else:
             module_logger.info("Unique index on 'hash' field already exists.")
-    except Exception as e:
+    except PyMongoError as e:
         module_logger.error(f"Failed to ensure unique index on 'hash': {e}", exc_info=True)
         print_log(f"Error: Failed to ensure unique index on 'hash': {e}", "error")
         return
@@ -431,7 +432,7 @@ def ensure_indexes(books_collection: Collection) -> None:
                 print_log(f"Ensured sparse index on '{field}' field.", "info")
             else:
                 module_logger.info(f"Sparse index on '{field}' field already exists.")
-        except Exception as e:
+        except PyMongoError as e:
             module_logger.warning(f"Failed to ensure sparse index on '{field}': {e}", exc_info=True)
             print_log(f"Warning: Failed to ensure sparse index on '{field}': {e}", "warning")
 

@@ -51,6 +51,26 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.flakeforge]
-# Rules are enabled one at a time; each code is added only once the tree is clean for it.
-# Run: uv run flakeforge check src tests scripts
-select = ["X001"]
+
+include = ["src", "tests"]
+
+exclude = []
+
+select = ["X001", "X002"]
+
+# Pre-existing violations accepted at migration time (the plugin was never
+# actually wired into Flake8 before, so these were invisible until now).
+# Gates only *new* violations from here on; see flakeforge's baseline docs.
+baseline = "flakeforge-baseline.json"
+
+# When false, a `# noqa` comment never suppresses a violation (the rule
+# engine's noqa support is bypassed entirely). Default true.
+allow_noqa = true
+
+# Whitelist: when non-empty, only files/directories listed here may use `# noqa`.
+# When empty, all files not in `noqa_forbidden` are permitted.
+noqa_allowed = []
+
+# Blacklist: files/directories where `# noqa` is strictly forbidden (violations always fire).
+# Blacklist always wins over `noqa_allowed`.
+noqa_forbidden = []

@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 
 import httpx
 from playwright.async_api import Browser, Page, Route, TimeoutError
+from playwright.async_api import Error as PlaywrightError
 
 from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
@@ -55,7 +56,7 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
     finally:
         try:
             await page.close()
-        except Exception as exc:  # noqa: BLE001 - a close failure must never mask the original error
+        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a page-close failure (any type, e.g. "browser already closed") must never mask the original error unwinding the with-block
             module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
@@ -158,7 +159,7 @@ async def get_leanpub_book_details(url: str) -> ScrapeResult:
     except json.JSONDecodeError:
         print(f"Failed to decode JSON response for url '{url}'. Response content: {response.text[:200]}...")
         return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="invalid JSON response")
-    except Exception as e:
+    except Exception as e:  # noqa: X002 - fail-soft boundary: get_leanpub_book_details must always return a ScrapeResult (never raise), so any unexpected JSON-shape/processing error is converted to a FAILED result
         print(f"An unexpected error occurred for url '{url}': {e}")
         return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"{type(e).__name__}: {e}")
 
@@ -298,7 +299,10 @@ async def scrape_book(
                             book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
                         else:
                             module_logger.warning(f"No PUBLICATION_DATE selector for {site}.")
-                except Exception as e:
+                except (PlaywrightError, AttributeError) as e:
+                    # A missing/slow date element raises a Playwright error; a None
+                    # get_attribute/text_content result makes the subsequent .split()/.strip()
+                    # raise AttributeError. Either leaves publication_date unset, not fatal.
                     module_logger.warning(f"No PUBLICATION_DATE selector for {site}: {e}.")
 
                 # ISBN10 & ISBN13
@@ -335,7 +339,9 @@ async def scrape_book(
                         if asin_match:
                             book_details["asin"] = asin_match.group(1)
                             module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
-                    except Exception as e:
+                    except (KeyError, TypeError) as e:
+                        # KeyError if 'title' was never set (no title selector); TypeError if
+                        # the URL is not a string. A missing ASIN is non-fatal.
                         module_logger.warning(f"Could not extract ASIN from Amazon URL {url}: {e}")
 
                 # Description
@@ -353,7 +359,7 @@ async def scrape_book(
                                     await page.wait_for_timeout(500)  # Small wait for content to load
                             except TimeoutError:
                                 module_logger.debug(f"No 'Read more' button found or clickable for {url}.")
-                            except Exception as e:
+                            except PlaywrightError as e:
                                 module_logger.warning(f"Error clicking 'Read more' on {url}: {e}")
 
                         description_text = await description_element.text_content()
@@ -399,7 +405,7 @@ async def scrape_book(
                 attempts=attempt,
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: X002 - per-attempt retry boundary: any non-timeout scrape failure is retried then reported as FAILED; the retry policy is reworked by subtask 03.0/03, so narrowing is deferred to avoid redesigning it here
             module_logger.error(f"Error scraping {url} on attempt {attempt}: {e}", exc_info=True)
             print_log(f"Error scraping {url}. Retrying...", "error")
             if attempt < retries:

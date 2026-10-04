@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from pymongo import MongoClient, server_api
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+from pymongo.errors import ConnectionFailure, PyMongoError, ServerSelectionTimeoutError
 
 PRODUCTION_CONFIG_DIR = Path.home() / ".bookscrapper"
 TLS_CERT_GLOB = "X509-cert-*.pem"
@@ -160,7 +160,7 @@ def run_connection_test(mongodb_uri, tls_cert_file=None):
         print("4. Check if your IP address is whitelisted in MongoDB Atlas")
         return False
 
-    except Exception as e:
+    except PyMongoError as e:
         print(f"ERROR: An unexpected error occurred: {e}")
         return False
 
