@@ -40,6 +40,9 @@ dev = [
 # CLAUDE.md's Testing section) - excluded by default so `uv run pytest` stays fast and offline;
 # run it explicitly with `uv run pytest -m integration`.
 addopts = "-m \"not integration\""
+# Collect only our own suite; other checkouts symlinked into the repo root (e.g. a local
+# Scrapegraph-ai clone kept for evaluation) must never be swept into a bare `pytest` run.
+testpaths = ["tests"]
 markers = [
     "integration: hits a real external service (MongoDB Atlas); requires real credentials, excluded by default",
     "chromium: runs the offline corpus harness in real headless Chromium; offline and fast, included by default (CI installs Chromium via task 06.2), skips cleanly when no browser is usable",
