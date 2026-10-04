@@ -3,8 +3,6 @@
 ## Scope
 
 - **Subject:** [Scrapegraph-ai](https://github.com/ScrapeGraphAI/Scrapegraph-ai) **v2.3.0** (commit `15ff7ec9`), a
-  local checkout symlinked into the repo root as `Scrapegraph-ai/`. It is a symlink, not a hardlink, and it is
-  untracked.
 - **Questions:**
   1. Is Scrapegraph-ai useful for `bookscraper`, or does Playwright plus what we already have cover our needs?
   2. Does either codebase, built or planned, rotate proxy servers while scraping?
