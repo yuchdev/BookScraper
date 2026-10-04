@@ -14,7 +14,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
-| 04.0 | AI-assisted schema detection       | 🔶 In progress | 8 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
+| 04.0 | AI-assisted schema detection       | 🔶 In progress | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
@@ -24,7 +24,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 39 / 94 subtasks complete.
+**Totals:** 40 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 

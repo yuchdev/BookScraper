@@ -66,3 +66,5 @@ Review each field below and apply desired changes to site_constants by hand.
 
 ========================================================================
 WARNING: 1 card-relative selector(s) matched under 80% of the cards on at least one sample URL: SEARCH_BOOK_DETAIL_LINK
+
+SECURITY NOTICE: these selector proposals were derived from UNTRUSTED page content, which may attempt prompt injection. Treat every proposal (and its rationale) as a suggestion to review by hand and validate against the live DOM before applying it to parameters.py - never apply unreviewed.

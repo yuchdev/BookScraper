@@ -33,7 +33,7 @@ pages, CI-friendly, and safe against hostile page content.
 | 06 | [Search-page selector support](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/06-search-page-support.md)          | ✅ Complete    | -      |
 | 07 | [Offline mode & golden tests](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/07-offline-mode-and-golden-tests.md)  | ✅ Complete    | 08     |
 | 08 | [JSON report & drift exit code](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/08-json-report-and-drift-check.md)  | ✅ Complete    | -      |
-| 09 | [Prompt-injection hardening](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/09-prompt-injection-hardening.md)      | ⬜ Not started | -      |
+| 09 | [Prompt-injection hardening](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/09-prompt-injection-hardening.md)      | ✅ Complete    | -      |
 
 ## Key constraints
 

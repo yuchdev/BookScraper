@@ -403,6 +403,34 @@ HTML (AIS-8/AIS-12) — only bounded match counts, ≤80-char DOM snippets, and 
 untrusted string (rationale, proposed selector, DOM snippets, sample identifiers) in **both** the text and JSON
 reports (AIS-13).
 
+**Prompt-injection hardening (subtask 04.0/09; threat model `docs/security/2026-10-02-ai-schema-detection.md`).**
+The pruned page HTML is untrusted input spliced into the prompt, so: the snapshot is fenced in
+`<page_html>...</page_html>` and the instruction block declares its contents untrusted *data* whose own instructions
+must be ignored, with any literal `<page_html>`/`</page_html>` inside it (any case/whitespace) angle-bracket-escaped so
+the fence can't be broken out of (AIS-1, same class as `sanitize.py`'s V-3). Cross-sample DOM validation stays
+mandatory and a proposed selector's **only** sink is `page.locator(sel).count()`/`.text_content()` (or
+`card.locator(...)`) — never eval/shell/`page.evaluate`/file-write (AIS-2/AIS-4). Every AI-proposed selector is run
+through `reject_selector()` in `validate_ai_response` **before** it is queried, and a failing one is **downgraded to a
+null selector with rationale `rejected: <rule>`** (never raised): rules reject >300 chars, the universal
+`*`/`html`/`body`/`:root`, `javascript:`/`<`/newline (AIS-5 — `<` rejects markup, but a single `>` CSS child
+combinator is ALLOWED; only `>>` is rejected), plus Playwright engine prefixes
+(`xpath=`/`text=`/`id=`/`data-testid=`/`css=`/`react=`/`vue=`/generic `<ident>=`/colon-qualified `internal:…=`), any
+`internal:` engine anywhere, `>>` chaining, pseudo-engines (`:has-text`/`:has(`/`:visible`/`:nth-match`/`:text(`/
+`:light(`) and a `/regex/` form appearing anywhere OUTSIDE a quoted span (so `[href="/a/b/"]` is not a false
+positive) (AIS-6; the engine-prefix/`internal:`/regex-anywhere widening is as-built follow-up PI-1). Every
+`count()`/`text_content()`/`.all()` runs under an explicit `SELECTOR_EVAL_TIMEOUT_S` wall-clock bound via
+`asyncio.wait_for`, so a pathological selector degrades to a non-match instead of hanging (AIS-7); search validation
+also caps the page-controlled card count at `MAX_CARDS_PER_SAMPLE` (50), computing the match fraction over the
+evaluated cards. `sanitize_untrusted()` additionally strips U+2028/U+2029 (PI-3) and `_FENCE_TAG_RE` neutralizes
+attributed fence tags like `</page_html foo="x">` (PI-2). Both reports end with a fixed untrusted-content review
+reminder — a footer line in the text report and a `notice` key in the JSON (AIS-15).
+**AIS-6 trade-off:** these rules reject AI *proposals* only — including the project's own `:has-text()` (amazon/
+packtpub/oreilly) selectors, which therefore show as `rejected` in a run's proposals (the `>` child combinator used by
+the amazon search selectors is NOT rejected — see the amended `<`/`>` rule) — but **never** the current
+`site_constants` selectors the drift check re-queries, so `--check-current-only` and the `current_matches`/`status`
+columns still evaluate `:has-text` selectors verbatim and report them `ok`/`broken` normally. A human applies a
+rejected selector by hand.
+
 ## Testing
 
 `tests/` is a real pytest suite in three tiers, mirroring `src/bookscraper`'s subpackages:

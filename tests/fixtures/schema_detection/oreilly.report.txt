@@ -45,31 +45,34 @@ Review each field below and apply desired changes to site_constants by hand.
       [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements) (null selector)
 
 ### ISBN13
-  = (unchanged) 'li:has-text("ISBN:") > span.value.t-isbn'
-    rationale: current site_constants selector for ISBN13
+  - current : 'li:has-text("ISBN:") > span.value.t-isbn'
+  + proposed: None
+    rationale: rejected: Playwright pseudo-engine :has-text
     status: ok
     validation:
-      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="9780596002985"
-      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="9781491903995"
-      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="9781492042778"
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements) (null selector)
 
 ### PUBLICATION_DATE
-  = (unchanged) 'li:has-text("Release date:") > span.value'
-    rationale: current site_constants selector for PUBLICATION_DATE
+  - current : 'li:has-text("Release date:") > span.value'
+  + proposed: None
+    rationale: rejected: Playwright pseudo-engine :has-text
     status: ok
     validation:
-      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="May 2003"
-      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="November 2014"
-      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="August 2016"
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements) (null selector)
 
 ### DESCRIPTION
-  = (unchanged) 'h2.t-description-heading:has-text("Book description") + span'
-    rationale: current site_constants selector for DESCRIPTION
+  - current : 'h2.t-description-heading:has-text("Book description") + span'
+  + proposed: None
+    rationale: rejected: Playwright pseudo-engine :has-text
     status: ok
     validation:
-      [MATCH] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
-      [MATCH] <FIXTURES>/html/oreilly/effective_modern_cpp.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
-      [MATCH] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (1 element(s)) text="Neutralized prose omitted from the public test corpus."
+      [ no  ] <FIXTURES>/html/oreilly/cpp_in_a_nutshell.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/effective_modern_cpp.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/oreilly/practical_cpp_metaprogramming.html (0 elements) (null selector)
 
 ### DESCRIPTION_ALT
   = (unchanged) 'div.read-more-wrapper'
@@ -100,3 +103,5 @@ Review each field below and apply desired changes to site_constants by hand.
 
 ========================================================================
 All proposed selectors validated consistently across the sample URLs.
+
+SECURITY NOTICE: these selector proposals were derived from UNTRUSTED page content, which may attempt prompt injection. Treat every proposal (and its rationale) as a suggestion to review by hand and validate against the live DOM before applying it to parameters.py - never apply unreviewed.

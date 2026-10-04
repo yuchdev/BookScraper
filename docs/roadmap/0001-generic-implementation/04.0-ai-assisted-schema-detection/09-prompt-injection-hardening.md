@@ -1,7 +1,7 @@
 # 09 - Prompt-injection hardening
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Security Auditor → Python Expert
 
 ## Context
@@ -21,7 +21,9 @@ could still mislead that reviewer. Proposed selectors are also passed straight t
   rationale replaced by `"rejected: <rule>"`, and never raises:
   - Length ≤ 300 chars.
   - Not one of the universal selectors `*`, `html`, `body`, `:root`.
-  - No `javascript:`, no `<` / `>`, no newline.
+  - No `javascript:`, no `<`, no newline. (Amended 2026-10-04: a single `>` stays allowed, because it is the CSS
+    child combinator the project's own selectors use. Markup can't appear without `<`, and Playwright `>>`
+    chaining is rejected separately under AIS-6.)
   - It must parse as CSS: attempt `page.locator(sel).count()` inside a try, the same way validation already does.
     Parse errors → `null`.
 - Rationales are truncated to 200 chars and have control characters stripped before they reach the report.

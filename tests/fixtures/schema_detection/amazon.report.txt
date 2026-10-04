@@ -111,14 +111,17 @@ Review each field below and apply desired changes to site_constants by hand.
       [MATCH] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (2 element(s)) text="C++ Programming"
 
 ### DETAILS_BUTTON
-  = (unchanged) "a.a-expander-header:has-text('Product details'), a.a-expander-header:has-text('See more product details'), a.a-expander-header:has-text('Product information')"
-    rationale: current site_constants selector for DETAILS_BUTTON
+  - current : "a.a-expander-header:has-text('Product details'), a.a-expander-header:has-text('See more product details'), a.a-expander-header:has-text('Product information')"
+  + proposed: None
+    rationale: rejected: Playwright pseudo-engine :has-text
     status: absent_optional
     validation:
-      [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements)
-      [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements)
-      [ no  ] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (0 elements)
-      [ no  ] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (0 elements)
+      [ no  ] <FIXTURES>/html/amazon/a_tour_of_cpp_3e.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/amazon/cpp_primer_5e.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/amazon/programming_principles_and_practice_3e.html (0 elements) (null selector)
+      [ no  ] <FIXTURES>/html/amazon/the_cpp_programming_language_4e.html (0 elements) (null selector)
 
 ========================================================================
 WARNING: 1 field(s) validated inconsistently across sample URLs: ASIN_DETAIL_PAGE_SELECTOR
+
+SECURITY NOTICE: these selector proposals were derived from UNTRUSTED page content, which may attempt prompt injection. Treat every proposal (and its rationale) as a suggestion to review by hand and validate against the live DOM before applying it to parameters.py - never apply unreviewed.

@@ -7,6 +7,7 @@ JSON, a selector that matches some sample URLs but not others (flagged, not sile
 accepted), and a Playwright page-load failure.
 """
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -384,6 +385,57 @@ async def test_validate_across_samples_bad_selector_does_not_abort() -> None:
     assert entry["snippet"] == "query error"
 
 
+class _HangingLocator(FakeLocator):
+    """A locator whose ``count()`` never resolves - stands in for a pathological selector whose
+    evaluation would block the event loop forever absent the AIS-7 timeout."""
+
+    async def count(self) -> int:
+        await asyncio.Event().wait()  # pragma: no cover - cancelled by the AIS-7 wait_for timeout
+        return 0
+
+
+async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch) -> None:
+    """Scenario: a selector whose count() never resolves is bounded by the AIS-7 timeout, recorded
+    as a non-match, and the run completes instead of hanging.
+
+    Boundaries: SELECTOR_EVAL_TIMEOUT_S is shrunk to 50 ms; a hanging fake locator is queried.
+    On failure: a crafted selector/page could block the tool (and a CI drift job) indefinitely.
+    """
+    monkeypatch.setattr(sd, "SELECTOR_EVAL_TIMEOUT_S", 0.05)
+    samples = [{"url": "u0", "page": FakePage(locators={"#hang": _HangingLocator()})}]
+    proposals = {"BOOK_TITLE": {"selector": "#hang", "rationale": ""}}
+
+    result = await asyncio.wait_for(sd.validate_across_samples(proposals, samples), timeout=5)
+
+    entry = result["BOOK_TITLE"]["per_url"][0]
+    assert entry["matched"] is False
+    assert entry["snippet"] == "query error"
+
+
+async def test_check_current_only_still_evaluates_has_text_current_selector(monkeypatch) -> None:
+    """Scenario: --check-current-only still evaluates a current :has-text selector - the AIS-6
+    rejection applies to AI PROPOSALS only, never to the current selectors the drift check queries.
+
+    Boundaries: a one-field site whose ISBN13 is a :has-text selector the FakePage matches; no AI.
+    On failure: the drift check would wrongly reject/skip the project's real :has-text selectors.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    has_text_sel = "li:has-text('ISBN:') > span.value.t-isbn"
+    monkeypatch.setattr(sd, "site_constants", {"tiny": {"BASE_URL": "https://x", "ISBN13": has_text_sel}})
+    page = FakePage(locators={has_text_sel: FakeLocator("9781234567890")}, content="<html></html>")
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        report, usage_line, exit_code = await sd.detect_schema("tiny", urls=["u0"], check_current_only=True)
+
+    # The current :has-text selector was queried, matched, and is NOT shown as rejected.
+    assert exit_code == 0
+    assert has_text_sel in report
+    assert "rejected" not in report
+    assert "no AI call" in usage_line
+    browser.close.assert_awaited_once()
+
+
 # --------------------------------------------------------------------------- #
 # detect_schema (full pipeline)
 # --------------------------------------------------------------------------- #
@@ -588,6 +640,23 @@ async def test_search_validation_reports_card_count_and_match_fraction() -> None
     assert title["snippet"] == "Book 0"
     # Page-level pagination selector validated against the whole page.
     assert result["SEARCH_NEXT_PAGE_SELECTOR"]["per_url"][0]["matched"] is True
+
+
+async def test_search_validation_caps_cards_per_sample() -> None:
+    """Scenario: card-relative validation evaluates at most MAX_CARDS_PER_SAMPLE cards per sample,
+    and the reported fraction is computed over the evaluated cards (auditor card-cap caveat).
+
+    Boundaries: a page with 60 matching cards; the card-relative work must stop at the cap.
+    On failure: a page-controlled card count could multiply the per-card locator work without bound.
+    """
+    samples = [{"url": "u0", "page": _search_page(n_cards=60, n_title=60)}]
+    result = await sd.validate_search_across_samples(_search_proposals(), samples)
+
+    title = result["SEARCH_TITLE"]["per_url"][0]
+    assert title["card_count"] == sd.MAX_CARDS_PER_SAMPLE == 50
+    assert title["match_count"] == sd.MAX_CARDS_PER_SAMPLE
+    assert title["fraction"] == 1.0
+    assert title["matched"] is True
 
 
 async def test_card_relative_selector_below_80_percent_flagged_partial() -> None:
@@ -1039,7 +1108,9 @@ async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> No
     with (
         patch.object(sd, "async_playwright", build_playwright_factory(browser)),
         patch.object(sd, "anthropic") as mock_anthropic,
-        patch.object(sd, "call_anthropic", MagicMock(side_effect=AssertionError("no AI call in check-current-only"))) as call_ai,
+        patch.object(
+            sd, "call_anthropic", MagicMock(side_effect=AssertionError("no AI call in check-current-only"))
+        ) as call_ai,
     ):
         mock_anthropic.Anthropic.side_effect = AssertionError("no client in check-current-only mode")
         report, usage_line, exit_code = await sd.detect_schema(
