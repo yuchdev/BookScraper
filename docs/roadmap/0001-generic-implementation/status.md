@@ -14,7 +14,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
-| 04.0 | AI-assisted schema detection       | 🔶 In progress | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
+| 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
@@ -151,7 +151,48 @@ CLAUDE.md and the runbook.
 Delivered per [ADR 0002](/docs/adr/0002-ai-assisted-schema-detection.md): Playwright load → prune → Claude proposal →
 cross-sample DOM validation → diff report, propose-only and fail-loudly. Open: current model default plus a token
 budget and prompt caching, search-page support, offline `--html-file`/`--replay` mode with golden tests, a JSON
-report with a drift exit code, and prompt-injection hardening.
+report with a drift exit code, and prompt-injection hardening. All are now closed (below).
+
+### Task 04.0 - AI-assisted schema detection (✅ 2026-10-04)
+
+**Delivered** (commits `6de5f6c`..`19bcc8f`; threat models
+[2026-10-02-ai-schema-detection.md](/docs/security/2026-10-02-ai-schema-detection.md) and
+[2026-10-04-schema-detection-prompt-injection.md](/docs/security/2026-10-04-schema-detection-prompt-injection.md)):
+
+- **05** `claude-sonnet-5` default (`--model` > `ANTHROPIC_MODEL` > default), `max_tokens` 16000, and
+  max_tokens/refusal/context-window stop reasons fail loudly. A count_tokens budget (40k; re-prune to a 10k-char
+  floor, else no send), ≤ 5 URLs and 1 retry, one request per URL merged first-non-null, a usage line without
+  prices, and redacted SDK errors.
+- **06** `--page-type search` with card-relative validation: per-sample card counts and match fractions, under
+  80% flagged partial. `NON_SELECTOR_SEARCH_KEYS` is shared with the capture script.
+- **07** Offline `--html-file` (all requests aborted, 400 KB cap) and `--replay`/`--record` (no key, no client).
+  Goldens cover amazon/packtpub/oreilly detail plus amazon search, from hand-authored `_provenance` replays. The
+  prune-regression check is clean on all 10 detail fixtures.
+- **08** `--format json` (stable schema, per-field `current_matches` + `status`) and `--check-current-only` (no
+  AI, no key). Exit codes 0/4/1, with the ratified drift rule (`_ALT` fallback + `OPTIONAL_SELECTOR_KEYS`).
+  ANSI/control characters are stripped from both reports.
+- **09** The `<page_html>` fence with breakout neutralization. `reject_selector` downgrades unsafe AI proposals
+  (length, universal, `javascript:`, `<`, newline, engine prefixes incl. `internal:`, `>>`, pseudo-engines,
+  regex). Evaluation is time-bounded at 10 s/call, search caps at 50 cards per sample, and both reports carry a
+  review notice.
+
+**Tests / gate:** 661 → 816 passed with Chromium (765 + 52 skipped without it), 98% total, and
+`schema_detection.py` / `detect_schema.py` / `cli.py` at 100%. `/verify-subtask` PASS ×5.
+`security-auditor`: no CRITICAL findings; PI-1..3 found, fixed and re-verified (PASS). `/pr-review`: security
+PASS; feature REQUEST_CHANGES on one item (invisible U+2028/2029 bytes in the AIS-13 regex), fixed in `19bcc8f`,
+so APPROVE.
+
+**Reconciliation note:** 05-09 are *consumed*. Spec amendment: 09's "no `<` / `>`" rule now allows a single `>`
+(the CSS child combinator). Orchestrator calls recorded above: one request per URL, and caching left in place
+below Sonnet 5's 1024-token minimum.
+
+**Open follow-ups (non-blocking):**
+- consider splitting `schema_detection.py` (~1,570 lines) into prompt / validate / report / client / io modules
+  before it reaches 2,000 lines;
+- drift is count-based, so empty elements pass;
+- the CLI has no Chromium executable-path option (→ 05.0/03);
+- an `HEADLESS_BROWSER=False` override for unattended runs;
+- an end-to-end `--record` → `--replay` round-trip test.
 
 ## Task 06.0 - Real-HTML mock test corpus
 
