@@ -26,10 +26,13 @@ library - it pulls in nothing from ``backends/``, ``commands/`` or even ``book_u
 from __future__ import annotations
 
 import json
+import logging
 import re
 from html.parser import HTMLParser
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+logger = logging.getLogger(__name__)
 
 # Bumped whenever the sanitizer rules change; recorded in every fixture's .meta.json
 # (FIX-14) so a committed fixture carries an audit trail of how it was cleaned.
@@ -564,7 +567,8 @@ def strip_url_params(url: str) -> str:
         return url
     try:
         parts = urlsplit(url)
-    except ValueError:
+    except ValueError as e:
+        logger.debug(f"URL left unchanged, not parseable: {type(e).__name__}")
         return url
     if not parts.query:
         return url

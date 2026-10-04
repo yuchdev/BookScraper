@@ -26,6 +26,7 @@ Run: uv run bookscraper rotate-cert
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pathlib
 import re
@@ -39,6 +40,8 @@ from cryptography import x509
 from ...book_utils import atomic_write_bytes
 from . import config
 from .client import MongoConnectionError, build_mongo_client, ping
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -159,6 +162,7 @@ def update_settings_after_rotation(new_cert_path: pathlib.Path) -> list[str]:
     try:
         settings = config.load_settings()
     except config.ConfigError as e:
+        logger.debug(f"settings.json repoint skipped: {type(e).__name__}")
         return [f"WARNING: could not read {config.SETTINGS_FILE}, leaving it untouched: {e}"]
 
     if settings is None:
@@ -384,6 +388,7 @@ def _prune_after_rotation(new_cert: pathlib.Path, keep: int) -> list[str]:
     try:
         _uri, active_cert = config.resolve_mongo_connection()
     except config.ConfigError as e:
+        logger.debug(f"cert pruning skipped, active cert unresolved: {type(e).__name__}")
         return [
             f"Skipping cert pruning: the active certificate could not be resolved ({e}); "
             "no old certificate is removed on uncertainty."
@@ -426,7 +431,9 @@ def prune_old_certificates(keep: int, protected: set[pathlib.Path]) -> list[str]
         except OSError:
             try:
                 mtime = path.lstat().st_mtime
-            except OSError:
+            except OSError as e:
+                # The file vanished between glob() and lstat(); there is nothing left to prune.
+                logger.debug(f"cert pruning candidate disappeared: {type(e).__name__}")
                 continue
         dated.append((mtime, path))
     candidates = [path for _mtime, path in sorted(dated, key=lambda item: item[0], reverse=True)]
@@ -504,6 +511,7 @@ def cert_expiry_warning(cert_path: Optional[pathlib.Path], warn_days: int = DEFA
     try:
         expires = read_certificate_expiry(cert_path)
     except RotationError as e:
+        logger.debug(f"cert expiry unreadable: {type(e).__name__}")
         return f"WARNING: could not read TLS client certificate expiry: {e}"
 
     days_remaining = (expires - datetime.now(UTC)).days

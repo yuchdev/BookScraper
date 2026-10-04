@@ -289,7 +289,8 @@ def extract_year_from_date(date_string: str) -> Optional[int]:
                 date_object = datetime.strptime(date_string, date_format)
                 return date_object.year
             except ValueError:
-                continue  # Try the next format
+                logger.debug(f"Date string did not match format {date_format!r}; trying the next one.")
+                continue
 
         # If none of the formats worked
         logger.warning(

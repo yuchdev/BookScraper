@@ -14,6 +14,7 @@ mongo/database.py's MongoDB collection.
 
 from __future__ import annotations
 
+import logging
 import pathlib
 import sys
 from abc import ABC, abstractmethod
@@ -26,6 +27,8 @@ from ..book_utils import check_local_write_permission, print_log
 from .local import store
 from .mongo import config, database, deduplicate
 from .mongo.cert_rotation import cert_expiry_warning
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -169,7 +172,9 @@ def _warn_if_cert_expiring() -> None:
     """
     try:
         _uri, cert_file = config.resolve_mongo_connection()
-    except config.ConfigError:
+    except config.ConfigError as e:
+        # Deferred on purpose: the real connection attempt that follows surfaces it loudly.
+        logger.debug(f"cert expiry pre-flight skipped: {type(e).__name__}")
         return
     warning = cert_expiry_warning(pathlib.Path(cert_file) if cert_file else None)
     if warning:
