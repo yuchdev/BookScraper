@@ -149,7 +149,7 @@ RATIONALE_MAX_CHARS = 200
 # terminal escape/ANSI sequences nor a line-break that spoofs a new report line into stdout/
 # ``--output`` nor corrupt a JSON CI artifact. Printable bytes (including the leftover ``[31m`` of a
 # stripped ``\x1b[31m``) are kept verbatim; only the dangerous control/separator bytes are removed.
-_UNTRUSTED_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
+_UNTRUSTED_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 # AIS-1: the pruned page snapshot is spliced into the prompt fenced in ``<page_html>...</page_html>``
 # and the instruction block (below) declares everything inside that fence to be untrusted DATA whose
@@ -993,6 +993,11 @@ def _check_stop_reason(message: anthropic.types.Message) -> None:
         category = getattr(details, "category", None) if details else None
         suffix = f" (category: {category})" if category else ""
         raise SchemaDetectionError(f"AI refused to produce a response{suffix}; not parsing it.")
+    if reason == "model_context_window_exceeded":
+        raise SchemaDetectionError(
+            "AI response was truncated: the request exceeded the model's context window. "
+            "The output is incomplete and will not be parsed; lower --max-input-tokens."
+        )
 
 
 def _fit_snapshot_to_budget(
@@ -1176,7 +1181,8 @@ def replay_lookup(replay: dict[str, str], instruction_block: str, snapshot_block
         raise SchemaDetectionError(
             f"No recorded response in the --replay file for prompt hash {key}. "
             "The prompt changed (site fields, page content, or page_type) or the recording is "
-            "stale; refresh it with --record against a live run."
+            "stale; refresh it with --record against a live run (for a committed test fixture, "
+            "re-run scripts/generate_schema_replays.py instead)."
         )
     return replay[key]
 

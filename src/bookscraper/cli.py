@@ -171,9 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     detect_schema_parser = subparsers.add_parser(
         "detect-schema",
-        help="Propose CSS-selector updates for a site's detail page via Playwright + Claude.",
-        description="Load one or more sample detail-page URLs, ask Claude to propose CSS selectors "
-        "for the fields in site_constants[site], validate them against each page's live DOM, and "
+        help="Propose CSS-selector updates for a site's detail or search pages via Playwright + Claude.",
+        description="Load one or more sample detail or search-results pages (see --page-type), ask Claude "
+        "to propose CSS selectors for the fields in site_constants[site], validate them against each page's live DOM, and "
         "print a diff-style report (or JSON with --format json). Never writes to parameters.py; "
         "needs ANTHROPIC_API_KEY (not with --replay/--check-current-only). Exit codes: 0 all "
         "current selectors matched; 4 at least one current selector matched on no sample (drift); "

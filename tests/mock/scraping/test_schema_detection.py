@@ -172,6 +172,19 @@ def test_call_anthropic_raises_on_truncated_response() -> None:
             sd.call_anthropic("instructions", "snapshot", "test-key")
 
 
+def test_call_anthropic_raises_on_context_window_exceeded() -> None:
+    """Scenario: a model_context_window_exceeded stop reason is reported as truncation, not bad JSON.
+
+    Boundaries: client mocked; create returns stop_reason=model_context_window_exceeded.
+    On failure: the partial answer is parsed, or the operator sees a misleading "not valid JSON".
+    """
+    client = _fake_client(_fake_message('{"BOOK_TITLE":', stop_reason="model_context_window_exceeded"))
+    with patch.object(sd, "anthropic") as mock_anthropic:
+        mock_anthropic.Anthropic.return_value = client
+        with pytest.raises(sd.SchemaDetectionError, match="context window"):
+            sd.call_anthropic("instructions", "snapshot", "test-key")
+
+
 def test_call_anthropic_raises_on_refusal_naming_category() -> None:
     """Scenario: a refusal stop reason raises and names stop_details.category when present.
 

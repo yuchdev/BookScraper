@@ -26,7 +26,40 @@ Adversarial probes were run from a scratch script (not committed) exercising `re
 confirmed from Playwright docs (chromium binary not installed on this host, so the locator leg was
 reasoned, not executed).
 
-### [MEDIUM] PI-1 (AIS-6) `internal:` Playwright engine prefix evades `reject_selector`
+## Re-verification of the follow-up fixes (commit `8429241`, 2026-10-04)
+
+Re-ran the scratch probes against the committed code. **All three follow-ups are closed and no new
+bypass was introduced.**
+
+- **PI-1 CLOSED.** `reject_selector` now rejects `internal:` anywhere (`internal:text="x"`,
+  `internal:attr=[name=/.*/]`, `internal:role=`, `internal:testid=`, mid-string `div >> internal:...`,
+  uppercase `INTERNAL:` - all rejected), the engine-prefix regex is generalized to
+  `^\s*[A-Za-z_-][\w-]*(:[\w-]+)*\s*=` (colon-qualified engines caught), and `_REGEX_LITERAL_RE`
+  now `.search`es for a `/regex/` **anywhere** after quoted spans are blanked (`div /ab+c/ span`,
+  `[data-x] /re/i` rejected). No RCE was ever possible; this removes the remaining non-CSS-engine path.
+- **PI-2 CLOSED.** `_FENCE_TAG_RE = <\s*/?\s*page_html\b[^>]*>` now neutralizes the attribute-bearing
+  close/open (`</page_html foo="x">`, `<page_html data-x>`, `< /page_html bar >` all HTML-escaped).
+- **PI-3 CLOSED.** `_UNTRUSTED_CONTROL_RE` now also strips U+2028/U+2029 (and U+0085 NEL, already in
+  the C1 range) - confirmed `a\u2028b` -> `ab`, `c\u2029d` -> `cd`.
+- **Card multiplier bounded.** `MAX_CARDS_PER_SAMPLE = 50` is applied as `cards[:50]` in
+  `validate_search_across_samples` before any per-card query, so the search worst case is now
+  `2 x N x 5 x 50 x 2 x 10 s` with a hard 50-card ceiling instead of a page-controlled count.
+
+Regression check for the new, broader regexes - **no over-rejection of legitimate CSS**:
+`a[href^="mailto:"]`, `a[href^="tel:"]`, `a[href="https://x/y/z"]`, `[href="/a/b/"]`, `div:not(.ad)`,
+`li:nth-child(2)`, `svg|rect`, `p::first-line`, `q:lang(en)`, `a:hover[data-x="y"]`, `:is(h1, h2)`,
+`:where(.a,.b)`, `a[title="say \"hi\""]`, and a slashy quoted attr `a[href="x"][data-y="/p/"]` all
+**ALLOW**. The engine-prefix regex fires only on a leading `ident(:ident)*=` form (e.g.
+`-moz-anything=x`), never on a pseudo-class-then-attribute selector.
+
+One negligible, **safe** quirk (not a finding): the quoted-span blanking uses a non-escape-aware
+`"[^"]*"` span, so a contrived selector embedding backslash-escaped quotes around slashes
+(`a[t="\"/re/\""]`) desyncs and is over-rejected as `regex-form selector`. This errs only toward
+rejection (an availability quirk on a selector no site would use, downgraded with an honest note),
+and it **cannot hide** an engine/regex form from detection - the `internal:`, engine-prefix, and
+pseudo-engine rules are independent of quote-blanking - so it introduces no security bypass.
+
+### [MEDIUM - RESOLVED in `8429241`] PI-1 (AIS-6) `internal:` Playwright engine prefix evaded `reject_selector`
 - Vector / evidence: `reject_selector` (`schema_detection.py:362-406`). `_ENGINE_PREFIX_RE`
   (`:178`, `^\s*[A-Za-z_][\w-]*\s*=`) stops at the first non-`[\w-]` char, so `internal:text="x"`,
   `internal:attr=[name=/.*/]`, `internal:role=`, `internal:label=`, `internal:control=`,
@@ -52,7 +85,7 @@ reasoned, not executed).
   reject a `/.../ ` regex **anywhere** in the string rather than only as a `fullmatch`. CWE-20,
   CWE-1333 (ReDoS).
 
-### [LOW] PI-2 (AIS-1) Fence close-tag with attributes is not neutralized
+### [LOW - RESOLVED in `8429241`] PI-2 (AIS-1) Fence close-tag with attributes was not neutralized
 - Vector / evidence: `_FENCE_TAG_RE` (`schema_detection.py:154`, `<\s*/?\s*page_html\s*>`) requires
   `page_html` immediately followed by `\s*>`. A snapshot token `</page_html foo="x">` is left
   verbatim (confirmed by the scratch probe: "attr close" stays unescaped). It is not the literal
@@ -64,7 +97,7 @@ reasoned, not executed).
 - Mitigation (optional, LOW): broaden `_FENCE_TAG_RE` to `<\s*/?\s*page_html\b[^>]*>` so any
   attribute-bearing fence tag is neutralized too. CWE-116.
 
-### [LOW] PI-3 (AIS-13) Unicode line/paragraph separators not stripped
+### [LOW - RESOLVED in `8429241`] PI-3 (AIS-13) Unicode line/paragraph separators not stripped
 - Vector / evidence: `_UNTRUSTED_CONTROL_RE` (`schema_detection.py:145`, `[\x00-\x1f\x7f-\x9f]`)
   strips C0/C1/DEL (including ESC `\x1b`, verified) but not U+2028/U+2029 (confirmed: `line sep`
   passes through). In the text report these can act as line breaks in some terminals; `json.dumps`
@@ -98,7 +131,7 @@ reasoned, not executed).
 - AIS-6 (reject non-CSS engines/pseudo/regex): PASS WITH FOLLOWUP. `xpath=/text=/css=/id=/
   data-testid=/role=` prefixes (incl. leading-ws, uppercase, `space =`), `>>`, pseudo-engines
   (`:has-text/:has(/:visible/:nth-match/:text(/:text-is(/:light(`, incl. `:is()/:where()` nesting and
-  uppercase), and bare `/regex/` all rejected - verified. **Gap: PI-1 `internal:` engine prefix.**
+  uppercase), and bare `/regex/` all rejected - verified. PI-1 `internal:` engine prefix now also rejected (`8429241`).
 - AIS-7 (bounded eval): PASS. `_bounded_eval` wraps every `count()/text_content()/all()` in
   `asyncio.wait_for(..., 10.0)`; timeout -> recorded miss, never a hang. Worst-case figure below.
 - AIS-8 (key never logged/printed/reported): PASS. `ANTHROPIC_API_KEY` read once into
@@ -157,12 +190,16 @@ The asymmetry (reject untrusted proposals, evaluate trusted current values) is e
 boundary the design should draw. A human can still apply a `:has-text` selector by hand; a rejected
 proposal is shown honestly as `rejected: ...` rather than silently run as non-CSS. Keep it.
 
-## Verdict: PASS_WITH_FOLLOWUP
+## Verdict: PASS (as of commit `8429241`)
 
-No CRITICAL findings - subtask 09's success criterion is met and 04.0 may close. The propose-only
-constraint (AIS-3), mandatory cross-sample DOM validation (AIS-2), the AIS-7 per-eval timeout, and
-the human reviewer bound every blast radius; Playwright locators give no RCE. One MEDIUM (PI-1,
-`internal:` engine bypass of AIS-6) and two LOW residuals (PI-2 attr-bearing fence close, PI-3 unicode
-separators) are **non-blocking follow-ups**: hand PI-1's `reject_selector` fix to `python-expert` and
-a regression (the `internal:*` matrix + a `/regex/`-anywhere case) to `testing-expert`. Cross-ref the
-pre-code model at `docs/security/2026-10-02-ai-schema-detection.md`.
+No CRITICAL findings and no open findings - subtask 09's success criterion is met and 04.0 may close.
+The pre-code gate's MEDIUM/LOW follow-ups (PI-1 `internal:` engine bypass, PI-2 attr-bearing fence
+close, PI-3 unicode separators) are all **RESOLVED and re-verified** in `8429241`, and the search
+card multiplier is now hard-bounded (`MAX_CARDS_PER_SAMPLE = 50`). The broadened regexes introduce no
+over-rejection of legitimate CSS and no new bypass (one safe, negligible escaped-quote over-rejection
+quirk noted, not a finding). The propose-only constraint (AIS-3), mandatory cross-sample DOM
+validation (AIS-2), the AIS-7 per-eval timeout, and the human reviewer bound every blast radius;
+Playwright locators give no RCE. Cross-ref the pre-code model at
+`docs/security/2026-10-02-ai-schema-detection.md`.
+
+(Prior verdict before `8429241`: PASS_WITH_FOLLOWUP - the three items below were open residuals.)

@@ -962,7 +962,7 @@ def test_sanitize_strips_unicode_line_and_paragraph_separators() -> None:
     On failure: a hostile page could inject a Unicode line break that spoofs a new report line.
     """
     cleaned = sanitize_untrusted("a b c\x85d")
-    for bad in (" ", " ", "\x85"):
+    for bad in ("\u2028", "\u2029", "\x85"):
         assert bad not in cleaned
     assert cleaned == "abcd"
 
