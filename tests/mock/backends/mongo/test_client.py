@@ -34,6 +34,24 @@ BARE_URI = "mongodb+srv://cluster.example.net/db?retryWrites=true"
     ],
 )
 def test_uri_selects_x509_auth(uri, expected) -> None:
+    """
+    [Local] client: verifies uri selects x509 auth.
+
+    Scenario:
+        Given test inputs and fixtures for uri selects x509 auth
+        When test_uri_selects_x509_auth executes the target flow
+        Then the expected outcome for uri selects x509 auth is confirmed.
+
+    Boundaries:
+        - Focus: uri selects x509 auth
+        - Fixtures/params: uri, expected (parametrized, 5 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to uri selects x509 auth
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by client
+    """
     assert client.uri_selects_x509_auth(uri) is expected
 
 
@@ -42,6 +60,24 @@ def test_uri_selects_x509_auth(uri, expected) -> None:
     [(SCRAM_URI, True), (X509_URI, False), (BARE_URI, False)],
 )
 def test_uri_has_embedded_credentials(uri, expected) -> None:
+    """
+    [Local] client: verifies uri has embedded credentials.
+
+    Scenario:
+        Given test inputs and fixtures for uri has embedded credentials
+        When test_uri_has_embedded_credentials executes the target flow
+        Then the expected outcome for uri has embedded credentials is confirmed.
+
+    Boundaries:
+        - Focus: uri has embedded credentials
+        - Fixtures/params: uri, expected (parametrized, 3 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to uri has embedded credentials
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by client
+    """
     assert client.uri_has_embedded_credentials(uri) is expected
 
 
@@ -49,6 +85,24 @@ def test_uri_has_embedded_credentials(uri, expected) -> None:
 # _warn_if_x509_mechanism_missing - the three-way branch
 # --------------------------------------------------------------------------- #
 def test_x509_mechanism_present_warns_nothing() -> None:
+    """
+    [Local] client: verifies x509 mechanism present warns nothing.
+
+    Scenario:
+        Given test inputs and fixtures for x509 mechanism present warns nothing
+        When test_x509_mechanism_present_warns_nothing executes the target flow
+        Then the expected outcome for x509 mechanism present warns nothing is confirmed.
+
+    Boundaries:
+        - Focus: x509 mechanism present warns nothing
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to x509 mechanism present warns nothing
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by client
+    """
     with (
         patch.object(client.module_logger, "warning") as warn,
         patch.object(client.module_logger, "critical") as crit,

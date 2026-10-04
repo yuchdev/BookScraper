@@ -29,41 +29,203 @@ def _write_settings(path, data) -> None:
 
 class TestResolveField:
     def test_literal_returns_value_as_is(self) -> None:
+        """
+        [Unit] resolve field: verifies literal returns value as is.
+
+        Scenario:
+            Given test inputs and fixtures for literal returns value as is
+            When test_literal_returns_value_as_is executes the target flow
+            Then the expected outcome for literal returns value as is is confirmed.
+
+        Boundaries:
+            - Focus: literal returns value as is
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to literal returns value as is
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         assert config._resolve_field({"source": "literal", "value": URI}, "f") == URI
 
     def test_env_returns_looked_up_value(self, monkeypatch) -> None:
+        """
+        [Local] resolve field: verifies env returns looked up value.
+
+        Scenario:
+            Given test inputs and fixtures for env returns looked up value
+            When test_env_returns_looked_up_value executes the target flow
+            Then the expected outcome for env returns looked up value is confirmed.
+
+        Boundaries:
+            - Focus: env returns looked up value
+            - Fixtures/params: monkeypatch
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to env returns looked up value
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         monkeypatch.setenv("SOME_VAR", URI)
         assert config._resolve_field({"source": "env", "value": "SOME_VAR"}, "f") == URI
 
     def test_env_unset_raises(self, monkeypatch) -> None:
+        """
+        [Local] resolve field: verifies env unset raises.
+
+        Scenario:
+            Given test inputs and fixtures for env unset raises
+            When test_env_unset_raises executes the target flow
+            Then the expected outcome for env unset raises is confirmed.
+
+        Boundaries:
+            - Focus: env unset raises
+            - Fixtures/params: monkeypatch
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to env unset raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         monkeypatch.delenv("MISSING_VAR", raising=False)
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "env", "value": "MISSING_VAR"}, "f")
 
     def test_missing_source_raises(self) -> None:
+        """
+        [Unit] resolve field: verifies missing source raises.
+
+        Scenario:
+            Given test inputs and fixtures for missing source raises
+            When test_missing_source_raises executes the target flow
+            Then the expected outcome for missing source raises is confirmed.
+
+        Boundaries:
+            - Focus: missing source raises
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to missing source raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         with pytest.raises(ConfigError):
             config._resolve_field({"value": URI}, "f")
 
     def test_missing_value_raises(self) -> None:
+        """
+        [Unit] resolve field: verifies missing value raises.
+
+        Scenario:
+            Given test inputs and fixtures for missing value raises
+            When test_missing_value_raises executes the target flow
+            Then the expected outcome for missing value raises is confirmed.
+
+        Boundaries:
+            - Focus: missing value raises
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to missing value raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "literal"}, "f")
 
     def test_not_a_dict_raises(self) -> None:
+        """
+        [Unit] resolve field: verifies not a dict raises.
+
+        Scenario:
+            Given test inputs and fixtures for not a dict raises
+            When test_not_a_dict_raises executes the target flow
+            Then the expected outcome for not a dict raises is confirmed.
+
+        Boundaries:
+            - Focus: not a dict raises
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to not a dict raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         with pytest.raises(ConfigError):
             config._resolve_field("just a string", "f")
 
     def test_unrecognized_source_raises(self) -> None:
+        """
+        [Unit] resolve field: verifies unrecognized source raises.
+
+        Scenario:
+            Given test inputs and fixtures for unrecognized source raises
+            When test_unrecognized_source_raises executes the target flow
+            Then the expected outcome for unrecognized source raises is confirmed.
+
+        Boundaries:
+            - Focus: unrecognized source raises
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to unrecognized source raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve field
+        """
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "vault", "value": "x"}, "f")
 
 
 class TestResolveCertField:
     def test_bare_filename_resolved_under_config_dir(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] resolve cert field: verifies bare filename resolved under config dir.
+
+        Scenario:
+            Given test inputs and fixtures for bare filename resolved under config dir
+            When test_bare_filename_resolved_under_config_dir executes the target flow
+            Then the expected outcome for bare filename resolved under config dir is confirmed.
+
+        Boundaries:
+            - Focus: bare filename resolved under config dir
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to bare filename resolved under config dir
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve cert field
+        """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         resolved = config._resolve_cert_field({"source": "literal", "value": "cert.pem"}, "x509.cert")
         assert resolved == str(tmp_path / "cert.pem")
 
     def test_absolute_path_returned_untouched(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] resolve cert field: verifies absolute path returned untouched.
+
+        Scenario:
+            Given test inputs and fixtures for absolute path returned untouched
+            When test_absolute_path_returned_untouched executes the target flow
+            Then the expected outcome for absolute path returned untouched is confirmed.
+
+        Boundaries:
+            - Focus: absolute path returned untouched
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to absolute path returned untouched
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve cert field
+        """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         abs_path = str(tmp_path / "elsewhere" / "cert.pem")
         resolved = config._resolve_cert_field({"source": "literal", "value": abs_path}, "x509.cert")
@@ -72,10 +234,46 @@ class TestResolveCertField:
 
 class TestGetDefaultTlsCertFile:
     def test_no_certs_returns_none(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] get default tls cert file: verifies no certs returns none.
+
+        Scenario:
+            Given test inputs and fixtures for no certs returns none
+            When test_no_certs_returns_none executes the target flow
+            Then the expected outcome for no certs returns none is confirmed.
+
+        Boundaries:
+            - Focus: no certs returns none
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to no certs returns none
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by get default tls cert file
+        """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         assert config.get_default_tls_cert_file() is None
 
     def test_returns_newest_by_mtime(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] get default tls cert file: verifies returns newest by mtime.
+
+        Scenario:
+            Given test inputs and fixtures for returns newest by mtime
+            When test_returns_newest_by_mtime executes the target flow
+            Then the expected outcome for returns newest by mtime is confirmed.
+
+        Boundaries:
+            - Focus: returns newest by mtime
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to returns newest by mtime
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by get default tls cert file
+        """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         old = tmp_path / "X509-cert-20200101_000000.pem"
         new = tmp_path / "X509-cert-20260101_000000.pem"
@@ -87,6 +285,24 @@ class TestGetDefaultTlsCertFile:
         assert config.get_default_tls_cert_file() == str(new)
 
     def test_ignores_non_matching_files(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] get default tls cert file: verifies ignores non matching files.
+
+        Scenario:
+            Given test inputs and fixtures for ignores non matching files
+            When test_ignores_non_matching_files executes the target flow
+            Then the expected outcome for ignores non matching files is confirmed.
+
+        Boundaries:
+            - Focus: ignores non matching files
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to ignores non matching files
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by get default tls cert file
+        """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         (tmp_path / "settings.json").write_text("{}", encoding="utf-8")
         (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
@@ -95,15 +311,69 @@ class TestGetDefaultTlsCertFile:
 
 class TestLoadSettings:
     def test_nonexistent_path_returns_none(self, tmp_path) -> None:
+        """
+        [Unit] load settings: verifies nonexistent path returns none.
+
+        Scenario:
+            Given test inputs and fixtures for nonexistent path returns none
+            When test_nonexistent_path_returns_none executes the target flow
+            Then the expected outcome for nonexistent path returns none is confirmed.
+
+        Boundaries:
+            - Focus: nonexistent path returns none
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to nonexistent path returns none
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load settings
+        """
         assert config.load_settings(tmp_path / "does_not_exist.json") is None
 
     def test_malformed_json_raises(self, tmp_path) -> None:
+        """
+        [Unit] load settings: verifies malformed json raises.
+
+        Scenario:
+            Given test inputs and fixtures for malformed json raises
+            When test_malformed_json_raises executes the target flow
+            Then the expected outcome for malformed json raises is confirmed.
+
+        Boundaries:
+            - Focus: malformed json raises
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to malformed json raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load settings
+        """
         bad = tmp_path / "settings.json"
         bad.write_text("{not valid json", encoding="utf-8")
         with pytest.raises(ConfigError):
             config.load_settings(bad)
 
     def test_valid_json_returns_parsed_dict(self, tmp_path) -> None:
+        """
+        [Unit] load settings: verifies valid json returns parsed dict.
+
+        Scenario:
+            Given test inputs and fixtures for valid json returns parsed dict
+            When test_valid_json_returns_parsed_dict executes the target flow
+            Then the expected outcome for valid json returns parsed dict is confirmed.
+
+        Boundaries:
+            - Focus: valid json returns parsed dict
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to valid json returns parsed dict
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load settings
+        """
         good = tmp_path / "settings.json"
         _write_settings(good, {"auth_type": "pass"})
         assert config.load_settings(good) == {"auth_type": "pass"}
@@ -111,6 +381,24 @@ class TestLoadSettings:
 
 class TestResolveMongoConnectionSettings:
     def test_pass_literal_uri(self, tmp_path) -> None:
+        """
+        [Unit] resolve mongo connection settings: verifies pass literal uri.
+
+        Scenario:
+            Given test inputs and fixtures for pass literal uri
+            When test_pass_literal_uri executes the target flow
+            Then the expected outcome for pass literal uri is confirmed.
+
+        Boundaries:
+            - Focus: pass literal uri
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to pass literal uri
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         path = tmp_path / "settings.json"
         _write_settings(
             path,
@@ -119,6 +407,24 @@ class TestResolveMongoConnectionSettings:
         assert config.resolve_mongo_connection(path) == (URI, None)
 
     def test_pass_env_uri(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] resolve mongo connection settings: verifies pass env uri.
+
+        Scenario:
+            Given test inputs and fixtures for pass env uri
+            When test_pass_env_uri executes the target flow
+            Then the expected outcome for pass env uri is confirmed.
+
+        Boundaries:
+            - Focus: pass env uri
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to pass env uri
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         monkeypatch.setenv("MONGODB_URI", URI)
         path = tmp_path / "settings.json"
         _write_settings(
@@ -131,6 +437,24 @@ class TestResolveMongoConnectionSettings:
         assert config.resolve_mongo_connection(path) == (URI, None)
 
     def test_x509_literal_uri_literal_bare_cert(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] resolve mongo connection settings: verifies x509 literal uri literal bare cert.
+
+        Scenario:
+            Given test inputs and fixtures for x509 literal uri literal bare cert
+            When test_x509_literal_uri_literal_bare_cert executes the target flow
+            Then the expected outcome for x509 literal uri literal bare cert is confirmed.
+
+        Boundaries:
+            - Focus: x509 literal uri literal bare cert
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to x509 literal uri literal bare cert
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
         monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
@@ -150,6 +474,24 @@ class TestResolveMongoConnectionSettings:
         assert cert == str(config_dir / "cert.pem")
 
     def test_all_four_x509_source_combos_resolve_identically(self, monkeypatch, tmp_path) -> None:
+        """
+        [Local] resolve mongo connection settings: verifies all four x509 source combos resolve identically.
+
+        Scenario:
+            Given test inputs and fixtures for all four x509 source combos resolve identically
+            When test_all_four_x509_source_combos_resolve_identically executes the target flow
+            Then the expected outcome for all four x509 source combos resolve identically is confirmed.
+
+        Boundaries:
+            - Focus: all four x509 source combos resolve identically
+            - Fixtures/params: monkeypatch, tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to all four x509 source combos resolve identically
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
         monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
@@ -186,24 +528,96 @@ class TestResolveMongoConnectionSettings:
         assert results == [(URI, expected_cert)] * 4
 
     def test_missing_auth_type_raises(self, tmp_path) -> None:
+        """
+        [Unit] resolve mongo connection settings: verifies missing auth type raises.
+
+        Scenario:
+            Given test inputs and fixtures for missing auth type raises
+            When test_missing_auth_type_raises executes the target flow
+            Then the expected outcome for missing auth type raises is confirmed.
+
+        Boundaries:
+            - Focus: missing auth type raises
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to missing auth type raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         path = tmp_path / "settings.json"
         _write_settings(path, {"pass": {"uri": {"source": "literal", "value": URI}}})
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
     def test_unrecognized_auth_type_raises(self, tmp_path) -> None:
+        """
+        [Unit] resolve mongo connection settings: verifies unrecognized auth type raises.
+
+        Scenario:
+            Given test inputs and fixtures for unrecognized auth type raises
+            When test_unrecognized_auth_type_raises executes the target flow
+            Then the expected outcome for unrecognized auth type raises is confirmed.
+
+        Boundaries:
+            - Focus: unrecognized auth type raises
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to unrecognized auth type raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "kerberos"})
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
     def test_pass_without_pass_block_raises(self, tmp_path) -> None:
+        """
+        [Unit] resolve mongo connection settings: verifies pass without pass block raises.
+
+        Scenario:
+            Given test inputs and fixtures for pass without pass block raises
+            When test_pass_without_pass_block_raises executes the target flow
+            Then the expected outcome for pass without pass block raises is confirmed.
+
+        Boundaries:
+            - Focus: pass without pass block raises
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to pass without pass block raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "pass"})
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
     def test_x509_without_x509_block_raises(self, tmp_path) -> None:
+        """
+        [Unit] resolve mongo connection settings: verifies x509 without x509 block raises.
+
+        Scenario:
+            Given test inputs and fixtures for x509 without x509 block raises
+            When test_x509_without_x509_block_raises executes the target flow
+            Then the expected outcome for x509 without x509 block raises is confirmed.
+
+        Boundaries:
+            - Focus: x509 without x509 block raises
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to x509 without x509 block raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection settings
+        """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "x509"})
         with pytest.raises(ConfigError):
@@ -212,6 +626,24 @@ class TestResolveMongoConnectionSettings:
 
 class TestResolveMongoConnectionLegacyFallback:
     def test_env_uri_no_cert(self, monkeypatch, tmp_path, no_real_env) -> None:
+        """
+        [Local] resolve mongo connection legacy fallback: verifies env uri no cert.
+
+        Scenario:
+            Given test inputs and fixtures for env uri no cert
+            When test_env_uri_no_cert executes the target flow
+            Then the expected outcome for env uri no cert is confirmed.
+
+        Boundaries:
+            - Focus: env uri no cert
+            - Fixtures/params: monkeypatch, tmp_path, no_real_env
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to env uri no cert
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+        """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
         monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
@@ -221,6 +653,24 @@ class TestResolveMongoConnectionLegacyFallback:
         assert result == (URI, None)
 
     def test_cert_glob_used_when_no_tls_cert_env(self, monkeypatch, tmp_path, no_real_env) -> None:
+        """
+        [Local] resolve mongo connection legacy fallback: verifies cert glob used when no tls cert env.
+
+        Scenario:
+            Given test inputs and fixtures for cert glob used when no tls cert env
+            When test_cert_glob_used_when_no_tls_cert_env executes the target flow
+            Then the expected outcome for cert glob used when no tls cert env is confirmed.
+
+        Boundaries:
+            - Focus: cert glob used when no tls cert env
+            - Fixtures/params: monkeypatch, tmp_path, no_real_env
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to cert glob used when no tls cert env
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+        """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
         monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
@@ -232,6 +682,24 @@ class TestResolveMongoConnectionLegacyFallback:
         assert resolved_cert == str(cert)
 
     def test_explicit_tls_cert_env_wins_over_glob(self, monkeypatch, tmp_path, no_real_env) -> None:
+        """
+        [Local] resolve mongo connection legacy fallback: verifies explicit tls cert env wins over glob.
+
+        Scenario:
+            Given test inputs and fixtures for explicit tls cert env wins over glob
+            When test_explicit_tls_cert_env_wins_over_glob executes the target flow
+            Then the expected outcome for explicit tls cert env wins over glob is confirmed.
+
+        Boundaries:
+            - Focus: explicit tls cert env wins over glob
+            - Fixtures/params: monkeypatch, tmp_path, no_real_env
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to explicit tls cert env wins over glob
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+        """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
         monkeypatch.setattr(config, "CONFIG_DIR", config_dir)

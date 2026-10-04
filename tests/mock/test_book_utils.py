@@ -48,14 +48,68 @@ def _patch_ping(side_effect=None):
 
 class TestCheckMongodbConnection:
     def test_config_error_returns_false(self) -> None:
+        """
+        [Local] check mongodb connection: verifies config error returns false.
+
+        Scenario:
+            Given test inputs and fixtures for config error returns false
+            When test_config_error_returns_false executes the target flow
+            Then the expected outcome for config error returns false is confirmed.
+
+        Boundaries:
+            - Focus: config error returns false
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to config error returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         with _patch_resolve(side_effect=ConfigError("bad settings.json")):
             assert book_utils.check_mongodb_connection() is False
 
     def test_no_uri_returns_false(self) -> None:
+        """
+        [Local] check mongodb connection: verifies no uri returns false.
+
+        Scenario:
+            Given test inputs and fixtures for no uri returns false
+            When test_no_uri_returns_false executes the target flow
+            Then the expected outcome for no uri returns false is confirmed.
+
+        Boundaries:
+            - Focus: no uri returns false
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to no uri returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         with _patch_resolve(return_value=(None, None)):
             assert book_utils.check_mongodb_connection() is False
 
     def test_success_without_tls_cert(self) -> None:
+        """
+        [Local] check mongodb connection: verifies success without tls cert.
+
+        Scenario:
+            Given test inputs and fixtures for success without tls cert
+            When test_success_without_tls_cert executes the target flow
+            Then the expected outcome for success without tls cert is confirmed.
+
+        Boundaries:
+            - Focus: success without tls cert
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to success without tls cert
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         mock_client = MagicMock()
         with (
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", None)),
@@ -69,6 +123,24 @@ class TestCheckMongodbConnection:
         mock_client.close.assert_called_once()
 
     def test_success_with_existing_tls_cert(self, tmp_path) -> None:
+        """
+        [Local] check mongodb connection: verifies success with existing tls cert.
+
+        Scenario:
+            Given test inputs and fixtures for success with existing tls cert
+            When test_success_with_existing_tls_cert executes the target flow
+            Then the expected outcome for success with existing tls cert is confirmed.
+
+        Boundaries:
+            - Focus: success with existing tls cert
+            - Fixtures/params: tmp_path
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to success with existing tls cert
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         cert_path = tmp_path / "cert.pem"
         cert_path.write_text("fake cert")
         mock_client = MagicMock()
@@ -119,6 +191,24 @@ class TestCheckMongodbConnection:
         mock_ctor.assert_not_called()
 
     def test_connection_failure_returns_false_and_closes(self) -> None:
+        """
+        [Local] check mongodb connection: verifies connection failure returns false and closes.
+
+        Scenario:
+            Given test inputs and fixtures for connection failure returns false and closes
+            When test_connection_failure_returns_false_and_closes executes the target flow
+            Then the expected outcome for connection failure returns false and closes is confirmed.
+
+        Boundaries:
+            - Focus: connection failure returns false and closes
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to connection failure returns false and closes
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         mock_client = MagicMock()
         with (
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", None)),
@@ -132,6 +222,24 @@ class TestCheckMongodbConnection:
         # If the factory raises something that isn't a MongoConnectionError, the defensive
         # branch returns False without leaking or crashing; client stays None so the finally
         # guard must not blow up.
+        """
+        [Local] check mongodb connection: verifies generic exception returns false without crashing.
+
+        Scenario:
+            Given test inputs and fixtures for generic exception returns false without crashing
+            When test_generic_exception_returns_false_without_crashing executes the target flow
+            Then the expected outcome for generic exception returns false without crashing is confirmed.
+
+        Boundaries:
+            - Focus: generic exception returns false without crashing
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to generic exception returns false without crashing
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check mongodb connection
+        """
         with (
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", None)),
             _patch_build(side_effect=RuntimeError("boom")),

@@ -30,6 +30,24 @@ def _temp_leftovers(store_path):
 
 class TestSaveBooks:
     def test_creates_file_with_content_on_fresh_store(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies creates file with content on fresh store.
+
+        Scenario:
+            Given test inputs and fixtures for creates file with content on fresh store
+            When test_creates_file_with_content_on_fresh_store executes the target flow
+            Then the expected outcome for creates file with content on fresh store is confirmed.
+
+        Boundaries:
+            - Focus: creates file with content on fresh store
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to creates file with content on fresh store
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         assert not isolated_local_store.exists()
         store.save_books([{"hash": "h1", "title": "Book One"}], isolated_local_store)
         assert isolated_local_store.exists()
@@ -39,6 +57,24 @@ class TestSaveBooks:
         assert data[0]["title"] == "Book One"
 
     def test_duplicate_hash_is_skipped(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies duplicate hash is skipped.
+
+        Scenario:
+            Given test inputs and fixtures for duplicate hash is skipped
+            When test_duplicate_hash_is_skipped executes the target flow
+            Then the expected outcome for duplicate hash is skipped is confirmed.
+
+        Boundaries:
+            - Focus: duplicate hash is skipped
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to duplicate hash is skipped
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books([{"hash": "h1", "title": "First"}], isolated_local_store)
         store.save_books([{"hash": "h1", "title": "Second"}], isolated_local_store)
         data = _read(isolated_local_store)
@@ -46,17 +82,71 @@ class TestSaveBooks:
         assert data[0]["title"] == "First"  # original kept, not overwritten
 
     def test_new_book_appends_alongside_existing(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies new book appends alongside existing.
+
+        Scenario:
+            Given test inputs and fixtures for new book appends alongside existing
+            When test_new_book_appends_alongside_existing executes the target flow
+            Then the expected outcome for new book appends alongside existing is confirmed.
+
+        Boundaries:
+            - Focus: new book appends alongside existing
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to new book appends alongside existing
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books([{"hash": "h1", "title": "First"}], isolated_local_store)
         store.save_books([{"hash": "h2", "title": "Second"}], isolated_local_store)
         data = _read(isolated_local_store)
         assert {b["hash"] for b in data} == {"h1", "h2"}
 
     def test_book_missing_hash_is_skipped_not_written(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies book missing hash is skipped not written.
+
+        Scenario:
+            Given test inputs and fixtures for book missing hash is skipped not written
+            When test_book_missing_hash_is_skipped_not_written executes the target flow
+            Then the expected outcome for book missing hash is skipped not written is confirmed.
+
+        Boundaries:
+            - Focus: book missing hash is skipped not written
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to book missing hash is skipped not written
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books([{"title": "No Hash"}], isolated_local_store)
         # _write_books only runs if something was inserted; nothing was.
         assert not isolated_local_store.exists()
 
     def test_mixed_batch_writes_only_valid_book(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies mixed batch writes only valid book.
+
+        Scenario:
+            Given test inputs and fixtures for mixed batch writes only valid book
+            When test_mixed_batch_writes_only_valid_book executes the target flow
+            Then the expected outcome for mixed batch writes only valid book is confirmed.
+
+        Boundaries:
+            - Focus: mixed batch writes only valid book
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to mixed batch writes only valid book
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books(
             [{"title": "No Hash"}, {"hash": "h1", "title": "Valid"}],
             isolated_local_store,
@@ -66,10 +156,46 @@ class TestSaveBooks:
         assert data[0]["hash"] == "h1"
 
     def test_empty_list_is_noop_no_file_created(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies empty list is noop no file created.
+
+        Scenario:
+            Given test inputs and fixtures for empty list is noop no file created
+            When test_empty_list_is_noop_no_file_created executes the target flow
+            Then the expected outcome for empty list is noop no file created is confirmed.
+
+        Boundaries:
+            - Focus: empty list is noop no file created
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty list is noop no file created
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books([], isolated_local_store)
         assert not isolated_local_store.exists()
 
     def test_all_duplicates_does_not_rewrite_missing_file(self, isolated_local_store) -> None:
+        """
+        [Unit] save books: verifies all duplicates does not rewrite missing file.
+
+        Scenario:
+            Given test inputs and fixtures for all duplicates does not rewrite missing file
+            When test_all_duplicates_does_not_rewrite_missing_file executes the target flow
+            Then the expected outcome for all duplicates does not rewrite missing file is confirmed.
+
+        Boundaries:
+            - Focus: all duplicates does not rewrite missing file
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to all duplicates does not rewrite missing file
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by save books
+        """
         store.save_books([{"hash": "h1", "title": "First"}], isolated_local_store)
         # Save the same hash again: num_inserted == 0, so _write_books is not called;
         # file content stays exactly as it was.
@@ -103,59 +229,311 @@ class TestSaveBooks:
 
 class TestCheckBookExists:
     def test_found(self, isolated_local_store) -> None:
+        """
+        [Unit] check book exists: verifies found.
+
+        Scenario:
+            Given test inputs and fixtures for found
+            When test_found executes the target flow
+            Then the expected outcome for found is confirmed.
+
+        Boundaries:
+            - Focus: found
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to found
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check book exists
+        """
         store.save_books([{"hash": "h1", "title": "T"}], isolated_local_store)
         assert store.check_book_exists("h1", isolated_local_store) is True
 
     def test_not_found(self, isolated_local_store) -> None:
+        """
+        [Unit] check book exists: verifies not found.
+
+        Scenario:
+            Given test inputs and fixtures for not found
+            When test_not_found executes the target flow
+            Then the expected outcome for not found is confirmed.
+
+        Boundaries:
+            - Focus: not found
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to not found
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check book exists
+        """
         store.save_books([{"hash": "h1", "title": "T"}], isolated_local_store)
         assert store.check_book_exists("nope", isolated_local_store) is False
 
     def test_empty_store_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] check book exists: verifies empty store returns false.
+
+        Scenario:
+            Given test inputs and fixtures for empty store returns false
+            When test_empty_store_returns_false executes the target flow
+            Then the expected outcome for empty store returns false is confirmed.
+
+        Boundaries:
+            - Focus: empty store returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty store returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check book exists
+        """
         assert store.check_book_exists("h1", isolated_local_store) is False
 
     def test_empty_hash_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] check book exists: verifies empty hash returns false.
+
+        Scenario:
+            Given test inputs and fixtures for empty hash returns false
+            When test_empty_hash_returns_false executes the target flow
+            Then the expected outcome for empty hash returns false is confirmed.
+
+        Boundaries:
+            - Focus: empty hash returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty hash returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check book exists
+        """
         assert store.check_book_exists("", isolated_local_store) is False
 
 
 class TestCheckAmazonAsinExists:
     def test_found(self, isolated_local_store) -> None:
+        """
+        [Unit] check amazon asin exists: verifies found.
+
+        Scenario:
+            Given test inputs and fixtures for found
+            When test_found executes the target flow
+            Then the expected outcome for found is confirmed.
+
+        Boundaries:
+            - Focus: found
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to found
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check amazon asin exists
+        """
         store.save_books([{"hash": "h1", "asin": "B001"}], isolated_local_store)
         assert store.check_amazon_asin_exists("B001", isolated_local_store) is True
 
     def test_not_found(self, isolated_local_store) -> None:
+        """
+        [Unit] check amazon asin exists: verifies not found.
+
+        Scenario:
+            Given test inputs and fixtures for not found
+            When test_not_found executes the target flow
+            Then the expected outcome for not found is confirmed.
+
+        Boundaries:
+            - Focus: not found
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to not found
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check amazon asin exists
+        """
         store.save_books([{"hash": "h1", "asin": "B001"}], isolated_local_store)
         assert store.check_amazon_asin_exists("B999", isolated_local_store) is False
 
     def test_empty_store_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] check amazon asin exists: verifies empty store returns false.
+
+        Scenario:
+            Given test inputs and fixtures for empty store returns false
+            When test_empty_store_returns_false executes the target flow
+            Then the expected outcome for empty store returns false is confirmed.
+
+        Boundaries:
+            - Focus: empty store returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty store returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check amazon asin exists
+        """
         assert store.check_amazon_asin_exists("B001", isolated_local_store) is False
 
     def test_empty_asin_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] check amazon asin exists: verifies empty asin returns false.
+
+        Scenario:
+            Given test inputs and fixtures for empty asin returns false
+            When test_empty_asin_returns_false executes the target flow
+            Then the expected outcome for empty asin returns false is confirmed.
+
+        Boundaries:
+            - Focus: empty asin returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty asin returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by check amazon asin exists
+        """
         assert store.check_amazon_asin_exists("", isolated_local_store) is False
 
 
 class TestLeanpubBookExists:
     def test_match_by_book_id_alone(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies match by book id alone.
+
+        Scenario:
+            Given test inputs and fixtures for match by book id alone
+            When test_match_by_book_id_alone executes the target flow
+            Then the expected outcome for match by book id alone is confirmed.
+
+        Boundaries:
+            - Focus: match by book id alone
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to match by book id alone
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("42", None, isolated_local_store) is True
 
     def test_match_by_slug_alone(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies match by slug alone.
+
+        Scenario:
+            Given test inputs and fixtures for match by slug alone
+            When test_match_by_slug_alone executes the target flow
+            Then the expected outcome for match by slug alone is confirmed.
+
+        Boundaries:
+            - Focus: match by slug alone
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to match by slug alone
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists(None, "some-book", isolated_local_store) is True
 
     def test_match_by_both(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies match by both.
+
+        Scenario:
+            Given test inputs and fixtures for match by both
+            When test_match_by_both executes the target flow
+            Then the expected outcome for match by both is confirmed.
+
+        Boundaries:
+            - Focus: match by both
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to match by both
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("42", "some-book", isolated_local_store) is True
 
     def test_no_match(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies no match.
+
+        Scenario:
+            Given test inputs and fixtures for no match
+            When test_no_match executes the target flow
+            Then the expected outcome for no match is confirmed.
+
+        Boundaries:
+            - Focus: no match
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to no match
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("99", "other-book", isolated_local_store) is False
 
     def test_neither_identifier_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies neither identifier returns false.
+
+        Scenario:
+            Given test inputs and fixtures for neither identifier returns false
+            When test_neither_identifier_returns_false executes the target flow
+            Then the expected outcome for neither identifier returns false is confirmed.
+
+        Boundaries:
+            - Focus: neither identifier returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to neither identifier returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         # Both falsy -> the "no identifier" warning branch, must not raise.
         assert store.leanpub_book_exists(None, None, isolated_local_store) is False
 
     def test_empty_store_returns_false(self, isolated_local_store) -> None:
+        """
+        [Unit] leanpub book exists: verifies empty store returns false.
+
+        Scenario:
+            Given test inputs and fixtures for empty store returns false
+            When test_empty_store_returns_false executes the target flow
+            Then the expected outcome for empty store returns false is confirmed.
+
+        Boundaries:
+            - Focus: empty store returns false
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to empty store returns false
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by leanpub book exists
+        """
         assert store.leanpub_book_exists("42", "some-book", isolated_local_store) is False
 
     def test_non_dict_entry_is_skipped(self, isolated_local_store) -> None:
@@ -248,13 +626,67 @@ class TestAtomicWriteAndBackup:
 
 class TestAssertStoreReadable:
     def test_valid_store_does_not_raise(self, isolated_local_store) -> None:
+        """
+        [Unit] assert store readable: verifies valid store does not raise.
+
+        Scenario:
+            Given test inputs and fixtures for valid store does not raise
+            When test_valid_store_does_not_raise executes the target flow
+            Then the expected outcome for valid store does not raise is confirmed.
+
+        Boundaries:
+            - Focus: valid store does not raise
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to valid store does not raise
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by assert store readable
+        """
         store.save_books([{"hash": "h1"}], isolated_local_store)
         store.assert_store_readable(isolated_local_store)  # must not raise
 
     def test_missing_store_does_not_raise(self, isolated_local_store) -> None:
+        """
+        [Unit] assert store readable: verifies missing store does not raise.
+
+        Scenario:
+            Given test inputs and fixtures for missing store does not raise
+            When test_missing_store_does_not_raise executes the target flow
+            Then the expected outcome for missing store does not raise is confirmed.
+
+        Boundaries:
+            - Focus: missing store does not raise
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to missing store does not raise
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by assert store readable
+        """
         store.assert_store_readable(isolated_local_store)  # must not raise
 
     def test_corrupt_store_raises(self, isolated_local_store) -> None:
+        """
+        [Unit] assert store readable: verifies corrupt store raises.
+
+        Scenario:
+            Given test inputs and fixtures for corrupt store raises
+            When test_corrupt_store_raises executes the target flow
+            Then the expected outcome for corrupt store raises is confirmed.
+
+        Boundaries:
+            - Focus: corrupt store raises
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to corrupt store raises
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by assert store readable
+        """
         isolated_local_store.write_text("{not json", encoding="utf-8")
         with pytest.raises(LocalStoreCorruptError):
             store.assert_store_readable(isolated_local_store)
@@ -262,14 +694,68 @@ class TestAssertStoreReadable:
 
 class TestLoadBooksRecovery:
     def test_malformed_json_returns_empty_list(self, isolated_local_store) -> None:
+        """
+        [Unit] load books recovery: verifies malformed json returns empty list.
+
+        Scenario:
+            Given test inputs and fixtures for malformed json returns empty list
+            When test_malformed_json_returns_empty_list executes the target flow
+            Then the expected outcome for malformed json returns empty list is confirmed.
+
+        Boundaries:
+            - Focus: malformed json returns empty list
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to malformed json returns empty list
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load books recovery
+        """
         isolated_local_store.write_text("{not valid json", encoding="utf-8")
         assert store._load_books(isolated_local_store) == []
 
     def test_valid_json_non_list_returns_empty_list(self, isolated_local_store) -> None:
+        """
+        [Unit] load books recovery: verifies valid json non list returns empty list.
+
+        Scenario:
+            Given test inputs and fixtures for valid json non list returns empty list
+            When test_valid_json_non_list_returns_empty_list executes the target flow
+            Then the expected outcome for valid json non list returns empty list is confirmed.
+
+        Boundaries:
+            - Focus: valid json non list returns empty list
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to valid json non list returns empty list
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load books recovery
+        """
         isolated_local_store.write_text('{"hash": "h1"}', encoding="utf-8")
         assert store._load_books(isolated_local_store) == []
 
     def test_nonexistent_file_returns_empty_list(self, isolated_local_store) -> None:
+        """
+        [Unit] load books recovery: verifies nonexistent file returns empty list.
+
+        Scenario:
+            Given test inputs and fixtures for nonexistent file returns empty list
+            When test_nonexistent_file_returns_empty_list executes the target flow
+            Then the expected outcome for nonexistent file returns empty list is confirmed.
+
+        Boundaries:
+            - Focus: nonexistent file returns empty list
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to nonexistent file returns empty list
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by load books recovery
+        """
         assert store._load_books(isolated_local_store) == []
 
     def test_unreadable_file_returns_empty_list(self, isolated_local_store) -> None:

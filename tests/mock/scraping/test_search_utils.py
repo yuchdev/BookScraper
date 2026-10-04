@@ -65,6 +65,24 @@ def _no_sleep():
 
 
 async def test_leanpub_api_single_short_page_stops_after_page_one():
+    """
+    [Local] search utils: verifies leanpub api single short page stops after page one.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api single short page stops after page one
+        When test_leanpub_api_single_short_page_stops_after_page_one executes the target flow
+        Then the expected outcome for leanpub api single short page stops after page one is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api single short page stops after page one
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api single short page stops after page one
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     payload = _search_payload([_search_book("b1", title="Python 101", slug="python-101")])
     response = FakeResponse(json_data=payload)
     with _patch_httpx(responses=[response]):
@@ -80,6 +98,24 @@ async def test_leanpub_api_single_short_page_stops_after_page_one():
 
 
 async def test_leanpub_api_full_page_then_short_page_combines_results():
+    """
+    [Local] search utils: verifies leanpub api full page then short page combines results.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api full page then short page combines results
+        When test_leanpub_api_full_page_then_short_page_combines_results executes the target flow
+        Then the expected outcome for leanpub api full page then short page combines results is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api full page then short page combines results
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api full page then short page combines results
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     page1_books = [_search_book(f"b{i}", title=f"Book {i}") for i in range(100)]
     page2_books = [_search_book("x1"), _search_book("x2")]
     responses = [
@@ -93,6 +129,24 @@ async def test_leanpub_api_full_page_then_short_page_combines_results():
 
 
 async def test_leanpub_api_empty_data_returns_empty_immediately():
+    """
+    [Local] search utils: verifies leanpub api empty data returns empty immediately.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api empty data returns empty immediately
+        When test_leanpub_api_empty_data_returns_empty_immediately executes the target flow
+        Then the expected outcome for leanpub api empty data returns empty immediately is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api empty data returns empty immediately
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api empty data returns empty immediately
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     response = FakeResponse(json_data={"data": [], "included": []})
     with _patch_httpx(responses=[response]):
         books = await get_leanpub_search_results_via_api("python")
@@ -101,6 +155,24 @@ async def test_leanpub_api_empty_data_returns_empty_immediately():
 
 
 async def test_leanpub_api_request_error_breaks_and_returns_accumulated():
+    """
+    [Local] search utils: verifies leanpub api request error breaks and returns accumulated.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api request error breaks and returns accumulated
+        When test_leanpub_api_request_error_breaks_and_returns_accumulated executes the target flow
+        Then the expected outcome for leanpub api request error breaks and returns accumulated is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api request error breaks and returns accumulated
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api request error breaks and returns accumulated
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     request = httpx.Request("GET", "https://leanpub.com/api")
     exc = httpx.RequestError("network down", request=request)
     with _patch_httpx(get_side_effect=[exc]):
@@ -110,6 +182,24 @@ async def test_leanpub_api_request_error_breaks_and_returns_accumulated():
 
 
 async def test_leanpub_api_request_error_on_second_page_keeps_first_page():
+    """
+    [Local] search utils: verifies leanpub api request error on second page keeps first page.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api request error on second page keeps first page
+        When test_leanpub_api_request_error_on_second_page_keeps_first_page executes the target flow
+        Then the expected outcome for leanpub api request error on second page keeps first page is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api request error on second page keeps first page
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api request error on second page keeps first page
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     page1_books = [_search_book(f"b{i}") for i in range(100)]
     request = httpx.Request("GET", "https://leanpub.com/api")
     exc = httpx.RequestError("boom", request=request)
@@ -121,6 +211,24 @@ async def test_leanpub_api_request_error_on_second_page_keeps_first_page():
 
 
 async def test_leanpub_api_json_decode_error_breaks_and_returns_empty():
+    """
+    [Local] search utils: verifies leanpub api json decode error breaks and returns empty.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api json decode error breaks and returns empty
+        When test_leanpub_api_json_decode_error_breaks_and_returns_empty executes the target flow
+        Then the expected outcome for leanpub api json decode error breaks and returns empty is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api json decode error breaks and returns empty
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api json decode error breaks and returns empty
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     decode_exc = json.JSONDecodeError("Expecting value", "", 0)
     response = FakeResponse(json_exc=decode_exc, text="<html>nope</html>")
     with _patch_httpx(responses=[response]):
@@ -130,6 +238,24 @@ async def test_leanpub_api_json_decode_error_breaks_and_returns_empty():
 
 
 async def test_leanpub_api_generic_exception_breaks_and_returns_empty():
+    """
+    [Local] search utils: verifies leanpub api generic exception breaks and returns empty.
+
+    Scenario:
+        Given test inputs and fixtures for leanpub api generic exception breaks and returns empty
+        When test_leanpub_api_generic_exception_breaks_and_returns_empty executes the target flow
+        Then the expected outcome for leanpub api generic exception breaks and returns empty is confirmed.
+
+    Boundaries:
+        - Focus: leanpub api generic exception breaks and returns empty
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to leanpub api generic exception breaks and returns empty
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     with _patch_httpx(get_side_effect=[RuntimeError("unexpected")]):
         books = await get_leanpub_search_results_via_api("python")
 
@@ -159,6 +285,24 @@ AMAZON_CARD = '[data-component-type="s-search-result"]'
 
 
 async def test_playwright_unknown_site_returns_empty_without_touching_browser():
+    """
+    [Local] search utils: verifies playwright unknown site returns empty without touching browser.
+
+    Scenario:
+        Given test inputs and fixtures for playwright unknown site returns empty without touching browser
+        When test_playwright_unknown_site_returns_empty_without_touching_browser executes the target flow
+        Then the expected outcome for playwright unknown site returns empty without touching browser is confirmed.
+
+    Boundaries:
+        - Focus: playwright unknown site returns empty without touching browser
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright unknown site returns empty without touching browser
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     browser = FakeBrowser()
     result = await get_search_results_via_playwright(browser, "nonexistent-site", "python")
 
@@ -168,6 +312,24 @@ async def test_playwright_unknown_site_returns_empty_without_touching_browser():
 
 async def test_playwright_missing_search_base_url_returns_empty(monkeypatch):
     # Truthy site config (so the site_config guard passes) but no SEARCH_BASE_URL key.
+    """
+    [Local] search utils: verifies playwright missing search base url returns empty.
+
+    Scenario:
+        Given test inputs and fixtures for playwright missing search base url returns empty
+        When test_playwright_missing_search_base_url_returns_empty executes the target flow
+        Then the expected outcome for playwright missing search base url returns empty is confirmed.
+
+    Boundaries:
+        - Focus: playwright missing search base url returns empty
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright missing search base url returns empty
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     monkeypatch.setattr(search_utils, "site_constants", {"fakesite": {"FOO": "bar"}})
     browser = FakeBrowser()
 
@@ -178,6 +340,24 @@ async def test_playwright_missing_search_base_url_returns_empty(monkeypatch):
 
 
 async def test_playwright_amazon_happy_path_extracts_one_book():
+    """
+    [Local] search utils: verifies playwright amazon happy path extracts one book.
+
+    Scenario:
+        Given test inputs and fixtures for playwright amazon happy path extracts one book
+        When test_playwright_amazon_happy_path_extracts_one_book executes the target flow
+        Then the expected outcome for playwright amazon happy path extracts one book is confirmed.
+
+    Boundaries:
+        - Focus: playwright amazon happy path extracts one book
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright amazon happy path extracts one book
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     card = {
         "text": "",
         "attrs": {"data-asin": "B0ABCDEFGH"},
@@ -204,6 +384,24 @@ async def test_playwright_amazon_happy_path_extracts_one_book():
 
 async def test_playwright_amazon_no_books_found_short_circuits(monkeypatch):
     # amazon has no SEARCH_NO_BOOKS_FOUND in real config; inject one for this case.
+    """
+    [Local] search utils: verifies playwright amazon no books found short circuits.
+
+    Scenario:
+        Given test inputs and fixtures for playwright amazon no books found short circuits
+        When test_playwright_amazon_no_books_found_short_circuits executes the target flow
+        Then the expected outcome for playwright amazon no books found short circuits is confirmed.
+
+    Boundaries:
+        - Focus: playwright amazon no books found short circuits
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright amazon no books found short circuits
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     sc = copy.deepcopy(search_utils.site_constants)
     sc["amazon"]["SEARCH_NO_BOOKS_FOUND"] = "div.no-results"
     monkeypatch.setattr(search_utils, "site_constants", sc)
@@ -222,6 +420,24 @@ async def test_playwright_amazon_no_books_found_short_circuits(monkeypatch):
 
 
 async def test_playwright_amazon_sponsored_link_extracts_real_url_and_asin():
+    """
+    [Local] search utils: verifies playwright amazon sponsored link extracts real url and asin.
+
+    Scenario:
+        Given test inputs and fixtures for playwright amazon sponsored link extracts real url and asin
+        When test_playwright_amazon_sponsored_link_extracts_real_url_and_asin executes the target flow
+        Then the expected outcome for playwright amazon sponsored link extracts real url and asin is confirmed.
+
+    Boundaries:
+        - Focus: playwright amazon sponsored link extracts real url and asin
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright amazon sponsored link extracts real url and asin
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     sponsored_href = "/sspa/click?ie=UTF8&url=%2Fdp%2FB0SPONSOR1%2Fref%3Dabc&qual=1"
     card = {
         "text": "",
@@ -245,6 +461,24 @@ async def test_playwright_amazon_sponsored_link_extracts_real_url_and_asin():
 
 async def test_playwright_non_amazon_default_case_returns_empty_cleanly():
     # leanpub has a SEARCH_BASE_URL so it passes the guards, then hits `case _: pass`.
+    """
+    [Local] search utils: verifies playwright non amazon default case returns empty cleanly.
+
+    Scenario:
+        Given test inputs and fixtures for playwright non amazon default case returns empty cleanly
+        When test_playwright_non_amazon_default_case_returns_empty_cleanly executes the target flow
+        Then the expected outcome for playwright non amazon default case returns empty cleanly is confirmed.
+
+    Boundaries:
+        - Focus: playwright non amazon default case returns empty cleanly
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to playwright non amazon default case returns empty cleanly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by search utils
+    """
     browser = FakeBrowser()
 
     result = await get_search_results_via_playwright(browser, "leanpub", "python")

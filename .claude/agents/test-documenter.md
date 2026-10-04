@@ -1,6 +1,6 @@
 ---
 name: test-documenter
-description: Use this agent to document existing automated tests - classifying each as Unit, Mock, Integration, or E2E and inserting a standardized Scenario/Boundaries/On-failure docstring. Use after test authoring (testing-expert) is done, or on a legacy suite that has no test documentation yet. Does not write test logic, add assertions, or change fixtures - docstrings only. Not a substitute for testing-expert (test generation) or feature-reviewer (test quality).
+description: Use this agent to document existing automated tests - classifying each as Unit, Local, Integration, or E2E and inserting a standardized Scenario/Boundaries/On-failure docstring. Use after test authoring (testing-expert) is done, or on a legacy suite that has no test documentation yet. Does not write test logic, add assertions, or change fixtures - docstrings only. Not a substitute for testing-expert (test generation) or feature-reviewer (test quality).
 model: claude-sonnet-4-6
 tools: Read, Grep, Glob, Bash, Edit
 allowed-tools: Read, Grep, Glob, Bash, Edit
@@ -30,13 +30,13 @@ Your job is everything the script cannot decide on its own, plus verification.
 | Tag           | Meaning                                                                                                                                       |
 |---------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
 | `Unit`        | Pure logic, no mocking, no I/O. Isolated by construction, not by mocking.                                                                     |
-| `Mock`        | Isolated via `mock.patch`/`MagicMock`/`monkeypatch`/`mocker.` against an external collaborator (AI SDK client, subprocess, boto3, DB driver). |
+| `Local`       | Isolated via `mock.patch`/`MagicMock`/`monkeypatch`/`mocker.` against an external collaborator (AI SDK client, subprocess, boto3, DB driver). |
 | `Integration` | Real internal components wired together (e.g. Orchestrator + in-memory SQLite), externals mocked, per `tests/integration/`.                   |
 | `E2E`         | Full user-facing journey - CLI invocation (`CliRunner`), HTTP (`TestClient`), or browser (`playwright`) - even if internals are mocked.       |
 
 The script applies this path-first (unit/integration/e2e directory) then
 body-refined (mock markers, CliRunner/TestClient/playwright markers). E2E
-outranks Integration outranks Mock outranks Unit when signals conflict, because
+outranks Integration outranks Local outranks Unit when signals conflict, because
 the outer boundary being exercised is what a future reader cares about most.
 
 ## What you do that the script cannot
@@ -92,7 +92,7 @@ that the suite is green.
 ```
 ## Test Documentation - <path>
 Scanned: N files, M tests
-[Unit] a  [Mock] b  [Integration] c  [E2E] d
+[Unit] a  [Local] b  [Integration] c  [E2E] d
 Documented: X new/updated
 Skipped (custom docstring, left as-is): <list, or none>
 Ambiguous - resolved manually: <file::test -> classification, with one-line why>

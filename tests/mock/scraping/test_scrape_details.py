@@ -81,6 +81,24 @@ def _amazon_page(title="Great Python Book - Amazon"):
 
 
 async def test_route_handler_allows_document_requests():
+    """
+    [Local] scrape details: verifies route handler allows document requests.
+
+    Scenario:
+        Given test inputs and fixtures for route handler allows document requests
+        When test_route_handler_allows_document_requests executes the target flow
+        Then the expected outcome for route handler allows document requests is confirmed.
+
+    Boundaries:
+        - Focus: route handler allows document requests
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to route handler allows document requests
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     route = MagicMock()
     route.request.resource_type = "document"
     route.continue_ = AsyncMock()
@@ -94,6 +112,24 @@ async def test_route_handler_allows_document_requests():
 
 @pytest.mark.parametrize("resource_type", ["image", "font", "stylesheet", "script"])
 async def test_route_handler_aborts_non_document_requests(resource_type):
+    """
+    [Local] scrape details: verifies route handler aborts non document requests.
+
+    Scenario:
+        Given test inputs and fixtures for route handler aborts non document requests
+        When test_route_handler_aborts_non_document_requests executes the target flow
+        Then the expected outcome for route handler aborts non document requests is confirmed.
+
+    Boundaries:
+        - Focus: route handler aborts non document requests
+        - Fixtures/params: resource_type (parametrized, 4 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to route handler aborts non document requests
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     route = MagicMock()
     route.request.resource_type = resource_type
     route.continue_ = AsyncMock()
@@ -111,6 +147,24 @@ async def test_route_handler_aborts_non_document_requests(resource_type):
 
 
 async def test_get_leanpub_book_details_happy_path():
+    """
+    [Local] scrape details: verifies get leanpub book details happy path.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details happy path
+        When test_get_leanpub_book_details_happy_path executes the target flow
+        Then the expected outcome for get leanpub book details happy path is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details happy path
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details happy path
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     response = FakeResponse(json_data=_leanpub_payload())
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
@@ -128,6 +182,24 @@ async def test_get_leanpub_book_details_happy_path():
 
 
 async def test_get_leanpub_book_details_cleans_html_description():
+    """
+    [Local] scrape details: verifies get leanpub book details cleans html description.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details cleans html description
+        When test_get_leanpub_book_details_cleans_html_description executes the target flow
+        Then the expected outcome for get leanpub book details cleans html description is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details cleans html description
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details cleans html description
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     response = FakeResponse(json_data=_leanpub_payload())
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
@@ -144,6 +216,24 @@ async def test_get_leanpub_book_details_cleans_html_description():
 
 
 async def test_get_leanpub_book_details_missing_data_key_returns_failed():
+    """
+    [Local] scrape details: verifies get leanpub book details missing data key returns failed.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details missing data key returns failed
+        When test_get_leanpub_book_details_missing_data_key_returns_failed executes the target flow
+        Then the expected outcome for get leanpub book details missing data key returns failed is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details missing data key returns failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details missing data key returns failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     response = FakeResponse(json_data={"meta": "no data here"})
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
@@ -154,6 +244,24 @@ async def test_get_leanpub_book_details_missing_data_key_returns_failed():
 
 
 async def test_get_leanpub_book_details_malformed_date_yields_none_date():
+    """
+    [Local] scrape details: verifies get leanpub book details malformed date yields none date.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details malformed date yields none date
+        When test_get_leanpub_book_details_malformed_date_yields_none_date executes the target flow
+        Then the expected outcome for get leanpub book details malformed date yields none date is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details malformed date yields none date
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details malformed date yields none date
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     payload = _leanpub_payload(last_published_at="not-a-real-date")
     response = FakeResponse(json_data=payload)
     with _patch_httpx(responses=[response]):
@@ -190,6 +298,24 @@ async def test_leanpub_failure_returns_failed_result_not_none():
 
 
 async def test_get_leanpub_book_details_request_error_returns_failed():
+    """
+    [Local] scrape details: verifies get leanpub book details request error returns failed.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details request error returns failed
+        When test_get_leanpub_book_details_request_error_returns_failed executes the target flow
+        Then the expected outcome for get leanpub book details request error returns failed is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details request error returns failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details request error returns failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     request = httpx.Request("GET", LEANPUB_URL)
     exc = httpx.RequestError("network down", request=request)
     with _patch_httpx(get_side_effect=[exc]):
@@ -200,6 +326,24 @@ async def test_get_leanpub_book_details_request_error_returns_failed():
 
 
 async def test_get_leanpub_book_details_json_decode_error_returns_failed():
+    """
+    [Local] scrape details: verifies get leanpub book details json decode error returns failed.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details json decode error returns failed
+        When test_get_leanpub_book_details_json_decode_error_returns_failed executes the target flow
+        Then the expected outcome for get leanpub book details json decode error returns failed is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details json decode error returns failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details json decode error returns failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     decode_exc = json.JSONDecodeError("Expecting value", "", 0)
     response = FakeResponse(json_exc=decode_exc, text="<html>not json</html>")
     with _patch_httpx(responses=[response]):
@@ -210,6 +354,24 @@ async def test_get_leanpub_book_details_json_decode_error_returns_failed():
 
 
 async def test_get_leanpub_book_details_generic_exception_returns_failed():
+    """
+    [Local] scrape details: verifies get leanpub book details generic exception returns failed.
+
+    Scenario:
+        Given test inputs and fixtures for get leanpub book details generic exception returns failed
+        When test_get_leanpub_book_details_generic_exception_returns_failed executes the target flow
+        Then the expected outcome for get leanpub book details generic exception returns failed is confirmed.
+
+    Boundaries:
+        - Focus: get leanpub book details generic exception returns failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get leanpub book details generic exception returns failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     with _patch_httpx(get_side_effect=[RuntimeError("unexpected")]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
@@ -223,6 +385,24 @@ async def test_get_leanpub_book_details_generic_exception_returns_failed():
 
 
 async def test_scrape_book_leanpub_short_circuits_to_api_helper():
+    """
+    [Local] scrape details: verifies scrape book leanpub short circuits to api helper.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book leanpub short circuits to api helper
+        When test_scrape_book_leanpub_short_circuits_to_api_helper executes the target flow
+        Then the expected outcome for scrape book leanpub short circuits to api helper is confirmed.
+
+    Boundaries:
+        - Focus: scrape book leanpub short circuits to api helper
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book leanpub short circuits to api helper
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     sentinel = {"title": "From API", "hash": "abc"}
     page = FakePage()
     browser = FakeBrowser(page=page)
@@ -242,6 +422,24 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
 
 async def test_scrape_book_site_without_base_url_returns_failed():
     # packtpub has no BASE_URL key at all -> KeyError -> caught -> retried -> FAILED.
+    """
+    [Local] scrape details: verifies scrape book site without base url returns failed.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book site without base url returns failed
+        When test_scrape_book_site_without_base_url_returns_failed executes the target flow
+        Then the expected outcome for scrape book site without base url returns failed is confirmed.
+
+    Boundaries:
+        - Focus: scrape book site without base url returns failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book site without base url returns failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     page = FakePage(title="Some Packt Book")
     browser = FakeBrowser(page=page)
 
@@ -273,6 +471,24 @@ async def test_scrape_book_404_returns_not_found():
 
 
 async def test_scrape_book_amazon_happy_path_returns_full_book():
+    """
+    [Local] scrape details: verifies scrape book amazon happy path returns full book.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book amazon happy path returns full book
+        When test_scrape_book_amazon_happy_path_returns_full_book executes the target flow
+        Then the expected outcome for scrape book amazon happy path returns full book is confirmed.
+
+    Boundaries:
+        - Focus: scrape book amazon happy path returns full book
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book amazon happy path returns full book
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/ref=sr_1_1"
     page = _amazon_page()
     browser = FakeBrowser(page=page)
@@ -293,6 +509,24 @@ async def test_scrape_book_amazon_happy_path_returns_full_book():
 
 
 async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
+    """
+    [Local] scrape details: verifies scrape book amazon missing isbn defaults to na.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book amazon missing isbn defaults to na
+        When test_scrape_book_amazon_missing_isbn_defaults_to_na executes the target flow
+        Then the expected outcome for scrape book amazon missing isbn defaults to na is confirmed.
+
+    Boundaries:
+        - Focus: scrape book amazon missing isbn defaults to na
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book amazon missing isbn defaults to na
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     # No ISBN selectors configured -> empty locators -> "N/A" default.
     page = FakePage(
@@ -313,6 +547,24 @@ async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
 
 
 async def test_scrape_book_duplicate_hash_returns_duplicate():
+    """
+    [Local] scrape details: verifies scrape book duplicate hash returns duplicate.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book duplicate hash returns duplicate
+        When test_scrape_book_duplicate_hash_returns_duplicate executes the target flow
+        Then the expected outcome for scrape book duplicate hash returns duplicate is confirmed.
+
+    Boundaries:
+        - Focus: scrape book duplicate hash returns duplicate
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book duplicate hash returns duplicate
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     page = _amazon_page()
     browser = FakeBrowser(page=page)
@@ -329,6 +581,24 @@ async def test_scrape_book_duplicate_hash_returns_duplicate():
 
 
 async def test_scrape_book_non_duplicate_returns_book():
+    """
+    [Local] scrape details: verifies scrape book non duplicate returns book.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book non duplicate returns book
+        When test_scrape_book_non_duplicate_returns_book executes the target flow
+        Then the expected outcome for scrape book non duplicate returns book is confirmed.
+
+    Boundaries:
+        - Focus: scrape book non duplicate returns book
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book non duplicate returns book
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     page = _amazon_page()
     browser = FakeBrowser(page=page)
@@ -370,6 +640,24 @@ async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count(
 
 
 async def test_scrape_book_retries_three_times_on_generic_exception_then_failed():
+    """
+    [Local] scrape details: verifies scrape book retries three times on generic exception then failed.
+
+    Scenario:
+        Given test inputs and fixtures for scrape book retries three times on generic exception then failed
+        When test_scrape_book_retries_three_times_on_generic_exception_then_failed executes the target flow
+        Then the expected outcome for scrape book retries three times on generic exception then failed is confirmed.
+
+    Boundaries:
+        - Focus: scrape book retries three times on generic exception then failed
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to scrape book retries three times on generic exception then failed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by scrape details
+    """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=ValueError("boom"))
     browser = FakeBrowser(page=page)

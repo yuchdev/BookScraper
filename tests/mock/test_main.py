@@ -24,6 +24,24 @@ def _fake_parser(args) -> Mock:
 
 @pytest.mark.asyncio
 async def test_main_dispatches_to_scrape_urls_run() -> None:
+    """
+    [Local] main: verifies main dispatches to scrape urls run.
+
+    Scenario:
+        Given test inputs and fixtures for main dispatches to scrape urls run
+        When test_main_dispatches_to_scrape_urls_run executes the target flow
+        Then the expected outcome for main dispatches to scrape urls run is confirmed.
+
+    Boundaries:
+        - Focus: main dispatches to scrape urls run
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to main dispatches to scrape urls run
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by main
+    """
     args = SimpleNamespace(command="scrape-urls", log_severity="info")
 
     with (
@@ -41,6 +59,24 @@ async def test_main_dispatches_to_scrape_urls_run() -> None:
 
 @pytest.mark.asyncio
 async def test_main_dispatches_to_search_run() -> None:
+    """
+    [Local] main: verifies main dispatches to search run.
+
+    Scenario:
+        Given test inputs and fixtures for main dispatches to search run
+        When test_main_dispatches_to_search_run executes the target flow
+        Then the expected outcome for main dispatches to search run is confirmed.
+
+    Boundaries:
+        - Focus: main dispatches to search run
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to main dispatches to search run
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by main
+    """
     args = SimpleNamespace(command="search", log_severity="debug")
 
     with (
@@ -58,6 +94,24 @@ async def test_main_dispatches_to_search_run() -> None:
 
 @pytest.mark.asyncio
 async def test_main_dispatches_to_rotate_cert_run() -> None:
+    """
+    [Local] main: verifies main dispatches to rotate cert run.
+
+    Scenario:
+        Given test inputs and fixtures for main dispatches to rotate cert run
+        When test_main_dispatches_to_rotate_cert_run executes the target flow
+        Then the expected outcome for main dispatches to rotate cert run is confirmed.
+
+    Boundaries:
+        - Focus: main dispatches to rotate cert run
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to main dispatches to rotate cert run
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by main
+    """
     args = SimpleNamespace(command="rotate-cert", log_severity="info")
 
     with (
@@ -77,6 +131,24 @@ async def test_main_dispatches_to_rotate_cert_run() -> None:
 
 @pytest.mark.asyncio
 async def test_main_dispatches_to_detect_schema_run() -> None:
+    """
+    [Local] main: verifies main dispatches to detect schema run.
+
+    Scenario:
+        Given test inputs and fixtures for main dispatches to detect schema run
+        When test_main_dispatches_to_detect_schema_run executes the target flow
+        Then the expected outcome for main dispatches to detect schema run is confirmed.
+
+    Boundaries:
+        - Focus: main dispatches to detect schema run
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to main dispatches to detect schema run
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by main
+    """
     args = SimpleNamespace(command="detect-schema", log_severity="info")
 
     with (

@@ -12,7 +12,7 @@ Path first, then body markers:
 1. Path contains `e2e` (dir or filename) → **E2E**.
 2. Path contains `integration` → **E2E** if the body uses an end-to-end runner,
    else **Integration**.
-3. Path contains `unit` → **Mock** if the body uses a mocking marker, else **Unit**.
+3. Path contains `unit` → **Local** if the body uses a mocking marker, else **Unit**.
 4. Unrecognised directory → same body-based guess, **flagged `ambiguous`**.
 
 Body markers the script looks for:
@@ -28,13 +28,13 @@ body only. Those are the cases you must read and confirm.
 | Class           | Real meaning                                                                                                                                | Book Scrapper examples                                                                 |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | **Unit**        | Pure logic, no mocks, no I/O. Exercises one function/class in isolation with real inputs.                                                   | `DiscountTier.from_subtotal`, pricing/tax math, `shipping` zone mapping.                  |
-| **Mock**        | Unit-scoped but a collaborator is replaced with a mock/patch/monkeypatch. Tests behaviour *around* an external boundary without hitting it. | `resolve_carrier` with the `_CARRIER_MAP` patched; order routing with mocked stores.      |
+| **Local**        | Unit-scoped but a collaborator is replaced with a mock/patch/monkeypatch. Tests behaviour *around* an external boundary without hitting it. | `resolve_carrier` with the `_CARRIER_MAP` patched; order routing with mocked stores.      |
 | **Integration** | Two or more real components wired together, externals mocked at the process edge. Not a pure unit; not a full user flow.                    | `OrderStore` + a real parser over a fixture file; store round-trip against a temp SQLite. |
 | **E2E**         | A full user-facing entry point driven end to end — CLI via `CliRunner`, API via `TestClient`, or browser via Playwright.                    | `orders process` through `CliRunner`; a FastAPI route through `TestClient`.               |
 
 Resolution rule of thumb when the script flags ambiguous:
 
-- Mocks present but only one unit under test → **Mock**, not Integration.
+- Mocks present but only one unit under test → **Local**, not Integration.
 - Real collaborators wired together, external edge mocked → **Integration**.
 - A CLI/HTTP/browser runner anywhere in the body → **E2E**, regardless of mocks.
 - No mocks, no runners, pure inputs/outputs → **Unit**.
@@ -47,7 +47,7 @@ paper over with a mislabeled docstring.
 ## Docstring format the script emits
 
 Title line must match:
-`^\[(Unit|Mock|Integration|E2E)\] <name>: verifies <one sentence>.$`
+`^\[(Unit|Local|Integration|E2E)\] <name>: verifies <one sentence>.$`
 followed by **Scenario**, **Boundaries**, and **On-failure-first-check** stanzas.
 
 A full worked specimen — one correctly-documented test per class, each also

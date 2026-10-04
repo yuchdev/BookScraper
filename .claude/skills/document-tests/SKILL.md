@@ -1,6 +1,6 @@
 ---
 name: document-tests
-description: User-invoked as /document-tests [path]. Documents every automated test under path (default tests/) - classifies each as Unit, Mock, Integration, or E2E and inserts a standardized Scenario/Boundaries/On-failure docstring via the document_tests.py codemod, then delegates flagged/ambiguous cases to the test-documenter agent. Use to bring an undocumented or partially-documented test suite up to a consistent standard.
+description: User-invoked as /document-tests [path]. Documents every automated test under path (default tests/) - classifies each as Unit, Local, Integration, or E2E and inserts a standardized Scenario/Boundaries/On-failure docstring via the document_tests.py codemod, then delegates flagged/ambiguous cases to the test-documenter agent. Use to bring an undocumented or partially-documented test suite up to a consistent standard.
 allowed-tools: Read, Grep, Glob, Bash, Agent
 invocation: /document-tests [path]
 ---
@@ -12,7 +12,7 @@ standardized classification + Scenario/Boundaries/On-failure docstring.
 
 **When resolving `Ambiguous classification` items** (step 2 below), use
 [references/classification-guide.md](references/classification-guide.md) — it
-gives the semantic Unit/Mock/Integration/E2E definitions the script cannot infer,
+gives the semantic Unit/Local/Integration/E2E definitions the script cannot infer,
 the resolution rules of thumb, and the exact docstring format (with a good/bad
 example) the codemod emits.
 
@@ -39,7 +39,7 @@ example) the codemod emits.
 ```
 ## Test Documentation - <path>
 Scanned: N files, M tests
-[Unit] a  [Mock] b  [Integration] c  [E2E] d
+[Unit] a  [Local] b  [Integration] c  [E2E] d
 Documented: X new/updated
 Skipped (custom docstring, left as-is): <list, or none>
 Ambiguous - resolved: <file::test -> classification>

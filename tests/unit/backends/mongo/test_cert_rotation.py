@@ -59,21 +59,93 @@ def _write_settings(config_dir, settings: dict) -> None:
 # resolve_months
 # --------------------------------------------------------------------------- #
 def test_resolve_months_defaults_to_six(monkeypatch) -> None:
+    """
+    [Local] cert rotation: verifies resolve months defaults to six.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months defaults to six
+        When test_resolve_months_defaults_to_six executes the target flow
+        Then the expected outcome for resolve months defaults to six is confirmed.
+
+    Boundaries:
+        - Focus: resolve months defaults to six
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months defaults to six
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.delenv("ATLAS_CERT_MONTHS", raising=False)
     assert cert_rotation.resolve_months() == 6
 
 
 def test_resolve_months_reads_env(monkeypatch) -> None:
+    """
+    [Local] cert rotation: verifies resolve months reads env.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months reads env
+        When test_resolve_months_reads_env executes the target flow
+        Then the expected outcome for resolve months reads env is confirmed.
+
+    Boundaries:
+        - Focus: resolve months reads env
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months reads env
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     assert cert_rotation.resolve_months() == 12
 
 
 def test_resolve_months_argument_beats_env(monkeypatch) -> None:
+    """
+    [Local] cert rotation: verifies resolve months argument beats env.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months argument beats env
+        When test_resolve_months_argument_beats_env executes the target flow
+        Then the expected outcome for resolve months argument beats env is confirmed.
+
+    Boundaries:
+        - Focus: resolve months argument beats env
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months argument beats env
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     assert cert_rotation.resolve_months(3) == 3
 
 
 def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
+    """
+    [Local] cert rotation: verifies resolve months rejects non integer env.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months rejects non integer env
+        When test_resolve_months_rejects_non_integer_env executes the target flow
+        Then the expected outcome for resolve months rejects non integer env is confirmed.
+
+    Boundaries:
+        - Focus: resolve months rejects non integer env
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months rejects non integer env
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "soon")
     with pytest.raises(cert_rotation.RotationError, match="ATLAS_CERT_MONTHS"):
         cert_rotation.resolve_months()
@@ -81,12 +153,48 @@ def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
 
 @pytest.mark.parametrize("months", [0, -1, 25])
 def test_resolve_months_rejects_out_of_range(months) -> None:
+    """
+    [Unit] cert rotation: verifies resolve months rejects out of range.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months rejects out of range
+        When test_resolve_months_rejects_out_of_range executes the target flow
+        Then the expected outcome for resolve months rejects out of range is confirmed.
+
+    Boundaries:
+        - Focus: resolve months rejects out of range
+        - Fixtures/params: months (parametrized, 3 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months rejects out of range
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with pytest.raises(cert_rotation.RotationError, match="1-24"):
         cert_rotation.resolve_months(months)
 
 
 @pytest.mark.parametrize("months", [1, 24])
 def test_resolve_months_accepts_range_boundaries(months) -> None:
+    """
+    [Unit] cert rotation: verifies resolve months accepts range boundaries.
+
+    Scenario:
+        Given test inputs and fixtures for resolve months accepts range boundaries
+        When test_resolve_months_accepts_range_boundaries executes the target flow
+        Then the expected outcome for resolve months accepts range boundaries is confirmed.
+
+    Boundaries:
+        - Focus: resolve months accepts range boundaries
+        - Fixtures/params: months (parametrized, 2 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to resolve months accepts range boundaries
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     assert cert_rotation.resolve_months(months) == months
 
 
@@ -94,6 +202,24 @@ def test_resolve_months_accepts_range_boundaries(months) -> None:
 # atomic_write / default_output_path
 # --------------------------------------------------------------------------- #
 def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
+    """
+    [Unit] cert rotation: verifies atomic write creates parents and owner only file.
+
+    Scenario:
+        Given test inputs and fixtures for atomic write creates parents and owner only file
+        When test_atomic_write_creates_parents_and_owner_only_file executes the target flow
+        Then the expected outcome for atomic write creates parents and owner only file is confirmed.
+
+    Boundaries:
+        - Focus: atomic write creates parents and owner only file
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to atomic write creates parents and owner only file
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     target = tmp_path / "nested" / "cert.pem"
     cert_rotation.atomic_write(target, b"PEM DATA")
 
@@ -102,6 +228,24 @@ def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
 
 
 def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) -> None:
+    """
+    [Unit] cert rotation: verifies atomic write replaces existing file and leaves no temp files.
+
+    Scenario:
+        Given test inputs and fixtures for atomic write replaces existing file and leaves no temp files
+        When test_atomic_write_replaces_existing_file_and_leaves_no_temp_files executes the target flow
+        Then the expected outcome for atomic write replaces existing file and leaves no temp files is confirmed.
+
+    Boundaries:
+        - Focus: atomic write replaces existing file and leaves no temp files
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to atomic write replaces existing file and leaves no temp files
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     target = tmp_path / "cert.pem"
     target.write_bytes(b"old")
 
@@ -112,6 +256,24 @@ def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) 
 
 
 def test_default_output_path_is_timestamped_under_config_dir(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies default output path is timestamped under config dir.
+
+    Scenario:
+        Given test inputs and fixtures for default output path is timestamped under config dir
+        When test_default_output_path_is_timestamped_under_config_dir executes the target flow
+        Then the expected outcome for default output path is timestamped under config dir is confirmed.
+
+    Boundaries:
+        - Focus: default output path is timestamped under config dir
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to default output path is timestamped under config dir
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     path = cert_rotation.default_output_path()
 
     assert path.parent == isolated_config
@@ -122,6 +284,24 @@ def test_default_output_path_is_timestamped_under_config_dir(isolated_config) ->
 # update_settings_after_rotation
 # --------------------------------------------------------------------------- #
 def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings no file reports legacy fallback.
+
+    Scenario:
+        Given test inputs and fixtures for update settings no file reports legacy fallback
+        When test_update_settings_no_file_reports_legacy_fallback executes the target flow
+        Then the expected outcome for update settings no file reports legacy fallback is confirmed.
+
+    Boundaries:
+        - Focus: update settings no file reports legacy fallback
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings no file reports legacy fallback
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     notes = cert_rotation.update_settings_after_rotation(isolated_config / "X509-cert-new.pem")
 
     assert len(notes) == 1
@@ -130,6 +310,24 @@ def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> Non
 
 
 def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings malformed file warns and is untouched.
+
+    Scenario:
+        Given test inputs and fixtures for update settings malformed file warns and is untouched
+        When test_update_settings_malformed_file_warns_and_is_untouched executes the target flow
+        Then the expected outcome for update settings malformed file warns and is untouched is confirmed.
+
+    Boundaries:
+        - Focus: update settings malformed file warns and is untouched
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings malformed file warns and is untouched
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     settings_file = isolated_config / "settings.json"
     settings_file.write_text("{not json")
 
@@ -140,6 +338,24 @@ def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) 
 
 
 def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings pass auth is untouched.
+
+    Scenario:
+        Given test inputs and fixtures for update settings pass auth is untouched
+        When test_update_settings_pass_auth_is_untouched executes the target flow
+        Then the expected outcome for update settings pass auth is untouched is confirmed.
+
+    Boundaries:
+        - Focus: update settings pass auth is untouched
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings pass auth is untouched
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     settings = {"auth_type": "pass", "pass": {"uri": {"source": "literal", "value": "mongodb+srv://x"}}}
     _write_settings(isolated_config, settings)
 
@@ -150,6 +366,24 @@ def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
 
 
 def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings literal cert is repointed.
+
+    Scenario:
+        Given test inputs and fixtures for update settings literal cert is repointed
+        When test_update_settings_literal_cert_is_repointed executes the target flow
+        Then the expected outcome for update settings literal cert is repointed is confirmed.
+
+    Boundaries:
+        - Focus: update settings literal cert is repointed
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings literal cert is repointed
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     _write_settings(
         isolated_config,
         {
@@ -172,6 +406,24 @@ def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
 
 
 def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings env cert only reminds.
+
+    Scenario:
+        Given test inputs and fixtures for update settings env cert only reminds
+        When test_update_settings_env_cert_only_reminds executes the target flow
+        Then the expected outcome for update settings env cert only reminds is confirmed.
+
+    Boundaries:
+        - Focus: update settings env cert only reminds
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings env cert only reminds
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     settings = {
         "auth_type": "x509",
         "x509": {
@@ -190,6 +442,24 @@ def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
 
 
 def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config) -> None:
+    """
+    [Unit] cert rotation: verifies update settings unrecognized cert shape is untouched.
+
+    Scenario:
+        Given test inputs and fixtures for update settings unrecognized cert shape is untouched
+        When test_update_settings_unrecognized_cert_shape_is_untouched executes the target flow
+        Then the expected outcome for update settings unrecognized cert shape is untouched is confirmed.
+
+    Boundaries:
+        - Focus: update settings unrecognized cert shape is untouched
+        - Fixtures/params: isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to update settings unrecognized cert shape is untouched
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     settings = {"auth_type": "x509", "x509": {"cert": {"source": "vault", "value": "x"}}}
     _write_settings(isolated_config, settings)
 

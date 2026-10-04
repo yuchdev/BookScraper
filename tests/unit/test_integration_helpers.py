@@ -31,11 +31,47 @@ def _make_cert(directory, name: str, mtime: float):
 
 
 def test_no_certificates_returns_none(cert_dir) -> None:
+    """
+    [Unit] integration helpers: verifies no certificates returns none.
+
+    Scenario:
+        Given test inputs and fixtures for no certificates returns none
+        When test_no_certificates_returns_none executes the target flow
+        Then the expected outcome for no certificates returns none is confirmed.
+
+    Boundaries:
+        - Focus: no certificates returns none
+        - Fixtures/params: cert_dir
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to no certificates returns none
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by integration helpers
+    """
     assert mongo_test_helpers.get_default_tls_cert_file(cert_dir) is None
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) is None
 
 
 def test_picks_newest_certificate_by_mtime(cert_dir) -> None:
+    """
+    [Unit] integration helpers: verifies picks newest certificate by mtime.
+
+    Scenario:
+        Given test inputs and fixtures for picks newest certificate by mtime
+        When test_picks_newest_certificate_by_mtime executes the target flow
+        Then the expected outcome for picks newest certificate by mtime is confirmed.
+
+    Boundaries:
+        - Focus: picks newest certificate by mtime
+        - Fixtures/params: cert_dir
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to picks newest certificate by mtime
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by integration helpers
+    """
     _make_cert(cert_dir, "X509-cert-20250101_000000.pem", 1_000)
     newest = _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
     _make_cert(cert_dir, "X509-cert-20250601_000000.pem", 5_000)
@@ -63,6 +99,24 @@ def test_a_freshly_rotated_cert_is_picked_up(cert_dir) -> None:
 
 
 def test_unrelated_files_are_ignored(cert_dir) -> None:
+    """
+    [Unit] integration helpers: verifies unrelated files are ignored.
+
+    Scenario:
+        Given test inputs and fixtures for unrelated files are ignored
+        When test_unrelated_files_are_ignored executes the target flow
+        Then the expected outcome for unrelated files are ignored is confirmed.
+
+    Boundaries:
+        - Focus: unrelated files are ignored
+        - Fixtures/params: cert_dir
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to unrelated files are ignored
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by integration helpers
+    """
     (cert_dir / "settings.json").write_text("{}")
     (cert_dir / "notes.txt").write_text("x")
     (cert_dir / "X509-cert-old.pem.bak").write_text("x")
@@ -71,6 +125,24 @@ def test_unrelated_files_are_ignored(cert_dir) -> None:
 
 
 def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> None:
+    """
+    [Local] integration helpers: verifies env var overrides the directory.
+
+    Scenario:
+        Given test inputs and fixtures for env var overrides the directory
+        When test_env_var_overrides_the_directory executes the target flow
+        Then the expected outcome for env var overrides the directory is confirmed.
+
+    Boundaries:
+        - Focus: env var overrides the directory
+        - Fixtures/params: cert_dir, tmp_path, monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to env var overrides the directory
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by integration helpers
+    """
     _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
     override = tmp_path / "elsewhere.pem"
     override.write_text("cert")
@@ -80,6 +152,24 @@ def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> Non
 
 
 def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch) -> None:
+    """
+    [Local] integration helpers: verifies nonexistent env var path falls back to directory.
+
+    Scenario:
+        Given test inputs and fixtures for nonexistent env var path falls back to directory
+        When test_nonexistent_env_var_path_falls_back_to_directory executes the target flow
+        Then the expected outcome for nonexistent env var path falls back to directory is confirmed.
+
+    Boundaries:
+        - Focus: nonexistent env var path falls back to directory
+        - Fixtures/params: cert_dir, monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to nonexistent env var path falls back to directory
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by integration helpers
+    """
     newest = _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
     monkeypatch.setenv("TLS_CERT_FILE", str(cert_dir / "does-not-exist.pem"))
 

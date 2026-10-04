@@ -10,7 +10,7 @@ at once:
    describes.
 
 Docstring contract (enforced by the codemod's title regex
-``^\\[(Unit|Mock|Integration|E2E)\\] .+: verifies .+\\.$``):
+``^\\[(Unit|Local|Integration|E2E)\\] .+: verifies .+\\.$``):
 
     [<Class>] <short name>: verifies <one sentence ending in a period>.
 
@@ -76,10 +76,10 @@ def test_discount_tier_below_threshold_is_none() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# [Mock] — unit-scoped, but a collaborator is patched. Signal: mock./monkeypatch.
+# [Local] — unit-scoped, but a collaborator is patched. Signal: mock./monkeypatch.
 # --------------------------------------------------------------------------- #
 def test_carrier_resolution_uses_lookup_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    """[Mock] carrier resolution: verifies resolve_carrier delegates to its lookup table.
+    """[Local] carrier resolution: verifies resolve_carrier delegates to its lookup table.
 
     Scenario: monkeypatch the module's _CARRIER_MAP to a controlled entry, then resolve a zone.
     Boundaries: Only the one function under test runs for real; the table it reads is a mock.

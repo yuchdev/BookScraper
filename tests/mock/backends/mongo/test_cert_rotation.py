@@ -49,6 +49,24 @@ def _response(*, json_body=None, content=b"", status=200, url="https://cloud.mon
 # get_access_token / issue_certificate
 # --------------------------------------------------------------------------- #
 def test_get_access_token_posts_client_credentials() -> None:
+    """
+    [Local] cert rotation: verifies get access token posts client credentials.
+
+    Scenario:
+        Given test inputs and fixtures for get access token posts client credentials
+        When test_get_access_token_posts_client_credentials executes the target flow
+        Then the expected outcome for get access token posts client credentials is confirmed.
+
+    Boundaries:
+        - Focus: get access token posts client credentials
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get access token posts client credentials
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with patch(f"{MODULE}.httpx.post", return_value=_response(json_body={"access_token": "tok"})) as post:
         assert cert_rotation.get_access_token("id", "secret") == "tok"
 
@@ -58,6 +76,24 @@ def test_get_access_token_posts_client_credentials() -> None:
 
 
 def test_get_access_token_propagates_http_errors() -> None:
+    """
+    [Local] cert rotation: verifies get access token propagates http errors.
+
+    Scenario:
+        Given test inputs and fixtures for get access token propagates http errors
+        When test_get_access_token_propagates_http_errors executes the target flow
+        Then the expected outcome for get access token propagates http errors is confirmed.
+
+    Boundaries:
+        - Focus: get access token propagates http errors
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to get access token propagates http errors
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with (
         patch(f"{MODULE}.httpx.post", return_value=_response(status=401, json_body={})),
         pytest.raises(httpx.HTTPStatusError),
@@ -66,6 +102,24 @@ def test_get_access_token_propagates_http_errors() -> None:
 
 
 def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
+    """
+    [Local] cert rotation: verifies issue certificate sends months in json body not query.
+
+    Scenario:
+        Given test inputs and fixtures for issue certificate sends months in json body not query
+        When test_issue_certificate_sends_months_in_json_body_not_query executes the target flow
+        Then the expected outcome for issue certificate sends months in json body not query is confirmed.
+
+    Boundaries:
+        - Focus: issue certificate sends months in json body not query
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to issue certificate sends months in json body not query
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with patch(f"{MODULE}.httpx.post", return_value=_response(content=b"PEM")) as post:
         cert = cert_rotation.issue_certificate("tok", "proj123", "svc-user", 9)
 
@@ -81,6 +135,24 @@ def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("missing", ["ATLAS_CLIENT_ID", "ATLAS_CLIENT_SECRET", "ATLAS_PROJECT_ID", "ATLAS_DB_USER"])
 def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, missing) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate requires each credential.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate requires each credential
+        When test_rotate_certificate_requires_each_credential executes the target flow
+        Then the expected outcome for rotate certificate requires each credential is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate requires each credential
+        - Fixtures/params: atlas_env, monkeypatch, missing (parametrized, 4 cases)
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate requires each credential
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.delenv(missing)
 
     with (
@@ -93,6 +165,24 @@ def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, mis
 
 
 def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate invalid months fails before any request.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate invalid months fails before any request
+        When test_rotate_certificate_invalid_months_fails_before_any_request executes the target flow
+        Then the expected outcome for rotate certificate invalid months fails before any request is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate invalid months fails before any request
+        - Fixtures/params: atlas_env
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate invalid months fails before any request
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with (
         patch(f"{MODULE}.httpx.post") as post,
         pytest.raises(cert_rotation.RotationError, match="1-24"),
@@ -103,6 +193,24 @@ def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -
 
 
 def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_env, isolated_config) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate happy path writes cert and updates settings.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate happy path writes cert and updates settings
+        When test_rotate_certificate_happy_path_writes_cert_and_updates_settings executes the target flow
+        Then the expected outcome for rotate certificate happy path writes cert and updates settings is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate happy path writes cert and updates settings
+        - Fixtures/params: atlas_env, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate happy path writes cert and updates settings
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     (isolated_config / "settings.json").write_text(
         json.dumps(
             {
@@ -130,6 +238,24 @@ def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_en
 
 
 def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, tmp_path, isolated_config) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate explicit arguments beat env.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate explicit arguments beat env
+        When test_rotate_certificate_explicit_arguments_beat_env executes the target flow
+        Then the expected outcome for rotate certificate explicit arguments beat env is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate explicit arguments beat env
+        - Fixtures/params: atlas_env, monkeypatch, tmp_path, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate explicit arguments beat env
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     monkeypatch.setenv("ATLAS_CERT_FILE", str(tmp_path / "from-env.pem"))
     explicit = tmp_path / "explicit.pem"
@@ -147,6 +273,24 @@ def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, 
 def test_rotate_certificate_env_overrides_apply_when_no_arguments(
     atlas_env, monkeypatch, tmp_path, isolated_config
 ) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate env overrides apply when no arguments.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate env overrides apply when no arguments
+        When test_rotate_certificate_env_overrides_apply_when_no_arguments executes the target flow
+        Then the expected outcome for rotate certificate env overrides apply when no arguments is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate env overrides apply when no arguments
+        - Fixtures/params: atlas_env, monkeypatch, tmp_path, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate env overrides apply when no arguments
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     monkeypatch.setenv("ATLAS_CERT_FILE", str(tmp_path / "from-env.pem"))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"PEM")]
@@ -161,6 +305,24 @@ def test_rotate_certificate_env_overrides_apply_when_no_arguments(
 def test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body(
     atlas_env, isolated_config
 ) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate http status error becomes rotation error without leaking body.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate http status error becomes rotation error without leaking body
+        When test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body executes the target flow
+        Then the expected outcome for rotate certificate http status error becomes rotation error without leaking body is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate http status error becomes rotation error without leaking body
+        - Fixtures/params: atlas_env, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate http status error becomes rotation error without leaking body
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     denied = _response(status=403, json_body={"detail": "client-secret was rejected"})
 
     with (
@@ -175,6 +337,24 @@ def test_rotate_certificate_http_status_error_becomes_rotation_error_without_lea
 
 
 def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isolated_config) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate network error becomes rotation error.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate network error becomes rotation error
+        When test_rotate_certificate_network_error_becomes_rotation_error executes the target flow
+        Then the expected outcome for rotate certificate network error becomes rotation error is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate network error becomes rotation error
+        - Fixtures/params: atlas_env, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate network error becomes rotation error
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     with (
         patch(f"{MODULE}.httpx.post", side_effect=httpx.ConnectError("no route")),
         pytest.raises(cert_rotation.RotationError, match="ConnectError"),
@@ -183,6 +363,24 @@ def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isol
 
 
 def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, isolated_config) -> None:
+    """
+    [Local] cert rotation: verifies rotate certificate does not touch settings when atlas fails.
+
+    Scenario:
+        Given test inputs and fixtures for rotate certificate does not touch settings when atlas fails
+        When test_rotate_certificate_does_not_touch_settings_when_atlas_fails executes the target flow
+        Then the expected outcome for rotate certificate does not touch settings when atlas fails is confirmed.
+
+    Boundaries:
+        - Focus: rotate certificate does not touch settings when atlas fails
+        - Fixtures/params: atlas_env, isolated_config
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to rotate certificate does not touch settings when atlas fails
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by cert rotation
+    """
     settings = {
         "auth_type": "x509",
         "x509": {

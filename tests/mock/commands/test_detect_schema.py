@@ -38,6 +38,24 @@ def _args(**overrides) -> SimpleNamespace:
 
 
 async def test_run_prints_report_and_usage_line(capsys) -> None:
+    """
+    [Local] detect schema: verifies run prints report and usage line.
+
+    Scenario:
+        Given test inputs and fixtures for run prints report and usage line
+        When test_run_prints_report_and_usage_line executes the target flow
+        Then the expected outcome for run prints report and usage line is confirmed.
+
+    Boundaries:
+        - Focus: run prints report and usage line
+        - Fixtures/params: capsys
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run prints report and usage line
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by detect schema
+    """
     args = _args(model="claude-sonnet-5", max_input_tokens=12345)
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
@@ -131,6 +149,24 @@ async def test_run_threads_offline_html_file_replay_record(capsys) -> None:
 
 
 async def test_run_exits_one_on_detection_error() -> None:
+    """
+    [Local] detect schema: verifies run exits one on detection error.
+
+    Scenario:
+        Given test inputs and fixtures for run exits one on detection error
+        When test_run_exits_one_on_detection_error executes the target flow
+        Then the expected outcome for run exits one on detection error is confirmed.
+
+    Boundaries:
+        - Focus: run exits one on detection error
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run exits one on detection error
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by detect schema
+    """
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
         patch.object(detect_schema, "detect_schema", new=AsyncMock(side_effect=SchemaDetectionError("boom"))),
@@ -141,6 +177,24 @@ async def test_run_exits_one_on_detection_error() -> None:
 
 
 async def test_run_writes_report_to_output_file(tmp_path) -> None:
+    """
+    [Local] detect schema: verifies run writes report to output file.
+
+    Scenario:
+        Given test inputs and fixtures for run writes report to output file
+        When test_run_writes_report_to_output_file executes the target flow
+        Then the expected outcome for run writes report to output file is confirmed.
+
+    Boundaries:
+        - Focus: run writes report to output file
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run writes report to output file
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by detect schema
+    """
     out_path = tmp_path / "report.txt"
     args = _args(site="leanpub", output=str(out_path))
     with (
@@ -153,6 +207,24 @@ async def test_run_writes_report_to_output_file(tmp_path) -> None:
 
 
 async def test_run_exits_one_when_output_write_fails(tmp_path) -> None:
+    """
+    [Local] detect schema: verifies run exits one when output write fails.
+
+    Scenario:
+        Given test inputs and fixtures for run exits one when output write fails
+        When test_run_exits_one_when_output_write_fails executes the target flow
+        Then the expected outcome for run exits one when output write fails is confirmed.
+
+    Boundaries:
+        - Focus: run exits one when output write fails
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run exits one when output write fails
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by detect schema
+    """
     args = _args(site="leanpub", output=str(tmp_path / "report.txt"))
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),

@@ -69,6 +69,24 @@ class TestSaveSummary:
 
 class TestMongoBackend:
     def test_save_books_delegates_to_database(self) -> None:
+        """
+        [Local] mongo backend: verifies save books delegates to database.
+
+        Scenario:
+            Given test inputs and fixtures for save books delegates to database
+            When test_save_books_delegates_to_database executes the target flow
+            Then the expected outcome for save books delegates to database is confirmed.
+
+        Boundaries:
+            - Focus: save books delegates to database
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to save books delegates to database
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by mongo backend
+        """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
         books = [{"title": "A"}, {"title": "B"}]
@@ -83,6 +101,24 @@ class TestMongoBackend:
         assert result is expected
 
     def test_book_exists_by_hash_returns_delegated_value(self) -> None:
+        """
+        [Local] mongo backend: verifies book exists by hash returns delegated value.
+
+        Scenario:
+            Given test inputs and fixtures for book exists by hash returns delegated value
+            When test_book_exists_by_hash_returns_delegated_value executes the target flow
+            Then the expected outcome for book exists by hash returns delegated value is confirmed.
+
+        Boundaries:
+            - Focus: book exists by hash returns delegated value
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to book exists by hash returns delegated value
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by mongo backend
+        """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
 
@@ -94,6 +130,24 @@ class TestMongoBackend:
         assert result is True
 
     def test_book_exists_by_asin_returns_delegated_value(self) -> None:
+        """
+        [Local] mongo backend: verifies book exists by asin returns delegated value.
+
+        Scenario:
+            Given test inputs and fixtures for book exists by asin returns delegated value
+            When test_book_exists_by_asin_returns_delegated_value executes the target flow
+            Then the expected outcome for book exists by asin returns delegated value is confirmed.
+
+        Boundaries:
+            - Focus: book exists by asin returns delegated value
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to book exists by asin returns delegated value
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by mongo backend
+        """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
 
@@ -105,6 +159,24 @@ class TestMongoBackend:
         assert result is False
 
     def test_leanpub_book_exists_delegates_to_deduplicate(self) -> None:
+        """
+        [Local] mongo backend: verifies leanpub book exists delegates to deduplicate.
+
+        Scenario:
+            Given test inputs and fixtures for leanpub book exists delegates to deduplicate
+            When test_leanpub_book_exists_delegates_to_deduplicate executes the target flow
+            Then the expected outcome for leanpub book exists delegates to deduplicate is confirmed.
+
+        Boundaries:
+            - Focus: leanpub book exists delegates to deduplicate
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to leanpub book exists delegates to deduplicate
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by mongo backend
+        """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
 
@@ -116,6 +188,24 @@ class TestMongoBackend:
         assert result is True
 
     def test_close_delegates_to_database(self) -> None:
+        """
+        [Local] mongo backend: verifies close delegates to database.
+
+        Scenario:
+            Given test inputs and fixtures for close delegates to database
+            When test_close_delegates_to_database executes the target flow
+            Then the expected outcome for close delegates to database is confirmed.
+
+        Boundaries:
+            - Focus: close delegates to database
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to close delegates to database
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by mongo backend
+        """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
 
@@ -127,6 +217,24 @@ class TestMongoBackend:
 
 class TestJsonBackend:
     def test_save_books_delegates_to_store(self) -> None:
+        """
+        [Local] json backend: verifies save books delegates to store.
+
+        Scenario:
+            Given test inputs and fixtures for save books delegates to store
+            When test_save_books_delegates_to_store executes the target flow
+            Then the expected outcome for save books delegates to store is confirmed.
+
+        Boundaries:
+            - Focus: save books delegates to store
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to save books delegates to store
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by json backend
+        """
         backend = JsonBackend()
         books = [{"title": "A"}]
         expected = SaveSummary(inserted=1, duplicates=0, errors=0)
@@ -238,6 +346,24 @@ def test_mongo_and_json_backends_return_save_summary() -> None:
 
 class TestResolveStoreBackend:
     def test_mongo_with_live_collection_returns_mongo_backend(self) -> None:
+        """
+        [Local] resolve store backend: verifies mongo with live collection returns mongo backend.
+
+        Scenario:
+            Given test inputs and fixtures for mongo with live collection returns mongo backend
+            When test_mongo_with_live_collection_returns_mongo_backend executes the target flow
+            Then the expected outcome for mongo with live collection returns mongo backend is confirmed.
+
+        Boundaries:
+            - Focus: mongo with live collection returns mongo backend
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to mongo with live collection returns mongo backend
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve store backend
+        """
         fake_collection = Mock(name="collection")
 
         with (
@@ -252,6 +378,24 @@ class TestResolveStoreBackend:
         mock_db.get_mongo_collection.assert_called_once_with()
 
     def test_mongo_with_no_collection_exits(self) -> None:
+        """
+        [Local] resolve store backend: verifies mongo with no collection exits.
+
+        Scenario:
+            Given test inputs and fixtures for mongo with no collection exits
+            When test_mongo_with_no_collection_exits executes the target flow
+            Then the expected outcome for mongo with no collection exits is confirmed.
+
+        Boundaries:
+            - Focus: mongo with no collection exits
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to mongo with no collection exits
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve store backend
+        """
         with (
             patch.object(storage, "_warn_if_cert_expiring"),
             patch.object(storage, "database") as mock_db,
@@ -263,6 +407,24 @@ class TestResolveStoreBackend:
         assert exc_info.value.code == 1
 
     def test_json_with_write_permission_returns_json_backend(self, isolated_local_store) -> None:
+        """
+        [Local] resolve store backend: verifies json with write permission returns json backend.
+
+        Scenario:
+            Given test inputs and fixtures for json with write permission returns json backend
+            When test_json_with_write_permission_returns_json_backend executes the target flow
+            Then the expected outcome for json with write permission returns json backend is confirmed.
+
+        Boundaries:
+            - Focus: json with write permission returns json backend
+            - Fixtures/params: isolated_local_store
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to json with write permission returns json backend
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve store backend
+        """
         with patch.object(storage, "check_local_write_permission", return_value=True) as mock_check:
             backend = resolve_store_backend("json")
 
@@ -286,6 +448,24 @@ class TestResolveStoreBackend:
         assert exc_info.value.code == 1
 
     def test_json_without_write_permission_exits(self) -> None:
+        """
+        [Local] resolve store backend: verifies json without write permission exits.
+
+        Scenario:
+            Given test inputs and fixtures for json without write permission exits
+            When test_json_without_write_permission_exits executes the target flow
+            Then the expected outcome for json without write permission exits is confirmed.
+
+        Boundaries:
+            - Focus: json without write permission exits
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to json without write permission exits
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve store backend
+        """
         with patch.object(storage, "check_local_write_permission", return_value=False):
             with pytest.raises(SystemExit) as exc_info:
                 resolve_store_backend("json")
@@ -293,6 +473,24 @@ class TestResolveStoreBackend:
         assert exc_info.value.code == 1
 
     def test_unknown_backend_exits_without_running_checks(self) -> None:
+        """
+        [Local] resolve store backend: verifies unknown backend exits without running checks.
+
+        Scenario:
+            Given test inputs and fixtures for unknown backend exits without running checks
+            When test_unknown_backend_exits_without_running_checks executes the target flow
+            Then the expected outcome for unknown backend exits without running checks is confirmed.
+
+        Boundaries:
+            - Focus: unknown backend exits without running checks
+            - Fixtures/params: none
+            - Scope: assertions and setup in this test case only
+
+        On failure, first check:
+            - Assertion details tied to unknown backend exits without running checks
+            - Fixture or parameter values used by this test
+            - Recent changes in code paths exercised by resolve store backend
+        """
         with (
             patch.object(storage, "database") as mock_db,
             patch.object(storage, "check_local_write_permission") as mock_check,

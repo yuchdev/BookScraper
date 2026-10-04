@@ -79,6 +79,24 @@ def _args(
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_run_success_passes_args_through_and_reports_notes(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies run success passes args through and reports notes.
+
+    Scenario:
+        Given test inputs and fixtures for run success passes args through and reports notes
+        When test_run_success_passes_args_through_and_reports_notes executes the target flow
+        Then the expected outcome for run success passes args through and reports notes is confirmed.
+
+    Boundaries:
+        - Focus: run success passes args through and reports notes
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run success passes args through and reports notes
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "X509-cert-new.pem", datetime(2027, 6, 1, tzinfo=UTC))
 
     with (
@@ -101,6 +119,24 @@ async def test_run_success_passes_args_through_and_reports_notes(tmp_path) -> No
 async def test_run_reports_when_new_cert_expiry_unreadable(tmp_path) -> None:
     # rotate_certificate reports a path that isn't a real cert; reading its expiry fails,
     # which is reported as a warning rather than crashing the (already-succeeded) rotation.
+    """
+    [Local] rotate cert: verifies run reports when new cert expiry unreadable.
+
+    Scenario:
+        Given test inputs and fixtures for run reports when new cert expiry unreadable
+        When test_run_reports_when_new_cert_expiry_unreadable executes the target flow
+        Then the expected outcome for run reports when new cert expiry unreadable is confirmed.
+
+    Boundaries:
+        - Focus: run reports when new cert expiry unreadable
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run reports when new cert expiry unreadable
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     missing = tmp_path / "not-a-cert.pem"
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -115,6 +151,24 @@ async def test_run_reports_when_new_cert_expiry_unreadable(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_without_output_flag_passes_none(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies run without output flag passes none.
+
+    Scenario:
+        Given test inputs and fixtures for run without output flag passes none
+        When test_run_without_output_flag_passes_none executes the target flow
+        Then the expected outcome for run without output flag passes none is confirmed.
+
+    Boundaries:
+        - Focus: run without output flag passes none
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run without output flag passes none
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "c.pem", datetime(2027, 6, 1, tzinfo=UTC))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -128,6 +182,24 @@ async def test_run_without_output_flag_passes_none(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_expands_user_in_output_flag(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies run expands user in output flag.
+
+    Scenario:
+        Given test inputs and fixtures for run expands user in output flag
+        When test_run_expands_user_in_output_flag executes the target flow
+        Then the expected outcome for run expands user in output flag is confirmed.
+
+    Boundaries:
+        - Focus: run expands user in output flag
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run expands user in output flag
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "c.pem", datetime(2027, 6, 1, tzinfo=UTC))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -159,6 +231,24 @@ async def test_no_prune_flag_disables_pruning(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_settings_warning_is_logged_as_warning(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies run settings warning is logged as warning.
+
+    Scenario:
+        Given test inputs and fixtures for run settings warning is logged as warning
+        When test_run_settings_warning_is_logged_as_warning executes the target flow
+        Then the expected outcome for run settings warning is logged as warning is confirmed.
+
+    Boundaries:
+        - Focus: run settings warning is logged as warning
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run settings warning is logged as warning
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "c.pem", datetime(2027, 6, 1, tzinfo=UTC))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -175,6 +265,24 @@ async def test_run_settings_warning_is_logged_as_warning(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_rotation_error_logs_and_exits_nonzero() -> None:
+    """
+    [Local] rotate cert: verifies run rotation error logs and exits nonzero.
+
+    Scenario:
+        Given test inputs and fixtures for run rotation error logs and exits nonzero
+        When test_run_rotation_error_logs_and_exits_nonzero executes the target flow
+        Then the expected outcome for run rotation error logs and exits nonzero is confirmed.
+
+    Boundaries:
+        - Focus: run rotation error logs and exits nonzero
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to run rotation error logs and exits nonzero
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     with (
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.cert_rotation.rotate_certificate", side_effect=RotationError("ATLAS_PROJECT_ID not set")),
@@ -344,6 +452,24 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies check mode exit zero when far from expiry.
+
+    Scenario:
+        Given test inputs and fixtures for check mode exit zero when far from expiry
+        When test_check_mode_exit_zero_when_far_from_expiry executes the target flow
+        Then the expected outcome for check mode exit zero when far from expiry is confirmed.
+
+    Boundaries:
+        - Focus: check mode exit zero when far from expiry
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode exit zero when far from expiry
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=180))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -363,6 +489,24 @@ async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_check_mode_exit_three_within_warn_window(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies check mode exit three within warn window.
+
+    Scenario:
+        Given test inputs and fixtures for check mode exit three within warn window
+        When test_check_mode_exit_three_within_warn_window executes the target flow
+        Then the expected outcome for check mode exit three within warn window is confirmed.
+
+    Boundaries:
+        - Focus: check mode exit three within warn window
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode exit three within warn window
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=10))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -377,6 +521,24 @@ async def test_check_mode_exit_three_within_warn_window(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_check_mode_exit_one_when_expired(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies check mode exit one when expired.
+
+    Scenario:
+        Given test inputs and fixtures for check mode exit one when expired
+        When test_check_mode_exit_one_when_expired executes the target flow
+        Then the expected outcome for check mode exit one when expired is confirmed.
+
+    Boundaries:
+        - Focus: check mode exit one when expired
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode exit one when expired
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) - timedelta(days=3))
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -392,6 +554,24 @@ async def test_check_mode_exit_one_when_expired(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_check_mode_exit_one_when_unreadable(tmp_path) -> None:
+    """
+    [Local] rotate cert: verifies check mode exit one when unreadable.
+
+    Scenario:
+        Given test inputs and fixtures for check mode exit one when unreadable
+        When test_check_mode_exit_one_when_unreadable executes the target flow
+        Then the expected outcome for check mode exit one when unreadable is confirmed.
+
+    Boundaries:
+        - Focus: check mode exit one when unreadable
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode exit one when unreadable
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     missing = tmp_path / "gone.pem"
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -407,6 +587,24 @@ async def test_check_mode_exit_one_when_unreadable(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_check_mode_without_x509_config_is_noop_zero() -> None:
+    """
+    [Local] rotate cert: verifies check mode without x509 config is noop zero.
+
+    Scenario:
+        Given test inputs and fixtures for check mode without x509 config is noop zero
+        When test_check_mode_without_x509_config_is_noop_zero executes the target flow
+        Then the expected outcome for check mode without x509 config is noop zero is confirmed.
+
+    Boundaries:
+        - Focus: check mode without x509 config is noop zero
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode without x509 config is noop zero
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     with (
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", None)),
@@ -421,6 +619,24 @@ async def test_check_mode_without_x509_config_is_noop_zero() -> None:
 
 @pytest.mark.asyncio
 async def test_check_mode_config_error_exits_one() -> None:
+    """
+    [Local] rotate cert: verifies check mode config error exits one.
+
+    Scenario:
+        Given test inputs and fixtures for check mode config error exits one
+        When test_check_mode_config_error_exits_one executes the target flow
+        Then the expected outcome for check mode config error exits one is confirmed.
+
+    Boundaries:
+        - Focus: check mode config error exits one
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to check mode config error exits one
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by rotate cert
+    """
     from bookscraper.backends.mongo.config import ConfigError
 
     with (

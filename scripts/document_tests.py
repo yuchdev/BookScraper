@@ -1,7 +1,7 @@
 """Insert standardized documentation docstrings into pytest test functions.
 
 For every ``test_*`` function/method under a target directory, generates a
-docstring that classifies the test as one of ``Unit``, ``Mock``,
+docstring that classifies the test as one of ``Unit``, ``Local``,
 ``Integration``, or ``E2E`` and fills a fixed narrative template (Scenario /
 Boundaries / On-failure-first-check) derived mechanically from the test's
 name, enclosing class, parameters, and body - no test logic is read for
@@ -15,13 +15,15 @@ Classification heuristic (path-first, body-refined):
     - body uses ``CliRunner``/``TestClient``/``playwright`` -> ``E2E``
     - else -> ``Integration``
 - else path under ``.../unit/`` (or unrecognised dir):
-    - body uses ``mock.patch``/``MagicMock``/``Mock(``/``monkeypatch``/``mocker.`` -> ``Mock``
+    - body uses ``mock.patch``/``MagicMock``/``Mock(``/``monkeypatch``/``mocker.`` -> ``Local``
+(the label flakeforge's X005 accepts for this project's ``tests/mock/`` tier; older
+generated ``[Mock]`` docstrings are still recognised and re-generated as ``[Local]``)
     - else -> ``Unit``
     - tests in an unrecognised directory are additionally flagged ``ambiguous``
       for human/agent review, since no directory convention backs the guess.
 
 A generated docstring is recognisable by its first content line matching
-``r"^\\[(Unit|Mock|Integration|E2E)\\] .+: verifies .+\\.$"``. Re-running this
+``r"^\\[(Unit|Local|Mock|Integration|E2E)\\] .+: verifies .+\\.$"``. Re-running this
 script re-generates (and overwrites) only docstrings matching that pattern,
 so it is safe to run repeatedly as tests change. A pre-existing hand-written
 docstring that does NOT match the pattern is left alone and reported as
@@ -62,9 +64,9 @@ DEFAULT_TARGET = "tests"
 
 EXCLUDED_FILENAMES = {"__init__.py", "conftest.py"}
 
-CLASSIFICATIONS = ("Unit", "Mock", "Integration", "E2E")
+CLASSIFICATIONS = ("Unit", "Local", "Integration", "E2E")
 
-_GENERATED_TITLE_RE = re.compile(r"^\[(Unit|Mock|Integration|E2E)\] .+: verifies .+\.$")
+_GENERATED_TITLE_RE = re.compile(r"^\[(Unit|Local|Mock|Integration|E2E)\] .+: verifies .+\.$")
 
 _E2E_BODY_MARKERS = ("clirunner", "testclient(", "playwright", "async_playwright")
 _MOCK_BODY_MARKERS = ("mock.patch", "@patch", "magicmock", "mock(", "monkeypatch", "mocker.")
@@ -150,16 +152,21 @@ def _classify(file_path: Path, body_text: str) -> tuple[str, bool]:
             return "E2E", False
         return "Integration", False
 
+    if "mock" in rel_parts:
+        # This project's tests/mock/ tier: every external dependency is replaced by a local
+        # double (including the offline real-Chromium corpus harness), so the tier is the label.
+        return "Local", False
+
     if "unit" in rel_parts:
         if any(marker in body_text for marker in _MOCK_BODY_MARKERS):
-            return "Mock", False
+            return "Local", False
         return "Unit", False
 
     # Unrecognised directory layout: best-effort cascade, flagged for review.
     if any(marker in body_text for marker in _E2E_BODY_MARKERS):
         return "E2E", True
     if any(marker in body_text for marker in _MOCK_BODY_MARKERS):
-        return "Mock", True
+        return "Local", True
     return "Unit", True
 
 

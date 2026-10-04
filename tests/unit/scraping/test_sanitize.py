@@ -286,7 +286,7 @@ def test_assert_clean_r3_catches_whitespace_split_token() -> None:
     On failure: an invisible-separator split smuggles a token past the backstop.
     """
     jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4"
-    for sep in (" ", " ", "​"):
+    for sep in (" ", "\u2028", "\u200b"):
         with pytest.raises(SanitizationError):
             assert_clean(f"<div>{jwt[:40]}{sep}{jwt[40:]}</div>")
 

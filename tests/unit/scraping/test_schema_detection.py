@@ -45,6 +45,24 @@ from bookscraper.scraping.schema_detection import (
 # detail_selector_fields
 # --------------------------------------------------------------------------- #
 def test_detail_selector_fields_excludes_search_url_api_and_sentinels() -> None:
+    """
+    [Unit] schema detection: verifies detail selector fields excludes search url api and sentinels.
+
+    Scenario:
+        Given test inputs and fixtures for detail selector fields excludes search url api and sentinels
+        When test_detail_selector_fields_excludes_search_url_api_and_sentinels executes the target flow
+        Then the expected outcome for detail selector fields excludes search url api and sentinels is confirmed.
+
+    Boundaries:
+        - Focus: detail selector fields excludes search url api and sentinels
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detail selector fields excludes search url api and sentinels
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     entry = {
         "BASE_URL": "https://x",
         "SEARCH_BASE_URL": "https://x/s",
@@ -62,6 +80,24 @@ def test_detail_selector_fields_excludes_search_url_api_and_sentinels() -> None:
 
 
 def test_detail_selector_fields_on_real_leanpub_entry() -> None:
+    """
+    [Unit] schema detection: verifies detail selector fields on real leanpub entry.
+
+    Scenario:
+        Given test inputs and fixtures for detail selector fields on real leanpub entry
+        When test_detail_selector_fields_on_real_leanpub_entry executes the target flow
+        Then the expected outcome for detail selector fields on real leanpub entry is confirmed.
+
+    Boundaries:
+        - Focus: detail selector fields on real leanpub entry
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detail selector fields on real leanpub entry
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     fields = detail_selector_fields(parameters.site_constants["leanpub"])
     assert "BOOK_TITLE" in fields
     assert "DESCRIPTION" in fields
@@ -138,6 +174,24 @@ def test_search_prompt_explains_card_relative_semantics() -> None:
 # prune_html
 # --------------------------------------------------------------------------- #
 def test_prune_html_removes_script_style_svg_and_comments() -> None:
+    """
+    [Unit] schema detection: verifies prune html removes script style svg and comments.
+
+    Scenario:
+        Given test inputs and fixtures for prune html removes script style svg and comments
+        When test_prune_html_removes_script_style_svg_and_comments executes the target flow
+        Then the expected outcome for prune html removes script style svg and comments is confirmed.
+
+    Boundaries:
+        - Focus: prune html removes script style svg and comments
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to prune html removes script style svg and comments
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     html = (
         "<html><head><style>.x{color:red}</style>"
         "<script>var a = 1;</script></head>"
@@ -154,18 +208,72 @@ def test_prune_html_removes_script_style_svg_and_comments() -> None:
 
 
 def test_prune_html_collapses_whitespace() -> None:
+    """
+    [Unit] schema detection: verifies prune html collapses whitespace.
+
+    Scenario:
+        Given test inputs and fixtures for prune html collapses whitespace
+        When test_prune_html_collapses_whitespace executes the target flow
+        Then the expected outcome for prune html collapses whitespace is confirmed.
+
+    Boundaries:
+        - Focus: prune html collapses whitespace
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to prune html collapses whitespace
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     pruned = prune_html("<p>a</p>\n\n   \t<p>b</p>")
     assert "  " not in pruned
     assert "\n" not in pruned
 
 
 def test_prune_html_truncates_to_budget() -> None:
+    """
+    [Unit] schema detection: verifies prune html truncates to budget.
+
+    Scenario:
+        Given test inputs and fixtures for prune html truncates to budget
+        When test_prune_html_truncates_to_budget executes the target flow
+        Then the expected outcome for prune html truncates to budget is confirmed.
+
+    Boundaries:
+        - Focus: prune html truncates to budget
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to prune html truncates to budget
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     html = "<p>" + ("x" * 1000) + "</p>"
     pruned = prune_html(html, max_chars=50)
     assert len(pruned) == 50
 
 
 def test_prune_html_empty_input() -> None:
+    """
+    [Unit] schema detection: verifies prune html empty input.
+
+    Scenario:
+        Given test inputs and fixtures for prune html empty input
+        When test_prune_html_empty_input executes the target flow
+        Then the expected outcome for prune html empty input is confirmed.
+
+    Boundaries:
+        - Focus: prune html empty input
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to prune html empty input
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     assert prune_html("") == ""
 
 
@@ -173,14 +281,68 @@ def test_prune_html_empty_input() -> None:
 # _strip_code_fences
 # --------------------------------------------------------------------------- #
 def test_strip_code_fences_json_fence() -> None:
+    """
+    [Unit] schema detection: verifies strip code fences json fence.
+
+    Scenario:
+        Given test inputs and fixtures for strip code fences json fence
+        When test_strip_code_fences_json_fence executes the target flow
+        Then the expected outcome for strip code fences json fence is confirmed.
+
+    Boundaries:
+        - Focus: strip code fences json fence
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to strip code fences json fence
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     assert _strip_code_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
 
 
 def test_strip_code_fences_bare_fence() -> None:
+    """
+    [Unit] schema detection: verifies strip code fences bare fence.
+
+    Scenario:
+        Given test inputs and fixtures for strip code fences bare fence
+        When test_strip_code_fences_bare_fence executes the target flow
+        Then the expected outcome for strip code fences bare fence is confirmed.
+
+    Boundaries:
+        - Focus: strip code fences bare fence
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to strip code fences bare fence
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     assert _strip_code_fences('```\n{"a": 1}\n```') == '{"a": 1}'
 
 
 def test_strip_code_fences_no_fence_passthrough() -> None:
+    """
+    [Unit] schema detection: verifies strip code fences no fence passthrough.
+
+    Scenario:
+        Given test inputs and fixtures for strip code fences no fence passthrough
+        When test_strip_code_fences_no_fence_passthrough executes the target flow
+        Then the expected outcome for strip code fences no fence passthrough is confirmed.
+
+    Boundaries:
+        - Focus: strip code fences no fence passthrough
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to strip code fences no fence passthrough
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     assert _strip_code_fences('  {"a": 1}  ') == '{"a": 1}'
 
 
@@ -191,6 +353,24 @@ FIELDS = ["BOOK_TITLE", "AUTHORS", "ISBN10"]
 
 
 def test_validate_ai_response_happy_path() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response happy path.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response happy path
+        When test_validate_ai_response_happy_path executes the target flow
+        Then the expected outcome for validate ai response happy path is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response happy path
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response happy path
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     raw = (
         '{"BOOK_TITLE": {"selector": "#t", "rationale": "stable id"}, '
         '"AUTHORS": {"selector": ".a", "rationale": "author link"}}'
@@ -201,12 +381,48 @@ def test_validate_ai_response_happy_path() -> None:
 
 
 def test_validate_ai_response_accepts_null_selector() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response accepts null selector.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response accepts null selector
+        When test_validate_ai_response_accepts_null_selector executes the target flow
+        Then the expected outcome for validate ai response accepts null selector is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response accepts null selector
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response accepts null selector
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     raw = '{"ISBN10": {"selector": null, "rationale": "not present on this page"}}'
     proposals = validate_ai_response(raw, FIELDS)
     assert proposals["ISBN10"]["selector"] is None
 
 
 def test_validate_ai_response_strips_fence() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response strips fence.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response strips fence
+        When test_validate_ai_response_strips_fence executes the target flow
+        Then the expected outcome for validate ai response strips fence is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response strips fence
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response strips fence
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     raw = '```json\n{"BOOK_TITLE": {"selector": "#t"}}\n```'
     proposals = validate_ai_response(raw, FIELDS)
     assert proposals["BOOK_TITLE"]["selector"] == "#t"
@@ -214,6 +430,24 @@ def test_validate_ai_response_strips_fence() -> None:
 
 
 def test_validate_ai_response_ignores_unknown_keys() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response ignores unknown keys.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response ignores unknown keys
+        When test_validate_ai_response_ignores_unknown_keys executes the target flow
+        Then the expected outcome for validate ai response ignores unknown keys is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response ignores unknown keys
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response ignores unknown keys
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     raw = '{"BOOK_TITLE": {"selector": "#t"}, "BOGUS": {"selector": ".x"}}'
     proposals = validate_ai_response(raw, FIELDS)
     assert "BOGUS" not in proposals
@@ -221,26 +455,116 @@ def test_validate_ai_response_ignores_unknown_keys() -> None:
 
 
 def test_validate_ai_response_rejects_non_json() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response rejects non json.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response rejects non json
+        When test_validate_ai_response_rejects_non_json executes the target flow
+        Then the expected outcome for validate ai response rejects non json is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response rejects non json
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response rejects non json
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(SchemaDetectionError, match="not valid JSON"):
         validate_ai_response("this is not json", FIELDS)
 
 
 def test_validate_ai_response_rejects_non_object_top_level() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response rejects non object top level.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response rejects non object top level
+        When test_validate_ai_response_rejects_non_object_top_level executes the target flow
+        Then the expected outcome for validate ai response rejects non object top level is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response rejects non object top level
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response rejects non object top level
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(SchemaDetectionError, match="must be an object"):
         validate_ai_response('["BOOK_TITLE", "#t"]', FIELDS)
 
 
 def test_validate_ai_response_rejects_proposal_without_selector_key() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response rejects proposal without selector key.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response rejects proposal without selector key
+        When test_validate_ai_response_rejects_proposal_without_selector_key executes the target flow
+        Then the expected outcome for validate ai response rejects proposal without selector key is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response rejects proposal without selector key
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response rejects proposal without selector key
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(SchemaDetectionError, match="must be an object with a 'selector'"):
         validate_ai_response('{"BOOK_TITLE": {"rationale": "oops"}}', FIELDS)
 
 
 def test_validate_ai_response_rejects_non_string_selector() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response rejects non string selector.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response rejects non string selector
+        When test_validate_ai_response_rejects_non_string_selector executes the target flow
+        Then the expected outcome for validate ai response rejects non string selector is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response rejects non string selector
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response rejects non string selector
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(SchemaDetectionError, match="non-string, non-null"):
         validate_ai_response('{"BOOK_TITLE": {"selector": 42}}', FIELDS)
 
 
 def test_validate_ai_response_rejects_empty_proposal_set() -> None:
+    """
+    [Unit] schema detection: verifies validate ai response rejects empty proposal set.
+
+    Scenario:
+        Given test inputs and fixtures for validate ai response rejects empty proposal set
+        When test_validate_ai_response_rejects_empty_proposal_set executes the target flow
+        Then the expected outcome for validate ai response rejects empty proposal set is confirmed.
+
+    Boundaries:
+        - Focus: validate ai response rejects empty proposal set
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate ai response rejects empty proposal set
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(SchemaDetectionError, match="no usable proposals"):
         validate_ai_response('{"UNKNOWN_KEY": {"selector": "#t"}}', FIELDS)
 
@@ -249,6 +573,24 @@ def test_validate_ai_response_rejects_empty_proposal_set() -> None:
 # build_prompt
 # --------------------------------------------------------------------------- #
 def test_build_prompt_includes_site_fields_and_html() -> None:
+    """
+    [Unit] schema detection: verifies build prompt includes site fields and html.
+
+    Scenario:
+        Given test inputs and fixtures for build prompt includes site fields and html
+        When test_build_prompt_includes_site_fields_and_html executes the target flow
+        Then the expected outcome for build prompt includes site fields and html is confirmed.
+
+    Boundaries:
+        - Focus: build prompt includes site fields and html
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to build prompt includes site fields and html
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     prompt = build_prompt("amazon", ["BOOK_TITLE", "AUTHORS"], "<h1>Snapshot</h1>")
     assert "amazon" in prompt
     assert "BOOK_TITLE" in prompt
@@ -270,6 +612,24 @@ def _validation(consistent: bool, matched_flags: list[bool]) -> dict:
 
 
 def test_format_diff_report_marks_changed_field() -> None:
+    """
+    [Unit] schema detection: verifies format diff report marks changed field.
+
+    Scenario:
+        Given test inputs and fixtures for format diff report marks changed field
+        When test_format_diff_report_marks_changed_field executes the target flow
+        Then the expected outcome for format diff report marks changed field is confirmed.
+
+    Boundaries:
+        - Focus: format diff report marks changed field
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format diff report marks changed field
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     report = format_diff_report(
         site="amazon",
         urls=["https://x/0"],
@@ -285,6 +645,24 @@ def test_format_diff_report_marks_changed_field() -> None:
 
 
 def test_format_diff_report_marks_unchanged_field() -> None:
+    """
+    [Unit] schema detection: verifies format diff report marks unchanged field.
+
+    Scenario:
+        Given test inputs and fixtures for format diff report marks unchanged field
+        When test_format_diff_report_marks_unchanged_field executes the target flow
+        Then the expected outcome for format diff report marks unchanged field is confirmed.
+
+    Boundaries:
+        - Focus: format diff report marks unchanged field
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format diff report marks unchanged field
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     report = format_diff_report(
         site="amazon",
         urls=["https://x/0"],
@@ -296,6 +674,24 @@ def test_format_diff_report_marks_unchanged_field() -> None:
 
 
 def test_format_diff_report_flags_inconsistent_field() -> None:
+    """
+    [Unit] schema detection: verifies format diff report flags inconsistent field.
+
+    Scenario:
+        Given test inputs and fixtures for format diff report flags inconsistent field
+        When test_format_diff_report_flags_inconsistent_field executes the target flow
+        Then the expected outcome for format diff report flags inconsistent field is confirmed.
+
+    Boundaries:
+        - Focus: format diff report flags inconsistent field
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format diff report flags inconsistent field
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     report = format_diff_report(
         site="amazon",
         urls=["https://x/0", "https://x/1"],
@@ -309,6 +705,24 @@ def test_format_diff_report_flags_inconsistent_field() -> None:
 
 
 def test_format_diff_report_all_consistent_summary() -> None:
+    """
+    [Unit] schema detection: verifies format diff report all consistent summary.
+
+    Scenario:
+        Given test inputs and fixtures for format diff report all consistent summary
+        When test_format_diff_report_all_consistent_summary executes the target flow
+        Then the expected outcome for format diff report all consistent summary is confirmed.
+
+    Boundaries:
+        - Focus: format diff report all consistent summary
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format diff report all consistent summary
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     report = format_diff_report(
         site="amazon",
         urls=["https://x/0"],
@@ -359,6 +773,24 @@ def test_format_diff_report_renders_card_fraction_and_flags_partial() -> None:
 
 
 def test_format_diff_report_handles_field_not_currently_present() -> None:
+    """
+    [Unit] schema detection: verifies format diff report handles field not currently present.
+
+    Scenario:
+        Given test inputs and fixtures for format diff report handles field not currently present
+        When test_format_diff_report_handles_field_not_currently_present executes the target flow
+        Then the expected outcome for format diff report handles field not currently present is confirmed.
+
+    Boundaries:
+        - Focus: format diff report handles field not currently present
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format diff report handles field not currently present
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     report = format_diff_report(
         site="amazon",
         urls=["https://x/0"],
@@ -621,6 +1053,24 @@ def test_card_relative_zero_cards_is_broken() -> None:
 
 
 def test_format_check_only_usage_line_names_no_ai_no_key() -> None:
+    """
+    [Unit] schema detection: verifies format check only usage line names no ai no key.
+
+    Scenario:
+        Given test inputs and fixtures for format check only usage line names no ai no key
+        When test_format_check_only_usage_line_names_no_ai_no_key executes the target flow
+        Then the expected outcome for format check only usage line names no ai no key is confirmed.
+
+    Boundaries:
+        - Focus: format check only usage line names no ai no key
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to format check only usage line names no ai no key
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     line = format_check_only_usage_line(3)
     assert "no AI call" in line
     assert "no API key required" in line
@@ -961,7 +1411,7 @@ def test_sanitize_strips_unicode_line_and_paragraph_separators() -> None:
     Boundaries: pure string transform.
     On failure: a hostile page could inject a Unicode line break that spoofs a new report line.
     """
-    cleaned = sanitize_untrusted("a b c\x85d")
+    cleaned = sanitize_untrusted("a\u2028b\u2029c\x85d")
     for bad in ("\u2028", "\u2029", "\x85"):
         assert bad not in cleaned
     assert cleaned == "abcd"

@@ -322,6 +322,24 @@ def test_create_sdk_error_is_wrapped_body_free() -> None:
 # fetch_pruned_html
 # --------------------------------------------------------------------------- #
 async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
+    """
+    [Local] schema detection: verifies fetch pruned html returns pruned snapshot.
+
+    Scenario:
+        Given test inputs and fixtures for fetch pruned html returns pruned snapshot
+        When test_fetch_pruned_html_returns_pruned_snapshot executes the target flow
+        Then the expected outcome for fetch pruned html returns pruned snapshot is confirmed.
+
+    Boundaries:
+        - Focus: fetch pruned html returns pruned snapshot
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to fetch pruned html returns pruned snapshot
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page = FakePage(content="<html><script>x()</script><h1>Title</h1></html>")
     result = await sd.fetch_pruned_html("https://x/book", page)
     assert "Title" in result
@@ -331,6 +349,24 @@ async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
 
 
 async def test_fetch_pruned_html_raises_on_timeout() -> None:
+    """
+    [Local] schema detection: verifies fetch pruned html raises on timeout.
+
+    Scenario:
+        Given test inputs and fixtures for fetch pruned html raises on timeout
+        When test_fetch_pruned_html_raises_on_timeout executes the target flow
+        Then the expected outcome for fetch pruned html raises on timeout is confirmed.
+
+    Boundaries:
+        - Focus: fetch pruned html raises on timeout
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to fetch pruned html raises on timeout
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page = FakePage()
     page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
     with pytest.raises(sd.SchemaDetectionError, match="Timed out loading"):
@@ -338,6 +374,24 @@ async def test_fetch_pruned_html_raises_on_timeout() -> None:
 
 
 async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
+    """
+    [Local] schema detection: verifies fetch pruned html raises on generic load error.
+
+    Scenario:
+        Given test inputs and fixtures for fetch pruned html raises on generic load error
+        When test_fetch_pruned_html_raises_on_generic_load_error executes the target flow
+        Then the expected outcome for fetch pruned html raises on generic load error is confirmed.
+
+    Boundaries:
+        - Focus: fetch pruned html raises on generic load error
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to fetch pruned html raises on generic load error
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page = FakePage()
     page.goto = AsyncMock(side_effect=PlaywrightError("connection refused"))
     with pytest.raises(sd.SchemaDetectionError, match="Failed to load"):
@@ -348,6 +402,24 @@ async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
 # validate_across_samples
 # --------------------------------------------------------------------------- #
 async def test_validate_across_samples_consistent_match() -> None:
+    """
+    [Local] schema detection: verifies validate across samples consistent match.
+
+    Scenario:
+        Given test inputs and fixtures for validate across samples consistent match
+        When test_validate_across_samples_consistent_match executes the target flow
+        Then the expected outcome for validate across samples consistent match is confirmed.
+
+    Boundaries:
+        - Focus: validate across samples consistent match
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate across samples consistent match
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page1 = FakePage(locators={"#t": FakeLocator("Book One")})
     page2 = FakePage(locators={"#t": FakeLocator("Book Two")})
     samples = [{"url": "u1", "page": page1}, {"url": "u2", "page": page2}]
@@ -363,6 +435,24 @@ async def test_validate_across_samples_consistent_match() -> None:
 
 async def test_validate_across_samples_flags_inconsistency() -> None:
     # ".tag" matches on page1 only -> inconsistent, must be flagged.
+    """
+    [Local] schema detection: verifies validate across samples flags inconsistency.
+
+    Scenario:
+        Given test inputs and fixtures for validate across samples flags inconsistency
+        When test_validate_across_samples_flags_inconsistency executes the target flow
+        Then the expected outcome for validate across samples flags inconsistency is confirmed.
+
+    Boundaries:
+        - Focus: validate across samples flags inconsistency
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate across samples flags inconsistency
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page1 = FakePage(locators={".tag": FakeLocator(["a", "b"])})
     page2 = FakePage(locators={})
     samples = [{"url": "u1", "page": page1}, {"url": "u2", "page": page2}]
@@ -376,6 +466,24 @@ async def test_validate_across_samples_flags_inconsistency() -> None:
 
 
 async def test_validate_across_samples_null_selector_is_miss() -> None:
+    """
+    [Local] schema detection: verifies validate across samples null selector is miss.
+
+    Scenario:
+        Given test inputs and fixtures for validate across samples null selector is miss
+        When test_validate_across_samples_null_selector_is_miss executes the target flow
+        Then the expected outcome for validate across samples null selector is miss is confirmed.
+
+    Boundaries:
+        - Focus: validate across samples null selector is miss
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate across samples null selector is miss
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page = FakePage(locators={})
     samples = [{"url": "u1", "page": page}]
     proposals = {"ISBN10": {"selector": None, "rationale": "absent"}}
@@ -388,6 +496,24 @@ async def test_validate_across_samples_null_selector_is_miss() -> None:
 
 
 async def test_validate_across_samples_bad_selector_does_not_abort() -> None:
+    """
+    [Local] schema detection: verifies validate across samples bad selector does not abort.
+
+    Scenario:
+        Given test inputs and fixtures for validate across samples bad selector does not abort
+        When test_validate_across_samples_bad_selector_does_not_abort executes the target flow
+        Then the expected outcome for validate across samples bad selector does not abort is confirmed.
+
+    Boundaries:
+        - Focus: validate across samples bad selector does not abort
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to validate across samples bad selector does not abort
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     page = FakePage(locators={"::bad::": FakeLocator([], raises=PlaywrightError("bad selector"))})
     samples = [{"url": "u1", "page": page}]
     proposals = {"TAGS": {"selector": "::bad::", "rationale": ""}}
@@ -468,6 +594,24 @@ def _amazon_pages():
 
 
 async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema happy path flags inconsistency.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema happy path flags inconsistency
+        When test_detect_schema_happy_path_flags_inconsistency executes the target flow
+        Then the expected outcome for detect schema happy path flags inconsistency is confirmed.
+
+    Boundaries:
+        - Focus: detect schema happy path flags inconsistency
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema happy path flags inconsistency
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
     page1, page2 = _amazon_pages()
@@ -561,12 +705,48 @@ async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
 
 
 async def test_detect_schema_missing_api_key(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema missing api key.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema missing api key
+        When test_detect_schema_missing_api_key executes the target flow
+        Then the expected outcome for detect schema missing api key is confirmed.
+
+    Boundaries:
+        - Focus: detect schema missing api key
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema missing api key
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(sd.SchemaDetectionError, match="ANTHROPIC_API_KEY is not set"):
         await sd.detect_schema("amazon", ["https://x/1"])
 
 
 async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema malformed ai json fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema malformed ai json fails loudly
+        When test_detect_schema_malformed_ai_json_fails_loudly executes the target flow
+        Then the expected outcome for detect schema malformed ai json fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: detect schema malformed ai json fails loudly
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema malformed ai json fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     page1, _ = _amazon_pages()
     browser = FakeBrowser(page_factory=lambda *a, **k: page1)
@@ -583,6 +763,24 @@ async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None
 
 
 async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema page load failure fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema page load failure fails loudly
+        When test_detect_schema_page_load_failure_fails_loudly executes the target flow
+        Then the expected outcome for detect schema page load failure fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: detect schema page load failure fails loudly
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema page load failure fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     bad_page = FakePage()
     bad_page.goto = AsyncMock(side_effect=PlaywrightError("connection refused"))
@@ -601,11 +799,47 @@ async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None
 
 
 async def test_detect_schema_unknown_site() -> None:
+    """
+    [Local] schema detection: verifies detect schema unknown site.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema unknown site
+        When test_detect_schema_unknown_site executes the target flow
+        Then the expected outcome for detect schema unknown site is confirmed.
+
+    Boundaries:
+        - Focus: detect schema unknown site
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema unknown site
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(sd.SchemaDetectionError, match="Unknown site"):
         await sd.detect_schema("bogus", ["https://x/1"])
 
 
 async def test_detect_schema_no_urls() -> None:
+    """
+    [Local] schema detection: verifies detect schema no urls.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema no urls
+        When test_detect_schema_no_urls executes the target flow
+        Then the expected outcome for detect schema no urls is confirmed.
+
+    Boundaries:
+        - Focus: detect schema no urls
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema no urls
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
         await sd.detect_schema("amazon", [])
 
@@ -858,11 +1092,47 @@ def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
 
 
 def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies load replay file missing path fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for load replay file missing path fails loudly
+        When test_load_replay_file_missing_path_fails_loudly executes the target flow
+        Then the expected outcome for load replay file missing path fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: load replay file missing path fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to load replay file missing path fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(sd.SchemaDetectionError, match="Cannot read --replay file"):
         sd.load_replay_file(str(tmp_path / "nope.json"))
 
 
 def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies load replay file invalid json fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for load replay file invalid json fails loudly
+        When test_load_replay_file_invalid_json_fails_loudly executes the target flow
+        Then the expected outcome for load replay file invalid json fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: load replay file invalid json fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to load replay file invalid json fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     path = tmp_path / "bad.json"
     path.write_text("not json", encoding="utf-8")
     with pytest.raises(sd.SchemaDetectionError, match="not valid JSON"):
@@ -870,6 +1140,24 @@ def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
 
 
 def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies load replay file non object fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for load replay file non object fails loudly
+        When test_load_replay_file_non_object_fails_loudly executes the target flow
+        Then the expected outcome for load replay file non object fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: load replay file non object fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to load replay file non object fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     path = tmp_path / "arr.json"
     path.write_text("[1, 2, 3]", encoding="utf-8")
     with pytest.raises(sd.SchemaDetectionError, match="must be a JSON object"):
@@ -877,6 +1165,24 @@ def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
 
 
 def test_replay_lookup_returns_recorded_response() -> None:
+    """
+    [Local] schema detection: verifies replay lookup returns recorded response.
+
+    Scenario:
+        Given test inputs and fixtures for replay lookup returns recorded response
+        When test_replay_lookup_returns_recorded_response executes the target flow
+        Then the expected outcome for replay lookup returns recorded response is confirmed.
+
+    Boundaries:
+        - Focus: replay lookup returns recorded response
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to replay lookup returns recorded response
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     replay = {sd.prompt_hash("I", "S"): '{"BOOK_TITLE": {"selector": "#t"}}'}
     assert sd.replay_lookup(replay, "I", "S") == '{"BOOK_TITLE": {"selector": "#t"}}'
 
@@ -906,6 +1212,24 @@ def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) 
 
 
 def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies write record file oserror fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for write record file oserror fails loudly
+        When test_write_record_file_oserror_fails_loudly executes the target flow
+        Then the expected outcome for write record file oserror fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: write record file oserror fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to write record file oserror fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with patch.object(sd.Path, "write_text", side_effect=OSError("read-only")):
         with pytest.raises(sd.SchemaDetectionError, match="Cannot write --record file"):
             sd.write_record_file(str(tmp_path / "rec.json"), {})
@@ -926,12 +1250,48 @@ async def test_block_all_requests_aborts() -> None:
 
 
 def test_read_html_file_reads_utf8(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies read html file reads utf8.
+
+    Scenario:
+        Given test inputs and fixtures for read html file reads utf8
+        When test_read_html_file_reads_utf8 executes the target flow
+        Then the expected outcome for read html file reads utf8 is confirmed.
+
+    Boundaries:
+        - Focus: read html file reads utf8
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to read html file reads utf8
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     path = tmp_path / "p.html"
     path.write_text("<h1>Tïtle</h1>", encoding="utf-8")
     assert sd._read_html_file(str(path)) == "<h1>Tïtle</h1>"
 
 
 def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies read html file missing path fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for read html file missing path fails loudly
+        When test_read_html_file_missing_path_fails_loudly executes the target flow
+        Then the expected outcome for read html file missing path fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: read html file missing path fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to read html file missing path fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     with pytest.raises(sd.SchemaDetectionError, match="Cannot access --html-file"):
         sd._read_html_file(str(tmp_path / "nope.html"))
 
@@ -950,6 +1310,24 @@ def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
 
 
 def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
+    """
+    [Local] schema detection: verifies read html file non utf8 fails loudly.
+
+    Scenario:
+        Given test inputs and fixtures for read html file non utf8 fails loudly
+        When test_read_html_file_non_utf8_fails_loudly executes the target flow
+        Then the expected outcome for read html file non utf8 fails loudly is confirmed.
+
+    Boundaries:
+        - Focus: read html file non utf8 fails loudly
+        - Fixtures/params: tmp_path
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to read html file non utf8 fails loudly
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     path = tmp_path / "bin.html"
     path.write_bytes(b"\xff\xfe\x00\x01not utf8")
     with pytest.raises(sd.SchemaDetectionError, match="as UTF-8 text"):
@@ -960,18 +1338,72 @@ def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
 # detect_schema - source resolution (urls vs html_files)
 # --------------------------------------------------------------------------- #
 async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema rejects both url and html file.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema rejects both url and html file
+        When test_detect_schema_rejects_both_url_and_html_file executes the target flow
+        Then the expected outcome for detect schema rejects both url and html file is confirmed.
+
+    Boundaries:
+        - Focus: detect schema rejects both url and html file
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema rejects both url and html file
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     with pytest.raises(sd.SchemaDetectionError, match="either --url or --html-file"):
         await sd.detect_schema("amazon", urls=["https://x/1"], html_files=["/tmp/a.html"])
 
 
 async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema rejects no source.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema rejects no source
+        When test_detect_schema_rejects_no_source executes the target flow
+        Then the expected outcome for detect schema rejects no source is confirmed.
+
+    Boundaries:
+        - Focus: detect schema rejects no source
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema rejects no source
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
         await sd.detect_schema("amazon")
 
 
 async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
+    """
+    [Local] schema detection: verifies detect schema rejects too many html files.
+
+    Scenario:
+        Given test inputs and fixtures for detect schema rejects too many html files
+        When test_detect_schema_rejects_too_many_html_files executes the target flow
+        Then the expected outcome for detect schema rejects too many html files is confirmed.
+
+    Boundaries:
+        - Focus: detect schema rejects too many html files
+        - Fixtures/params: monkeypatch
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - Assertion details tied to detect schema rejects too many html files
+        - Fixture or parameter values used by this test
+        - Recent changes in code paths exercised by schema detection
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     too_many = [f"/tmp/{i}.html" for i in range(sd.MAX_SAMPLE_URLS + 1)]
     with pytest.raises(sd.SchemaDetectionError, match="--html-file paths"):
