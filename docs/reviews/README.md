@@ -15,6 +15,7 @@ audits, secret scans, performance-regression findings, and license checks.
 | [example-report.md](example-report.md)                              | Example efficiency audit.                                                |
 | [2026-09-29-dep-audit.md](2026-09-29-dep-audit.md)                  | Dep audit: mongomock addition (milestone 0001/01.0/08) — no CVEs found. |
 | [2026-09-30-dep-audit.md](2026-09-30-dep-audit.md)                  | Dep audit: cryptography addition (milestone 0001/02.1/06) — no CVEs found; MIT-0 policy updated. |
+| [2026-10-04-scrapegraph-ai-evaluation.md](2026-10-04-scrapegraph-ai-evaluation.md) | Scrapegraph-ai v2.3.0 fit evaluation + proxy-rotation analysis — do not adopt; no rotation in either codebase. |
 
 ## What a review report must contain
 
