@@ -284,6 +284,9 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
 
 
 def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collection] = None) -> bool:
+    """
+    Checks if a book with the given Amazon ASIN already exists in the database.
+    """
     books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
     if books_collection is None:

@@ -60,6 +60,16 @@ def get_default_tls_cert_file() -> Optional[str]:
 
 
 def _resolve_field(spec: dict, field_name: str) -> str:
+    """
+    Resolve one ``{"source", "value"}`` settings field to its concrete string value.
+
+    :param spec: The field object, which must carry both ``source`` and ``value`` keys.
+    :param field_name: Field name, used only in error messages (never its value).
+    :returns: ``value`` as-is for a ``literal`` source, or the looked-up environment
+        variable for an ``env`` source.
+    :raises ConfigError: If the shape is invalid, the source is unrecognized, or an
+        ``env`` source names a variable that is not set.
+    """
     if not isinstance(spec, dict) or "source" not in spec or "value" not in spec:
         raise ConfigError(f"settings.json: '{field_name}' must be an object with 'source' and 'value'.")
 
@@ -168,6 +178,12 @@ def load_settings(path: Optional[Path] = None) -> Optional[dict]:
 
 
 def _legacy_resolve() -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve the connection the legacy way, used when no ``settings.json`` exists.
+
+    :returns: ``(uri, cert)`` where ``uri`` comes from ``MONGODB_URI`` and ``cert`` from
+        ``TLS_CERT_FILE`` or, failing that, the newest ``~/.bookscrapper/X509-cert-*.pem``.
+    """
     uri = os.environ.get("MONGODB_URI")
     cert = os.environ.get("TLS_CERT_FILE") or get_default_tls_cert_file()
     return uri, cert

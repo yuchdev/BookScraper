@@ -25,6 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
+    """
+    Fetch Leanpub search-result candidates for ``query`` via Leanpub's paginated JSON API.
+
+    :param query: The search query to run against the Leanpub bookstore API.
+    :returns: A list of candidate book dictionaries collected across all result pages.
+    """
     print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
     logger.info(f"Leanpub - Fetching search results from Leanpub.com for {query}.")
     base_url = site_constants["leanpub"]["SEARCH_BASE_API"]

@@ -9,6 +9,7 @@ from .commands import detect_schema, rotate_cert, scrape_urls, search
 
 
 async def main() -> None:
+    """Parse CLI arguments, configure logging, and dispatch to the matching command's ``run``."""
     parser = build_parser()
     args = parser.parse_args()
     configure_logging(getattr(logging, args.log_severity.upper()))

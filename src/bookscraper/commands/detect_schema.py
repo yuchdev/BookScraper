@@ -30,6 +30,15 @@ from ..scraping.schema_detection import SchemaDetectionError, detect_schema
 
 
 async def run(args: argparse.Namespace) -> None:
+    """
+    The "propose selector-schema updates" workflow (dev maintenance, never touches book data).
+
+    Runs :func:`detect_schema` over the sample pages, writes the report to stdout (and
+    ``--output`` if given), and exits ``1`` on a :class:`SchemaDetectionError` or ``4`` on
+    detected schema drift.
+
+    :param args: Parsed ``detect-schema`` arguments.
+    """
     # Load .env so ANTHROPIC_API_KEY (and an optional ANTHROPIC_MODEL) can live there,
     # the same lightweight way commands/rotate_cert.py picks up its ATLAS_* vars.
     load_dotenv()
@@ -60,6 +69,7 @@ async def run(args: argparse.Namespace) -> None:
     sys.stdout.flush()
 
     def _status(message: str, level: str) -> None:
+        """Emit a human status line to stderr in JSON mode, else via ``print_log`` to stdout."""
         if json_format:
             print(message, file=sys.stderr)
         else:

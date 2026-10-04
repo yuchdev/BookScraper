@@ -29,6 +29,13 @@ module_logger = logging.getLogger("scrape_details")
 
 
 async def route_handler(route: Route) -> None:
+    """
+    Playwright route handler that lets document requests through and aborts the rest.
+
+    Blocking non-document resources (images, fonts, stylesheets) speeds up page loads.
+
+    :param route: The intercepted Playwright route to continue or abort.
+    """
     request = route.request
     # Allow document (HTML page) requests to go through.
     # Block other resource types (images, fonts, stylesheets, etc.) to speed up scraping.

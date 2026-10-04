@@ -81,6 +81,13 @@ class RotationError(Exception):
 
 
 def _require_env(name: str) -> str:
+    """
+    Return the value of environment variable ``name``, or raise if it is unset/empty.
+
+    :param name: Environment variable to read.
+    :returns: The non-empty value.
+    :raises RotationError: If the variable is missing or blank.
+    """
     value = os.environ.get(name)
     if not value:
         raise RotationError(f"{name} not set (check .env or your environment).")
@@ -105,6 +112,14 @@ def resolve_months(months: Optional[int] = None) -> int:
 
 
 def get_access_token(client_id: str, client_secret: str) -> str:
+    """
+    Exchange Atlas Service Account credentials for a short-lived OAuth access token.
+
+    :param client_id: Atlas API Service Account client id.
+    :param client_secret: Atlas API Service Account client secret.
+    :returns: The bearer access token for subsequent Admin API calls.
+    :raises httpx.HTTPStatusError: If the OAuth endpoint returns a non-2xx status.
+    """
     response = httpx.post(
         ATLAS_OAUTH_URL,
         auth=(client_id, client_secret),
@@ -116,6 +131,16 @@ def get_access_token(client_id: str, client_secret: str) -> str:
 
 
 def issue_certificate(token: str, project_id: str, db_user: str, months: int) -> bytes:
+    """
+    Issue a fresh Atlas-managed X.509 client certificate for a database user.
+
+    :param token: Bearer access token from :func:`get_access_token`.
+    :param project_id: Atlas project (group) id.
+    :param db_user: Atlas database username to issue the certificate for.
+    :param months: Certificate validity in months.
+    :returns: The combined PEM (private key + certificate) bytes returned by Atlas.
+    :raises httpx.HTTPStatusError: If the Admin API returns a non-2xx status.
+    """
     url = f"{ATLAS_API_BASE_URL}/groups/{project_id}/databaseUsers/{db_user}/certs"
 
     response = httpx.post(
@@ -136,11 +161,22 @@ def issue_certificate(token: str, project_id: str, db_user: str, months: int) ->
 
 
 def atomic_write(path: pathlib.Path, data: bytes) -> None:
+    """
+    Atomically write ``data`` to ``path`` with owner-only (``0600``) permissions.
+
+    :param path: Destination file.
+    :param data: Bytes to write.
+    """
     # The cert (and settings.json, which can hold a connection string) is owner-only.
     atomic_write_bytes(path, data, mode=0o600)
 
 
 def default_output_path() -> pathlib.Path:
+    """
+    Return the default cert output path, a timestamped file under ``~/.bookscrapper/``.
+
+    :returns: ``CONFIG_DIR / X509-cert-<UTC timestamp>.pem``.
+    """
     # Matches book_utils.py's LOG_FILE_PATH timestamp format, so filenames across
     # ~/.bookscrapper/ stay consistently sortable.
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")

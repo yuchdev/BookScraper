@@ -96,6 +96,14 @@ def identify_website(url: str) -> str:
 
 
 async def run(args: argparse.Namespace) -> None:
+    """
+    The "I already have URLs" workflow: scrape a CSV of book URLs into the chosen store.
+
+    Resolves the storage backend, buckets the input URLs by site, scrapes each in
+    batches of concurrent Playwright tasks, and writes the run's diagnostic CSVs.
+
+    :param args: Parsed ``scrape-urls`` arguments (input file, ``--store-backend``, etc.).
+    """
     start_time = time.time()
 
     storage_backend = resolve_store_backend(args.store_backend)

@@ -57,38 +57,52 @@ class StorageBackend(ABC):
     """Uniform read/write contract shared by the mongo and json backends."""
 
     @abstractmethod
-    def save_books(self, books: list[dict]) -> SaveSummary: ...
+    def save_books(self, books: list[dict]) -> SaveSummary:
+        """Persist ``books``, skipping those whose ``hash`` already exists, and return a :class:`SaveSummary`."""
 
     @abstractmethod
-    def book_exists_by_hash(self, book_hash: str) -> bool: ...
+    def book_exists_by_hash(self, book_hash: str) -> bool:
+        """Report whether a book with the given ``hash`` already exists in the backend."""
 
     @abstractmethod
-    def book_exists_by_asin(self, asin: str) -> bool: ...
+    def book_exists_by_asin(self, asin: str) -> bool:
+        """Report whether a book with the given Amazon ``asin`` already exists in the backend."""
 
     @abstractmethod
-    def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool: ...
+    def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
+        """Report whether a Leanpub book matching ``book_id`` or ``book_slug`` already exists in the backend."""
 
     def close(self) -> None:  # noqa: B027 - intentional no-op default, not every backend holds a connection
         """Optional cleanup hook; no-op unless a backend holds a live connection."""
 
 
 class MongoBackend(StorageBackend):
+    """Thin :class:`StorageBackend` adapter over the MongoDB functions in :mod:`.mongo.database`."""
+
     def __init__(self, collection: Collection) -> None:
+        """
+        :param collection: The MongoDB collection this backend reads from and writes to.
+        """
         self._collection = collection
 
     def save_books(self, books: list[dict]) -> SaveSummary:
+        """Delegate to :func:`database.save_books_to_mongodb`."""
         return database.save_books_to_mongodb(books, self._collection)
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
+        """Delegate to :func:`database.check_book_exists_in_db`."""
         return database.check_book_exists_in_db(book_hash, self._collection)
 
     def book_exists_by_asin(self, asin: str) -> bool:
+        """Delegate to :func:`database.check_amazon_asin_exists_in_db`."""
         return database.check_amazon_asin_exists_in_db(asin, self._collection)
 
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
+        """Delegate to :func:`deduplicate.leanpub_prescrape_deduplicate`."""
         return deduplicate.leanpub_prescrape_deduplicate(book_id, book_slug, self._collection)
 
     def close(self) -> None:
+        """Close the shared MongoDB connection via :func:`database.close_mongo_connection`."""
         database.close_mongo_connection()
 
 
@@ -106,16 +120,19 @@ class JsonBackend(StorageBackend):
     _INDEX_FIELDS = (("hashes", "hash"), ("asins", "asin"), ("book_ids", "book_id"), ("slugs", "slug"))
 
     def __init__(self) -> None:
+        """Create the backend with its in-memory index unbuilt (built lazily on first lookup)."""
         self._index: Optional[dict[str, set[str]]] = None
 
     @classmethod
     def _add_to_index(cls, index: dict[str, set[str]], book: dict) -> None:
+        """Add ``book``'s non-empty indexed field values into the matching buckets of ``index``."""
         for bucket, field in cls._INDEX_FIELDS:
             value = book.get(field)
             if value:
                 index[bucket].add(value)
 
     def _ensure_index(self) -> dict[str, set[str]]:
+        """Return the in-memory index, building it from the store file on first access."""
         if self._index is None:
             index: dict[str, set[str]] = {bucket: set() for bucket, _ in self._INDEX_FIELDS}
             # Pass the path explicitly (read now, not at def time) so tests that
@@ -127,6 +144,7 @@ class JsonBackend(StorageBackend):
         return self._index
 
     def save_books(self, books: list[dict]) -> SaveSummary:
+        """Persist ``books`` via :func:`store.save_books` and mirror newly written entries into the index."""
         summary = store.save_books(books, store.LOCAL_STORE_FILE)
         # Mirror in the cache exactly what store.save_books just persisted: books that
         # carry a hash not already known (duplicates and hash-less errors are not written).
@@ -140,16 +158,19 @@ class JsonBackend(StorageBackend):
         return summary
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
+        """Report whether ``book_hash`` is present in the in-memory index."""
         if not book_hash:
             return False
         return book_hash in self._ensure_index()["hashes"]
 
     def book_exists_by_asin(self, asin: str) -> bool:
+        """Report whether ``asin`` is present in the in-memory index."""
         if not asin:
             return False
         return asin in self._ensure_index()["asins"]
 
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
+        """Report whether ``book_id`` or ``book_slug`` is present in the in-memory index."""
         if not book_id and not book_slug:
             return False
         index = self._ensure_index()

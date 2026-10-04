@@ -99,6 +99,9 @@ class _Text:
     __slots__ = ("data", "parent")
 
     def __init__(self, data: str) -> None:
+        """
+        :param data: The already entity-decoded text content of the node.
+        """
         self.data = data
         self.parent: Optional[_Element] = None
 
@@ -109,6 +112,10 @@ class _Element:
     __slots__ = ("tag", "attrs", "children", "parent")
 
     def __init__(self, tag: str, attrs: list[list[Optional[str]]]) -> None:
+        """
+        :param tag: The element's tag name.
+        :param attrs: Ordered mutable ``[name, value]`` attribute pairs (value may be ``None``).
+        """
         self.tag = tag
         self.attrs = attrs
         self.children: list[Any] = []
@@ -119,39 +126,52 @@ class _TreeBuilder(HTMLParser):
     """Builds a bounded ``_Element`` tree from an HTML string."""
 
     def __init__(self) -> None:
+        """Initialize the parser with an empty document root and a single-entry element stack."""
         super().__init__(convert_charrefs=True)
         self.root = _Element(_DOCUMENT, [])
         self.doctype: Optional[str] = None
         self._stack: list[_Element] = [self.root]
 
     def _append(self, node: Any) -> None:
+        """Attach ``node`` as a child of the current top-of-stack element."""
         parent = self._stack[-1]
         node.parent = parent
         parent.children.append(node)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        """Append a new element and, unless void or past :data:`MAX_TREE_DEPTH`, push it as the open parent."""
         el = _Element(tag, [[name, value] for name, value in attrs])
         self._append(el)
         if tag not in _VOID_ELEMENTS and len(self._stack) < MAX_TREE_DEPTH:
             self._stack.append(el)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        """Append a self-closing element without pushing it onto the open-parent stack."""
         self._append(_Element(tag, [[name, value] for name, value in attrs]))
 
     def handle_endtag(self, tag: str) -> None:
+        """Close the nearest matching open element, discarding any unclosed children above it."""
         for i in range(len(self._stack) - 1, 0, -1):
             if self._stack[i].tag == tag:
                 del self._stack[i:]
                 return
 
     def handle_data(self, data: str) -> None:
+        """Append a text node for character data under the current element."""
         self._append(_Text(data))
 
     def handle_decl(self, decl: str) -> None:
+        """Record a document-type declaration so the serializer can re-emit it."""
         self.doctype = f"<!{decl}>"
 
 
 def _parse(html: str) -> _Element:
+    """
+    Parse ``html`` into a bounded ``_Element`` tree rooted at a ``#document`` node.
+
+    :param html: The markup to parse (malformed input is handled best-effort).
+    :returns: The document root element, with any doctype stashed on it for serialization.
+    """
     builder = _TreeBuilder()
     builder.feed(html)
     builder.close()
@@ -162,14 +182,17 @@ def _parse(html: str) -> _Element:
 
 
 def _escape_text(text: str) -> str:
+    """Escape ``&``, ``<`` and ``>`` for safe emission as element text content."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _escape_attr(value: str) -> str:
+    """Escape ``&``, ``<``, ``>`` and ``"`` for safe emission inside a double-quoted attribute."""
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def _emit(node: Any, parts: list[str]) -> None:
+    """Serialize ``node`` and its descendants into ``parts``, emitting rawtext element bodies verbatim."""
     if isinstance(node, _Text):
         parts.append(_escape_text(node.data))
         return
@@ -197,6 +220,7 @@ def _emit(node: Any, parts: list[str]) -> None:
 
 
 def _serialize(node: Any) -> str:
+    """Serialize ``node`` back to an HTML string, re-emitting the stashed doctype for a document root."""
     parts: list[str] = []
     if isinstance(node, _Element) and node.tag == _DOCUMENT:
         doctype = _attr(node, "__doctype__")
@@ -228,6 +252,13 @@ def _filter_tree(el: _Element, should_remove: Any) -> None:
 
 
 def _attr(el: _Element, name: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    Return ``el``'s attribute ``name`` (case-insensitive), or ``default`` if absent/valueless.
+
+    :param el: Element to read.
+    :param name: Attribute name, matched case-insensitively.
+    :param default: Returned when the attribute is missing or valueless.
+    """
     lowered = name.lower()
     for attr_name, value in el.attrs:
         if attr_name.lower() == lowered:
@@ -236,6 +267,7 @@ def _attr(el: _Element, name: str, default: Optional[str] = None) -> Optional[st
 
 
 def _set_attr(el: _Element, name: str, value: str) -> None:
+    """Set ``el``'s attribute ``name`` (case-insensitive) to ``value``, appending it if not already present."""
     lowered = name.lower()
     for pair in el.attrs:
         if pair[0].lower() == lowered:
@@ -262,9 +294,12 @@ _IDENT_CHARS = frozenset("-_")
 
 
 class _Compound:
+    """A parsed compound selector: optional tag / id, plus class, attribute and ``:has-text`` constraints."""
+
     __slots__ = ("tag", "id", "classes", "attrs", "has_text")
 
     def __init__(self) -> None:
+        """Initialize an empty compound with no constraints."""
         self.tag: Optional[str] = None
         self.id: Optional[str] = None
         self.classes: list[str] = []
@@ -273,6 +308,13 @@ class _Compound:
 
 
 def _read_ident(text: str, i: int) -> tuple[str, int]:
+    """
+    Read a CSS identifier (alphanumerics plus ``-``/``_``) from ``text`` starting at ``i``.
+
+    :param text: The selector text.
+    :param i: Index of the first identifier character.
+    :returns: ``(identifier, next_index)``.
+    """
     start = i
     while i < len(text) and (text[i].isalnum() or text[i] in _IDENT_CHARS):
         i += 1
@@ -280,6 +322,13 @@ def _read_ident(text: str, i: int) -> tuple[str, int]:
 
 
 def _parse_attr(inner: str, compound: _Compound) -> None:
+    """
+    Parse the ``inner`` text of an ``[attr]`` / ``[attr="value"]`` selector onto ``compound``.
+
+    :param inner: Text between the brackets.
+    :param compound: Compound selector to record the attribute constraint on.
+    :raises SanitizationError: For any attribute operator other than exact ``=``.
+    """
     if "=" not in inner:
         compound.attrs.append((inner.strip(), None))
         return
@@ -291,6 +340,15 @@ def _parse_attr(inner: str, compound: _Compound) -> None:
 
 
 def _parse_has_text(text: str, i: int, compound: _Compound) -> int:
+    """
+    Parse a ``:has-text(...)`` argument onto ``compound`` and return the index past its ``)``.
+
+    :param text: The full selector text.
+    :param i: Index of the opening ``(`` immediately after ``:has-text``.
+    :param compound: Compound selector to record the normalized substring on.
+    :returns: Index one past the closing ``)``.
+    :raises SanitizationError: If the argument is unterminated or a regex form.
+    """
     # A supported :has-text() argument must not contain a ``)`` or an unquoted ``,``: the
     # parser scans to the first ``)`` here and _select splits selector groups on a bare ``,``
     # (both below), so such an argument is misparsed - it fails closed (raises or truncates),
@@ -309,6 +367,15 @@ def _parse_has_text(text: str, i: int, compound: _Compound) -> int:
 
 
 def _parse_pseudo(text: str, i: int, compound: _Compound) -> int:
+    """
+    Parse a pseudo-class at ``i`` onto ``compound``; only ``:has-text(...)`` is supported.
+
+    :param text: The full selector text.
+    :param i: Index of the leading ``:``.
+    :param compound: Compound selector to record the constraint on.
+    :returns: Index past the parsed pseudo-class.
+    :raises SanitizationError: For any pseudo-element or unsupported pseudo-class.
+    """
     if text.startswith("::", i):
         raise SanitizationError(f"Unsupported pseudo-element in selector: {text!r}")
     name, j = _read_ident(text, i + 1)
@@ -318,6 +385,13 @@ def _parse_pseudo(text: str, i: int, compound: _Compound) -> int:
 
 
 def _parse_compound(text: str) -> _Compound:
+    """
+    Parse one compound selector (``tag#id.class[attr]:has-text(...)``) into a :class:`_Compound`.
+
+    :param text: The compound selector text (no combinators).
+    :returns: The parsed compound.
+    :raises SanitizationError: On any unsupported selector syntax.
+    """
     compound = _Compound()
     i = 0
     while i < len(text):
@@ -385,6 +459,7 @@ def _split_group(group: str) -> list[tuple[str, _Compound]]:
 
 
 def _classes_of(el: _Element) -> set[str]:
+    """Return the set of CSS class names on ``el`` (empty when it has no ``class`` attribute)."""
     value = _attr(el, "class")
     return set(value.split()) if value else set()
 
@@ -403,6 +478,7 @@ def _text_content(el: _Element) -> str:
     parts: list[str] = []
 
     def collect(node: _Element) -> None:
+        """Append ``node``'s descendant text into ``parts``, skipping script/style subtrees."""
         for child in node.children:
             if isinstance(child, _Text):
                 parts.append(child.data)
@@ -414,6 +490,7 @@ def _text_content(el: _Element) -> str:
 
 
 def _matches_compound(el: _Element, compound: _Compound) -> bool:
+    """Report whether ``el`` satisfies every tag/id/class/attribute/``:has-text`` constraint in ``compound``."""
     if compound.tag is not None and el.tag.lower() != compound.tag:
         return False
     if compound.id is not None and _attr(el, "id") != compound.id:
@@ -436,12 +513,20 @@ def _matches_compound(el: _Element, compound: _Compound) -> bool:
 
 
 def _element_siblings(el: _Element) -> list[_Element]:
+    """Return ``el``'s element siblings in document order (just ``[el]`` when it has no parent)."""
     if el.parent is None:
         return [el]
     return [child for child in el.parent.children if isinstance(child, _Element)]
 
 
 def _matches_sequence(el: _Element, pairs: list[tuple[str, _Compound]]) -> bool:
+    """
+    Report whether ``el`` matches the rightmost compound and the combinator chain to its left.
+
+    :param el: Candidate element (matched against the last pair).
+    :param pairs: ``(combinator, compound)`` pairs for one selector group, left to right.
+    :returns: ``True`` if the whole sequence matches with ``el`` as the subject.
+    """
     combinator, compound = pairs[-1]
     if not _matches_compound(el, compound):
         return False
@@ -465,6 +550,14 @@ def _matches_sequence(el: _Element, pairs: list[tuple[str, _Compound]]) -> bool:
 
 
 def _select(root: _Element, selector: str) -> list[_Element]:
+    """
+    Return all elements under ``root`` matching ``selector`` (comma-separated groups), deduplicated.
+
+    :param root: Subtree root to search.
+    :param selector: A CSS selector from the bounded supported subset.
+    :returns: Matching elements in document order, each at most once.
+    :raises SanitizationError: If any group uses unsupported selector syntax.
+    """
     results: list[_Element] = []
     seen: set[int] = set()
     # Selector groups split on a bare ``,``; consequently a ``:has-text()`` argument must not
@@ -537,6 +630,7 @@ _OPAQUE_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-+=.]{16,}")
 
 
 def _is_opaque_token(value: str) -> bool:
+    """Report whether ``value`` looks like an opaque token: >=16 base64url-ish chars with >=2 character classes."""
     if not _OPAQUE_TOKEN_RE.fullmatch(value):
         return False
     classes = sum(bool(re.search(cls, value)) for cls in (r"[a-z]", r"[A-Z]", r"[0-9]"))
@@ -544,6 +638,7 @@ def _is_opaque_token(value: str) -> bool:
 
 
 def _is_sensitive_param(key: str, value: str) -> bool:
+    """Report whether a query param should be dropped, by its ``key`` (tracking/session) or ``value`` (JWT/opaque)."""
     lowered = key.lower()
     if lowered in _STRIP_PARAM_EXACT or any(lowered.startswith(p) for p in _STRIP_PARAM_PREFIXES):
         return True
@@ -581,6 +676,7 @@ def strip_url_params(url: str) -> str:
 
 
 def _strip_srcset(value: str) -> str:
+    """Strip tracking/signed params from each URL in a ``srcset`` attribute, preserving its descriptors."""
     cleaned: list[str] = []
     for candidate in value.split(","):
         candidate = candidate.strip()
@@ -596,6 +692,7 @@ def _strip_srcset(value: str) -> str:
 # strip_scripts_and_styles
 # --------------------------------------------------------------------------- #
 def _is_ld_json(el: _Element) -> bool:
+    """Report whether ``el`` is a ``<script type="application/ld+json">`` element."""
     return el.tag == "script" and (_attr(el, "type", "") or "").strip().lower() == "application/ld+json"
 
 
@@ -611,6 +708,7 @@ def strip_scripts_and_styles(html: str) -> str:
     root = _parse(html)
 
     def should_remove(el: _Element) -> bool:
+        """Drop every script except real ld+json, plus style/noscript/iframe elements."""
         local = _local_name(el.tag)
         if local == "script":
             # Only a real (non-namespaced) ld+json script is kept; svg:script etc. go.
@@ -627,6 +725,7 @@ def strip_scripts_and_styles(html: str) -> str:
 # strip_tracking
 # --------------------------------------------------------------------------- #
 def _is_tracker(el: _Element) -> bool:
+    """Report whether ``el`` is an ``<img>``/``<link>`` pointing at a known analytics/tracker host."""
     if el.tag not in ("img", "link"):
         return False
     url = _attr(el, "src") or _attr(el, "href") or ""
@@ -699,16 +798,25 @@ _CORRELATION_DATA_PREFIXES = ("data-csa-c-",)
 
 
 def _is_correlation_data_attr(lowered_name: str) -> bool:
+    """Report whether a lowercased ``data-*`` name is an Amazon per-render correlation id (CL-1)."""
     return lowered_name in _CORRELATION_DATA_ATTRS or any(
         lowered_name.startswith(prefix) for prefix in _CORRELATION_DATA_PREFIXES
     )
 
 
 def _name_segments(name: str) -> list[str]:
+    """Split ``name`` on ``_ - .`` and camelCase boundaries into lowercased segments."""
     return [part.lower() for part in _KEY_SPLIT_RE.split(name) if part]
 
 
 def _has_sensitive_segment(name: str, segments: frozenset[str]) -> bool:
+    """
+    Report whether ``name`` has a sensitive segment, matched per-segment to avoid substring false positives.
+
+    :param name: The key or ``data-*`` name to classify.
+    :param segments: The set of sensitive segments (and adjacent-pair joins) to match against.
+    :returns: ``True`` if any lowered segment, or an adjacent segment pair, is in ``segments``.
+    """
     segs = _name_segments(name)
     if any(seg in segments for seg in segs):
         return True
@@ -729,10 +837,12 @@ _EMAIL_RE = re.compile(
 
 
 def _replace_emails(text: str) -> str:
+    """Rewrite every real email address in ``text`` to the reserved :data:`EMAIL_PLACEHOLDER`."""
     return _EMAIL_RE.sub(EMAIL_PLACEHOLDER, text)
 
 
 def _is_sensitive_meta(el: _Element) -> bool:
+    """Report whether ``el`` is a ``<meta>`` whose name/property/http-equiv/itemprop signals identity/tracking."""
     if el.tag != "meta":
         return False
     for key in ("name", "property", "http-equiv", "itemprop"):
@@ -786,11 +896,13 @@ def strip_secrets(html: str) -> str:
 
 
 def _looks_like_json(value: str) -> bool:
+    """Report whether ``value`` (trimmed) begins like a JSON object or array."""
     stripped = value.strip()
     return stripped.startswith("{") or stripped.startswith("[")
 
 
 def _is_opaque_style(value: str) -> bool:
+    """Report whether a ``style`` value is opaque: it embeds a ``data:`` URL or exceeds the length cap."""
     return "url(data:" in value.lower() or len(value) > DATA_ATTR_MAX_CHARS
 
 
@@ -816,6 +928,7 @@ def shrink(html: str, keep_selectors: list[str], min_chars: int = SHRINK_MIN_SUB
                 node = node.parent
 
     def should_remove(el: _Element) -> bool:
+        """Drop an element only when it holds no keep-selector match and serializes larger than ``min_chars``."""
         if id(el) in needed:
             return False
         return len(_serialize(el)) > min_chars
@@ -834,6 +947,7 @@ _PROSE_CONTAINER_RE = re.compile(
 
 
 def _is_prose_container(el: _Element) -> bool:
+    """Report whether ``el``'s id/class names signal a prose block (description, review, bio, etc.)."""
     for key in ("id", "class"):
         value = _attr(el, key)
         if value and _PROSE_CONTAINER_RE.search(value):
@@ -847,6 +961,7 @@ def _nonprotected_text(el: _Element, protected: set[int]) -> str:
     parts: list[str] = []
 
     def walk(node: _Element) -> None:
+        """Append ``node``'s text into ``parts``, descending only into non-protected child elements."""
         for child in node.children:
             if isinstance(child, _Text):
                 parts.append(child.data)
@@ -865,6 +980,7 @@ def _collapse_text_to_placeholder(el: _Element, protected: set[int]) -> None:
     placed = False
 
     def walk(node: _Element) -> None:
+        """Place the placeholder on the first non-protected non-empty text node and blank the rest."""
         nonlocal placed
         for child in node.children:
             if isinstance(child, _Text):
@@ -967,6 +1083,7 @@ _JSON_PROSE_KEY_RE = re.compile(r"description|about|review|blurb|bio|abstract|sy
 
 
 def _sanitize_json_string(value: str) -> str:
+    """Clean a JSON string leaf: strip tracking params from any URL and rewrite emails."""
     result = value
     if "://" in result:
         result = strip_url_params(result)
@@ -1128,6 +1245,7 @@ def _match_is_placeholder(name: str, match: re.Match[str]) -> bool:
 
 
 def _collapse_all_whitespace(text: str) -> str:
+    """Remove our placeholders, then strip all whitespace/zero-width separators so split tokens re-fuse (R-3)."""
     # Remove our own emitted placeholders first, so collapsing whitespace cannot fuse a
     # placeholder (e.g. the reserved-domain email) with adjacent text into a spurious hit.
     for placeholder in (EMAIL_PLACEHOLDER, PROSE_PLACEHOLDER, REDACTED_VALUE):
@@ -1136,6 +1254,13 @@ def _collapse_all_whitespace(text: str) -> str:
 
 
 def _scan_segment(segment: str, where: str) -> None:
+    """
+    Run every secret detector over ``segment``, raising on any non-placeholder hit.
+
+    :param segment: One view of the sanitized text (a line or a concatenated text variant).
+    :param where: Location label used only in the error message.
+    :raises SanitizationError: On the first detector hit that is not an exact placeholder.
+    """
     for name, pattern in _ALL_DETECTORS:
         for match in pattern.finditer(segment):
             if _match_is_placeholder(name, match):

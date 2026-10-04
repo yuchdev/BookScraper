@@ -156,18 +156,41 @@ def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
 
 
 def check_book_exists(book_hash: str, path: Path = LOCAL_STORE_FILE) -> bool:
+    """
+    Report whether a book with the given ``hash`` already exists in the store.
+
+    :param book_hash: The SHA-256 book hash to look up; a falsy value returns ``False``.
+    :param path: Store file location.
+    :returns: ``True`` if any stored document carries a matching ``hash``.
+    """
     if not book_hash:
         return False
     return any(b.get("hash") == book_hash for b in _load_books(path) if isinstance(b, dict))
 
 
 def check_amazon_asin_exists(asin: str, path: Path = LOCAL_STORE_FILE) -> bool:
+    """
+    Report whether a book with the given Amazon ``asin`` already exists in the store.
+
+    :param asin: The Amazon ASIN to look up; a falsy value returns ``False``.
+    :param path: Store file location.
+    :returns: ``True`` if any stored document carries a matching ``asin``.
+    """
     if not asin:
         return False
     return any(b.get("asin") == asin for b in _load_books(path) if isinstance(b, dict))
 
 
 def leanpub_book_exists(book_id: Optional[str], book_slug: Optional[str], path: Path = LOCAL_STORE_FILE) -> bool:
+    """
+    Report whether a Leanpub book already exists in the store, matched by id or slug.
+
+    :param book_id: The Leanpub book id to look up.
+    :param book_slug: The Leanpub book slug to look up.
+    :param path: Store file location.
+    :returns: ``True`` if a stored document matches ``book_id`` or ``book_slug``; ``False``
+        when neither identifier is provided.
+    """
     if not book_id and not book_slug:
         module_logger.warning("No book_id or book_slug provided for Leanpub book existence check.")
         return False

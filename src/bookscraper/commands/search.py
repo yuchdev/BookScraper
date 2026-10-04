@@ -67,6 +67,15 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
 
 
 async def run(args: argparse.Namespace) -> None:
+    """
+    The "discover new books" workflow: search each configured site, then scrape survivors.
+
+    For every site in ``SITES_TO_SCRAPE`` and query in ``SEARCH_QUERIES`` it collects
+    candidates, deduplicates them against the resolved storage backend before the
+    expensive detail scrape, scrapes details for the survivors, and saves them.
+
+    :param args: Parsed ``search`` arguments (``--store-backend``, ``--max-search-pages``, etc.).
+    """
     start_time = time.time()
     module_logger.info("Application started.")
 
