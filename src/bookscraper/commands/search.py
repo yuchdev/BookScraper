@@ -5,10 +5,12 @@ import asyncio
 import csv
 import logging
 import time
+from collections import Counter
 
 from ..backends import resolve_store_backend
 from ..book_utils import print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
+from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
 
@@ -75,6 +77,8 @@ async def run(args: argparse.Namespace) -> None:
     failed_scrape_attempts = []  # List to store book data that failed detailed scraping
     total_duplicates_skipped = 0  # To sum up duplicates across all sites
     books_from_search = []
+    # Per-status tally for the end-of-run summary (counts every ScrapeStatus seen).
+    status_counts: Counter[ScrapeStatus] = Counter()
 
     try:
         # --- Iterate through SITES_TO_SCRAPE and perform search + scrape ---
@@ -139,36 +143,45 @@ async def run(args: argparse.Namespace) -> None:
             for original_book_data, result in zip(
                 new_books_for_detailed_scrape, current_site_scraped_results, strict=True
             ):
-                if isinstance(result, dict):
-                    scraped_books_data.append(result)
-                    print_log(
-                        f"Successfully scraped details for: {result.get('title', 'Unknown Title')} from {site_name}",
-                        "info",
-                    )
-                elif isinstance(result, Exception):
+                if isinstance(result, ScrapeResult):
+                    status_counts[result.status] += 1
+                    if result.status is ScrapeStatus.SUCCESS:
+                        scraped_books_data.append(result.book)
+                        print_log(
+                            f"Successfully scraped details for: "
+                            f"{result.book.get('title', 'Unknown Title')} from {site_name}",
+                            "info",
+                        )
+                    else:
+                        # result.url is the real book_url (fixes the old "url": "N/A"), and
+                        # result.error is the typed, secret-free failure reason.
+                        failed_scrape_attempts.append(
+                            {
+                                "url": result.url,
+                                "site": original_book_data.get("site", "N/A"),
+                                "title": original_book_data.get("title", "N/A"),
+                                "error": result.error or result.status.value,
+                            }
+                        )
+                        print_log(
+                            f"Failed to scrape details for {result.url} from {site_name}: "
+                            f"{result.status.value} - {result.error}",
+                            "error",
+                        )
+                else:
+                    # gather(return_exceptions=True) surfaced an exception the detail scraper
+                    # did not convert into a ScrapeResult; record it as a raw failure.
                     failed_scrape_attempts.append(
                         {
-                            "url": original_book_data.get("url", "N/A"),
+                            "url": original_book_data.get("book_url", original_book_data.get("url", "N/A")),
                             "site": original_book_data.get("site", "N/A"),
                             "title": original_book_data.get("title", "N/A"),
                             "error": str(result),
                         }
                     )
                     print_log(
-                        f"Failed to scrape details for {original_book_data.get('url', 'N/A')} from {site_name}: {str(result)}",
-                        "error",
-                    )
-                else:
-                    failed_scrape_attempts.append(
-                        {
-                            "url": original_book_data.get("url", "N/A"),
-                            "site": original_book_data.get("site", "N/A"),
-                            "title": original_book_data.get("title", "N/A"),
-                            "error": f"Detailed scrape returned unexpected type: {type(result)} - {str(result)}",
-                        }
-                    )
-                    print_log(
-                        f"Failed to scrape details for {original_book_data.get('url', 'N/A')} from {site_name}: Unexpected result type.",
+                        f"Failed to scrape details for "
+                        f"{original_book_data.get('book_url', 'N/A')} from {site_name}: {str(result)}",
                         "error",
                     )
         else:
@@ -192,6 +205,11 @@ async def run(args: argparse.Namespace) -> None:
         "warning" if len(failed_scrape_attempts) > 0 else "info",
     )
     print_log(f"{total_duplicates_skipped} books already in the database and skipped.")
+    if status_counts:
+        status_breakdown = ", ".join(
+            f"{status.value}={status_counts[status]}" for status in ScrapeStatus if status_counts[status]
+        )
+        print_log(f"Scrape status breakdown: {status_breakdown}.")
 
     # --- Output Saving ---
     print_log("\n--- Output Summary ---", "step")

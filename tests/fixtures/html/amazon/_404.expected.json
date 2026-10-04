@@ -1,6 +1,7 @@
 {
   "_known_issues": [
-    "03.0/02 typed scrape result (the amazon 404_PAGE_TITLE branch fires and returns (None, 'FAILED'); 03.0/02 would return a typed NOT_FOUND status instead of the opaque FAILED tuple)"
+    "03.0/02 typed scrape result (the amazon 404_PAGE_TITLE branch fires and now returns a typed NOT_FOUND ScrapeResult with error '404 page detected', replacing the old opaque (None, 'FAILED') tuple)"
   ],
-  "_scrape_status": "FAILED"
+  "_scrape_error": "404 page detected",
+  "_scrape_status": "NOT_FOUND"
 }

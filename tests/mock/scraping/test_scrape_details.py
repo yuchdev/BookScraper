@@ -12,6 +12,7 @@ import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import scrape_details
+from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 from bookscraper.scraping.scrape_details import (
     get_leanpub_book_details,
     route_handler,
@@ -114,15 +115,16 @@ async def test_get_leanpub_book_details_happy_path():
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is not None
-    assert result["title"] == "Example Book"
-    assert result["book_id"] == "book-123"
-    assert result["slug"] == "example-book"
-    assert result["authors"] == ["Jane Doe"]
-    assert result["categories"] == ["Python"]
-    assert result["last_published_at"] == "2023-05-01"
-    assert result["site"] == "leanpub.com"
-    assert isinstance(result["hash"], str) and result["hash"]
+    assert result.status is ScrapeStatus.SUCCESS
+    book = result.book
+    assert book["title"] == "Example Book"
+    assert book["book_id"] == "book-123"
+    assert book["slug"] == "example-book"
+    assert book["authors"] == ["Jane Doe"]
+    assert book["categories"] == ["Python"]
+    assert book["last_published_at"] == "2023-05-01"
+    assert book["site"] == "leanpub.com"
+    assert isinstance(book["hash"], str) and book["hash"]
 
 
 async def test_get_leanpub_book_details_cleans_html_description():
@@ -130,7 +132,7 @@ async def test_get_leanpub_book_details_cleans_html_description():
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    about = result["about_the_book"]
+    about = result.book["about_the_book"]
     # All markup tags stripped.
     assert "<" not in about and ">" not in about
     # Paragraph/list breaks collapsed - never three+ consecutive newlines.
@@ -141,12 +143,14 @@ async def test_get_leanpub_book_details_cleans_html_description():
     assert "Item two" in about
 
 
-async def test_get_leanpub_book_details_missing_data_key_returns_none():
+async def test_get_leanpub_book_details_missing_data_key_returns_failed():
     response = FakeResponse(json_data={"meta": "no data here"})
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is None
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
+    assert result.url == LEANPUB_URL
 
 
 async def test_get_leanpub_book_details_malformed_date_yields_none_date():
@@ -155,13 +159,20 @@ async def test_get_leanpub_book_details_malformed_date_yields_none_date():
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is not None
-    assert result["last_published_at"] is None
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["last_published_at"] is None
     # Bad date must not blow up hashing.
-    assert isinstance(result["hash"], str) and result["hash"]
+    assert isinstance(result.book["hash"], str) and result.book["hash"]
 
 
-async def test_get_leanpub_book_details_http_status_error_returns_none():
+async def test_leanpub_failure_returns_failed_result_not_none():
+    """Scenario: a Leanpub HTTP error that used to return a bare ``None``.
+
+    Boundaries: the httpx client raises an ``HTTPStatusError``; the helper must now surface a
+    typed ``ScrapeResult`` (FAILED, with the real url and a secret-free error) rather than
+    ``None``, which ``scrape_urls`` once filed as ``UNKNOWN_ERROR`` (defect (d)).
+    On failure: a Leanpub failure again returns ``None`` and the opaque-error regression returns.
+    """
     request = httpx.Request("GET", LEANPUB_URL)
     resp = httpx.Response(404, request=request, text="not found")
     status_exc = httpx.HTTPStatusError("boom", request=request, response=resp)
@@ -169,32 +180,41 @@ async def test_get_leanpub_book_details_http_status_error_returns_none():
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is None
+    assert isinstance(result, ScrapeResult)
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
+    assert result.url == LEANPUB_URL
+    assert result.error is not None
+    # Only the status code is surfaced, never the raw response body.
+    assert "not found" not in result.error
 
 
-async def test_get_leanpub_book_details_request_error_returns_none():
+async def test_get_leanpub_book_details_request_error_returns_failed():
     request = httpx.Request("GET", LEANPUB_URL)
     exc = httpx.RequestError("network down", request=request)
     with _patch_httpx(get_side_effect=[exc]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is None
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
 
 
-async def test_get_leanpub_book_details_json_decode_error_returns_none():
+async def test_get_leanpub_book_details_json_decode_error_returns_failed():
     decode_exc = json.JSONDecodeError("Expecting value", "", 0)
     response = FakeResponse(json_exc=decode_exc, text="<html>not json</html>")
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is None
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
 
 
-async def test_get_leanpub_book_details_generic_exception_returns_none():
+async def test_get_leanpub_book_details_generic_exception_returns_failed():
     with _patch_httpx(get_side_effect=[RuntimeError("unexpected")]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result is None
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
 
 
 # ---------------------------------------------------------------------------
@@ -228,17 +248,27 @@ async def test_scrape_book_site_without_base_url_returns_failed():
     with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()):
         result = await scrape_book("/some/book", browser, "packtpub")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
+    assert result.site == "packtpub"
 
 
-async def test_scrape_book_detects_404_page():
-    # amazon's 404_PAGE_TITLE is "page not found".
+async def test_scrape_book_404_returns_not_found():
+    """Scenario: amazon serves a page whose title matches ``404_PAGE_TITLE``.
+
+    Boundaries: the 404 short-circuit fires on the first attempt; the result must be a typed
+    NOT_FOUND (not the old opaque ``(None, "FAILED")``) so ``failed_books.csv`` can tell a dead
+    URL from a broken selector. The page is closed exactly once.
+    On failure: a 404 again collapses into FAILED, erasing the distinction subtask 02 adds.
+    """
     page = FakePage(title="Sorry - Page Not Found")
     browser = FakeBrowser(page=page)
 
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.NOT_FOUND
+    assert result.book is None
+    assert result.error is not None
     page.close.assert_awaited()
 
 
@@ -249,16 +279,17 @@ async def test_scrape_book_amazon_happy_path_returns_full_book():
 
     result = await scrape_book(url, browser, "amazon")
 
-    assert isinstance(result, dict)
-    assert result["title"] == "Great Python Book"
-    assert result["authors"] == ["Jane Doe", "John Smith"]
-    assert result["isbn10"] == "1234567890"
-    assert result["isbn13"] == "978-1234567890"
-    assert result["description"] == "A great book about Python."
-    assert result["asin"] == "B0ABCDEFGH"
-    assert result["site"] == "amazon"
-    assert result["url"] == url
-    assert isinstance(result["hash"], str) and result["hash"]
+    assert result.status is ScrapeStatus.SUCCESS
+    book = result.book
+    assert book["title"] == "Great Python Book"
+    assert book["authors"] == ["Jane Doe", "John Smith"]
+    assert book["isbn10"] == "1234567890"
+    assert book["isbn13"] == "978-1234567890"
+    assert book["description"] == "A great book about Python."
+    assert book["asin"] == "B0ABCDEFGH"
+    assert book["site"] == "amazon"
+    assert book["url"] == url
+    assert isinstance(book["hash"], str) and book["hash"]
 
 
 async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
@@ -276,9 +307,9 @@ async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
 
     result = await scrape_book(url, browser, "amazon")
 
-    assert isinstance(result, dict)
-    assert result["isbn10"] == "N/A"
-    assert result["isbn13"] == "N/A"
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["isbn10"] == "N/A"
+    assert result.book["isbn13"] == "N/A"
 
 
 async def test_scrape_book_duplicate_hash_returns_duplicate():
@@ -291,7 +322,8 @@ async def test_scrape_book_duplicate_hash_returns_duplicate():
 
     result = await scrape_book(url, browser, "amazon", storage_backend=storage)
 
-    assert result == (None, "DUPLICATE")
+    assert result.status is ScrapeStatus.DUPLICATE
+    assert result.book is None
     storage.book_exists_by_hash.assert_called_once()
     page.close.assert_awaited()
 
@@ -306,14 +338,21 @@ async def test_scrape_book_non_duplicate_returns_book():
 
     result = await scrape_book(url, browser, "amazon", storage_backend=storage)
 
-    assert isinstance(result, dict)
-    assert result["title"] == "Great Python Book"
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["title"] == "Great Python Book"
     # The hash actually checked against the backend is the book's own hash, not "".
-    storage.book_exists_by_hash.assert_called_once_with(result["hash"])
-    assert result["hash"] != ""
+    storage.book_exists_by_hash.assert_called_once_with(result.book["hash"])
+    assert result.book["hash"] != ""
 
 
-async def test_scrape_book_retries_three_times_on_timeout_then_failed():
+async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count():
+    """Scenario: every navigation times out, exhausting all three attempts.
+
+    Boundaries: the final-timeout path must return a typed TIMEOUT (not the old
+    ``(None, "FAILED")``) and record ``attempts == 3`` so the summary and CSV reflect the
+    retry budget that was spent.
+    On failure: an all-timeouts run again reads as a generic FAILED with no attempt count.
+    """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
     browser = FakeBrowser(page=page)
@@ -321,7 +360,9 @@ async def test_scrape_book_retries_three_times_on_timeout_then_failed():
     with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep:
         result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.TIMEOUT
+    assert result.book is None
+    assert result.attempts == 3
     assert page.goto.await_count == 3
     assert browser.new_page.await_count == 3
     # Sleeps only between attempts (after attempts 1 and 2, not after the last).
@@ -336,7 +377,8 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
     with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep:
         result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.FAILED
+    assert result.book is None
     assert page.goto.await_count == 3
     assert mock_sleep.await_count == 2
 
@@ -384,7 +426,7 @@ async def test_page_closed_exactly_once_on_success():
 
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert isinstance(result, dict)
+    assert result.status is ScrapeStatus.SUCCESS
     assert browser.new_page.await_count == 1
     assert page.close.await_count == 1
     assert browser.new_page.await_count == page.close.await_count
@@ -404,7 +446,7 @@ async def test_page_closed_exactly_once_on_duplicate():
 
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon", storage_backend=storage)
 
-    assert result == (None, "DUPLICATE")
+    assert result.status is ScrapeStatus.DUPLICATE
     assert browser.new_page.await_count == 1
     assert page.close.await_count == 1
 
@@ -421,7 +463,7 @@ async def test_page_closed_exactly_once_on_404():
 
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.NOT_FOUND
     assert browser.new_page.await_count == 1
     assert page.close.await_count == 1
 
@@ -442,7 +484,7 @@ async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
     with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()):
         result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert result == (None, "FAILED")
+    assert result.status is ScrapeStatus.TIMEOUT
     assert browser.new_page.await_count == 3
     assert page.close.await_count == 3
     assert browser.new_page.await_count == page.close.await_count
@@ -462,6 +504,6 @@ async def test_close_failure_does_not_mask_original_error():
 
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
-    assert isinstance(result, dict)
-    assert result["title"] == "Great Python Book"
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["title"] == "Great Python Book"
     page.close.assert_awaited_once()

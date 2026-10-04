@@ -21,6 +21,7 @@ import pytest
 from _pytest.outcomes import Failed, Skipped
 from playwright.async_api import Error as PlaywrightError
 
+from bookscraper.scraping.results import ScrapeStatus
 from bookscraper.scraping.scrape_details import get_leanpub_book_details, route_handler
 
 from .conftest import (
@@ -265,12 +266,15 @@ async def test_httpx_corpus_serves_json_and_rejects_unknown(httpx_corpus):
 
     result = await get_leanpub_book_details(base_url)
 
-    assert result is not None
-    assert result["title"] == "C++17 in Detail"
-    assert result["slug"] == "cpp17indetail"
-    assert result["book_id"] == "101"
-    assert result["authors"] == ["Bartlomiej Filipek"]
-    assert result["last_published_at"] == "2019-08-15"
+    # get_leanpub_book_details now returns a typed ScrapeResult (subtask 03.0/02); unwrap its
+    # SUCCESS book document, which stays identical to the pre-typed-result dict.
+    assert result.status is ScrapeStatus.SUCCESS
+    book = result.book
+    assert book["title"] == "C++17 in Detail"
+    assert book["slug"] == "cpp17indetail"
+    assert book["book_id"] == "101"
+    assert book["authors"] == ["Bartlomiej Filipek"]
+    assert book["last_published_at"] == "2019-08-15"
 
     # Reject-unknown proof via a standalone recorder so the fixture teardown stays green.
     unknown = "https://leanpub.com/api/v1/cache/books/does_not_exist.json?include=accepted_authors"

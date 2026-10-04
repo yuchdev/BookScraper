@@ -6,6 +6,7 @@ import csv
 import random
 import sys
 import time
+from collections import Counter
 
 import pandas as pd
 from playwright.async_api import async_playwright
@@ -13,16 +14,19 @@ from playwright.async_api import async_playwright
 from ..backends import resolve_store_backend
 from ..book_utils import logger, print_log
 from ..scraping.parameters import HEADLESS_BROWSER
+from ..scraping.results import ScrapeStatus
 from ..scraping.scrape_details import scrape_book
 
 
-def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str]], filename: str = "failed_books.csv") -> None:
-    """
-    Saves the failed/duplicate URLs with their status to a CSV file.
+def save_failed_urls_to_csv(
+    failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"
+) -> None:
+    """Save the failed/duplicate URLs with their status and error reason to a CSV file.
 
-    Args:
-        failed_urls_with_status: A list of tuples, where each tuple is (url, status_string).
-        filename: The name of the CSV file to create.
+    :param failed_urls_with_status: A list of ``(url, status, error)`` tuples, where ``status``
+        is a :class:`ScrapeStatus` value and ``error`` is a short, secret-free reason (may be
+        empty for a duplicate).
+    :param filename: The name of the CSV file to create.
     """
     if not failed_urls_with_status:
         logger.info(f"No failed/duplicate URLs to save to {filename}.")
@@ -31,9 +35,9 @@ def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str]], file
     try:
         with open(filename, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["url", "status"])  # Add status header
-            for url, status in failed_urls_with_status:
-                writer.writerow([url, status])
+            writer.writerow(["url", "status", "error"])  # Add status + error header
+            for url, status, error in failed_urls_with_status:
+                writer.writerow([url, status, error])
         print_log(
             f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}",
             "success",
@@ -104,8 +108,10 @@ async def run(args: argparse.Namespace) -> None:
         "oreilly": [],
         "other": [],
     }
-    # This will store (url, status) tuples for failed or duplicate entries
+    # This will store (url, status, error) tuples for failed or duplicate entries
     failed_urls_with_status = []
+    # Per-status tally for the end-of-run summary (counts every ScrapeStatus seen).
+    status_counts: Counter[ScrapeStatus] = Counter()
 
     filepath = args.input_file
     try:
@@ -176,35 +182,26 @@ async def run(args: argparse.Namespace) -> None:
             tasks = []
             for url in batch_urls:
                 site = identify_website(url)
-                # Pass the storage_backend to scrape_book for immediate duplicate check
-                # scrape_book will return a dict on success, or (None, "DUPLICATE"), or (None, "FAILED")
+                # Pass the storage_backend to scrape_book for immediate duplicate check.
+                # scrape_book always returns a typed ScrapeResult (see scraping/results.py).
                 tasks.append(scrape_book(url, browser, site, storage_backend))
 
             results = await asyncio.gather(*tasks)
 
-            for index, result in enumerate(results):
-                if isinstance(result, dict):
-                    # This is a successfully scraped book (a dictionary)
-                    books.append(result)
-                elif isinstance(result, tuple) and len(result) == 2 and result[0] is None:
-                    # This is a status tuple: (None, "DUPLICATE") or (None, "FAILED")
-                    original_url = batch_urls[index]
-                    status_type = result[1]  # "DUPLICATE" or "FAILED"
-
-                    # Add to failed_urls_with_status for diagnostic CSV
-                    failed_urls_with_status.append((original_url, status_type))
-
-                    if status_type == "DUPLICATE":
-                        logger.info(f"Book from URL: {original_url} detected as duplicate and skipped from saving.")
-                    elif status_type == "FAILED":
-                        logger.error(f"Scraping failed for URL: {original_url}")
-                else:
-                    # Catch-all for unexpected return types from scrape_book
-                    original_url = batch_urls[index]
-                    logger.error(f"Unexpected return type from scrape_book for URL: {original_url}. Result: {result}")
-                    failed_urls_with_status.append(
-                        (original_url, "UNKNOWN_ERROR")
-                    )  # Add to failed_urls for diagnostics
+            for result in results:
+                status_counts[result.status] += 1
+                match result.status:
+                    case ScrapeStatus.SUCCESS:
+                        # book is guaranteed non-None on SUCCESS by ScrapeResult.__post_init__.
+                        books.append(result.book)
+                    case ScrapeStatus.DUPLICATE:
+                        failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
+                        logger.info(f"Book from URL: {result.url} detected as duplicate and skipped from saving.")
+                    case _:
+                        # Every other status is a failed scrape; the enum value is the CSV
+                        # status and the typed error distinguishes 404 / timeout / parse error.
+                        failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
+                        logger.error(f"Scraping failed for URL: {result.url} ({result.status.value}): {result.error}")
 
             if current_batch_num < total_batches:  # Only pause if there are more batches
                 print_log("Pausing between batches...", "info")
@@ -224,6 +221,12 @@ async def run(args: argparse.Namespace) -> None:
             )
         else:
             print_log("No unique books were scraped successfully.", "warning")
+
+        if status_counts:
+            status_breakdown = ", ".join(
+                f"{status.value}={status_counts[status]}" for status in ScrapeStatus if status_counts[status]
+            )
+            print_log(f"Scrape status breakdown: {status_breakdown}.", "info")
 
         await browser.close()
 

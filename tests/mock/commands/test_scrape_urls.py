@@ -19,6 +19,7 @@ from bookscraper.commands.scrape_urls import (
     save_failed_urls_to_csv,
     save_other_links_to_csv,
 )
+from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 MODULE = "bookscraper.commands.scrape_urls"
 
@@ -49,19 +50,19 @@ def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
     assert not target.exists()
 
 
-def test_save_failed_urls_writes_header_and_rows(tmp_path) -> None:
+def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path) -> None:
     target = tmp_path / "failed_books.csv"
     rows = [
-        ("https://leanpub.com/a", "DUPLICATE"),
-        ("https://www.amazon.com/dp/1", "FAILED"),
-        ("https://example.com/x", "UNKNOWN_ERROR"),
+        ("https://leanpub.com/a", "DUPLICATE", ""),
+        ("https://www.amazon.com/dp/1", "NOT_FOUND", "404 page detected"),
+        ("https://www.oreilly.com/x", "TIMEOUT", "timed out after 3 attempts"),
     ]
     save_failed_urls_to_csv(rows, filename=str(target))
 
     with open(target, encoding="utf-8", newline="") as fh:
         read_rows = list(csv.reader(fh))
 
-    assert read_rows[0] == ["url", "status"]
+    assert read_rows[0] == ["url", "status", "error"]
     assert read_rows[1:] == [list(r) for r in rows]
 
 
@@ -69,7 +70,7 @@ def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
     target = tmp_path / "failed_books.csv"
     with patch("builtins.open", side_effect=OSError("disk full")):
         # Must not propagate: the caller relies on best-effort diagnostic writes.
-        save_failed_urls_to_csv([("u", "FAILED")], filename=str(target))
+        save_failed_urls_to_csv([("u", "FAILED", "boom")], filename=str(target))
     assert not target.exists()
 
 
@@ -218,7 +219,8 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
     backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
     pw_factory, browser = _make_playwright_factory()
     book = {"title": "Good Book", "hash": "abc123"}
-    scrape_book = AsyncMock(side_effect=[book])
+    result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/good", site="leanpub", book=book)
+    scrape_book = AsyncMock(side_effect=[result])
 
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
@@ -237,14 +239,33 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
 
 
 @pytest.mark.parametrize(
-    ("scrape_result", "expected_status"),
+    ("scrape_result", "expected_row"),
     [
-        ((None, "DUPLICATE"), "DUPLICATE"),
-        ((None, "FAILED"), "FAILED"),
-        ("some-unexpected-string", "UNKNOWN_ERROR"),
+        (
+            ScrapeResult(ScrapeStatus.DUPLICATE, url="https://leanpub.com/x", site="leanpub"),
+            ("https://leanpub.com/x", "DUPLICATE", ""),
+        ),
+        (
+            ScrapeResult(
+                ScrapeStatus.FAILED, url="https://leanpub.com/x", site="leanpub", error="KeyError: 'BASE_URL'"
+            ),
+            ("https://leanpub.com/x", "FAILED", "KeyError: 'BASE_URL'"),
+        ),
+        (
+            ScrapeResult(
+                ScrapeStatus.NOT_FOUND, url="https://leanpub.com/x", site="leanpub", error="404 page detected"
+            ),
+            ("https://leanpub.com/x", "NOT_FOUND", "404 page detected"),
+        ),
+        (
+            ScrapeResult(
+                ScrapeStatus.TIMEOUT, url="https://leanpub.com/x", site="leanpub", error="timed out after 3 attempts"
+            ),
+            ("https://leanpub.com/x", "TIMEOUT", "timed out after 3 attempts"),
+        ),
     ],
 )
-async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, expected_status: str) -> None:
+async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_result, expected_row) -> None:
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/x"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
 
@@ -261,15 +282,63 @@ async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, 
     ):
         await run(args)
 
-    # No dict result => nothing saved, but the backend is still closed.
+    # No success result => nothing saved, but the backend is still closed.
     backend.save_books.assert_not_called()
     backend.close.assert_called_once_with()
     browser.close.assert_awaited_once()
 
-    # The failed/duplicate diagnostic CSV gets exactly the one status tuple.
+    # The failed/duplicate diagnostic CSV gets exactly the one (url, status, error) row,
+    # keyed off the typed result's own url and error (UNKNOWN_ERROR no longer exists).
     save_failed.assert_called_once()
     (recorded,), _ = save_failed.call_args
-    assert recorded == [("https://leanpub.com/x", expected_status)]
+    assert recorded == [expected_row]
+
+
+async def test_run_summary_counts_each_status(tmp_path) -> None:
+    """Scenario: a run yields one SUCCESS, one NOT_FOUND, and one TIMEOUT result.
+
+    Boundaries: the end-of-run summary must emit a per-ScrapeStatus breakdown tallying each
+    status exactly once, in enum order, via ``print_log``.
+    On failure: the summary drops or miscounts a status, so an operator can't see at a glance
+    how a batch broke down (how many dead URLs vs. timeouts vs. real books).
+    """
+    urls = [f"https://leanpub.com/book-{i}" for i in range(3)]
+    csv_path = _write_csv(tmp_path, urls)
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    pw_factory, _browser = _make_playwright_factory()
+    results = [
+        ScrapeResult(ScrapeStatus.SUCCESS, url=urls[0], site="leanpub", book={"title": "A", "hash": "h"}),
+        ScrapeResult(ScrapeStatus.NOT_FOUND, url=urls[1], site="leanpub", error="404 page detected"),
+        ScrapeResult(ScrapeStatus.TIMEOUT, url=urls[2], site="leanpub", error="timed out after 3 attempts"),
+    ]
+    scrape_book = AsyncMock(side_effect=results)
+    print_log = MagicMock()
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.asyncio.sleep", AsyncMock()),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.print_log", print_log),
+    ):
+        await run(args)
+
+    breakdown_lines = [
+        call.args[0] for call in print_log.call_args_list if call.args and "Scrape status breakdown:" in call.args[0]
+    ]
+    assert len(breakdown_lines) == 1
+    line = breakdown_lines[0]
+    assert "SUCCESS=1" in line
+    assert "NOT_FOUND=1" in line
+    assert "TIMEOUT=1" in line
+    # Only the three statuses that actually occurred appear (no DUPLICATE=0 noise).
+    assert "DUPLICATE" not in line
+    assert "FAILED" not in line
 
 
 async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> None:
@@ -282,7 +351,11 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> No
     backend.save_books.return_value = SaveSummary(inserted=11, duplicates=0, errors=0)
     pw_factory, browser = _make_playwright_factory()
     books = [{"title": f"Book {i}", "hash": f"h{i}"} for i in range(11)]
-    scrape_book = AsyncMock(side_effect=books)
+    results = [
+        ScrapeResult(ScrapeStatus.SUCCESS, url=f"https://leanpub.com/book-{i}", site="leanpub", book=book)
+        for i, book in enumerate(books)
+    ]
+    scrape_book = AsyncMock(side_effect=results)
     sleep = AsyncMock()
 
     with (

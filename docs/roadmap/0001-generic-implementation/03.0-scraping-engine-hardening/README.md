@@ -28,7 +28,7 @@ stay attributable.
 | #  | Document                                                                   | Status         | Blocks     |
 |----|----------------------------------------------------------------------------|----------------|------------|
 | 01 | [Page lifecycle & leak fixes](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks.md)          | ✅ Complete    | 02         |
-| 02 | [Typed scrape result](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)                      | ⬜ Not started | 03, 05     |
+| 02 | [Typed scrape result](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)                      | ✅ Complete    | 03, 05     |
 | 03 | [Missing-field resilience & retry policy](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/03-missing-field-resilience.md) | ⬜ Not started | 04     |
 | 04 | [Wire unused selectors (tags, fallbacks, expanders)](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/04-wire-unused-selectors.md) | ⬜ Not started | - |
 | 05 | [Leanpub API detail hardening](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/05-leanpub-api-detail-hardening.md)     | ⬜ Not started | -          |

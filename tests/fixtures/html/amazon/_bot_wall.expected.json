@@ -1,6 +1,7 @@
 {
   "_known_issues": [
-    "03.2/04 bot-wall detection (a CAPTCHA 'Robot Check' page has no #productTitle, so BOOK_TITLE times out and scrape_book retries 3x then returns (None, 'FAILED'); 03.2/04 would detect the wall and return BLOCKED with no retry)"
+    "03.2/04 bot-wall detection (a CAPTCHA 'Robot Check' page has no #productTitle, so BOOK_TITLE times out and scrape_book retries 3x then returns a typed TIMEOUT ScrapeResult since 03.0/02; 03.2/04 would detect the wall and return BLOCKED with no retry)"
   ],
-  "_scrape_status": "FAILED"
+  "_scrape_error": "timed out after 3 attempts",
+  "_scrape_status": "TIMEOUT"
 }

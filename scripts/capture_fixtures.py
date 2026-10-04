@@ -574,10 +574,26 @@ def _normalize_scrape_result(result: Any) -> dict[str, Any]:
     this as ``normalize_result`` rather than keeping its own copy, so ``--refresh``'s
     golden-drift check here and that golden tier cannot diverge.
 
-    A dict scrape is returned minus the volatile ``scraped_at``; a ``(None, STATUS)``
-    tuple becomes ``{"_scrape_status": STATUS}``; a bare ``None`` becomes
-    ``{"_scrape_status": "NONE"}`` - so a golden diff reads identically to subtask 04's.
+    Since subtask 03.0/02 the production scrapers always return a
+    :class:`bookscraper.scraping.results.ScrapeResult`. A ``SUCCESS`` result is normalized to
+    its book document minus the volatile ``scraped_at`` (so the book-document goldens stay
+    byte-identical to the pre-typed-result ones); every other status becomes
+    ``{"_scrape_status": STATUS}`` plus a ``_scrape_error`` when the result carries one, so a
+    404 / timeout / parse error reads as a distinct, diffable golden rather than one opaque
+    ``FAILED``. The legacy dict / ``(None, STATUS)`` / bare-``None`` shapes are still accepted
+    for any pre-typed caller that has not migrated.
     """
+    from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
+
+    if isinstance(result, ScrapeResult):
+        if result.status is ScrapeStatus.SUCCESS:
+            record = dict(result.book)
+            record.pop("scraped_at", None)
+            return record
+        normalized: dict[str, Any] = {"_scrape_status": result.status.value}
+        if result.error is not None:
+            normalized["_scrape_error"] = result.error
+        return normalized
     if result is None:
         return {"_scrape_status": "NONE"}
     if isinstance(result, tuple):

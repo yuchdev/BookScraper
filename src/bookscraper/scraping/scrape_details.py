@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from html import unescape
-from typing import Optional, Union
+from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -18,6 +18,10 @@ from playwright.async_api import Browser, Page, Route, TimeoutError
 from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
 from .parameters import USER_AGENTS, site_constants
+from .results import ScrapeResult, ScrapeStatus
+
+# The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
+LEANPUB_SITE = "leanpub"
 
 # Get a logger instance specifically for this module
 module_logger = logging.getLogger("scrape_details")
@@ -55,15 +59,17 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
             module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
-async def get_leanpub_book_details(url: str) -> Optional[dict]:
-    """
-    Fetches detailed information for a single Leanpub book from the provided JSON structure.
+async def get_leanpub_book_details(url: str) -> ScrapeResult:
+    """Fetch detailed information for a single Leanpub book from its JSON:API endpoint.
 
-    Args:
-        url (str): The API endpoint of the book (e.g., "https://leanpub.com/api/v1/cache/books/quickguidetodatasciencewithpython.json").
+    Every path returns a :class:`ScrapeResult`: a :attr:`ScrapeStatus.SUCCESS` carrying the
+    book document, or a :attr:`ScrapeStatus.FAILED` carrying a short, secret-free ``error``
+    (the raw HTTP response body is never put in ``error``; only the status code is). Refining
+    the "no data" / unparseable-field cases into richer statuses is deferred to subtask 03.0/05.
 
-    Returns:
-        dict: A dictionary containing extracted book details, or None if an error occurs.
+    :param url: The API endpoint of the book (e.g.
+        ``https://leanpub.com/api/v1/cache/books/quickguidetodatasciencewithpython.json``).
+    :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     # In a real application, you would make an HTTP request here:
     params = {"include": "accepted_authors"}  # Keep this if 'included' authors are still needed from API
@@ -77,7 +83,7 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
             book_data = response_data.get("data")
             if not book_data:
                 print(f"No 'data' found in response for book slug: {url}")
-                return None
+                return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="no 'data' in response")
 
             attributes = book_data.get("attributes", {})
             relationships = book_data.get("relationships", {})
@@ -141,37 +147,38 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
                 extract_year_from_date(extracted_details["last_published_at"]),
             )
 
-            return extracted_details
+            return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site=LEANPUB_SITE, book=extracted_details)
 
     except httpx.HTTPStatusError as e:
         print(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
-        return None
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"HTTP {e.response.status_code}")
     except httpx.RequestError as exc:
         print(f"An HTTP error occurred while requesting {exc.request.url!r}: {exc}")
-        return None
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="request error")
     except json.JSONDecodeError:
         print(f"Failed to decode JSON response for url '{url}'. Response content: {response.text[:200]}...")
-        return None
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="invalid JSON response")
     except Exception as e:
         print(f"An unexpected error occurred for url '{url}': {e}")
-        return None
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"{type(e).__name__}: {e}")
 
 
 async def scrape_book(
     url: str, browser: Browser, site: str, storage_backend: Optional[StorageBackend] = None
-) -> Optional[Union[dict, tuple[None, str]]]:
-    """
-    Scrapes book details from a given URL, handles retries, and checks for duplicates.
+) -> ScrapeResult:
+    """Scrape book details from a URL, handle retries, and check for duplicates.
 
-    Args:
-        url: The URL of the book page to scrape (can be relative).
-        browser: The Playwright browser instance.
-        site: The identifier for the website (e.g., "amazon", "leanpub").
-        storage_backend: The StorageBackend (mongo or json) to check for duplicates against.
+    Every path returns a :class:`ScrapeResult` - a :attr:`ScrapeStatus.SUCCESS` carrying the
+    scraped book document, or one of the non-success statuses (:attr:`ScrapeStatus.DUPLICATE`,
+    :attr:`ScrapeStatus.NOT_FOUND`, :attr:`ScrapeStatus.TIMEOUT`, or :attr:`ScrapeStatus.FAILED`)
+    carrying a short, secret-free ``error``.
 
-    Returns:
-        A dictionary of book details on successful scrape, (None, "DUPLICATE") if already exists,
-        or (None, "FAILED") on failure.
+    :param url: The URL of the book page to scrape (can be relative).
+    :param browser: The Playwright browser instance.
+    :param site: The identifier for the website (e.g. ``"amazon"``, ``"leanpub"``).
+    :param storage_backend: The :class:`StorageBackend` (mongo or json) to check duplicates
+        against, or ``None`` to skip the inline duplicate check.
+    :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     # Leanpub is a pure httpx/JSON path - dispatch it before any Playwright page is created,
     # so it never opens (and therefore never leaks) a browser page.
@@ -196,7 +203,13 @@ async def scrape_book(
                 if not base_url:
                     module_logger.error(f"BASE_URL not defined for site: {site}. Cannot scrape {url}")
                     print_log(f"Error: BASE_URL not defined for {site}. Skipping {url}.", "error")
-                    return (None, "FAILED")
+                    return ScrapeResult(
+                        ScrapeStatus.FAILED,
+                        url=url,
+                        site=site,
+                        error=f"BASE_URL not defined for site '{site}'",
+                        attempts=attempt,
+                    )
 
                 full_url = urljoin(base_url, url)
                 module_logger.info(f"Navigating to {full_url} for detailed scraping.")
@@ -210,7 +223,13 @@ async def scrape_book(
                     if site_constants[site]["404_PAGE_TITLE"].lower() in page_title.lower():
                         module_logger.warning(f"404 page detected for {full_url}. Skipping.")
                         print_log(f"404 page detected for {full_url}. Skipping.", "warning")
-                        return (None, "FAILED")
+                        return ScrapeResult(
+                            ScrapeStatus.NOT_FOUND,
+                            url=full_url,
+                            site=site,
+                            error="404 page detected",
+                            attempts=attempt,
+                        )
 
                 # Scrape data fields using selectors from site_constants
                 book_details = {
@@ -358,11 +377,11 @@ async def scrape_book(
                             f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
                         )
                         print_log(f"Skipping duplicate book for URL: {url}", "warning")
-                        return (None, "DUPLICATE")  # Indicate duplicate status
+                        return ScrapeResult(ScrapeStatus.DUPLICATE, url=full_url, site=site, attempts=attempt)
 
                 # If all successful and not a duplicate:
                 module_logger.info(f"Successfully scraped details for {book_details['title']}")
-                return book_details
+                return ScrapeResult(ScrapeStatus.SUCCESS, url=full_url, site=site, book=book_details, attempts=attempt)
 
         except TimeoutError as e:
             module_logger.error(f"Timeout while scraping {url} on attempt {attempt}: {e}")
@@ -372,7 +391,13 @@ async def scrape_book(
                 continue  # Try next attempt
             module_logger.error(f"Failed to scrape {url} after {retries} attempts due to timeout.")
             print_log(f"Failed to scrape {url} after {retries} attempts due to timeout.", "error")
-            return (None, "FAILED")
+            return ScrapeResult(
+                ScrapeStatus.TIMEOUT,
+                url=url,
+                site=site,
+                error=f"timed out after {retries} attempts",
+                attempts=attempt,
+            )
 
         except Exception as e:
             module_logger.error(f"Error scraping {url} on attempt {attempt}: {e}", exc_info=True)
@@ -382,9 +407,21 @@ async def scrape_book(
                 continue  # Try next attempt
             module_logger.error(f"Failed to scrape {url} after {retries} attempts.")
             print_log(f"Failed to scrape {url} after {retries} attempts.", "error")
-            return (None, "FAILED")
+            return ScrapeResult(
+                ScrapeStatus.FAILED,
+                url=url,
+                site=site,
+                error=f"{type(e).__name__}: {e}",
+                attempts=attempt,
+            )
 
     # The loop only exits here if every attempt fell through without returning; the
-    # per-attempt handlers above already return (None, "FAILED") on the final attempt,
-    # so this is the explicit post-loop failure return.
-    return (None, "FAILED")
+    # per-attempt handlers above already return on the final attempt, so this is the
+    # explicit post-loop failure return.
+    return ScrapeResult(
+        ScrapeStatus.FAILED,
+        url=url,
+        site=site,
+        error="scrape exhausted all attempts",
+        attempts=retries,
+    )

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
 from bookscraper.commands.search import run, save_failed_urls_to_csv
+from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 MODULE = "bookscraper.commands.search"
 
@@ -153,7 +154,14 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
     backend.leanpub_book_exists = MagicMock(side_effect=[True, False])
 
     search_api = AsyncMock(return_value=[existing, fresh])
-    detail = AsyncMock(return_value={"title": "Fresh Book", "hash": "h1"})
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/fresh-book.json",
+            site="leanpub",
+            book={"title": "Fresh Book", "hash": "h1"},
+        )
+    )
 
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
@@ -187,13 +195,23 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     backend.leanpub_book_exists = MagicMock(return_value=False)
 
     search_api = AsyncMock(return_value=[good, boom, weird])
-    # dict => saved; Exception => captured by gather(return_exceptions=True) => failed;
-    # None => unexpected type => failed. None of these raise out of run().
+    # SUCCESS ScrapeResult => saved; non-success ScrapeResult => failed (typed status/error);
+    # a raw Exception from gather(return_exceptions=True) => failed via the fallback branch.
     detail = AsyncMock(
         side_effect=[
-            {"title": "Good Book", "hash": "ok"},
-            RuntimeError("detail scrape blew up"),
-            None,
+            ScrapeResult(
+                ScrapeStatus.SUCCESS,
+                url="https://leanpub.com/api/v1/cache/books/good.json",
+                site="leanpub",
+                book={"title": "Good Book", "hash": "ok"},
+            ),
+            ScrapeResult(
+                ScrapeStatus.FAILED,
+                url="https://leanpub.com/api/v1/cache/books/boom.json",
+                site="leanpub",
+                error="detail scrape blew up",
+            ),
+            RuntimeError("weird crash"),
         ]
     )
     saved_failed = MagicMock()
@@ -207,11 +225,11 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     ):
         await run(args)
 
-    # Only the dict result is persisted.
+    # Only the SUCCESS result's book is persisted.
     backend.save_books.assert_called_once_with([{"title": "Good Book", "hash": "ok"}])
     backend.close.assert_called_once_with()
 
-    # The Exception and the None results both land in the failed-attempts CSV.
+    # The typed FAILED result and the raw Exception both land in the failed-attempts CSV.
     saved_failed.assert_called_once()
     (failed_arg,), _ = saved_failed.call_args
     assert len(failed_arg) == 2
@@ -219,6 +237,46 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     assert failed_titles == {"Boom Book", "Weird Book"}
     boom_entry = next(f for f in failed_arg if f["title"] == "Boom Book")
     assert "detail scrape blew up" in boom_entry["error"]
+
+
+async def test_search_failed_record_uses_real_book_url() -> None:
+    """Scenario: a Leanpub detail scrape fails, producing a non-success ScrapeResult.
+
+    Boundaries: the detail helper returns a typed FAILED result; the failed-attempts record
+    must carry the result's real ``url`` (the resolved ``book_url``) and ``error``, not the old
+    ``"url": "N/A"`` that came from reading a ``url`` key Leanpub candidates never had.
+    On failure: the diagnostic CSV again records ``N/A`` for every Leanpub failure, erasing the
+    URL an operator needs to retry it.
+    """
+    args = SimpleNamespace(store_backend="json")
+
+    candidate = _leanpub_book("broken-book", "Broken Book")
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+
+    book_url = "https://leanpub.com/api/v1/cache/books/broken-book.json"
+    search_api = AsyncMock(return_value=[candidate])
+    detail = AsyncMock(return_value=ScrapeResult(ScrapeStatus.FAILED, url=book_url, site="leanpub", error="HTTP 500"))
+    saved_failed = MagicMock()
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
+    ):
+        await run(args)
+
+    backend.save_books.assert_not_called()
+    saved_failed.assert_called_once()
+    (failed_arg,), _ = saved_failed.call_args
+    assert len(failed_arg) == 1
+    record = failed_arg[0]
+    assert record["url"] == book_url
+    assert record["url"] != "N/A"
+    assert record["error"] == "HTTP 500"
 
 
 async def test_run_no_new_books_skips_save_but_closes_backend() -> None:
