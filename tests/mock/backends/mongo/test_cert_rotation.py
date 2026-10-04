@@ -28,6 +28,7 @@ _X509_SETTINGS = {
 
 @pytest.fixture
 def atlas_env(monkeypatch):
+    """Fixture: set ATLAS_* env vars to dummy values for cert rotation tests."""
     monkeypatch.setenv("ATLAS_CLIENT_ID", "client-id")
     monkeypatch.setenv("ATLAS_CLIENT_SECRET", "client-secret")
     monkeypatch.setenv("ATLAS_PROJECT_ID", "proj123")
@@ -37,6 +38,7 @@ def atlas_env(monkeypatch):
 
 
 def _response(*, json_body=None, content=b"", status=200, url="https://cloud.mongodb.com/x") -> httpx.Response:
+    """Build a minimal httpx.Response for Atlas API mocking."""
     return httpx.Response(
         status,
         json=json_body,
@@ -404,9 +406,16 @@ def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, 
 # --------------------------------------------------------------------------- #
 def test_verify_retries_then_succeeds() -> None:
     """
-    Scenario: Atlas rejects the freshly issued cert twice while it propagates, then accepts it.
-    Boundaries: build_mongo_client/ping faked; injected sleep so no real wait; client per attempt.
-    On failure: verification gives up before Atlas propagates, or never retries.
+    [Local] cert rotation: verifies verify retries then succeeds.
+    
+    Scenario:
+        Atlas rejects the freshly issued cert twice while it propagates, then accepts it.
+    
+    Boundaries:
+        - build_mongo_client/ping faked; injected sleep so no real wait; client per attempt.
+    
+    On failure, first check:
+        - verification gives up before Atlas propagates, or never retries.
     """
     client = Mock()
     sleep = Mock()
@@ -426,9 +435,16 @@ def test_verify_retries_then_succeeds() -> None:
 
 def test_verify_failure_message_has_code_but_no_host() -> None:
     """
-    Scenario: every attempt fails; the raised error keeps the redacted code but no host/URI.
-    Boundaries: ping always raises a redacted MongoConnectionError; injected sleep.
-    On failure: verification masks the error code, or a host/credential leaks into the message.
+    [Local] cert rotation: verifies verify failure message has code but no host.
+    
+    Scenario:
+        every attempt fails; the raised error keeps the redacted code but no host/URI.
+    
+    Boundaries:
+        - ping always raises a redacted MongoConnectionError; injected sleep.
+    
+    On failure, first check:
+        - verification masks the error code, or a host/credential leaks into the message.
     """
     client = Mock()
     sleep = Mock()
@@ -450,9 +466,16 @@ def test_verify_failure_message_has_code_but_no_host() -> None:
 
 def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
     """
-    Scenario: attempts <= 0 still runs exactly one ping (clamped to 1), never zero.
-    Boundaries: build_mongo_client/ping faked; ping succeeds so no sleep is needed.
-    On failure: a mistyped --verify-attempts 0 silently skips verification.
+    [Local] cert rotation: verifies verify certificate runs once when attempts below one.
+    
+    Scenario:
+        attempts <= 0 still runs exactly one ping (clamped to 1), never zero.
+    
+    Boundaries:
+        - build_mongo_client/ping faked; ping succeeds so no sleep is needed.
+    
+    On failure, first check:
+        - a mistyped --verify-attempts 0 silently skips verification.
     """
     client = Mock()
     with (
@@ -470,9 +493,16 @@ def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
 # --------------------------------------------------------------------------- #
 def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> None:
     """
-    Scenario: the new cert verifies, so settings.json is repointed at it and verified is True.
-    Boundaries: Atlas HTTP + build_mongo_client/ping faked (ping succeeds).
-    On failure: a verified cert is not committed, or verification is skipped.
+    [Local] cert rotation: verifies verify success then repoints settings.
+    
+    Scenario:
+        the new cert verifies, so settings.json is repointed at it and verified is True.
+    
+    Boundaries:
+        - Atlas HTTP + build_mongo_client/ping faked (ping succeeds).
+    
+    On failure, first check:
+        - a verified cert is not committed, or verification is skipped.
     """
     (isolated_config / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -493,9 +523,16 @@ def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> No
 
 def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> None:
     """
-    Scenario: no URI is configured, so verification is skipped (no ping) but repointing proceeds.
-    Boundaries: resolver returns (None, None); build_mongo_client asserted never called.
-    On failure: verification pings with no URI, or a skip blocks the repoint.
+    [Local] cert rotation: verifies verify skipped when no uri configured.
+    
+    Scenario:
+        no URI is configured, so verification is skipped (no ping) but repointing proceeds.
+    
+    Boundaries:
+        - resolver returns (None, None); build_mongo_client asserted never called.
+    
+    On failure, first check:
+        - verification pings with no URI, or a skip blocks the repoint.
     """
     (isolated_config / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -518,10 +555,16 @@ def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> No
 
 def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, isolated_config) -> None:
     """
-    Scenario: verification fails for good; settings.json is NOT repointed, the PEM stays on disk,
-    and verified is False (ROT-12).
-    Boundaries: ping always raises a redacted MongoConnectionError; verify_attempts=1 (no sleep).
-    On failure: a broken identity is committed to settings.json.
+    [Local] cert rotation: verifies rotate certificate verify failure leaves settings untouched.
+    
+    Scenario:
+        verification fails for good; settings.json is NOT repointed, the PEM stays on disk, and verified is False (ROT-12).
+    
+    Boundaries:
+        - ping always raises a redacted MongoConnectionError; verify_attempts=1 (no sleep).
+    
+    On failure, first check:
+        - a broken identity is committed to settings.json.
     """
     (isolated_config / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -542,9 +585,16 @@ def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, 
 
 def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolated_config) -> None:
     """
-    Scenario: verify=False repoints settings.json without ever building a client / pinging.
-    Boundaries: build_mongo_client asserted never called.
-    On failure: the offline path still contacts Atlas.
+    [Local] cert rotation: verifies rotate certificate no verify skips ping and repoints.
+    
+    Scenario:
+        verify=False repoints settings.json without ever building a client / pinging.
+    
+    Boundaries:
+        - build_mongo_client asserted never called.
+    
+    On failure, first check:
+        - the offline path still contacts Atlas.
     """
     (isolated_config / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -564,10 +614,16 @@ def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolate
 
 def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(atlas_env, isolated_config) -> None:
     """
-    Scenario: the resolver cannot supply a URI (ConfigError), so rotation fails loudly without
-    repointing rather than pinging or guessing.
-    Boundaries: resolve_mongo_connection raises ConfigError after the PEM is written.
-    On failure: an unhandled ConfigError crashes, or settings.json is repointed blindly.
+    [Local] cert rotation: verifies rotate certificate config error during verify becomes rotation error.
+    
+    Scenario:
+        the resolver cannot supply a URI (ConfigError), so rotation fails loudly without repointing rather than pinging or guessing.
+    
+    Boundaries:
+        - resolve_mongo_connection raises ConfigError after the PEM is written.
+    
+    On failure, first check:
+        - an unhandled ConfigError crashes, or settings.json is repointed blindly.
     """
     (isolated_config / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -601,10 +657,16 @@ def prune_guard(isolated_config):
 
 def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard) -> None:
     """
-    Scenario: after a verified rotation the active cert and the new cert are kept, older certs pruned.
-    Boundaries: keep=1; the resolver reports an older 'active' cert that must survive despite being
-    beyond keep (protected), while a still-older stale cert is pruned (ROT-6/7).
-    On failure: the active identity is deleted, or stale keys linger past keep.
+    [Local] cert rotation: verifies verify success prunes superseded keeping active.
+    
+    Scenario:
+        after a verified rotation the active cert and the new cert are kept, older certs pruned.
+    
+    Boundaries:
+        - keep=1; the resolver reports an older 'active' cert that must survive despite being beyond keep (protected), while a still-older stale cert is pruned (ROT-6/7).
+    
+    On failure, first check:
+        - the active identity is deleted, or stale keys linger past keep.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     active = prune_guard / "X509-cert-old.pem"
@@ -632,10 +694,16 @@ def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard)
 
 def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -> None:
     """
-    Scenario: a cert named by TLS_CERT_FILE is protected from pruning however old (ROT-6).
-    Boundaries: keep=1 with a TLS_CERT_FILE cert older than the newest, so only the TLS_CERT_FILE
-    clause of the protected set keeps it.
-    On failure: an in-use cert referenced only via TLS_CERT_FILE is deleted.
+    [Local] cert rotation: verifies prune protects tls cert file env.
+    
+    Scenario:
+        a cert named by TLS_CERT_FILE is protected from pruning however old (ROT-6).
+    
+    Boundaries:
+        - keep=1 with a TLS_CERT_FILE cert older than the newest, so only the TLS_CERT_FILE clause of the protected set keeps it.
+    
+    On failure, first check:
+        - an in-use cert referenced only via TLS_CERT_FILE is deleted.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     tls_cert = prune_guard / "X509-cert-tls.pem"
@@ -658,10 +726,16 @@ def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -
 
 def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> None:
     """
-    Scenario: the URI resolves for verification but the post-repoint resolve raises ConfigError, so
-    pruning is skipped entirely - never prune on uncertainty (ROT-8).
-    Boundaries: resolve_mongo_connection succeeds once (URI) then raises ConfigError (prune).
-    On failure: a resolver hiccup deletes certs blindly, risking loss of the active identity.
+    [Local] cert rotation: verifies prune skipped when active cert unresolvable.
+    
+    Scenario:
+        the URI resolves for verification but the post-repoint resolve raises ConfigError, so pruning is skipped entirely - never prune on uncertainty (ROT-8).
+    
+    Boundaries:
+        - resolve_mongo_connection succeeds once (URI) then raises ConfigError (prune).
+    
+    On failure, first check:
+        - a resolver hiccup deletes certs blindly, risking loss of the active identity.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     stale = prune_guard / "X509-cert-stale.pem"
@@ -687,9 +761,16 @@ def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> 
 
 def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
     """
-    Scenario: verification fails, so pruning never runs (ROT-13) - no superseded cert is removed.
-    Boundaries: ping always raises; prune_old_certificates patched to detect any call.
-    On failure: certs are pruned around an unverified/broken new identity.
+    [Local] cert rotation: verifies prune not run when verification fails.
+    
+    Scenario:
+        verification fails, so pruning never runs (ROT-13) - no superseded cert is removed.
+    
+    Boundaries:
+        - ping always raises; prune_old_certificates patched to detect any call.
+    
+    On failure, first check:
+        - certs are pruned around an unverified/broken new identity.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     responses = [_response(json_body={"access_token": "tok"}), _response(content=b"NEW PEM")]
@@ -709,9 +790,16 @@ def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
 
 def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
     """
-    Scenario: an Atlas API failure aborts rotation before any pruning is attempted.
-    Boundaries: httpx.post returns 500; prune_old_certificates patched to detect any call.
-    On failure: certs are pruned even though no new cert was successfully issued.
+    [Local] cert rotation: verifies prune not run when rotation fails.
+    
+    Scenario:
+        an Atlas API failure aborts rotation before any pruning is attempted.
+    
+    Boundaries:
+        - httpx.post returns 500; prune_old_certificates patched to detect any call.
+    
+    On failure, first check:
+        - certs are pruned even though no new cert was successfully issued.
     """
     with (
         patch(f"{MODULE}.httpx.post", return_value=_response(status=500, json_body={})),
@@ -725,9 +813,16 @@ def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
 
 def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
     """
-    Scenario: prune=False leaves every superseded cert on disk after a verified rotation.
-    Boundaries: a stale cert well beyond keep=1 survives; no 'Pruned' note is emitted.
-    On failure: --no-prune still deletes certs.
+    [Local] cert rotation: verifies no prune argument keeps all certs.
+    
+    Scenario:
+        prune=False leaves every superseded cert on disk after a verified rotation.
+    
+    Boundaries:
+        - a stale cert well beyond keep=1 survives; no 'Pruned' note is emitted.
+    
+    On failure, first check:
+        - --no-prune still deletes certs.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     stale = prune_guard / "X509-cert-stale.pem"
@@ -750,10 +845,16 @@ def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
 
 def test_no_verify_does_not_prune(atlas_env, prune_guard) -> None:
     """
-    Scenario: --no-verify (verify=False) repoints but never prunes, keeping old certs against a
-    possible lockout (the chosen conservative interaction of --no-verify with pruning).
-    Boundaries: a stale cert beyond keep=1 survives; a skip note is emitted.
-    On failure: an unverified rotation deletes the previously working identity.
+    [Local] cert rotation: verifies no verify does not prune.
+    
+    Scenario:
+        --no-verify (verify=False) repoints but never prunes, keeping old certs against a possible lockout (the chosen conservative interaction of --no-verify with pruning).
+    
+    Boundaries:
+        - a stale cert beyond keep=1 survives; a skip note is emitted.
+    
+    On failure, first check:
+        - an unverified rotation deletes the previously working identity.
     """
     (prune_guard / "settings.json").write_text(json.dumps(_X509_SETTINGS))
     stale = prune_guard / "X509-cert-stale.pem"

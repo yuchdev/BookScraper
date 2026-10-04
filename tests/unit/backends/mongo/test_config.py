@@ -24,10 +24,13 @@ URI = "mongodb+srv://u:p@cluster/db?retryWrites=true&w=majority"
 
 
 def _write_settings(path, data) -> None:
+    """Write a settings dict as JSON to ``path``."""
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
 class TestResolveField:
+    """Tests for config._resolve_field(): literal vs env-var source resolution."""
+
     def test_literal_returns_value_as_is(self) -> None:
         """
         [Unit] resolve field: verifies literal returns value as is.
@@ -184,6 +187,8 @@ class TestResolveField:
 
 
 class TestResolveCertField:
+    """Tests for config._resolve_cert_field(): resolves a cert path literal or env var relative to CONFIG_DIR."""
+
     def test_bare_filename_resolved_under_config_dir(self, monkeypatch, tmp_path) -> None:
         """
         [Local] resolve cert field: verifies bare filename resolved under config dir.
@@ -233,6 +238,8 @@ class TestResolveCertField:
 
 
 class TestGetDefaultTlsCertFile:
+    """Tests for config.get_default_tls_cert_file(): returns the newest X509-cert-*.pem by mtime."""
+
     def test_no_certs_returns_none(self, monkeypatch, tmp_path) -> None:
         """
         [Local] get default tls cert file: verifies no certs returns none.
@@ -310,6 +317,8 @@ class TestGetDefaultTlsCertFile:
 
 
 class TestLoadSettings:
+    """Tests for config.load_settings(): reads and parses settings.json, returns None when absent."""
+
     def test_nonexistent_path_returns_none(self, tmp_path) -> None:
         """
         [Unit] load settings: verifies nonexistent path returns none.
@@ -715,6 +724,7 @@ class TestResolveMongoConnectionLegacyFallback:
 
 
 def _pass_settings() -> dict:
+    """Return a minimal password-auth settings dict for tests that need a valid settings.json."""
     return {"auth_type": "pass", "pass": {"uri": {"source": "literal", "value": URI}}}
 
 
@@ -723,6 +733,7 @@ class TestSettingsFileSecurity:
 
     @pytest.fixture(autouse=True)
     def _clear_guard(self):
+        """Reset the per-process security-warning deduplication set before and after each test."""
         config._SECURITY_WARNINGS_EMITTED.clear()
         yield
         config._SECURITY_WARNINGS_EMITTED.clear()

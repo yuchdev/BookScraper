@@ -16,6 +16,8 @@ from bookscraper.book_utils import (
 
 
 class TestHashBook:
+    """Tests for book_utils.hash_book(): SHA-256 identity function for book deduplication."""
+
     def test_same_inputs_produce_same_hash(self) -> None:
         """
         [Unit] hash book: verifies same inputs produce same hash.
@@ -276,6 +278,8 @@ class TestHashBook:
 
 
 class TestExtractYearFromDate:
+    """Tests for book_utils.extract_year_from_date(): normalises site-specific date strings to a year int."""
+
     def test_iso_date(self) -> None:
         """
         [Unit] extract year from date: verifies iso date.
@@ -561,8 +565,11 @@ class TestExtractYearFromDate:
         import bookscraper.book_utils as book_utils_module
 
         class _RaisingDatetime:
+            """Stub that replaces datetime to make strptime raise a non-ValueError."""
+
             @staticmethod
             def strptime(*args, **kwargs):
+                """Raise RuntimeError unconditionally."""
                 raise RuntimeError("boom")
 
         monkeypatch.setattr(book_utils_module, "datetime", _RaisingDatetime)
@@ -570,6 +577,8 @@ class TestExtractYearFromDate:
 
 
 class TestCheckLocalWritePermission:
+    """Tests for book_utils.check_local_write_permission(): pre-flight write check for the json backend."""
+
     def test_success_cleans_up_test_file(self, tmp_path) -> None:
         """
         [Unit] check local write permission: verifies success cleans up test file.
@@ -612,7 +621,9 @@ class TestCheckLocalWritePermission:
             - Fixture or parameter values used by this test
             - Recent changes in code paths exercised by check local write permission
         """
+
         def raise_oserror(*args, **kwargs):
+            """Simulate a disk-full OSError on any open() call."""
             raise OSError("disk full")
 
         monkeypatch.setattr("builtins.open", raise_oserror)
@@ -637,7 +648,9 @@ class TestCheckLocalWritePermission:
             - Fixture or parameter values used by this test
             - Recent changes in code paths exercised by check local write permission
         """
+
         def raise_runtime_error(*args, **kwargs):
+            """Simulate an unexpected RuntimeError on any open() call."""
             raise RuntimeError("unexpected")
 
         monkeypatch.setattr("builtins.open", raise_runtime_error)
@@ -645,13 +658,24 @@ class TestCheckLocalWritePermission:
 
 
 class TestAtomicWriteBytesPermissions:
+    """Tests for atomic_write_bytes() permission handling: default 0644 and preserve-existing-mode."""
+
     def test_new_file_defaults_to_0644_and_existing_mode_is_preserved(self, tmp_path) -> None:
         """
-        Scenario: atomic_write_bytes without an explicit mode must not inherit mkstemp's
-        owner-only 0600 - a new file gets 0644 and a rewrite keeps the file's current mode.
-        Boundaries: new file (no mode), existing 0640 file (no mode), explicit 0600 override.
-        On failure: books.json silently becomes owner-only after the first save, or a
-        rewrite quietly widens/narrows permissions the user set.
+        [Unit] book utils: verifies atomic_write_bytes defaults to 0644 for new files and preserves the existing mode on rewrites.
+
+        Scenario:
+            Given a new file written with no explicit mode, then re-written with mode 0640, then re-written with explicit 0600
+            When atomic_write_bytes is called for each write
+            Then the new file gets 0644, the 0640 file keeps 0640 after rewrite, and explicit 0600 is honoured.
+
+        Boundaries:
+            - Real file I/O via tmp_path; no mocking
+            - Three scenarios in one test: new-file default, existing-mode preservation, explicit-mode override
+
+        On failure, first check:
+            - Whether atomic_write_bytes still reads the existing file's mode before the temp-file write
+            - Whether mkstemp's 0600 default is being propagated instead of overridden
         """
         target = tmp_path / "store.json"
 

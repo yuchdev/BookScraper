@@ -138,13 +138,17 @@ async def test_golden_report_matches_for_site(
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: the offline detect-schema report for a site matches its committed golden.
+    """
+    [Local] schema detection goldens: verifies golden report matches for site.
 
-    Boundaries: every detail fixture is loaded via set_content (no network) and the model step
-    is served from the hand-authored replay; the normalized report text is compared field by
-    field against ``<site>.report.txt``.
-    On failure: a selector drifted against the real captured DOM, the report format changed, or
-    the replay/pruner path regressed - the golden diff names which.
+    Scenario:
+        the offline detect-schema report for a site matches its committed golden.
+
+    Boundaries:
+        - every detail fixture is loaded via set_content (no network) and the model step is served from the hand-authored replay; the normalized report text is compared field by field against ``<site>.report.txt``.
+
+    On failure, first check:
+        - a selector drifted against the real captured DOM, the report format changed, or the replay/pruner path regressed - the golden diff names which.
     """
     fixtures = _detail_fixtures(site)
     assert len(fixtures) >= 2, f"{site} must have >= 2 detail fixtures for a cross-sample golden"
@@ -171,12 +175,17 @@ async def test_golden_report_matches_for_amazon_search(
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: the deferred subtask-06 criterion - an amazon --page-type search golden.
+    """
+    [Local] schema detection goldens: verifies golden report matches for amazon search.
 
-    Boundaries: the two committed amazon search-results fixtures (p1 + p2) are loaded offline and
-    the SEARCH_* selectors validated card-relative; the normalized report is compared to its golden.
-    On failure: a search-card selector drifted against the real listing markup, or the
-    card-relative validation/report regressed.
+    Scenario:
+        the deferred subtask-06 criterion - an amazon --page-type search golden.
+
+    Boundaries:
+        - the two committed amazon search-results fixtures (p1 + p2) are loaded offline and the SEARCH_* selectors validated card-relative; the normalized report is compared to its golden.
+
+    On failure, first check:
+        - a search-card selector drifted against the real listing markup, or the card-relative validation/report regressed.
     """
     fixtures = [
         FIXTURES_ROOT / "html" / "amazon" / "search_python_p1.html",
@@ -208,13 +217,17 @@ async def test_html_file_mode_makes_no_network_request(
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: an --html-file + --replay run issues NO request that leaves the page (AIS-9).
+    """
+    [Local] schema detection goldens: verifies html file mode makes no network request.
 
-    Boundaries: the run goes through the default-deny corpus recorder with an EMPTY mapping, so
-    any request - document or subresource - is recorded and fails the test at the recorder's
-    teardown. No API key is set and no Anthropic client may be built (replay mode).
-    On failure: set_content pulled a subresource (or a document fetch leaked), breaking the
-    offline guarantee the CI pipeline depends on.
+    Scenario:
+        an --html-file + --replay run issues NO request that leaves the page (AIS-9).
+
+    Boundaries:
+        - the run goes through the default-deny corpus recorder with an EMPTY mapping, so any request - document or subresource - is recorded and fails the test at the recorder's teardown. No API key is set and no Anthropic client may be built (replay mode).
+
+    On failure, first check:
+        - set_content pulled a subresource (or a document fetch leaked), breaking the offline guarantee the CI pipeline depends on.
     """
     report = await _run_detect_schema(
         chromium_browser,
@@ -295,12 +308,17 @@ async def test_ci_gate_hand_built_detail_set_exits_zero(
     chromium_browser: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: --check-current-only over a site's HAND-BUILT detail fixtures exits 0 (CI gate).
+    """
+    [Local] schema detection goldens: verifies ci gate hand built detail set exits zero.
 
-    Boundaries: only hand-built fixtures (the live amazon capture is excluded - it may legitimately
-    drift and is reported separately); fully offline, no AI, no key.
-    On failure: the drift rule mis-flags a fallback/optional selector as broken, so the scheduled
-    offline CI gate would be red on a healthy schema - the exact failure this subtask must prevent.
+    Scenario:
+        --check-current-only over a site's HAND-BUILT detail fixtures exits 0 (CI gate).
+
+    Boundaries:
+        - only hand-built fixtures (the live amazon capture is excluded - it may legitimately drift and is reported separately); fully offline, no AI, no key.
+
+    On failure, first check:
+        - the drift rule mis-flags a fallback/optional selector as broken, so the scheduled offline CI gate would be red on a healthy schema - the exact failure this subtask must prevent.
     """
     fixtures = [f for f in _detail_fixtures(site) if _is_hand_built(f)]
     assert fixtures, f"{site} must have >= 1 hand-built detail fixture for the CI gate"
@@ -316,11 +334,17 @@ async def test_ci_gate_live_amazon_detail_reported(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Scenario: the LIVE amazon capture is RECORDED, not forced (real drift is legitimate here).
+    """
+    [Local] schema detection goldens: verifies ci gate live amazon detail reported.
 
-    Boundaries: the single live ``a_tour_of_cpp_3e`` fixture; offline, no AI.
-    On failure: only a crash fails this - a 0 or 4 result is reported for a human to read, since a
-    genuinely-drifted NEEDED field on the live page is a real finding, not a test bug.
+    Scenario:
+        the LIVE amazon capture is RECORDED, not forced (real drift is legitimate here).
+
+    Boundaries:
+        - the single live ``a_tour_of_cpp_3e`` fixture; offline, no AI.
+
+    On failure, first check:
+        - only a crash fails this - a 0 or 4 result is reported for a human to read, since a genuinely-drifted NEEDED field on the live page is a real finding, not a test bug.
     """
     live = FIXTURES_ROOT / "html" / "amazon" / "a_tour_of_cpp_3e.html"
     exit_code, broken = await _run_check_current_only(chromium_browser, monkeypatch, site="amazon", fixtures=[live])
@@ -336,11 +360,17 @@ async def test_ci_gate_amazon_search_reported(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Scenario: amazon --page-type search over p1/p2 is RECORDED (06.0 found real card drift).
+    """
+    [Local] schema detection goldens: verifies ci gate amazon search reported.
 
-    Boundaries: the two live amazon search fixtures; offline, no AI.
-    On failure: only a crash fails this - a 4 (SEARCH_BOOK_DETAIL_LINK matching no live card) is a
-    real, expected finding and is reported, not asserted away.
+    Scenario:
+        amazon --page-type search over p1/p2 is RECORDED (06.0 found real card drift).
+
+    Boundaries:
+        - the two live amazon search fixtures; offline, no AI.
+
+    On failure, first check:
+        - only a crash fails this - a 4 (SEARCH_BOOK_DETAIL_LINK matching no live card) is a real, expected finding and is reported, not asserted away.
     """
     fixtures = [
         FIXTURES_ROOT / "html" / "amazon" / "search_python_p1.html",
@@ -364,12 +394,17 @@ async def test_check_current_only_html_file_makes_no_network_request(
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: --check-current-only + --html-file issues NO network request and no AI call (AIS-9).
+    """
+    [Local] schema detection goldens: verifies check current only html file makes no network request.
 
-    Boundaries: the run goes through the default-deny corpus recorder with an EMPTY mapping, so any
-    request fails the test at teardown; no API key is set and sd.anthropic.Anthropic / call_anthropic
-    raise if ever reached. The JSON report is parsed to confirm the drift schema is emitted.
-    On failure: a keyless/offline drift check leaked a network fetch or reached for the live API.
+    Scenario:
+        --check-current-only + --html-file issues NO network request and no AI call (AIS-9).
+
+    Boundaries:
+        - the run goes through the default-deny corpus recorder with an EMPTY mapping, so any request fails the test at teardown; no API key is set and sd.anthropic.Anthropic / call_anthropic raise if ever reached. The JSON report is parsed to confirm the drift schema is emitted.
+
+    On failure, first check:
+        - a keyless/offline drift check leaked a network fetch or reached for the live API.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -447,12 +482,17 @@ async def test_pruning_preserves_every_currently_matching_selector(
     fixture: Path,
     chromium_browser: Any,
 ) -> None:
-    """Scenario: every current detail selector matching the RAW fixture still matches the pruned one.
+    """
+    [Local] schema detection goldens: verifies pruning preserves every currently matching selector.
 
-    Boundaries: the raw fixture and its ``prune_html`` snapshot are each loaded via set_content
-    (offline); only selectors that match the raw DOM are required to survive pruning.
-    On failure: ``prune_html`` stripped load-bearing markup - a REAL pruner bug. The assertion
-    names the selector and fixture; fix the pruner rather than weakening this test.
+    Scenario:
+        every current detail selector matching the RAW fixture still matches the pruned one.
+
+    Boundaries:
+        - the raw fixture and its ``prune_html`` snapshot are each loaded via set_content (offline); only selectors that match the raw DOM are required to survive pruning.
+
+    On failure, first check:
+        - ``prune_html`` stripped load-bearing markup - a REAL pruner bug. The assertion names the selector and fixture; fix the pruner rather than weakening this test.
     """
     raw = fixture.read_text(encoding="utf-8")
     selectors = {

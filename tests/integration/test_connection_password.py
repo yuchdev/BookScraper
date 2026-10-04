@@ -20,6 +20,17 @@ ENV_VAR_NAME = "TEST_MONGODB_URI_PASS"
 
 @pytest.mark.integration
 def test_password_auth_connects():
-    """Password/SCRAM auth resolves and pings the live Atlas cluster successfully."""
+    """
+    [Integration] connection password auth: verifies password auth connects.
+    
+    Scenario:
+        Password/SCRAM auth resolves and pings the live Atlas cluster successfully.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     uri = require_env(ENV_VAR_NAME)
     assert run_connection_test(uri, tls_cert_file=None) is True

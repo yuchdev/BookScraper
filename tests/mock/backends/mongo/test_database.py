@@ -51,11 +51,20 @@ def reset_globals(monkeypatch):
 # reference in database.py to patch anymore.
 # --------------------------------------------------------------------------- #
 class TestInitializeMongodbConnection:
+    """Tests for database._initialize_mongodb_connection."""
+
     def test_config_error_returns_none_none(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: the resolver raises ConfigError, so no client is ever built.
-        Boundaries: resolve_mongo_connection raises before any factory call.
-        On failure: a malformed config still reaches the factory / network.
+        [Local] database connection: verifies config error returns none none.
+
+        Scenario:
+            the resolver raises ConfigError, so no client is ever built.
+
+        Boundaries:
+            - resolve_mongo_connection raises before any factory call.
+
+        On failure, first check:
+            - a malformed config still reaches the factory / network.
         """
         monkeypatch.setattr(
             database.config,
@@ -70,9 +79,16 @@ class TestInitializeMongodbConnection:
 
     def test_missing_uri_returns_none_none(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: the resolver yields no URI, so the factory is never called.
-        Boundaries: resolve returns (None, None).
-        On failure: a connection is attempted with an empty URI.
+        [Local] database connection: verifies missing uri returns none none.
+
+        Scenario:
+            the resolver yields no URI, so the factory is never called.
+
+        Boundaries:
+            - resolve returns (None, None).
+
+        On failure, first check:
+            - a connection is attempted with an empty URI.
         """
         monkeypatch.setattr(
             database.config,
@@ -87,10 +103,16 @@ class TestInitializeMongodbConnection:
 
     def test_missing_cert_file_returns_none_none(self, monkeypatch, no_real_env, tmp_path) -> None:
         """
-        Scenario: a configured client cert that does not exist aborts the connection via the
-        factory's MongoConnectionError, rather than silently connecting certless.
-        Boundaries: resolve returns a cert path that does not exist; the real factory runs.
-        On failure: the missing cert is dropped and a certless client is built.
+        [Local] database connection: verifies missing cert file returns none none.
+
+        Scenario:
+            a configured client cert that does not exist aborts the connection via the factory's MongoConnectionError, rather than silently connecting certless.
+
+        Boundaries:
+            - resolve returns a cert path that does not exist; the real factory runs.
+
+        On failure, first check:
+            - the missing cert is dropped and a certless client is built.
         """
         missing = str(tmp_path / "does_not_exist.pem")
         monkeypatch.setattr(
@@ -107,10 +129,16 @@ class TestInitializeMongodbConnection:
 
     def test_with_cert_file_builds_via_factory_and_pings(self, monkeypatch, no_real_env, tmp_path) -> None:
         """
-        Scenario: with a valid cert the factory builds the client, ping confirms it, and the
-        indexes are ensured on the resolved collection.
-        Boundaries: resolve returns a real cert path; build + ping are stubbed.
-        On failure: the cert path is not forwarded to the factory, or ping/index setup is skipped.
+        [Local] database connection: verifies with cert file builds via factory and pings.
+
+        Scenario:
+            with a valid cert the factory builds the client, ping confirms it, and the indexes are ensured on the resolved collection.
+
+        Boundaries:
+            - resolve returns a real cert path; build + ping are stubbed.
+
+        On failure, first check:
+            - the cert path is not forwarded to the factory, or ping/index setup is skipped.
         """
         cert = tmp_path / "cert.pem"
         cert.write_text("dummy-cert")
@@ -143,9 +171,16 @@ class TestInitializeMongodbConnection:
 
     def test_without_cert_file_forwards_none_cert(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: with no cert the factory is called with cert_file=None.
-        Boundaries: resolve returns (uri, None); build + ping stubbed.
-        On failure: a stray cert path is forwarded to the factory.
+        [Local] database connection: verifies without cert file forwards none cert.
+
+        Scenario:
+            with no cert the factory is called with cert_file=None.
+
+        Boundaries:
+            - resolve returns (uri, None); build + ping stubbed.
+
+        On failure, first check:
+            - a stray cert path is forwarded to the factory.
         """
         monkeypatch.setattr(
             database.config,
@@ -168,12 +203,16 @@ class TestInitializeMongodbConnection:
 
     def test_namespace_from_resolver_used_for_db_and_collection(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: the db/collection subscripts come from config.resolve_mongo_namespace, not
-        from the MONGODB_DB_NAME / MONGODB_COLLECTION_NAME env vars (determinism when
-        settings.json exists).
-        Boundaries: the resolver returns a custom namespace while the env vars name a
-        different one.
-        On failure: the connection targets the env-var namespace, contradicting settings.json.
+        [Local] database connection: verifies namespace from resolver used for db and collection.
+
+        Scenario:
+            the db/collection subscripts come from config.resolve_mongo_namespace, not from the MONGODB_DB_NAME / MONGODB_COLLECTION_NAME env vars (determinism when settings.json exists).
+
+        Boundaries:
+            - the resolver returns a custom namespace while the env vars name a different one.
+
+        On failure, first check:
+            - the connection targets the env-var namespace, contradicting settings.json.
         """
         monkeypatch.setenv("MONGODB_DB_NAME", "env_db")
         monkeypatch.setenv("MONGODB_COLLECTION_NAME", "env_coll")
@@ -201,10 +240,16 @@ class TestInitializeMongodbConnection:
 
     def test_tls_ca_file_env_is_forwarded_to_factory(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: TLS_CA_FILE from the environment is forwarded to the factory as ca_file, so
-        the real path pins the server CA identically to the pre-flight check.
-        Boundaries: TLS_CA_FILE set; build stubbed.
-        On failure: the CA bundle is ignored on the real connection path.
+        [Local] database connection: verifies tls ca file env is forwarded to factory.
+
+        Scenario:
+            TLS_CA_FILE from the environment is forwarded to the factory as ca_file, so the real path pins the server CA identically to the pre-flight check.
+
+        Boundaries:
+            - TLS_CA_FILE set; build stubbed.
+
+        On failure, first check:
+            - the CA bundle is ignored on the real connection path.
         """
         monkeypatch.setenv("TLS_CA_FILE", "/path/to/ca.pem")
         monkeypatch.setattr(
@@ -225,10 +270,16 @@ class TestInitializeMongodbConnection:
 
     def test_ping_connection_error_resets_globals(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: ping fails with a redacted MongoConnectionError; the globals are reset and
-        (None, None) is returned.
-        Boundaries: build succeeds, ping raises MongoConnectionError.
-        On failure: a failed connection leaves stale globals or leaks raw pymongo text.
+        [Local] database connection: verifies ping connection error resets globals.
+
+        Scenario:
+            ping fails with a redacted MongoConnectionError; the globals are reset and (None, None) is returned.
+
+        Boundaries:
+            - build succeeds, ping raises MongoConnectionError.
+
+        On failure, first check:
+            - a failed connection leaves stale globals or leaks raw pymongo text.
         """
         monkeypatch.setattr(
             database.config,
@@ -249,10 +300,16 @@ class TestInitializeMongodbConnection:
 
     def test_generic_exception_resets_globals(self, monkeypatch, no_real_env) -> None:
         """
-        Scenario: an unexpected non-pymongo error during init is caught defensively, globals
-        reset, and no raw exception text is logged.
-        Boundaries: build_mongo_client raises a plain RuntimeError.
-        On failure: the exception propagates or leaves stale globals.
+        [Local] database connection: verifies generic exception resets globals.
+
+        Scenario:
+            an unexpected non-pymongo error during init is caught defensively, globals reset, and no raw exception text is logged.
+
+        Boundaries:
+            - build_mongo_client raises a plain RuntimeError.
+
+        On failure, first check:
+            - the exception propagates or leaves stale globals.
         """
         monkeypatch.setattr(
             database.config,
@@ -270,10 +327,16 @@ class TestInitializeMongodbConnection:
 
     def test_init_failure_does_not_leak_uri_or_host(self, monkeypatch, no_real_env, caplog) -> None:
         """
-        Scenario: ping fails; the resolved URI/host must appear in neither the logs nor the
-        print_log output on the real connection path (regression for CWE-532 leakage).
-        Boundaries: ping raises a redacted MongoConnectionError; a fake secret URI is resolved.
-        On failure: the connection URI/host reaches the persistent log or the console.
+        [Local] database connection: verifies init failure does not leak uri or host.
+
+        Scenario:
+            ping fails; the resolved URI/host must appear in neither the logs nor the print_log output on the real connection path (regression for CWE-532 leakage).
+
+        Boundaries:
+            - ping raises a redacted MongoConnectionError; a fake secret URI is resolved.
+
+        On failure, first check:
+            - the connection URI/host reaches the persistent log or the console.
         """
         secret_uri = "mongodb+srv://user:pw@cluster0.example.net/db"
         monkeypatch.setattr(
@@ -300,6 +363,8 @@ class TestInitializeMongodbConnection:
 # get_mongo_collection
 # --------------------------------------------------------------------------- #
 class TestGetMongoCollection:
+    """Tests for database.get_mongo_collection."""
+
     def test_returns_cached_collection_without_reinitializing(self, monkeypatch) -> None:
         """
         [Local] get mongo collection: verifies returns cached collection without reinitializing.
@@ -392,11 +457,16 @@ class TestGetMongoCollection:
 
     def test_success_message_only_printed_when_collection_initialized(self, monkeypatch) -> None:
         """
-        Scenario: init returns a live collection, so exactly one 'success'-status line
-        announces the connection.
-        Boundaries: init returns (client, non-None collection).
-        On failure: the success line is dropped on a healthy connection, or emitted with
-        the wrong status.
+        [Local] database connection: verifies success message only printed when collection initialized.
+
+        Scenario:
+            init returns a live collection, so exactly one 'success'-status line announces the connection.
+
+        Boundaries:
+            - init returns (client, non-None collection).
+
+        On failure, first check:
+            - the success line is dropped on a healthy connection, or emitted with the wrong status.
         """
         collection = Mock(name="collection")
         monkeypatch.setattr(
@@ -413,12 +483,16 @@ class TestGetMongoCollection:
 
     def test_no_success_message_when_initialization_returns_none(self, monkeypatch) -> None:
         """
-        Scenario: init fails and returns (None, None); no contradictory 'success' line is
-        emitted on top of the cause already logged by init and the FAILED line printed by
-        resolve_store_backend.
-        Boundaries: init returns (None, None) without raising.
-        On failure: a green 'success' line follows a red critical line, the exact
-        pre-existing inconsistency this subtask removes.
+        [Local] database connection: verifies no success message when initialization returns none.
+
+        Scenario:
+            init fails and returns (None, None); no contradictory 'success' line is emitted on top of the cause already logged by init and the FAILED line printed by resolve_store_backend.
+
+        Boundaries:
+            - init returns (None, None) without raising.
+
+        On failure, first check:
+            - a green 'success' line follows a red critical line, the exact pre-existing inconsistency this subtask removes.
         """
         monkeypatch.setattr(
             database,
@@ -434,12 +508,16 @@ class TestGetMongoCollection:
 
     def test_success_message_names_db_and_collection_not_uri(self, monkeypatch) -> None:
         """
-        Scenario: the success line identifies the target by database.collection only,
-        never leaking the host or connection URI into the console/log.
-        Boundaries: init returns a live collection; the resolved URI is never referenced
-        by the message.
-        On failure: the success line embeds the host/URI (credential leakage into the
-        persistent log) or omits the database/collection identity.
+        [Local] database connection: verifies success message names db and collection not uri.
+
+        Scenario:
+            the success line identifies the target by database.collection only, never leaking the host or connection URI into the console/log.
+
+        Boundaries:
+            - init returns a live collection; the resolved URI is never referenced by the message.
+
+        On failure, first check:
+            - the success line embeds the host/URI (credential leakage into the persistent log) or omits the database/collection identity.
         """
         monkeypatch.setattr(
             database,
@@ -459,12 +537,16 @@ class TestGetMongoCollection:
 
     def test_success_message_uses_resolved_namespace_globals(self, monkeypatch) -> None:
         """
-        Scenario: the success line reflects the namespace _initialize resolved (stored in
-        the module globals), so it names exactly what was connected rather than a hard-coded
-        or env-derived default.
-        Boundaries: the namespace globals are set to a custom namespace; init returns a live
-        collection.
-        On failure: the message names a different db/collection than the live connection.
+        [Local] database connection: verifies success message uses resolved namespace globals.
+
+        Scenario:
+            the success line reflects the namespace _initialize resolved (stored in the module globals), so it names exactly what was connected rather than a hard-coded or env-derived default.
+
+        Boundaries:
+            - the namespace globals are set to a custom namespace; init returns a live collection.
+
+        On failure, first check:
+            - the message names a different db/collection than the live connection.
         """
         monkeypatch.setattr(database, "_mongo_db_name", "resolved_db")
         monkeypatch.setattr(database, "_mongo_collection_name", "resolved_coll")
@@ -485,6 +567,8 @@ class TestGetMongoCollection:
 # close_mongo_connection
 # --------------------------------------------------------------------------- #
 class TestCloseMongoConnection:
+    """Tests for database.close_mongo_connection."""
+
     def test_closes_client_and_resets_globals(self, monkeypatch) -> None:
         """
         [Local] close mongo connection: verifies closes client and resets globals.
@@ -544,13 +628,20 @@ class TestCloseMongoConnection:
 # save_books_to_mongodb
 # --------------------------------------------------------------------------- #
 class TestSaveBooksToMongodb:
+    """Tests for database.save_books_to_mongodb."""
+
     def test_save_returns_all_errors_and_skips_io_when_collection_is_none(self, monkeypatch) -> None:
         """
-        Scenario: the resolved collection is None, so nothing can be written.
-        Boundaries: two books, no live collection; the previous code fell through and
-        raised AttributeError per book, reporting N errors as N swallowed exceptions.
-        On failure: a total outage is misreported, and pymongo is touched despite there
-        being no collection.
+        [Local] database save books: verifies save returns all errors and skips io when collection is none.
+
+        Scenario:
+            the resolved collection is None, so nothing can be written.
+
+        Boundaries:
+            - two books, no live collection; the previous code fell through and raised AttributeError per book, reporting N errors as N swallowed exceptions.
+
+        On failure, first check:
+            - a total outage is misreported, and pymongo is touched despite there being no collection.
         """
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
         books = [{"title": "x", "hash": "h1"}, {"title": "y", "hash": "h2"}]
@@ -564,10 +655,16 @@ class TestSaveBooksToMongodb:
 
     def test_save_empty_list_returns_zero_summary_without_db_call(self) -> None:
         """
-        Scenario: an empty batch resolves to a zero summary and never touches the DB.
-        Boundaries: [] with a live collection present.
-        On failure: an empty insert_many([]) raises InvalidOperation, or a needless
-        round-trip is issued.
+        [Local] database save books: verifies save empty list returns zero summary without db call.
+
+        Scenario:
+            an empty batch resolves to a zero summary and never touches the DB.
+
+        Boundaries:
+            - [] with a live collection present.
+
+        On failure, first check:
+            - an empty insert_many([]) raises InvalidOperation, or a needless round-trip is issued.
         """
         collection = Mock(name="collection")
 
@@ -578,10 +675,16 @@ class TestSaveBooksToMongodb:
 
     def test_save_uses_single_unordered_insert_many(self) -> None:
         """
-        Scenario: a 100-book batch is written with exactly one unordered insert_many.
-        Boundaries: 100 valid documents, all inserted.
-        On failure: the per-book insert_one regression returns (500 round-trips), or the
-        batch is ordered and aborts on the first duplicate.
+        [Local] database save books: verifies save uses single unordered insert many.
+
+        Scenario:
+            a 100-book batch is written with exactly one unordered insert_many.
+
+        Boundaries:
+            - 100 valid documents, all inserted.
+
+        On failure, first check:
+            - the per-book insert_one regression returns (500 round-trips), or the batch is ordered and aborts on the first duplicate.
         """
         collection = Mock(name="collection")
         collection.insert_many.return_value = Mock(inserted_ids=[f"id{i}" for i in range(100)])
@@ -598,11 +701,16 @@ class TestSaveBooksToMongodb:
 
     def test_bulk_write_error_splits_duplicates_from_other_errors(self) -> None:
         """
-        Scenario: insert_many partially fails; duplicates (code 11000) and other write
-        errors are counted apart, with nInserted as the success count.
-        Boundaries: details carrying two 11000 codes and one 121 (document-validation).
-        On failure: duplicates inflate the error count (or vice versa) and the partial-
-        failure signal misfires.
+        [Local] database save books: verifies bulk write error splits duplicates from other errors.
+
+        Scenario:
+            insert_many partially fails; duplicates (code 11000) and other write errors are counted apart, with nInserted as the success count.
+
+        Boundaries:
+            - details carrying two 11000 codes and one 121 (document-validation).
+
+        On failure, first check:
+            - duplicates inflate the error count (or vice versa) and the partial- failure signal misfires.
         """
         collection = Mock(name="collection")
         details = {
@@ -623,11 +731,16 @@ class TestSaveBooksToMongodb:
 
     def test_invalid_document_counted_as_error_without_aborting_batch(self) -> None:
         """
-        Scenario: one un-encodable document is rejected up front while the rest of the
-        batch is still inserted.
-        Boundaries: a batch of one BSON-encodable and one un-encodable document.
-        On failure: the bad document aborts the whole insert_many, so a single malformed
-        record loses every other book in the batch.
+        [Local] database save books: verifies invalid document counted as error without aborting batch.
+
+        Scenario:
+            one un-encodable document is rejected up front while the rest of the batch is still inserted.
+
+        Boundaries:
+            - a batch of one BSON-encodable and one un-encodable document.
+
+        On failure, first check:
+            - the bad document aborts the whole insert_many, so a single malformed record loses every other book in the batch.
         """
         collection = Mock(name="collection")
         collection.insert_many.return_value = Mock(inserted_ids=["id1"])
@@ -644,9 +757,16 @@ class TestSaveBooksToMongodb:
 
     def test_all_invalid_documents_skip_insert_many(self) -> None:
         """
-        Scenario: every document fails pre-validation, so insert_many is never called.
-        Boundaries: a batch whose only member is un-encodable.
-        On failure: insert_many([]) is issued and raises InvalidOperation.
+        [Local] database save books: verifies all invalid documents skip insert many.
+
+        Scenario:
+            every document fails pre-validation, so insert_many is never called.
+
+        Boundaries:
+            - a batch whose only member is un-encodable.
+
+        On failure, first check:
+            - insert_many([]) is issued and raises InvalidOperation.
         """
         collection = Mock(name="collection")
         bad = {"title": "Bad", "hash": "h1", "broken": object()}
@@ -659,15 +779,21 @@ class TestSaveBooksToMongodb:
 
     def test_caller_dicts_are_not_mutated_with_object_id(self) -> None:
         """
-        Scenario: pymongo assigns _id in place on the docs it inserts; the caller's dicts
-        must be untouched so a later json.dumps diagnostic write does not choke on an
-        ObjectId.
-        Boundaries: insert_many stamps _id onto the doc it receives.
-        On failure: the caller's dict gains an ObjectId _id and downstream JSON writes fail.
+        [Local] database save books: verifies caller dicts are not mutated with object id.
+
+        Scenario:
+            pymongo assigns _id in place on the docs it inserts; the caller's dicts must be untouched so a later json.dumps diagnostic write does not choke on an ObjectId.
+
+        Boundaries:
+            - insert_many stamps _id onto the doc it receives.
+
+        On failure, first check:
+            - the caller's dict gains an ObjectId _id and downstream JSON writes fail.
         """
         collection = Mock(name="collection")
 
         def _stamp_id(docs, ordered):  # noqa: ARG001 - mirrors pymongo's in-place _id assignment
+            """Side-effect mimicking pymongo's in-place _id stamping on insert_many docs."""
             for doc in docs:
                 doc["_id"] = "stamped-object-id"
             return Mock(inserted_ids=["stamped-object-id"])
@@ -682,10 +808,16 @@ class TestSaveBooksToMongodb:
 
     def test_unexpected_insert_many_error_counts_whole_batch_as_errors(self) -> None:
         """
-        Scenario: insert_many fails with something other than a BulkWriteError (e.g. a
-        connection drop mid-insert); the whole encodable batch is reported as errors.
-        Boundaries: a generic exception raised by insert_many.
-        On failure: the exception propagates out of save_books instead of being summarized.
+        [Local] database save books: verifies unexpected insert many error counts whole batch as errors.
+
+        Scenario:
+            insert_many fails with something other than a BulkWriteError (e.g. a connection drop mid-insert); the whole encodable batch is reported as errors.
+
+        Boundaries:
+            - a generic exception raised by insert_many.
+
+        On failure, first check:
+            - the exception propagates out of save_books instead of being summarized.
         """
         collection = Mock(name="collection")
         collection.insert_many.side_effect = PyMongoError("connection lost")
@@ -701,6 +833,8 @@ class TestSaveBooksToMongodb:
 # check_amazon_asin_exists_in_db / check_book_exists_in_db
 # --------------------------------------------------------------------------- #
 class TestCheckAmazonAsinExists:
+    """Tests for database.check_amazon_asin_exists_in_db."""
+
     def test_found(self) -> None:
         """
         [Local] check amazon asin exists: verifies found.
@@ -795,6 +929,8 @@ class TestCheckAmazonAsinExists:
 
 
 class TestCheckBookExists:
+    """Tests for database.check_book_exists_in_db."""
+
     def test_found(self) -> None:
         """
         [Local] check book exists: verifies found.
@@ -892,6 +1028,8 @@ class TestCheckBookExists:
 # update_book_isbn
 # --------------------------------------------------------------------------- #
 class TestUpdateBookIsbn:
+    """Tests for database.update_book_isbn."""
+
     def test_both_isbns_set_and_modified(self) -> None:
         """
         [Local] update book isbn: verifies both isbns set and modified.
@@ -1044,6 +1182,8 @@ _ALL_SECONDARY_NAMES = ("asin_lookup_index", "book_id_lookup_index", "slug_looku
 
 
 class TestEnsureUniqueIndexOnHash:
+    """Tests for the unique hash index via database.ensure_indexes."""
+
     def test_creates_index_when_absent(self) -> None:
         """
         [Local] ensure unique index on hash: verifies creates index when absent.
@@ -1145,13 +1285,20 @@ class TestEnsureUniqueIndexOnHash:
 
 
 class TestEnsureIndexes:
+    """Tests for database.ensure_indexes."""
+
     def test_ensure_indexes_creates_all_four_when_absent(self) -> None:
         """
-        Scenario: an empty collection gets the unique hash index plus all three sparse
-        secondary lookup indexes created in one call.
-        Boundaries: index_information() reports only the implicit _id_ index.
-        On failure: a lookup field is left unindexed, so pre-scrape dedup falls back to a
-        full collection scan.
+        [Local] database ensure indexes: verifies ensure indexes creates all four when absent.
+
+        Scenario:
+            an empty collection gets the unique hash index plus all three sparse secondary lookup indexes created in one call.
+
+        Boundaries:
+            - index_information() reports only the implicit _id_ index.
+
+        On failure, first check:
+            - a lookup field is left unindexed, so pre-scrape dedup falls back to a full collection scan.
         """
         collection = Mock()
         collection.index_information.return_value = {"_id_": {}}
@@ -1164,10 +1311,16 @@ class TestEnsureIndexes:
 
     def test_ensure_indexes_is_idempotent_when_all_present(self) -> None:
         """
-        Scenario: every index already exists, so a repeat call creates nothing.
-        Boundaries: index_information() reports all four named indexes.
-        On failure: a redundant create_index round-trip is issued, or a duplicate-index
-        error is raised on a healthy collection.
+        [Local] database ensure indexes: verifies ensure indexes is idempotent when all present.
+
+        Scenario:
+            every index already exists, so a repeat call creates nothing.
+
+        Boundaries:
+            - index_information() reports all four named indexes.
+
+        On failure, first check:
+            - a redundant create_index round-trip is issued, or a duplicate-index error is raised on a healthy collection.
         """
         collection = Mock()
         collection.index_information.return_value = {
@@ -1179,15 +1332,22 @@ class TestEnsureIndexes:
 
     def test_secondary_index_failure_warns_and_continues(self) -> None:
         """
-        Scenario: creating the first secondary index fails; the remaining secondary
-        indexes are still created and the failure is only a warning.
-        Boundaries: only the hash index pre-exists; the asin index create raises.
-        On failure: one bad index aborts the whole call, leaving later indexes missing.
+        [Local] database ensure indexes: verifies secondary index failure warns and continues.
+
+        Scenario:
+            creating the first secondary index fails; the remaining secondary indexes are still created and the failure is only a warning.
+
+        Boundaries:
+            - only the hash index pre-exists; the asin index create raises.
+
+        On failure, first check:
+            - one bad index aborts the whole call, leaving later indexes missing.
         """
         collection = Mock()
         collection.index_information.return_value = {"hash_unique_index": {}}
 
         def create_index(field, **kwargs):
+            """Raise PyMongoError only for the 'asin' field to test partial-failure handling."""
             if field == "asin":
                 raise PyMongoError("boom")
 
@@ -1203,10 +1363,16 @@ class TestEnsureIndexes:
 
     def test_secondary_indexes_are_sparse_and_non_unique(self) -> None:
         """
-        Scenario: the secondary indexes are created sparse and never unique, since two
-        editions can legitimately share a slug across sites.
-        Boundaries: empty collection so all secondary indexes are created.
-        On failure: a unique secondary index would reject legitimate cross-site editions.
+        [Local] database ensure indexes: verifies secondary indexes are sparse and non unique.
+
+        Scenario:
+            the secondary indexes are created sparse and never unique, since two editions can legitimately share a slug across sites.
+
+        Boundaries:
+            - empty collection so all secondary indexes are created.
+
+        On failure, first check:
+            - a unique secondary index would reject legitimate cross-site editions.
         """
         collection = Mock()
         collection.index_information.return_value = {"_id_": {}}
@@ -1243,11 +1409,16 @@ class TestEnsureIndexes:
 
     def test_index_information_failure_aborts(self) -> None:
         """
-        Scenario: reading index_information() fails, so no index is attempted and the
-        error keeps the prior hash-index failure behavior.
-        Boundaries: index_information() raises before any create_index call.
-        On failure: the exception propagates, or secondary indexes are attempted against
-        an unreadable collection.
+        [Local] database ensure indexes: verifies index information failure aborts.
+
+        Scenario:
+            reading index_information() fails, so no index is attempted and the error keeps the prior hash-index failure behavior.
+
+        Boundaries:
+            - index_information() raises before any create_index call.
+
+        On failure, first check:
+            - the exception propagates, or secondary indexes are attempted against an unreadable collection.
         """
         collection = Mock()
         collection.index_information.side_effect = PyMongoError("boom")
@@ -1264,10 +1435,16 @@ class TestEnsureIndexes:
 # --------------------------------------------------------------------------- #
 def test_x509_and_factory_symbols_are_reexported_from_client() -> None:
     """
-    Scenario: database.py re-exports the moved names so existing imports/patch targets
-    keep resolving to the single client.py definitions.
-    Boundaries: identity comparison against the client module's objects.
-    On failure: a stale duplicate definition drifts from the factory.
+    [Local] database: verifies x509 and factory symbols are reexported from client.
+
+    Scenario:
+        database.py re-exports the moved names so existing imports/patch targets keep resolving to the single client.py definitions.
+
+    Boundaries:
+        - identity comparison against the client module's objects.
+
+    On failure, first check:
+        - a stale duplicate definition drifts from the factory.
     """
     from bookscraper.backends.mongo import client
 

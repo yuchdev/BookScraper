@@ -232,6 +232,7 @@ def test_save_other_links_open_failure_is_swallowed(tmp_path) -> None:
 # helpers for run()
 # --------------------------------------------------------------------------- #
 def _write_csv(tmp_path, urls, header: str = "url"):
+    """Write a CSV fixture file under tmp_path for scrape-urls tests."""
     target = tmp_path / "urls.csv"
     lines = [header, *urls]
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -529,12 +530,17 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
 
 
 async def test_run_summary_counts_each_status(tmp_path) -> None:
-    """Scenario: a run yields one SUCCESS, one NOT_FOUND, and one TIMEOUT result.
-
-    Boundaries: the end-of-run summary must emit a per-ScrapeStatus breakdown tallying each
-    status exactly once, in enum order, via ``print_log``.
-    On failure: the summary drops or miscounts a status, so an operator can't see at a glance
-    how a batch broke down (how many dead URLs vs. timeouts vs. real books).
+    """
+    [Local] scrape urls: verifies run summary counts each status.
+    
+    Scenario:
+        a run yields one SUCCESS, one NOT_FOUND, and one TIMEOUT result.
+    
+    Boundaries:
+        - the end-of-run summary must emit a per-ScrapeStatus breakdown tallying each status exactly once, in enum order, via ``print_log``.
+    
+    On failure, first check:
+        - the summary drops or miscounts a status, so an operator can't see at a glance how a batch broke down (how many dead URLs vs. timeouts vs. real books).
     """
     urls = [f"https://leanpub.com/book-{i}" for i in range(3)]
     csv_path = _write_csv(tmp_path, urls)

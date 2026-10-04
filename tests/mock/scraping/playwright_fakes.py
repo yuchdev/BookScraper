@@ -64,40 +64,49 @@ class FakeLocator:
     """
 
     def __init__(self, matches: LocatorInit = None, raises: Optional[BaseException] = None) -> None:
+        """Store normalized matches and an optional exception to raise on count()."""
         self._matches: list[Match] = _normalize(matches)
         self._raises = raises
 
     @property
     def first(self) -> FakeLocator:
+        """Return a single-element locator for the first match, or empty."""
         if self._matches:
             return FakeLocator([self._matches[0]])
         return FakeLocator([])
 
     async def text_content(self, *args: Any, **kwargs: Any) -> Optional[str]:
+        """Return the ``text`` of the first match, or None if empty."""
         if not self._matches:
             return None
         return self._matches[0].get("text")
 
     async def all_text_contents(self, *args: Any, **kwargs: Any) -> list[str]:
+        """Return ``text`` values for all matches that carry one."""
         return [m.get("text") for m in self._matches if m.get("text") is not None]
 
     async def get_attribute(self, name: str, *args: Any, **kwargs: Any) -> Optional[str]:
+        """Return the named attribute of the first match, or None."""
         if not self._matches:
             return None
         return self._matches[0].get("attrs", {}).get(name)
 
     async def all(self) -> list[FakeLocator]:
+        """Return each match as its own single-element FakeLocator."""
         return [FakeLocator([m]) for m in self._matches]
 
     async def count(self) -> int:
+        """Return the number of matches, or raise if ``raises`` was set."""
         if self._raises is not None:
             raise self._raises
         return len(self._matches)
 
     async def click(self, *args: Any, **kwargs: Any) -> None:
+        """No-op click stub."""
         return None
 
     async def is_visible(self, *args: Any, **kwargs: Any) -> bool:
+        """Return True if the first match is visible (or absent means False)."""
         if not self._matches:
             return False
         return bool(self._matches[0].get("visible", True))
@@ -126,6 +135,7 @@ class FakePage:
         url: str = "https://example.test/",
         content: str = "",
     ) -> None:
+        """Set up AsyncMock stubs and the locator map."""
         self._locators: dict[str, FakeLocator] = locators or {}
         self.url = url
         self.title = AsyncMock(return_value=title)
@@ -140,6 +150,7 @@ class FakePage:
         self.wait_for_timeout = AsyncMock()
 
     def locator(self, selector: str) -> FakeLocator:
+        """Return the pre-configured FakeLocator for selector, or an empty one."""
         return self._locators.get(selector, FakeLocator([]))
 
 
@@ -158,6 +169,7 @@ class FakeContext:
         cookies_after_clear: Optional[list] = None,
         origins: Optional[list] = None,
     ) -> None:
+        """Set up AsyncMock stubs, cookie lists, and storage state."""
         self._cookies = list(cookies or [])
         self._cookies_after_clear = list(cookies_after_clear or [])
         self._cleared = False
@@ -166,9 +178,11 @@ class FakeContext:
         self.close = AsyncMock()
 
     async def cookies(self, *args: Any, **kwargs: Any) -> list:
+        """Return post-clear cookies if cleared, else the initial list."""
         return self._cookies_after_clear if self._cleared else self._cookies
 
     async def clear_cookies(self, *args: Any, **kwargs: Any) -> None:
+        """Mark cookies as cleared so subsequent cookies() returns the after-clear list."""
         self._cleared = True
 
 
@@ -187,6 +201,7 @@ class FakeBrowser:
         page_factory: Optional[Any] = None,
         context: Optional[FakeContext] = None,
     ) -> None:
+        """Configure new_page/new_context stubs from a fixed page or factory callable."""
         if page_factory is not None:
             self.new_page = AsyncMock(side_effect=page_factory)
         else:
@@ -232,16 +247,19 @@ class FakeResponse:
         raise_status_exc: Optional[BaseException] = None,
         text: str = "",
     ) -> None:
+        """Store the canned response data and optional exception triggers."""
         self._json_data = json_data
         self._json_exc = json_exc
         self._raise_status_exc = raise_status_exc
         self.text = text
 
     def raise_for_status(self) -> None:
+        """Raise raise_status_exc if set, otherwise no-op."""
         if self._raise_status_exc is not None:
             raise self._raise_status_exc
 
     def json(self) -> Any:
+        """Raise json_exc if set, otherwise return json_data."""
         if self._json_exc is not None:
             raise self._json_exc
         return self._json_data

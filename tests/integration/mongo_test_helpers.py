@@ -60,6 +60,7 @@ def mask_uri(uri):
 
 
 def print_separator():
+    """Print a visual separator line to stdout during integration test runs."""
     print("-" * 80)
 
 

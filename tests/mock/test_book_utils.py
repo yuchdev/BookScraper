@@ -27,6 +27,7 @@ def _neutralize_dotenv(monkeypatch):
 
 
 def _patch_resolve(return_value=None, side_effect=None):
+    """Patch config.resolve_mongo_connection for check_mongodb_connection tests."""
     return patch(
         "bookscraper.backends.mongo.config.resolve_mongo_connection",
         return_value=return_value,
@@ -35,6 +36,7 @@ def _patch_resolve(return_value=None, side_effect=None):
 
 
 def _patch_build(return_value=None, side_effect=None):
+    """Patch client.build_mongo_client for check_mongodb_connection tests."""
     return patch(
         "bookscraper.backends.mongo.client.build_mongo_client",
         return_value=return_value,
@@ -43,10 +45,12 @@ def _patch_build(return_value=None, side_effect=None):
 
 
 def _patch_ping(side_effect=None):
+    """Patch client.ping for check_mongodb_connection tests."""
     return patch("bookscraper.backends.mongo.client.ping", side_effect=side_effect)
 
 
 class TestCheckMongodbConnection:
+    """Tests for book_utils.check_mongodb_connection."""
     def test_config_error_returns_false(self) -> None:
         """
         [Local] check mongodb connection: verifies config error returns false.
@@ -157,10 +161,16 @@ class TestCheckMongodbConnection:
 
     def test_check_mongodb_connection_honors_tls_ca_file(self, monkeypatch) -> None:
         """
-        Scenario: TLS_CA_FILE is forwarded to the factory on the pre-flight path, identically
-        to the real connection - it is no longer ignored.
-        Boundaries: TLS_CA_FILE set in the environment; build + ping stubbed.
-        On failure: the pre-flight check drops the CA bundle and loses server-CA pinning.
+        [Local] book utils: verifies check mongodb connection honors tls ca file.
+        
+        Scenario:
+            TLS_CA_FILE is forwarded to the factory on the pre-flight path, identically to the real connection - it is no longer ignored.
+        
+        Boundaries:
+            - TLS_CA_FILE set in the environment; build + ping stubbed.
+        
+        On failure, first check:
+            - the pre-flight check drops the CA bundle and loses server-CA pinning.
         """
         monkeypatch.setenv("TLS_CA_FILE", "/path/to/ca.pem")
         mock_client = MagicMock()
@@ -176,11 +186,16 @@ class TestCheckMongodbConnection:
 
     def test_missing_cert_file_raises_and_returns_false(self, tmp_path) -> None:
         """
-        Scenario: a configured client cert that does not exist fails the check via the
-        factory's MongoConnectionError rather than silently connecting certless (the old bug).
-        Boundaries: resolve returns a nonexistent cert path; the real factory runs; MongoClient
-        must never be constructed.
-        On failure: the missing cert is dropped and the check reports a false-positive success.
+        [Local] book utils: verifies missing cert file raises and returns false.
+        
+        Scenario:
+            a configured client cert that does not exist fails the check via the factory's MongoConnectionError rather than silently connecting certless (the old bug).
+        
+        Boundaries:
+            - resolve returns a nonexistent cert path; the real factory runs; MongoClient must never be constructed.
+        
+        On failure, first check:
+            - the missing cert is dropped and the check reports a false-positive success.
         """
         missing = str(tmp_path / "does_not_exist.pem")
         with (
@@ -248,10 +263,16 @@ class TestCheckMongodbConnection:
 
     def test_failure_does_not_leak_uri_or_host(self, caplog) -> None:
         """
-        Scenario: regression - a redacted MongoConnectionError on the pre-flight path leaves no
-        URI/host in the logs or print_log output (CWE-532).
-        Boundaries: ping raises a redacted error; a fake secret URI is resolved.
-        On failure: the connection URI/host reaches the persistent log or console.
+        [Local] book utils: verifies failure does not leak uri or host.
+        
+        Scenario:
+            regression - a redacted MongoConnectionError on the pre-flight path leaves no URI/host in the logs or print_log output (CWE-532).
+        
+        Boundaries:
+            - ping raises a redacted error; a fake secret URI is resolved.
+        
+        On failure, first check:
+            - the connection URI/host reaches the persistent log or console.
         """
         secret_uri = "mongodb+srv://user:pw@cluster0.example.net/db"
         mock_client = MagicMock()

@@ -18,6 +18,7 @@ MODULE = "bookscraper.commands.search"
 
 
 def _leanpub_book(slug: str, title: str) -> dict:
+    """Build a minimal Leanpub book dict for search command tests."""
     return {
         "site": "leanpub",
         "title": title,
@@ -186,10 +187,12 @@ def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(t
     real_writer_factory = csv.DictWriter
 
     def _make_writer(csvfile, **kwargs):
+        """Build a DictWriter whose writerow raises csv.Error for the 'bad' URL."""
         writer = real_writer_factory(csvfile, **kwargs)
         original_writerow = writer.writerow
 
         def _writerow(row):
+            """Raise csv.Error for the bad URL, else delegate to the real writerow."""
             if row.get("url") == "https://leanpub.com/bad":
                 # A non-ValueError csv.Error hits the inner per-row guard; the loop
                 # must keep going and still write the remaining rows.
@@ -402,13 +405,17 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
 
 
 async def test_search_failed_record_uses_real_book_url() -> None:
-    """Scenario: a Leanpub detail scrape fails, producing a non-success ScrapeResult.
+    """
+    [Local] search: verifies search failed record uses real book url.
 
-    Boundaries: the detail helper returns a typed FAILED result; the failed-attempts record
-    must carry the result's real ``url`` (the resolved ``book_url``) and ``error``, not the old
-    ``"url": "N/A"`` that came from reading a ``url`` key Leanpub candidates never had.
-    On failure: the diagnostic CSV again records ``N/A`` for every Leanpub failure, erasing the
-    URL an operator needs to retry it.
+    Scenario:
+        a Leanpub detail scrape fails, producing a non-success ScrapeResult.
+
+    Boundaries:
+        - the detail helper returns a typed FAILED result; the failed-attempts record must carry the result's real ``url`` (the resolved ``book_url``) and ``error``, not the old ``"url": "N/A"`` that came from reading a ``url`` key Leanpub candidates never had.
+
+    On failure, first check:
+        - the diagnostic CSV again records ``N/A`` for every Leanpub failure, erasing the URL an operator needs to retry it.
     """
     args = SimpleNamespace(store_backend="json")
 

@@ -48,6 +48,7 @@ _CAPTURE_SCRIPT = Path(__file__).resolve().parents[4] / "scripts" / "capture_fix
 
 
 def _load_capture_module() -> ModuleType:
+    """Import capture_fixtures lazily so tests that skip it don't fail on import."""
     spec = importlib.util.spec_from_file_location("capture_fixtures", _CAPTURE_SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -179,13 +180,17 @@ async def test_detail_golden(
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: the unmodified ``scrape_book`` runs a Playwright fixture into its golden.
+    """
+    [Local] detail goldens: verifies detail golden.
 
-    Boundaries: every request is served from committed bytes or default-denied (offline); the
-    exact return shape - a full record dict, or a ``(None, "FAILED")`` tuple - is characterized.
-    These share the one session Chromium (``chromium`` marker) and skip cleanly when none is usable.
-    On failure: a field drifted (a selector stopped matching, a date/ISBN/hash changed, or a
-    dict/tuple flip would reroute a real book into the failed CSV); the diff names the field.
+    Scenario:
+        the unmodified ``scrape_book`` runs a Playwright fixture into its golden.
+
+    Boundaries:
+        - every request is served from committed bytes or default-denied (offline); the exact return shape - a full record dict, or a ``(None, "FAILED")`` tuple - is characterized. These share the one session Chromium (``chromium`` marker) and skip cleanly when none is usable.
+
+    On failure, first check:
+        - a field drifted (a selector stopped matching, a date/ISBN/hash changed, or a dict/tuple flip would reroute a real book into the failed CSV); the diff names the field.
     """
     label = f"{case.site}/{case.name}"
     browser = corpus_router(chromium_browser, corpus_mapping("html"))
@@ -195,6 +200,7 @@ async def test_detail_golden(
     original_new_page = browser.new_page
 
     async def _timed_new_page(*args: Any, **kwargs: Any) -> Any:
+        """Open a new page and apply the reduced DETAIL_TIMEOUT_MS timeout."""
         page = await original_new_page(*args, **kwargs)
         page.set_default_timeout(DETAIL_TIMEOUT_MS)
         return page
@@ -212,17 +218,17 @@ async def test_detail_golden_leanpub(
     httpx_corpus: Any,
     update_goldens: bool,
 ) -> None:
-    """Scenario: the unmodified ``get_leanpub_book_details`` runs a JSON fixture into its golden.
+    """
+    [Local] detail goldens: verifies detail golden leanpub.
 
-    Boundaries: the Leanpub API response is served from committed bytes via ``httpx_corpus``
-    (an ``httpx.MockTransport``); no browser is needed, so this runs offline regardless of
-    Chromium. One parametrized id per fixture, kept in ``<site>/<name>`` form.
-    On failure: a parsed field drifted (title/authors/slug/book_id/categories/date/hash), which
-    would quietly corrupt the Leanpub half of the corpus and its dedup identity.
+    Scenario:
+        the unmodified ``get_leanpub_book_details`` runs a JSON fixture into its golden.
 
-    Unlike the Chromium leg this carries no ``loop_scope="session"``: it relies on
-    ``asyncio_mode = "auto"`` (pyproject.toml) giving it a fresh per-test event loop on
-    purpose, since the offline ``httpx_corpus`` transport needs no shared session browser.
+    Boundaries:
+        - the Leanpub API response is served from committed bytes via ``httpx_corpus`` (an ``httpx.MockTransport``); no browser is needed, so this runs offline regardless of Chromium. One parametrized id per fixture, kept in ``<site>/<name>`` form.
+
+    On failure, first check:
+        - a parsed field drifted (title/authors/slug/book_id/categories/date/hash), which would quietly corrupt the Leanpub half of the corpus and its dedup identity.
     """
     label = f"{case.site}/{case.name}"
     httpx_corpus(corpus_mapping("json"))
@@ -238,13 +244,17 @@ async def test_detail_golden_leanpub(
 
 
 def test_update_goldens_option_rewrites_and_fails(pytester: pytest.Pytester) -> None:
-    """Scenario: ``--update-goldens`` rewrites a golden and then fails the run.
+    """
+    [Local] detail goldens: verifies update goldens option rewrites and fails.
 
-    Boundaries: proven in an isolated inline pytest run against a throwaway golden file, so the
-    real ``tests/fixtures/**/*.expected.json`` are never written; asserts both halves of the
-    contract - the file is rewritten AND the run fails with the review message.
-    On failure: a regeneration could silently pass (goldens drift into the repo unreviewed) or
-    fail to write (goldens never update) - both defeat the characterization workflow.
+    Scenario:
+        ``--update-goldens`` rewrites a golden and then fails the run.
+
+    Boundaries:
+        - proven in an isolated inline pytest run against a throwaway golden file, so the real ``tests/fixtures/**/*.expected.json`` are never written; asserts both halves of the contract - the file is rewritten AND the run fails with the review message.
+
+    On failure, first check:
+        - a regeneration could silently pass (goldens drift into the repo unreviewed) or fail to write (goldens never update) - both defeat the characterization workflow.
     """
     pytester.makeconftest(
         """

@@ -35,9 +35,17 @@ X509_XFAIL_REASON = (
 @pytest.mark.integration
 @pytest.mark.xfail(reason=X509_XFAIL_REASON, strict=False)
 def test_x509_auth_connects():
-    """X.509 client-cert auth resolves and pings the live Atlas cluster.
-
-    Expected XFAIL today due to the Atlas-side cert-validation issue above.
+    """
+    [Integration] connection tls auth: verifies x509 auth connects.
+    
+    Scenario:
+        X.509 client-cert auth resolves and pings the live Atlas cluster. Expected XFAIL today due to the Atlas-side cert-validation issue above.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
     """
     uri = require_env(ENV_VAR_NAME)
     cert = mongo_test_helpers.get_tls_cert_file()

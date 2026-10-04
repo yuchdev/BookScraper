@@ -35,10 +35,12 @@ def _all_files() -> list[Path]:
 
 
 def _is_meta(path: Path) -> bool:
+    """Return True if ``path`` is a ``.meta.json`` sidecar file."""
     return path.name.endswith(_META_SUFFIX)
 
 
 def _is_expected(path: Path) -> bool:
+    """Return True if ``path`` is an ``.expected.json`` golden file."""
     return path.name.endswith(_EXPECTED_SUFFIX)
 
 
@@ -101,11 +103,21 @@ def _payload_for(sidecar: Path) -> Optional[Path]:
 
 
 def test_every_fixture_has_meta_json() -> None:
-    """Scenario: every captured/hand-built payload carries provenance metadata.
+    """
+    [Unit] fixture corpus: verifies every captured payload has a sibling .meta.json.
 
-    Boundaries: a payload whose sibling ``<base>.meta.json`` is missing.
-    On failure: a fixture with no audit trail (how/whether it was sanitized, captured
-    logged-out) slips into the corpus.
+    Scenario:
+        Given all payload files under the captured-corpus directories
+        When each payload is checked for a sibling <base>.meta.json
+        Then no payload is missing its provenance metadata file.
+
+    Boundaries:
+        - Non-capture subtrees (schema_detection/) are excluded
+        - No network; pure filesystem read against committed bytes
+
+    On failure, first check:
+        - Whether a new fixture was added without running capture_fixtures.py (which writes the meta)
+        - Whether a meta file was accidentally deleted or renamed
     """
     missing = [
         str(p.relative_to(FIXTURES_DIR))
@@ -116,11 +128,21 @@ def test_every_fixture_has_meta_json() -> None:
 
 
 def test_no_orphan_meta_or_expected_files() -> None:
-    """Scenario: no .meta.json or golden survives its payload being removed/renamed.
+    """
+    [Unit] fixture corpus: verifies no .meta.json or .expected.json survives its payload being removed.
 
-    Boundaries: both sidecar kinds are checked; goldens do not exist yet (subtask 04),
-    so their absence must be tolerated while an orphaned one is still flagged.
-    On failure: a stale metadata/golden points at a fixture that no longer exists.
+    Scenario:
+        Given all .meta.json and .expected.json sidecars under the corpus
+        When each sidecar's corresponding payload is looked up in the same directory
+        Then no sidecar is missing its payload (i.e. no orphans exist).
+
+    Boundaries:
+        - Both .meta.json and .expected.json kinds are checked
+        - An orphaned sidecar with no payload in the same directory is the failure condition
+
+    On failure, first check:
+        - Whether a payload was deleted or renamed without removing its sidecar files
+        - Whether capture_fixtures.py was run leaving behind a stale meta for a removed fixture
     """
     sidecars = [p for p in _all_files() if _is_meta(p) or _is_expected(p)]
     orphans = [str(p.relative_to(FIXTURES_DIR)) for p in sidecars if _payload_for(p) is None]
@@ -128,10 +150,21 @@ def test_no_orphan_meta_or_expected_files() -> None:
 
 
 def test_fixture_file_size_budget() -> None:
-    """Scenario: no single fixture file exceeds the 400 KB per-file budget.
+    """
+    [Unit] fixture corpus: verifies no single corpus file exceeds the 400 KB per-file budget.
 
-    Boundaries: applies to every committed corpus file (payload, meta, golden).
-    On failure: an over-large capture (hostile bloat or un-trimmed noise) is committed.
+    Scenario:
+        Given every regular file under tests/fixtures/ (payloads, meta, goldens)
+        When each file's size is compared against PER_FILE_BUDGET (400 KB)
+        Then no file exceeds the budget.
+
+    Boundaries:
+        - Applies to all corpus files including README.md is excluded
+        - PER_FILE_BUDGET = 400 * 1024 bytes
+
+    On failure, first check:
+        - Whether a newly captured fixture was trimmed/pruned before committing
+        - Whether an over-large HTML page was captured without the 400 KB cap applied
     """
     over = [
         (str(p.relative_to(FIXTURES_DIR)), p.stat().st_size)
@@ -142,22 +175,42 @@ def test_fixture_file_size_budget() -> None:
 
 
 def test_corpus_total_size_budget() -> None:
-    """Scenario: the whole corpus stays under the 15 MB budget.
+    """
+    [Unit] fixture corpus: verifies the total corpus size stays under the 15 MB budget.
 
-    Boundaries: sums every regular file under tests/fixtures/.
-    On failure: the corpus grows without bound and bloats every clone/CI run.
+    Scenario:
+        Given the sum of all regular files under tests/fixtures/
+        When the total is compared against CORPUS_BUDGET (15 MB)
+        Then the total does not exceed the budget.
+
+    Boundaries:
+        - Sums every regular file including meta, goldens, and non-capture subtrees
+        - CORPUS_BUDGET = 15 * 1024 * 1024 bytes
+
+    On failure, first check:
+        - Whether many large fixtures were added in a recent commit
+        - Whether the schema_detection/ replay/golden files grew disproportionately
     """
     total = sum(p.stat().st_size for p in _all_files())
     assert total <= CORPUS_BUDGET, f"corpus is {total} bytes, over the {CORPUS_BUDGET} budget"
 
 
 def test_meta_sha256_matches_file() -> None:
-    """Scenario: no fixture was hand-edited after capture (FIX-13 compensating control).
+    """
+    [Unit] fixture corpus: verifies no fixture was hand-edited after capture (FIX-13 compensating control).
 
-    Boundaries: covers every fixture - each payload must have a .meta.json whose
-    ``sha256`` equals the sha256 of the payload bytes on disk.
-    On failure: a byte changed after capture (a smuggled secret, a silent tweak) that a
-    suppressed HTML diff would hide.
+    Scenario:
+        Given every captured payload and its .meta.json
+        When the sha256 in .meta.json is compared against sha256(payload bytes on disk)
+        Then every hash matches, confirming the payload is byte-identical to what was captured.
+
+    Boundaries:
+        - Covers all captured-corpus payloads; schema_detection/ subtree is excluded
+        - A single byte change after capture causes a mismatch
+
+    On failure, first check:
+        - Whether a fixture was edited by hand (the -diff gitattribute suppresses the diff)
+        - Whether capture_fixtures.py was rerun without updating the .meta.json sha256
     """
     payloads = _payload_files()
     assert payloads, "corpus is empty - expected the minimum initial fixtures"
@@ -184,10 +237,21 @@ def test_meta_sha256_matches_file() -> None:
     ],
 )
 def test_minimum_initial_corpus_present(site: str, kind: str, count: int) -> None:
-    """Scenario: the minimum initial corpus (amazon/packtpub/oreilly x3, leanpub x3) exists.
+    """
+    [Unit] fixture corpus: verifies the minimum initial corpus per site is present.
 
-    Boundaries: counts only payload files under the site's kind directory.
-    On failure: the corpus is short of the minimum the success criterion requires.
+    Scenario:
+        Given the fixtures/<kind>/<site>/ directory
+        When payload files (not meta or goldens) are counted
+        Then at least ``count`` payload files exist for the site.
+
+    Boundaries:
+        - Parametrised over amazon/packtpub/oreilly (html, 3 each) and leanpub (json, 3)
+        - Counts only payload files, not .meta.json or .expected.json
+
+    On failure, first check:
+        - Whether a fixture was deleted without adding a replacement
+        - Whether the fixture directory structure changed (html/json layout)
     """
     site_dir = FIXTURES_DIR / kind / site
     found = sorted(

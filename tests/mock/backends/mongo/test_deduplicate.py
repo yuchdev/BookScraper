@@ -14,6 +14,7 @@ from bookscraper.backends.mongo import deduplicate
 
 
 class TestLeanpubPrescrapeDeduplicate:
+    """Tests for deduplicate.leanpub_prescrape_deduplicate."""
     def test_book_id_only_builds_id_only_query(self) -> None:
         """
         [Local] leanpub prescrape deduplicate: verifies book id only builds id only query.

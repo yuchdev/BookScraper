@@ -39,6 +39,7 @@ def _leanpub_payload(
     last_published_at="2023-05-01T00:00:00Z",
     slug="example-book",
 ):
+    """Build a minimal Leanpub JSON detail payload for scrape-details tests."""
     return {
         "data": {
             "id": "book-123",
@@ -274,12 +275,17 @@ async def test_get_leanpub_book_details_malformed_date_yields_none_date():
 
 
 async def test_leanpub_failure_returns_failed_result_not_none():
-    """Scenario: a Leanpub HTTP error that used to return a bare ``None``.
-
-    Boundaries: the httpx client raises an ``HTTPStatusError``; the helper must now surface a
-    typed ``ScrapeResult`` (FAILED, with the real url and a secret-free error) rather than
-    ``None``, which ``scrape_urls`` once filed as ``UNKNOWN_ERROR`` (defect (d)).
-    On failure: a Leanpub failure again returns ``None`` and the opaque-error regression returns.
+    """
+    [Local] scrape details: verifies leanpub failure returns failed result not none.
+    
+    Scenario:
+        a Leanpub HTTP error that used to return a bare ``None``.
+    
+    Boundaries:
+        - the httpx client raises an ``HTTPStatusError``; the helper must now surface a typed ``ScrapeResult`` (FAILED, with the real url and a secret-free error) rather than ``None``, which ``scrape_urls`` once filed as ``UNKNOWN_ERROR`` (defect (d)).
+    
+    On failure, first check:
+        - a Leanpub failure again returns ``None`` and the opaque-error regression returns.
     """
     request = httpx.Request("GET", LEANPUB_URL)
     resp = httpx.Response(404, request=request, text="not found")
@@ -452,12 +458,17 @@ async def test_scrape_book_site_without_base_url_returns_failed():
 
 
 async def test_scrape_book_404_returns_not_found():
-    """Scenario: amazon serves a page whose title matches ``404_PAGE_TITLE``.
-
-    Boundaries: the 404 short-circuit fires on the first attempt; the result must be a typed
-    NOT_FOUND (not the old opaque ``(None, "FAILED")``) so ``failed_books.csv`` can tell a dead
-    URL from a broken selector. The page is closed exactly once.
-    On failure: a 404 again collapses into FAILED, erasing the distinction subtask 02 adds.
+    """
+    [Local] scrape details: verifies scrape book 404 returns not found.
+    
+    Scenario:
+        amazon serves a page whose title matches ``404_PAGE_TITLE``.
+    
+    Boundaries:
+        - the 404 short-circuit fires on the first attempt; the result must be a typed NOT_FOUND (not the old opaque ``(None, "FAILED")``) so ``failed_books.csv`` can tell a dead URL from a broken selector. The page is closed exactly once.
+    
+    On failure, first check:
+        - a 404 again collapses into FAILED, erasing the distinction subtask 02 adds.
     """
     page = FakePage(title="Sorry - Page Not Found")
     browser = FakeBrowser(page=page)
@@ -616,12 +627,17 @@ async def test_scrape_book_non_duplicate_returns_book():
 
 
 async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count():
-    """Scenario: every navigation times out, exhausting all three attempts.
-
-    Boundaries: the final-timeout path must return a typed TIMEOUT (not the old
-    ``(None, "FAILED")``) and record ``attempts == 3`` so the summary and CSV reflect the
-    retry budget that was spent.
-    On failure: an all-timeouts run again reads as a generic FAILED with no attempt count.
+    """
+    [Local] scrape details: verifies scrape book exhausted timeouts return timeout with attempt count.
+    
+    Scenario:
+        every navigation times out, exhausting all three attempts.
+    
+    Boundaries:
+        - the final-timeout path must return a typed TIMEOUT (not the old ``(None, "FAILED")``) and record ``attempts == 3`` so the summary and CSV reflect the retry budget that was spent.
+    
+    On failure, first check:
+        - an all-timeouts run again reads as a generic FAILED with no attempt count.
     """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
@@ -677,12 +693,17 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
 
 
 async def test_leanpub_dispatch_opens_no_playwright_page():
-    """Scenario: ``scrape_book`` is called for a Leanpub URL.
-
-    Boundaries: exercises only the pre-loop Leanpub dispatch; the httpx detail
-    helper is stubbed, so no network and no Playwright page are involved.
-    On failure: the Leanpub branch would again open (and leak) a browser page
-    before short-circuiting to the API helper - defect (a) from the parent task.
+    """
+    [Local] scrape details: verifies leanpub dispatch opens no playwright page.
+    
+    Scenario:
+        ``scrape_book`` is called for a Leanpub URL.
+    
+    Boundaries:
+        - exercises only the pre-loop Leanpub dispatch; the httpx detail helper is stubbed, so no network and no Playwright page are involved.
+    
+    On failure, first check:
+        - the Leanpub branch would again open (and leak) a browser page before short-circuiting to the API helper - defect (a) from the parent task.
     """
     page = FakePage()
     browser = FakeBrowser(page=page)
@@ -702,12 +723,17 @@ async def test_leanpub_dispatch_opens_no_playwright_page():
 
 
 async def test_page_closed_exactly_once_on_success():
-    """Scenario: a happy-path Amazon scrape returns a full book dict.
-
-    Boundaries: single attempt, no duplicate check; asserts the page-open and
-    page-close counts match exactly.
-    On failure: a page was opened without a matching close (a leak) or closed
-    more than once (spurious ``Target closed`` errors).
+    """
+    [Local] scrape details: verifies page closed exactly once on success.
+    
+    Scenario:
+        a happy-path Amazon scrape returns a full book dict.
+    
+    Boundaries:
+        - single attempt, no duplicate check; asserts the page-open and page-close counts match exactly.
+    
+    On failure, first check:
+        - a page was opened without a matching close (a leak) or closed more than once (spurious ``Target closed`` errors).
     """
     page = _amazon_page()
     browser = FakeBrowser(page=page)
@@ -721,11 +747,17 @@ async def test_page_closed_exactly_once_on_success():
 
 
 async def test_page_closed_exactly_once_on_duplicate():
-    """Scenario: a scraped book is already present in the storage backend.
-
-    Boundaries: single attempt that returns ``(None, "DUPLICATE")`` from inside
-    the page context.
-    On failure: the duplicate short-circuit leaked its page or double-closed it.
+    """
+    [Local] scrape details: verifies page closed exactly once on duplicate.
+    
+    Scenario:
+        a scraped book is already present in the storage backend.
+    
+    Boundaries:
+        - single attempt that returns ``(None, "DUPLICATE")`` from inside the page context.
+    
+    On failure, first check:
+        - the duplicate short-circuit leaked its page or double-closed it.
     """
     page = _amazon_page()
     browser = FakeBrowser(page=page)
@@ -740,11 +772,17 @@ async def test_page_closed_exactly_once_on_duplicate():
 
 
 async def test_page_closed_exactly_once_on_404():
-    """Scenario: the target serves a 404 page (title matches ``404_PAGE_TITLE``).
-
-    Boundaries: single attempt that returns ``(None, "FAILED")`` from the 404
-    short-circuit inside the page context.
-    On failure: the 404 branch leaked its page or double-closed it.
+    """
+    [Local] scrape details: verifies page closed exactly once on 404.
+    
+    Scenario:
+        the target serves a 404 page (title matches ``404_PAGE_TITLE``).
+    
+    Boundaries:
+        - single attempt that returns ``(None, "FAILED")`` from the 404 short-circuit inside the page context.
+    
+    On failure, first check:
+        - the 404 branch leaked its page or double-closed it.
     """
     page = FakePage(title="Sorry - Page Not Found")
     browser = FakeBrowser(page=page)
@@ -757,13 +795,17 @@ async def test_page_closed_exactly_once_on_404():
 
 
 async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
-    """Scenario: every navigation times out, so all three attempts fail.
-
-    Boundaries: three attempts hand out the same fake page; asserts exactly one
-    open and one close per attempt (3 == 3), never a fourth close from a stale
-    post-loop cleanup.
-    On failure: the removed post-loop ``if page: await page.close()`` block (or a
-    double-close on the final attempt) would push the close count to 4+.
+    """
+    [Local] scrape details: verifies page closed exactly once per attempt on repeated timeout.
+    
+    Scenario:
+        every navigation times out, so all three attempts fail.
+    
+    Boundaries:
+        - three attempts hand out the same fake page; asserts exactly one open and one close per attempt (3 == 3), never a fourth close from a stale post-loop cleanup.
+    
+    On failure, first check:
+        - the removed post-loop ``if page: await page.close()`` block (or a double-close on the final attempt) would push the close count to 4+.
     """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
@@ -779,12 +821,17 @@ async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
 
 
 async def test_close_failure_does_not_mask_original_error():
-    """Scenario: ``page.close()`` itself raises (e.g. the browser already crashed).
-
-    Boundaries: a happy-path scrape whose page close raises; the close failure
-    must be swallowed so the successful result still propagates.
-    On failure: the close exception masks the real return value, turning a good
-    scrape into a crash.
+    """
+    [Local] scrape details: verifies close failure does not mask original error.
+    
+    Scenario:
+        ``page.close()`` itself raises (e.g. the browser already crashed).
+    
+    Boundaries:
+        - a happy-path scrape whose page close raises; the close failure must be swallowed so the successful result still propagates.
+    
+    On failure, first check:
+        - the close exception masks the real return value, turning a good scrape into a crash.
     """
     page = _amazon_page()
     page.close = AsyncMock(side_effect=RuntimeError("Target page, context or browser has been closed"))

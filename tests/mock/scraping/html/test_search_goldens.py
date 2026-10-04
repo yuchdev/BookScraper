@@ -88,6 +88,7 @@ async def _run_amazon_search(
     original_new_page = browser.new_page
 
     async def _timed_new_page(*args: Any, **kwargs: Any) -> Any:
+        """Wrap new_page to set a reduced default timeout for golden tests."""
         page = await original_new_page(*args, **kwargs)
         page.set_default_timeout(SEARCH_TIMEOUT_MS)
         return page
@@ -109,14 +110,17 @@ async def test_amazon_search_golden(
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: the unmodified amazon search scrapes two served pages into its golden.
+    """
+    [Local] search goldens: verifies amazon search golden.
 
-    Boundaries: pages 1 and 2 are served from committed bytes (everything else default-denied
-    and offline); the full candidate list (title/authors/date/url/asin, per-page numbering) is
-    characterized field-by-field.
-    On failure: a card selector drifted or the dict shape changed - either silently corrupts
-    the search half of the corpus. The golden already records today's detail-link drift
-    (url/asin None) via ``_known_issues``.
+    Scenario:
+        the unmodified amazon search scrapes two served pages into its golden.
+
+    Boundaries:
+        - pages 1 and 2 are served from committed bytes (everything else default-denied and offline); the full candidate list (title/authors/date/url/asin, per-page numbering) is characterized field-by-field.
+
+    On failure, first check:
+        - a card selector drifted or the dict shape changed - either silently corrupts the search half of the corpus. The golden already records today's detail-link drift (url/asin None) via ``_known_issues``.
     """
     mapping = {
         _amazon_page_url(1): AMAZON_DIR / "search_python_p1.html",
@@ -143,13 +147,17 @@ async def test_amazon_search_stops_on_last_page(
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: page 1 has results, page 2 is the exhausted (no-card) last page.
+    """
+    [Local] search goldens: verifies amazon search stops on last page.
 
-    Boundaries: ``SEARCH_MAXIMUM_PAGES`` is raised to force a page-2 request; page 2 is the
-    result-exhausted snapshot, whose absent SEARCH_BOOK_CARD makes the production
-    ``wait_for_selector`` time out and stop the run with page 1 already collected.
-    On failure: the loop either kept going past an empty page or dropped page-1 results -
-    both change which books a search run reports as new.
+    Scenario:
+        page 1 has results, page 2 is the exhausted (no-card) last page.
+
+    Boundaries:
+        - ``SEARCH_MAXIMUM_PAGES`` is raised to force a page-2 request; page 2 is the result-exhausted snapshot, whose absent SEARCH_BOOK_CARD makes the production ``wait_for_selector`` time out and stop the run with page 1 already collected.
+
+    On failure, first check:
+        - the loop either kept going past an empty page or dropped page-1 results - both change which books a search run reports as new.
     """
     mapping = {
         _amazon_page_url(1): AMAZON_DIR / "search_python_p1.html",
@@ -170,13 +178,17 @@ async def test_amazon_search_no_results_returns_empty(
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: a no-results search page yields no candidates at all.
+    """
+    [Local] search goldens: verifies amazon search no results returns empty.
 
-    Boundaries: the served page carries no SEARCH_BOOK_CARD, so the production
-    ``wait_for_selector`` times out and the function returns an empty list (today amazon has no
-    SEARCH_NO_BOOKS_FOUND marker, so this is the real termination path).
-    On failure: a no-results page that returned phantom candidates would inject empty/``None``
-    rows into the corpus while the run still reported "N books scraped".
+    Scenario:
+        a no-results search page yields no candidates at all.
+
+    Boundaries:
+        - the served page carries no SEARCH_BOOK_CARD, so the production ``wait_for_selector`` times out and the function returns an empty list (today amazon has no SEARCH_NO_BOOKS_FOUND marker, so this is the real termination path).
+
+    On failure, first check:
+        - a no-results page that returned phantom candidates would inject empty/``None`` rows into the corpus while the run still reported "N books scraped".
     """
     mapping = {_amazon_page_url(1): AMAZON_DIR / "search_no_results.html"}
     result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=2)
@@ -191,13 +203,17 @@ async def test_amazon_sponsored_card_unwrapped(
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: a sponsored ``/sspa/click`` result card is unwrapped to the real product URL.
+    """
+    [Local] search goldens: verifies amazon sponsored card unwrapped.
 
-    Boundaries: the card's detail link is an ``/sspa/click`` redirect carrying the true path in
-    its ``url`` query param; the parser must decode it, rebuild an absolute product URL, and
-    recover the 10-char ASIN from it.
-    On failure: a sponsored card stored with its ``/sspa/click`` tracking URL (or no ASIN) would
-    dedup wrong and re-fetch the same book forever.
+    Scenario:
+        a sponsored ``/sspa/click`` result card is unwrapped to the real product URL.
+
+    Boundaries:
+        - the card's detail link is an ``/sspa/click`` redirect carrying the true path in its ``url`` query param; the parser must decode it, rebuild an absolute product URL, and recover the 10-char ASIN from it.
+
+    On failure, first check:
+        - a sponsored card stored with its ``/sspa/click`` tracking URL (or no ASIN) would dedup wrong and re-fetch the same book forever.
     """
     mapping = {_amazon_page_url(1): AMAZON_DIR / "search_sponsored.html"}
     result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=2)
@@ -224,13 +240,17 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Scenario: a full (100-item) page is followed to the next, which is short and stops it.
+    """
+    [Local] search goldens: verifies leanpub search api golden paginates until short page.
 
-    Boundaries: page 1 holds exactly 100 items (so the ``len < 100`` guard keeps paginating) and
-    page 2 holds 7 (so it stops); the ``SimpleAuthor`` lookup from the ``included`` section is
-    resolved onto each book. Both pages are served from committed bytes via ``httpx_corpus``.
-    On failure: pagination that stopped early loses page 2, or over-ran into an unmapped page 3
-    (default-denied); an author-lookup regression blanks the authors that feed ``hash_book``.
+    Scenario:
+        a full (100-item) page is followed to the next, which is short and stops it.
+
+    Boundaries:
+        - page 1 holds exactly 100 items (so the ``len < 100`` guard keeps paginating) and page 2 holds 7 (so it stops); the ``SimpleAuthor`` lookup from the ``included`` section is resolved onto each book. Both pages are served from committed bytes via ``httpx_corpus``.
+
+    On failure, first check:
+        - pagination that stopped early loses page 2, or over-ran into an unmapped page 3 (default-denied); an author-lookup regression blanks the authors that feed ``hash_book``.
     """
     monkeypatch.setattr(search_utils.random, "uniform", lambda _a, _b: 0)
     p1 = LEANPUB_DIR / "search_python_p1.json"
@@ -252,12 +272,17 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
 
 
 async def test_leanpub_search_api_empty_result(httpx_corpus: Any) -> None:
-    """Scenario: a search whose first page has an empty ``data`` array returns no candidates.
-
-    Boundaries: the single served page's empty ``data`` triggers the immediate break before any
-    pagination; the result is an empty list.
-    On failure: an empty API page that returned non-empty results would fabricate books with no
-    identity, corrupting dedup downstream.
+    """
+    [Local] search goldens: verifies leanpub search api empty result.
+    
+    Scenario:
+        a search whose first page has an empty ``data`` array returns no candidates.
+    
+    Boundaries:
+        - the single served page's empty ``data`` triggers the immediate break before any pagination; the result is an empty list.
+    
+    On failure, first check:
+        - an empty API page that returned non-empty results would fabricate books with no identity, corrupting dedup downstream.
     """
     empty = LEANPUB_DIR / "search_empty.json"
     httpx_corpus({_meta_url(empty): empty})

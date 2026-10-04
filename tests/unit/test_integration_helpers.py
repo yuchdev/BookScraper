@@ -22,6 +22,7 @@ def cert_dir(tmp_path, monkeypatch):
 
 
 def _make_cert(directory, name: str, mtime: float):
+    """Create a stub PEM file in ``directory`` with the given name and mtime."""
     path = directory / name
     path.write_text("-----BEGIN CERTIFICATE-----\n")
     import os
@@ -81,8 +82,22 @@ def test_picks_newest_certificate_by_mtime(cert_dir) -> None:
 
 
 def test_newest_wins_even_when_name_sorts_lower(cert_dir) -> None:
-    """mtime, not lexical name order, decides - a manually placed cert can outrank a
-    later-named one."""
+    """
+    [Unit] integration helpers: verifies mtime beats lexical name order when selecting the newest cert.
+
+    Scenario:
+        Given two cert files where the higher-mtime file has a lexically lower name
+        When get_default_tls_cert_file is called
+        Then the file with the highest mtime is returned, not the lexically last name.
+
+    Boundaries:
+        - No env-var override path; cert_dir fixture only
+        - Sorting by mtime, not by filename alphanumeric order
+
+    On failure, first check:
+        - Whether get_default_tls_cert_file sorts candidates by mtime descending
+        - Recent changes to the glob/sort logic in mongo_test_helpers
+    """
     _make_cert(cert_dir, "X509-cert-99999999_999999.pem", 1_000)
     newest = _make_cert(cert_dir, "X509-cert-142838411852079927.pem", 9_000)
 
@@ -90,8 +105,22 @@ def test_newest_wins_even_when_name_sorts_lower(cert_dir) -> None:
 
 
 def test_a_freshly_rotated_cert_is_picked_up(cert_dir) -> None:
-    """The regression that motivated this module: after rotation writes a new
-    timestamped cert, resolution must follow it rather than a pinned filename."""
+    """
+    [Unit] integration helpers: verifies a freshly-rotated cert is picked up via mtime glob.
+
+    Scenario:
+        Given an older pinned cert and a newly-rotated cert with a higher mtime
+        When get_tls_cert_file is called with no TLS_CERT_FILE env override
+        Then the rotated cert's path is returned, not the older one's.
+
+    Boundaries:
+        - No env-var override; cert_dir fixture; file mtime ordering
+        - Regression guard: the helper must not pin a hardcoded filename
+
+    On failure, first check:
+        - Whether get_tls_cert_file uses mtime not filename to pick the newest cert
+        - Recent changes to TLS_CERT_GLOB or mtime-sort logic in mongo_test_helpers
+    """
     _make_cert(cert_dir, "X509-cert-142838411852079927.pem", 1_000)
     rotated = _make_cert(cert_dir, "X509-cert-20260923_120000.pem", 9_000)
 
@@ -177,6 +206,21 @@ def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch)
 
 
 def test_helper_no_longer_pins_a_hardcoded_certificate_name() -> None:
-    """The stale constant must stay gone - its removal is the fix."""
+    """
+    [Unit] integration helpers: verifies the hardcoded cert constant is absent and the glob is present.
+
+    Scenario:
+        Given the mongo_test_helpers module
+        When its attributes are inspected
+        Then DEFAULT_TLS_CERT_FILE does not exist and TLS_CERT_GLOB equals "X509-cert-*.pem".
+
+    Boundaries:
+        - Attribute presence check only; no filesystem or network access
+        - Guards against re-introduction of the pinned constant
+
+    On failure, first check:
+        - Whether DEFAULT_TLS_CERT_FILE was accidentally re-added to mongo_test_helpers
+        - Whether TLS_CERT_GLOB was renamed or removed
+    """
     assert not hasattr(mongo_test_helpers, "DEFAULT_TLS_CERT_FILE")
     assert mongo_test_helpers.TLS_CERT_GLOB == "X509-cert-*.pem"

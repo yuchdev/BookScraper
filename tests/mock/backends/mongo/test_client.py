@@ -116,8 +116,18 @@ def test_x509_mechanism_present_warns_nothing() -> None:
 
 
 def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
-    """Legacy resolution attaches the newest cert to any URI, so a working SCRAM
-    setup can pick one up incidentally - that is a warning, not a critical."""
+    """
+    [Local] client: verifies scram uri with stray cert warns but does not escalate.
+
+    Scenario:
+        Legacy resolution attaches the newest cert to any URI, so a working SCRAM setup can pick one up incidentally - that is a warning, not a critical.
+
+    Boundaries:
+        - see test body
+
+    On failure, first check:
+        - see test body
+    """
     with (
         patch.object(client.module_logger, "warning") as warn,
         patch.object(client.module_logger, "critical") as crit,
@@ -131,7 +141,18 @@ def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
 
 
 def test_cert_without_mechanism_or_credentials_is_critical() -> None:
-    """No mechanism and no userinfo means the connection authenticates as nobody."""
+    """
+    [Local] client: verifies cert without mechanism or credentials is critical.
+
+    Scenario:
+        No mechanism and no userinfo means the connection authenticates as nobody.
+
+    Boundaries:
+        - see test body
+
+    On failure, first check:
+        - see test body
+    """
     with (
         patch.object(client.module_logger, "critical") as crit,
         patch.object(client, "print_log") as printed,
@@ -147,12 +168,20 @@ def test_cert_without_mechanism_or_credentials_is_critical() -> None:
 # resolve_server_selection_timeout_ms
 # --------------------------------------------------------------------------- #
 class TestResolveTimeout:
+    """Tests for client.resolve_server_selection_timeout_ms."""
+
     def test_timeout_default_and_env_override(self, monkeypatch) -> None:
         """
-        Scenario: the timeout defaults to DEFAULT_SERVER_SELECTION_TIMEOUT_MS and is
-        overridden by MONGODB_SERVER_SELECTION_TIMEOUT_MS when set to a valid integer.
-        Boundaries: env unset -> default; env "2500" -> 2500.
-        On failure: the knob is ignored, or the default drifts from 10_000.
+        [Local] client: verifies timeout default and env override.
+
+        Scenario:
+            the timeout defaults to DEFAULT_SERVER_SELECTION_TIMEOUT_MS and is overridden by MONGODB_SERVER_SELECTION_TIMEOUT_MS when set to a valid integer.
+
+        Boundaries:
+            - env unset -> default; env "2500" -> 2500.
+
+        On failure, first check:
+            - the knob is ignored, or the default drifts from 10_000.
         """
         monkeypatch.delenv(client.SERVER_SELECTION_TIMEOUT_ENV, raising=False)
         assert client.resolve_server_selection_timeout_ms() == client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
@@ -163,18 +192,32 @@ class TestResolveTimeout:
 
     def test_blank_env_falls_back_to_default(self, monkeypatch) -> None:
         """
-        Scenario: a blank/whitespace env value falls back to the default.
-        Boundaries: env set to "   ".
-        On failure: an empty knob crashes int() instead of defaulting.
+        [Local] client: verifies blank env falls back to default.
+
+        Scenario:
+            a blank/whitespace env value falls back to the default.
+
+        Boundaries:
+            - env set to "   ".
+
+        On failure, first check:
+            - an empty knob crashes int() instead of defaulting.
         """
         monkeypatch.setenv(client.SERVER_SELECTION_TIMEOUT_ENV, "   ")
         assert client.resolve_server_selection_timeout_ms() == client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
 
     def test_non_integer_env_warns_and_defaults(self, monkeypatch) -> None:
         """
-        Scenario: a non-integer knob warns and falls back rather than failing the connection.
-        Boundaries: env "abc".
-        On failure: a mistyped knob aborts the connection.
+        [Local] client: verifies non integer env warns and defaults.
+
+        Scenario:
+            a non-integer knob warns and falls back rather than failing the connection.
+
+        Boundaries:
+            - env "abc".
+
+        On failure, first check:
+            - a mistyped knob aborts the connection.
         """
         monkeypatch.setenv(client.SERVER_SELECTION_TIMEOUT_ENV, "abc")
         with patch.object(client.module_logger, "warning") as warn:
@@ -183,9 +226,16 @@ class TestResolveTimeout:
 
     def test_non_positive_env_warns_and_defaults(self, monkeypatch) -> None:
         """
-        Scenario: a non-positive knob warns and falls back.
-        Boundaries: env "0".
-        On failure: a zero/negative timeout is passed straight to pymongo.
+        [Local] client: verifies non positive env warns and defaults.
+
+        Scenario:
+            a non-positive knob warns and falls back.
+
+        Boundaries:
+            - env "0".
+
+        On failure, first check:
+            - a zero/negative timeout is passed straight to pymongo.
         """
         monkeypatch.setenv(client.SERVER_SELECTION_TIMEOUT_ENV, "0")
         with patch.object(client.module_logger, "warning") as warn:
@@ -197,12 +247,20 @@ class TestResolveTimeout:
 # build_mongo_client
 # --------------------------------------------------------------------------- #
 class TestBuildMongoClient:
+    """Tests for client.build_mongo_client."""
+
     def test_build_client_with_cert_sets_tls_and_key_file(self, tmp_path) -> None:
         """
-        Scenario: a valid cert yields tls=True + tlsCertificateKeyFile and hard-locked
-        validation, plus ServerApi("1") and the timeout.
-        Boundaries: an existing cert path with an X.509 URI (no warning branch).
-        On failure: TLS is left off, the key file is dropped, or validation is disableable.
+        [Local] client: verifies build client with cert sets tls and key file.
+
+        Scenario:
+            a valid cert yields tls=True + tlsCertificateKeyFile and hard-locked validation, plus ServerApi("1") and the timeout.
+
+        Boundaries:
+            - an existing cert path with an X.509 URI (no warning branch).
+
+        On failure, first check:
+            - TLS is left off, the key file is dropped, or validation is disableable.
         """
         cert = tmp_path / "cert.pem"
         cert.write_text("dummy")
@@ -222,10 +280,16 @@ class TestBuildMongoClient:
 
     def test_build_client_without_cert_omits_tls_kwargs(self) -> None:
         """
-        Scenario: with no cert, tls/tlsCertificateKeyFile are omitted but validation and
-        ServerApi are still set.
-        Boundaries: cert_file=None, ca_file=None.
-        On failure: a certless build accidentally sets tls kwargs or disables validation.
+        [Local] client: verifies build client without cert omits tls kwargs.
+
+        Scenario:
+            with no cert, tls/tlsCertificateKeyFile are omitted but validation and ServerApi are still set.
+
+        Boundaries:
+            - cert_file=None, ca_file=None.
+
+        On failure, first check:
+            - a certless build accidentally sets tls kwargs or disables validation.
         """
         instance = MagicMock(name="client")
         with patch.object(client, "MongoClient", return_value=instance) as mock_ctor:
@@ -239,9 +303,16 @@ class TestBuildMongoClient:
 
     def test_build_client_passes_ca_file_only_when_set(self) -> None:
         """
-        Scenario: tlsCAFile is present only when ca_file is given.
-        Boundaries: ca_file="/ca.pem" vs ca_file=None.
-        On failure: the CA bundle is ignored, or a None CA path is forwarded.
+        [Local] client: verifies build client passes ca file only when set.
+
+        Scenario:
+            tlsCAFile is present only when ca_file is given.
+
+        Boundaries:
+            - ca_file="/ca.pem" vs ca_file=None.
+
+        On failure, first check:
+            - the CA bundle is ignored, or a None CA path is forwarded.
         """
         instance = MagicMock(name="client")
         with patch.object(client, "MongoClient", return_value=instance) as mock_ctor:
@@ -256,9 +327,16 @@ class TestBuildMongoClient:
 
     def test_build_client_missing_cert_file_raises(self, tmp_path) -> None:
         """
-        Scenario: a configured cert path that does not exist raises rather than dropping it.
-        Boundaries: cert_file points at a nonexistent file; MongoClient must never be reached.
-        On failure: the missing cert is silently dropped and a certless client is built.
+        [Local] client: verifies build client missing cert file raises.
+
+        Scenario:
+            a configured cert path that does not exist raises rather than dropping it.
+
+        Boundaries:
+            - cert_file points at a nonexistent file; MongoClient must never be reached.
+
+        On failure, first check:
+            - the missing cert is silently dropped and a certless client is built.
         """
         missing = str(tmp_path / "nope.pem")
         with patch.object(client, "MongoClient") as mock_ctor:
@@ -268,9 +346,16 @@ class TestBuildMongoClient:
 
     def test_build_client_warns_when_cert_lacks_x509_mechanism(self, tmp_path) -> None:
         """
-        Scenario: a cert paired with a bare URI triggers the unauthenticated-connection warning.
-        Boundaries: existing cert + BARE_URI (no mechanism, no creds).
-        On failure: the silent-cert misconfiguration is not surfaced.
+        [Local] client: verifies build client warns when cert lacks x509 mechanism.
+
+        Scenario:
+            a cert paired with a bare URI triggers the unauthenticated-connection warning.
+
+        Boundaries:
+            - existing cert + BARE_URI (no mechanism, no creds).
+
+        On failure, first check:
+            - the silent-cert misconfiguration is not surfaced.
         """
         cert = tmp_path / "cert.pem"
         cert.write_text("dummy")
@@ -283,10 +368,16 @@ class TestBuildMongoClient:
 
     def test_build_client_wraps_construction_error_redacted(self) -> None:
         """
-        Scenario: MongoClient rejects a bad URI (ConfigurationError embedding the URI); the
-        factory re-raises a redacted MongoConnectionError that never carries the URI text.
-        Boundaries: constructor raises ConfigurationError with the secret URI in the message.
-        On failure: the raw URI (with password) escapes through the exception message.
+        [Local] client: verifies build client wraps construction error redacted.
+
+        Scenario:
+            MongoClient rejects a bad URI (ConfigurationError embedding the URI); the factory re-raises a redacted MongoConnectionError that never carries the URI text.
+
+        Boundaries:
+            - constructor raises ConfigurationError with the secret URI in the message.
+
+        On failure, first check:
+            - the raw URI (with password) escapes through the exception message.
         """
         secret_uri = "mongodb+srv://user:pw@cluster0.example.net/db"
         with patch.object(client, "MongoClient", side_effect=ConfigurationError(secret_uri)):
@@ -302,11 +393,20 @@ class TestBuildMongoClient:
 # _redact_pymongo_error / ping
 # --------------------------------------------------------------------------- #
 class TestPing:
+    """Tests for client.ping."""
+
     def test_ping_success_is_silent(self) -> None:
         """
-        Scenario: a healthy client pings without raising.
-        Boundaries: admin.command("ping") returns normally.
-        On failure: a successful ping raises or fails to issue the command.
+        [Local] client: verifies ping success is silent.
+
+        Scenario:
+            a healthy client pings without raising.
+
+        Boundaries:
+            - admin.command("ping") returns normally.
+
+        On failure, first check:
+            - a successful ping raises or fails to issue the command.
         """
         instance = MagicMock(name="client")
         client.ping(instance)
@@ -314,10 +414,16 @@ class TestPing:
 
     def test_ping_wraps_error_keeping_code_name_only(self) -> None:
         """
-        Scenario: an OperationFailure carrying code/codeName is reduced to
-        "OperationFailure 8000 AtlasError" - class name plus code plus codeName only.
-        Boundaries: OperationFailure with code=8000 and details.codeName="AtlasError".
-        On failure: the raw pymongo message (or extra detail) survives into the wrapper.
+        [Local] client: verifies ping wraps error keeping code name only.
+
+        Scenario:
+            an OperationFailure carrying code/codeName is reduced to "OperationFailure 8000 AtlasError" - class name plus code plus codeName only.
+
+        Boundaries:
+            - OperationFailure with code=8000 and details.codeName="AtlasError".
+
+        On failure, first check:
+            - the raw pymongo message (or extra detail) survives into the wrapper.
         """
         err = OperationFailure("bad thing at cluster0.example.net", code=8000, details={"codeName": "AtlasError"})
         instance = MagicMock(name="client")
@@ -328,10 +434,16 @@ class TestPing:
 
     def test_ping_wraps_error_without_code(self) -> None:
         """
-        Scenario: a ServerSelectionTimeoutError (no code/codeName) is reduced to its class
-        name alone.
-        Boundaries: exception with no code attribute and no details dict.
-        On failure: the raw host-bearing timeout text leaks.
+        [Local] client: verifies ping wraps error without code.
+
+        Scenario:
+            a ServerSelectionTimeoutError (no code/codeName) is reduced to its class name alone.
+
+        Boundaries:
+            - exception with no code attribute and no details dict.
+
+        On failure, first check:
+            - the raw host-bearing timeout text leaks.
         """
         instance = MagicMock(name="client")
         instance.admin.command.side_effect = ServerSelectionTimeoutError("no servers at cluster0.example.net:27017")
@@ -341,10 +453,16 @@ class TestPing:
 
     def test_ping_error_does_not_leak_host_in_message_or_logs(self, caplog) -> None:
         """
-        Scenario: regression - a pymongo error whose message embeds a fake URI/host must not
-        appear in the MongoConnectionError message nor in any captured log (CWE-532/CWE-209).
-        Boundaries: OperationFailure message contains "mongodb+srv://user:pw@cluster0.example.net".
-        On failure: the credential-bearing string reaches the exception or the log record.
+        [Local] client: verifies ping error does not leak host in message or logs.
+
+        Scenario:
+            regression - a pymongo error whose message embeds a fake URI/host must not appear in the MongoConnectionError message nor in any captured log (CWE-532/CWE-209).
+
+        Boundaries:
+            - OperationFailure message contains "mongodb+srv://user:pw@cluster0.example.net".
+
+        On failure, first check:
+            - the credential-bearing string reaches the exception or the log record.
         """
         secret = "mongodb+srv://user:pw@cluster0.example.net"
         instance = MagicMock(name="client")
@@ -364,13 +482,21 @@ class TestPing:
 
     def test_redact_ignores_non_dict_details(self) -> None:
         """
-        Scenario: an exception whose ``details`` is not a dict contributes only its class name
-        and code.
-        Boundaries: a crafted exception with details set to a string.
-        On failure: the redactor crashes on a non-dict details attribute.
+        [Local] client: verifies redact ignores non dict details.
+
+        Scenario:
+            an exception whose ``details`` is not a dict contributes only its class name and code.
+
+        Boundaries:
+            - a crafted exception with details set to a string.
+
+        On failure, first check:
+            - the redactor crashes on a non-dict details attribute.
         """
 
         class Weird(Exception):
+            """Exception subclass with non-dict details to test the redact-ignores path."""
+
             code = 42
             details = "not-a-dict"
 
@@ -382,11 +508,16 @@ class TestPing:
 # --------------------------------------------------------------------------- #
 def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_path) -> None:
     """
-    Scenario: for the same resolved inputs, database._initialize_mongodb_connection and
-    book_utils.check_mongodb_connection construct MongoClient with identical kwargs (single
-    factory, one construction site), so a diagnosis on one path carries to the other.
-    Boundaries: same URI, same existing cert, same TLS_CA_FILE on both paths.
-    On failure: the two paths drift again (CA ignored, cert dropped, timeout mismatch).
+    [Local] client: verifies database and preflight build identical client kwargs.
+
+    Scenario:
+        for the same resolved inputs, database._initialize_mongodb_connection and book_utils.check_mongodb_connection construct MongoClient with identical kwargs (single factory, one construction site), so a diagnosis on one path carries to the other.
+
+    Boundaries:
+        - same URI, same existing cert, same TLS_CA_FILE on both paths.
+
+    On failure, first check:
+        - the two paths drift again (CA ignored, cert dropped, timeout mismatch).
     """
     from bookscraper import book_utils
     from bookscraper.backends.mongo import database
@@ -408,6 +539,7 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
     captured = []
 
     def fake_ctor(uri, **kwargs):
+        """Capture (uri, kwargs) and return a fresh MagicMock as the client."""
         captured.append((uri, kwargs))
         return MagicMock(name="client")
 

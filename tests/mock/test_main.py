@@ -168,7 +168,18 @@ async def test_main_dispatches_to_detect_schema_run() -> None:
 
 @pytest.mark.asyncio
 async def test_main_unknown_command_calls_parser_error() -> None:
-    """The else branch delegates to parser.error() for an unrecognized command."""
+    """
+    [Local] main: verifies main unknown command calls parser error.
+    
+    Scenario:
+        The else branch delegates to parser.error() for an unrecognized command.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     args = SimpleNamespace(command="bogus", log_severity="warning")
     parser = _fake_parser(args)
 
@@ -188,12 +199,17 @@ async def test_main_unknown_command_calls_parser_error() -> None:
 
 
 def test_main_sync_wraps_main_in_asyncio_run() -> None:
-    """main_sync() drives the main() coroutine through asyncio.run exactly once.
-
-    main is `async def`, so patch.object auto-promotes it to an AsyncMock: calling it
-    synchronously (as main_sync() does, passing the result into asyncio.run) returns a
-    fresh coroutine object each time, not a comparable sentinel - assert on the call
-    shape (one positional arg, itself a coroutine) rather than object identity.
+    """
+    [Local] main: verifies main sync wraps main in asyncio run.
+    
+    Scenario:
+        main_sync() drives the main() coroutine through asyncio.run exactly once. main is `async def`, so patch.object auto-promotes it to an AsyncMock: calling it synchronously (as main_sync() does, passing the result into asyncio.run) returns a fresh coroutine object each time, not a comparable sentinel - assert on the call shape (one positional arg, itself a coroutine) rather than object identity.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
     """
     with (
         patch.object(main, "main", new_callable=AsyncMock) as mock_main,

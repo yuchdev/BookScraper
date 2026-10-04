@@ -939,10 +939,21 @@ def test_detect_schema_log_severity_defaults_to_info() -> None:
 
 
 def test_html_file_and_url_are_mutually_exclusive() -> None:
-    """Scenario: --url and --html-file cannot be combined; one of them is required.
+    """
+    [Unit] cli: verifies that --url and --html-file are mutually exclusive and that one is required.
 
-    Boundaries: pure argparse; the mutually exclusive group enforces both halves.
-    On failure: a run could mix live and offline sources, or neither, with no clear source.
+    Scenario:
+        Given a detect-schema invocation that supplies both --url and --html-file
+        When the parser processes the args
+        Then SystemExit is raised; the same applies when neither is supplied.
+
+    Boundaries:
+        - Pure argparse; no filesystem, no network
+        - Both conflict direction (both given) and missing direction (neither given) are checked
+
+    On failure, first check:
+        - Whether the mutually_exclusive_group(required=True) is still present in cli.py
+        - Recent changes to detect-schema subparser argument definitions
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(
@@ -1082,9 +1093,7 @@ def test_detect_schema_format_json_parses() -> None:
         - Fixture or parameter values used by this test
         - Recent changes in code paths exercised by cli
     """
-    args = build_parser().parse_args(
-        ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "json"]
-    )
+    args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "json"])
     assert args.format == "json"
 
 
@@ -1108,9 +1117,7 @@ def test_detect_schema_rejects_unknown_format() -> None:
         - Recent changes in code paths exercised by cli
     """
     with pytest.raises(SystemExit):
-        build_parser().parse_args(
-            ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "yaml"]
-        )
+        build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "yaml"])
 
 
 def test_detect_schema_check_current_only_flag_sets_true() -> None:

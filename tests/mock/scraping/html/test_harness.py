@@ -42,6 +42,7 @@ UNMAPPED_URL = "https://www.amazon.com/dp/UNMAPPED000"
 
 
 def _amazon_mapping() -> dict:
+    """Build an Amazon URL->fixture path mapping for harness tests."""
     mapping = corpus_mapping("html")
     return {AMAZON_URL: mapping[AMAZON_URL]}
 
@@ -49,11 +50,17 @@ def _amazon_mapping() -> dict:
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_serves_mapped_url(chromium_browser, corpus_router):
-    """Scenario: a page.goto to a mapped corpus URL is served from committed bytes offline.
-
-    Boundaries: exact mapped detail URL; content served must be the fixture, not the network.
-    On failure: the harness would let a real Amazon request through (live scraping from CI) or
-    serve the wrong bytes, so golden tests built on it would silently characterize garbage.
+    """
+    [Local] harness: verifies harness serves mapped url.
+    
+    Scenario:
+        a page.goto to a mapped corpus URL is served from committed bytes offline.
+    
+    Boundaries:
+        - exact mapped detail URL; content served must be the fixture, not the network.
+    
+    On failure, first check:
+        - the harness would let a real Amazon request through (live scraping from CI) or serve the wrong bytes, so golden tests built on it would silently characterize garbage.
     """
     browser = corpus_router(chromium_browser, _amazon_mapping())
     page = await browser.new_page()
@@ -68,13 +75,17 @@ async def test_harness_serves_mapped_url(chromium_browser, corpus_router):
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_fails_test_on_unmapped_request(chromium_browser):
-    """Scenario: an unmapped page.goto is aborted, recorded, and would fail the test (FIX-8).
-
-    Boundaries: a URL absent from the mapping; the abort must be observable (goto raises),
-    recorded verbatim, and surfaced by ``assert_no_unexpected`` naming the URL.
-    On failure: an unmapped document reaches the network - the exact live-scraping-from-CI
-    boundary violation FIX-8 blocks. An expected-failure helper keeps this test green while
-    proving the harness fails such a request.
+    """
+    [Local] harness: verifies harness fails test on unmapped request.
+    
+    Scenario:
+        an unmapped page.goto is aborted, recorded, and would fail the test (FIX-8).
+    
+    Boundaries:
+        - a URL absent from the mapping; the abort must be observable (goto raises), recorded verbatim, and surfaced by ``assert_no_unexpected`` naming the URL.
+    
+    On failure, first check:
+        - an unmapped document reaches the network - the exact live-scraping-from-CI boundary violation FIX-8 blocks. An expected-failure helper keeps this test green while proving the harness fails such a request.
     """
     recorder = PlaywrightRecorder(CorpusMapping(_amazon_mapping()))
     page = await chromium_browser.new_page()
@@ -95,12 +106,17 @@ async def test_harness_fails_test_on_unmapped_request(chromium_browser):
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_takes_precedence_over_production_route_handler(chromium_browser):
-    """Scenario: the corpus route wins over production's document-continuing route_handler.
-
-    Boundaries: production installs ``page.route("**/*", route_handler)`` (which would
-    ``route.continue_()`` a document to the network) *after* the corpus route; the corpus must
-    still serve the mapped document and nothing may fall through (FIX-9).
-    On failure: an unmapped document would be continued to the live site - the FIX-9 bypass.
+    """
+    [Local] harness: verifies harness takes precedence over production route handler.
+    
+    Scenario:
+        the corpus route wins over production's document-continuing route_handler.
+    
+    Boundaries:
+        - production installs ``page.route("**/*", route_handler)`` (which would ``route.continue_()`` a document to the network) *after* the corpus route; the corpus must still serve the mapped document and nothing may fall through (FIX-9).
+    
+    On failure, first check:
+        - an unmapped document would be continued to the live site - the FIX-9 bypass.
     """
     recorder = PlaywrightRecorder(CorpusMapping(_amazon_mapping()))
     page = await chromium_browser.new_page()
@@ -121,15 +137,17 @@ async def test_harness_takes_precedence_over_production_route_handler(chromium_b
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_routes_pages_from_new_context(chromium_browser, corpus_router):
-    """Scenario: pages from a wrapped browser.new_context() serve the corpus and default-deny.
-
-    Boundaries: a mapped request from ``new_context().new_page()`` is served from fixture bytes
-    (through the fixture-wrapped browser, which forces ``service_workers="block"``); an unmapped
-    request from a context page is aborted, recorded, and would fail the test (FIX-8). The
-    unmapped leg runs on a standalone recorder/context (bypassing the fixture wrap via the class
-    method) so the fixture teardown stays green while the failure is proved.
-    On failure: a context-created page (the direction task 03.2/05 moves production onto) could
-    reach the live network - the FIX-8 boundary violation, undetected.
+    """
+    [Local] harness: verifies harness routes pages from new context.
+    
+    Scenario:
+        pages from a wrapped browser.new_context() serve the corpus and default-deny.
+    
+    Boundaries:
+        - a mapped request from ``new_context().new_page()`` is served from fixture bytes (through the fixture-wrapped browser, which forces ``service_workers="block"``); an unmapped request from a context page is aborted, recorded, and would fail the test (FIX-8). The unmapped leg runs on a standalone recorder/context (bypassing the fixture wrap via the class method) so the fixture teardown stays green while the failure is proved.
+    
+    On failure, first check:
+        - a context-created page (the direction task 03.2/05 moves production onto) could reach the live network - the FIX-8 boundary violation, undetected.
     """
     browser = corpus_router(chromium_browser, _amazon_mapping())
     context = await browser.new_context()
@@ -157,13 +175,17 @@ async def test_harness_routes_pages_from_new_context(chromium_browser, corpus_ro
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_precedence_over_context_route(chromium_browser):
-    """Scenario: the corpus context route wins over a production context-level route_handler.
-
-    Boundaries: production installs ``context.route("**/*", route_handler)`` *after* the corpus
-    context route; a page created from the context's *original* new_page (no page-level corpus
-    route) must still be served from the corpus, proving the wrapped ``context.route`` re-appends
-    the corpus last (FIX-9) rather than letting route_handler continue the document to the network.
-    On failure: an unmapped document on a context route would reach the live site.
+    """
+    [Local] harness: verifies harness precedence over context route.
+    
+    Scenario:
+        the corpus context route wins over a production context-level route_handler.
+    
+    Boundaries:
+        - production installs ``context.route("**/*", route_handler)`` *after* the corpus context route; a page created from the context's *original* new_page (no page-level corpus route) must still be served from the corpus, proving the wrapped ``context.route`` re-appends the corpus last (FIX-9) rather than letting route_handler continue the document to the network.
+    
+    On failure, first check:
+        - an unmapped document on a context route would reach the live site.
     """
     recorder = PlaywrightRecorder(CorpusMapping(_amazon_mapping()))
     context = await type(chromium_browser).new_context(chromium_browser, service_workers="block")
@@ -186,11 +208,17 @@ async def test_harness_precedence_over_context_route(chromium_browser):
 @pytest.mark.chromium
 @pytest.mark.asyncio(loop_scope="session")
 async def test_harness_blocks_web_sockets(chromium_browser):
-    """Scenario: a WebSocket opened from a served page is closed and recorded as unexpected.
-
-    Boundaries: a mapped page opens ``new WebSocket(wss://...)``; the route_web_socket handler
-    must close it (never reach the network) and record it so the test fails (FIX-8).
-    On failure: a live socket would bypass HTTP routing and leak traffic from CI.
+    """
+    [Local] harness: verifies harness blocks web sockets.
+    
+    Scenario:
+        a WebSocket opened from a served page is closed and recorded as unexpected.
+    
+    Boundaries:
+        - a mapped page opens ``new WebSocket(wss://...)``; the route_web_socket handler must close it (never reach the network) and record it so the test fails (FIX-8).
+    
+    On failure, first check:
+        - a live socket would bypass HTTP routing and leak traffic from CI.
     """
     recorder = PlaywrightRecorder(CorpusMapping(_amazon_mapping()))
     context = await type(chromium_browser).new_context(chromium_browser, service_workers="block")
@@ -215,12 +243,17 @@ async def test_harness_blocks_web_sockets(chromium_browser):
 
 @pytest.mark.asyncio
 async def test_harness_skips_cleanly_without_chromium(monkeypatch):
-    """Scenario: when no Chromium can launch, the tier skips (not fails) with the install hint.
-
-    Boundaries: bundled-browser launch raises (simulated missing executable) and no override
-    env var is set.
-    On failure: a machine without Chromium would hard-fail the suite instead of skipping, so
-    CI could never install one incrementally (task 06.2).
+    """
+    [Local] harness: verifies harness skips cleanly without chromium.
+    
+    Scenario:
+        when no Chromium can launch, the tier skips (not fails) with the install hint.
+    
+    Boundaries:
+        - bundled-browser launch raises (simulated missing executable) and no override env var is set.
+    
+    On failure, first check:
+        - a machine without Chromium would hard-fail the suite instead of skipping, so CI could never install one incrementally (task 06.2).
     """
     monkeypatch.delenv(CHROMIUM_PATH_ENV, raising=False)
     fake_playwright = MagicMock()
@@ -233,11 +266,17 @@ async def test_harness_skips_cleanly_without_chromium(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_harness_skips_when_env_path_missing(monkeypatch):
-    """Scenario: BOOKSCRAPER_CHROMIUM_PATH pointing at a nonexistent file skips with the path.
-
-    Boundaries: env var set to a path that does not exist; launch must not be attempted.
-    On failure: a stale/typo'd override would launch the bundled browser silently or crash,
-    hiding the misconfiguration.
+    """
+    [Local] harness: verifies harness skips when env path missing.
+    
+    Scenario:
+        BOOKSCRAPER_CHROMIUM_PATH pointing at a nonexistent file skips with the path.
+    
+    Boundaries:
+        - env var set to a path that does not exist; launch must not be attempted.
+    
+    On failure, first check:
+        - a stale/typo'd override would launch the bundled browser silently or crash, hiding the misconfiguration.
     """
     monkeypatch.setenv(CHROMIUM_PATH_ENV, "/no/such/chromium-binary")
     fake_playwright = MagicMock()
@@ -250,13 +289,17 @@ async def test_harness_skips_when_env_path_missing(monkeypatch):
 
 
 async def test_httpx_corpus_serves_json_and_rejects_unknown(httpx_corpus):
-    """Scenario: mapped Leanpub JSON is served through production; an unknown URL is rejected.
-
-    Boundaries: the mapped ``?include=accepted_authors`` endpoint (query-sensitive key) parses
-    into a real record; an unmapped Leanpub URL is recorded, raises OfflineNetworkError naming
-    it, and would fail the test via ``assert_no_unexpected`` (FIX-8).
-    On failure: a real Leanpub API request would leave CI (live scraping) or the parser would
-    be fed live, non-deterministic JSON.
+    """
+    [Local] harness: verifies httpx corpus serves json and rejects unknown.
+    
+    Scenario:
+        mapped Leanpub JSON is served through production; an unknown URL is rejected.
+    
+    Boundaries:
+        - the mapped ``?include=accepted_authors`` endpoint (query-sensitive key) parses into a real record; an unmapped Leanpub URL is recorded, raises OfflineNetworkError naming it, and would fail the test via ``assert_no_unexpected`` (FIX-8).
+    
+    On failure, first check:
+        - a real Leanpub API request would leave CI (live scraping) or the parser would be fed live, non-deterministic JSON.
     """
     mapping = corpus_mapping("json")
     httpx_corpus(mapping)

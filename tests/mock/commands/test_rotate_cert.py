@@ -60,6 +60,7 @@ def _args(
     keep=2,
     no_prune=False,
 ) -> SimpleNamespace:
+    """Build an argparse.Namespace for rotate_cert.run() tests."""
     return SimpleNamespace(
         command="rotate-cert",
         months=months,
@@ -214,9 +215,16 @@ async def test_run_expands_user_in_output_flag(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_no_prune_flag_disables_pruning(tmp_path) -> None:
     """
-    Scenario: --no-prune and --keep map onto rotate_certificate's prune/keep arguments.
-    Boundaries: rotate_certificate mocked; only the forwarded call arguments are asserted.
-    On failure: the CLI flags never reach the pruning logic, so retention can't be controlled.
+    [Local] rotate cert: verifies no prune flag disables pruning.
+
+    Scenario:
+        --no-prune and --keep map onto rotate_certificate's prune/keep arguments.
+
+    Boundaries:
+        - rotate_certificate mocked; only the forwarded call arguments are asserted.
+
+    On failure, first check:
+        - the CLI flags never reach the pruning logic, so retention can't be controlled.
     """
     cert = _write_combined_cert(tmp_path / "c.pem", datetime(2027, 6, 1, tzinfo=UTC))
     with (
@@ -301,6 +309,7 @@ async def test_run_rotation_error_logs_and_exits_nonzero() -> None:
 # verification (rotation mode, full flow through cert_rotation.rotate_certificate)
 # --------------------------------------------------------------------------- #
 def _atlas_env(monkeypatch) -> None:
+    """Monkeypatch ATLAS_* credentials so the rotate-cert command can proceed."""
     monkeypatch.setenv("ATLAS_CLIENT_ID", "client-id")
     monkeypatch.setenv("ATLAS_CLIENT_SECRET", "client-secret")
     monkeypatch.setenv("ATLAS_PROJECT_ID", "proj123")
@@ -310,6 +319,7 @@ def _atlas_env(monkeypatch) -> None:
 
 
 def _atlas_responses() -> list[httpx.Response]:
+    """Return a two-response list (token + cert PEM) for Atlas API mocking."""
     token = httpx.Response(200, json={"access_token": "tok"}, request=httpx.Request("POST", "https://x"))
     pem = httpx.Response(200, content=b"NEW PEM", request=httpx.Request("POST", "https://x"))
     return [token, pem]
@@ -318,10 +328,16 @@ def _atlas_responses() -> list[httpx.Response]:
 @pytest.mark.asyncio
 async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monkeypatch, isolated_config) -> None:
     """
-    Scenario: the new cert never authenticates, so settings.json is not repointed and the
-    command exits 1 while the previously configured cert keeps working (ROT-12).
-    Boundaries: real rotate_certificate; Atlas HTTP + build_mongo_client faked; ping always fails.
-    On failure: a broken identity is committed to settings.json, or the command exits 0.
+    [Local] rotate cert: verifies verify final failure leaves settings untouched and exits one.
+
+    Scenario:
+        the new cert never authenticates, so settings.json is not repointed and the command exits 1 while the previously configured cert keeps working (ROT-12).
+
+    Boundaries:
+        - real rotate_certificate; Atlas HTTP + build_mongo_client faked; ping always fails.
+
+    On failure, first check:
+        - a broken identity is committed to settings.json, or the command exits 0.
     """
     _atlas_env(monkeypatch)
     settings = {
@@ -358,9 +374,16 @@ async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monk
 @pytest.mark.asyncio
 async def test_no_verify_flag_skips_ping(monkeypatch, isolated_config) -> None:
     """
-    Scenario: --no-verify repoints settings.json without ever pinging Atlas.
-    Boundaries: real rotate_certificate; build_mongo_client patched to detect any ping attempt.
-    On failure: the offline path still contacts Atlas, defeating --no-verify.
+    [Local] rotate cert: verifies no verify flag skips ping.
+
+    Scenario:
+        --no-verify repoints settings.json without ever pinging Atlas.
+
+    Boundaries:
+        - real rotate_certificate; build_mongo_client patched to detect any ping attempt.
+
+    On failure, first check:
+        - the offline path still contacts Atlas, defeating --no-verify.
     """
     _atlas_env(monkeypatch)
     (isolated_config / "settings.json").write_text(
@@ -393,11 +416,16 @@ async def test_no_verify_flag_skips_ping(monkeypatch, isolated_config) -> None:
 @pytest.mark.asyncio
 async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isolated_config, caplog) -> None:
     """
-    Scenario: a pymongo auth failure carrying a URI+password is redacted everywhere - no status
-    line, print_log call, or log record leaks the secret (ROT-11/13, SEC-3/4/8 inherited).
-    Boundaries: real client.ping does the redaction; build_mongo_client faked to a client whose
-    ping raises OperationFailure with an embedded password.
-    On failure: the connection string / password reaches a user-facing sink or a log.
+    [Local] rotate cert: verifies verify failure message has no password or host.
+
+    Scenario:
+        a pymongo auth failure carrying a URI+password is redacted everywhere - no status line, print_log call, or log record leaks the secret (ROT-11/13, SEC-3/4/8 inherited).
+
+    Boundaries:
+        - real client.ping does the redaction; build_mongo_client faked to a client whose ping raises OperationFailure with an embedded password.
+
+    On failure, first check:
+        - the connection string / password reaches a user-facing sink or a log.
     """
     from pymongo.errors import OperationFailure
 
@@ -422,6 +450,7 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
     printed: list[str] = []
 
     def _capture(msg, status="info") -> None:
+        """Capture a print_log call's message into the printed list."""
         printed.append(msg)
 
     with (
@@ -654,10 +683,16 @@ async def test_check_mode_config_error_exits_one() -> None:
 @pytest.mark.asyncio
 async def test_check_mode_returns_without_rotating() -> None:
     """
-    Scenario: in --check mode run() delegates to _run_check and returns without rotating,
-    even if _run_check itself does not exit the process.
-    Boundaries: _run_check patched to a no-op so the post-delegation guard return is exercised.
-    On failure: --check falls through into the rotation path and contacts Atlas.
+    [Local] rotate cert: verifies check mode returns without rotating.
+
+    Scenario:
+        in --check mode run() delegates to _run_check and returns without rotating, even if _run_check itself does not exit the process.
+
+    Boundaries:
+        - _run_check patched to a no-op so the post-delegation guard return is exercised.
+
+    On failure, first check:
+        - --check falls through into the rotation path and contacts Atlas.
     """
     with (
         patch(f"{MODULE}.load_dotenv"),
@@ -674,9 +709,16 @@ async def test_check_mode_returns_without_rotating() -> None:
 @pytest.mark.asyncio
 async def test_check_mode_never_requires_atlas_env(tmp_path, monkeypatch) -> None:
     """
-    Scenario: --check works with no ATLAS_* variables and never calls the rotation client.
-    Boundaries: every ATLAS_* var stripped; a valid, far-from-expiry cert configured.
-    On failure: the offline health check depends on Atlas credentials it should never need.
+    [Local] rotate cert: verifies check mode never requires atlas env.
+
+    Scenario:
+        --check works with no ATLAS_* variables and never calls the rotation client.
+
+    Boundaries:
+        - every ATLAS_* var stripped; a valid, far-from-expiry cert configured.
+
+    On failure, first check:
+        - the offline health check depends on Atlas credentials it should never need.
     """
     for var in ("ATLAS_CLIENT_ID", "ATLAS_CLIENT_SECRET", "ATLAS_PROJECT_ID", "ATLAS_DB_USER"):
         monkeypatch.delenv(var, raising=False)

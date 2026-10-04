@@ -61,6 +61,7 @@ _SETTINGS_TLS_CERT = "TEST_SETTINGS_TLS_CERT"
 
 
 def _write_settings(tmp_path: Path, data: dict) -> Path:
+    """Write a settings.json fixture under tmp_path for integration tests."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps(data))
     return settings_path
@@ -185,11 +186,17 @@ def _build_scenario(scenario_name: str):
     ],
 )
 def test_settings_resolution_and_connect(scenario_name, tmp_path, monkeypatch):
-    """resolve_mongo_connection() reads the declared settings.json shape, returns
-    exactly the declared URI/cert, and the resolved pair connects to live Atlas.
-
-    'pass' shapes must resolve AND connect (unmarked). 'x509' shapes must resolve
-    correctly; the connection is expected to XFAIL today (Atlas-side cert issue).
+    """
+    [Integration] connection settings: verifies settings resolution and connect.
+    
+    Scenario:
+        resolve_mongo_connection() reads the declared settings.json shape, returns exactly the declared URI/cert, and the resolved pair connects to live Atlas. 'pass' shapes must resolve AND connect (unmarked). 'x509' shapes must resolve correctly; the connection is expected to XFAIL today (Atlas-side cert issue).
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
     """
     settings_data, env_overrides, expected_uri, expected_cert = _build_scenario(scenario_name)
 

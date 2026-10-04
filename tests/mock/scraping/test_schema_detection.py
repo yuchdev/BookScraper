@@ -82,10 +82,17 @@ def _fake_client(message: object, input_tokens: int = 100) -> MagicMock:
 # call_anthropic (anthropic SDK mocked)
 # --------------------------------------------------------------------------- #
 def test_call_anthropic_returns_reply_text_and_usage() -> None:
-    """Scenario: a well-formed reply is returned with its usage object.
-
-    Boundaries: the anthropic client (count_tokens + create) is fully mocked; no real call.
-    On failure: the model kwarg is not threaded through, or usage is dropped.
+    """
+    [Local] schema detection: verifies call anthropic returns reply text and usage.
+    
+    Scenario:
+        a well-formed reply is returned with its usage object.
+    
+    Boundaries:
+        - the anthropic client (count_tokens + create) is fully mocked; no real call.
+    
+    On failure, first check:
+        - the model kwarg is not threaded through, or usage is dropped.
     """
     usage = _fake_usage(input_tokens=42, output_tokens=7)
     client = _fake_client(_fake_message('{"BOOK_TITLE": {"selector": "#t"}}', usage=usage))
@@ -101,10 +108,17 @@ def test_call_anthropic_returns_reply_text_and_usage() -> None:
 
 
 def test_call_anthropic_sets_bounded_retries() -> None:
-    """Scenario: the client is built with a single retry, matching the module's own bound.
-
-    Boundaries: only the client constructor kwargs are asserted; no network.
-    On failure: stacked/unbounded retries would multiply spend on a transient error.
+    """
+    [Local] schema detection: verifies call anthropic sets bounded retries.
+    
+    Scenario:
+        the client is built with a single retry, matching the module's own bound.
+    
+    Boundaries:
+        - only the client constructor kwargs are asserted; no network.
+    
+    On failure, first check:
+        - stacked/unbounded retries would multiply spend on a transient error.
     """
     client = _fake_client(_fake_message('{"BOOK_TITLE": {"selector": "#t"}}'))
     with patch.object(sd, "anthropic") as mock_anthropic:
@@ -116,10 +130,17 @@ def test_call_anthropic_sets_bounded_retries() -> None:
 
 
 def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
-    """Scenario: cache_control sits on the static instruction block, never the per-page snapshot.
-
-    Boundaries: asserts only the create() kwargs shape; no network.
-    On failure: caching the volatile snapshot would write a fresh entry every request.
+    """
+    [Local] schema detection: verifies instruction block marked cacheable and snapshot not.
+    
+    Scenario:
+        cache_control sits on the static instruction block, never the per-page snapshot.
+    
+    Boundaries:
+        - asserts only the create() kwargs shape; no network.
+    
+    On failure, first check:
+        - caching the volatile snapshot would write a fresh entry every request.
     """
     client = _fake_client(_fake_message('{"BOOK_TITLE": {"selector": "#t"}}'))
     with patch.object(sd, "anthropic") as mock_anthropic:
@@ -137,10 +158,17 @@ def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
 
 
 def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
-    """Scenario: an SDK error surfaces only the exception class + status, never its body/key.
-
-    Boundaries: the client constructor raises; the fake key must appear nowhere in the error.
-    On failure: a leaked body/key is a credential/PII disclosure (AIS-8/AIS-16).
+    """
+    [Local] schema detection: verifies call anthropic wraps sdk error without body or key.
+    
+    Scenario:
+        an SDK error surfaces only the exception class + status, never its body/key.
+    
+    Boundaries:
+        - the client constructor raises; the fake key must appear nowhere in the error.
+    
+    On failure, first check:
+        - a leaked body/key is a credential/PII disclosure (AIS-8/AIS-16).
     """
 
     class _FakeStatusError(Exception):
@@ -161,10 +189,17 @@ def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
 
 
 def test_call_anthropic_raises_on_truncated_response() -> None:
-    """Scenario: a max_tokens stop reason is treated as truncation and never parsed.
-
-    Boundaries: client mocked; create returns stop_reason=max_tokens.
-    On failure: a half-written JSON answer would be parsed as if complete.
+    """
+    [Local] schema detection: verifies call anthropic raises on truncated response.
+    
+    Scenario:
+        a max_tokens stop reason is treated as truncation and never parsed.
+    
+    Boundaries:
+        - client mocked; create returns stop_reason=max_tokens.
+    
+    On failure, first check:
+        - a half-written JSON answer would be parsed as if complete.
     """
     client = _fake_client(_fake_message('{"BOOK_TITLE":', stop_reason="max_tokens"))
     with patch.object(sd, "anthropic") as mock_anthropic:
@@ -174,10 +209,17 @@ def test_call_anthropic_raises_on_truncated_response() -> None:
 
 
 def test_call_anthropic_raises_on_context_window_exceeded() -> None:
-    """Scenario: a model_context_window_exceeded stop reason is reported as truncation, not bad JSON.
-
-    Boundaries: client mocked; create returns stop_reason=model_context_window_exceeded.
-    On failure: the partial answer is parsed, or the operator sees a misleading "not valid JSON".
+    """
+    [Local] schema detection: verifies call anthropic raises on context window exceeded.
+    
+    Scenario:
+        a model_context_window_exceeded stop reason is reported as truncation, not bad JSON.
+    
+    Boundaries:
+        - client mocked; create returns stop_reason=model_context_window_exceeded.
+    
+    On failure, first check:
+        - the partial answer is parsed, or the operator sees a misleading "not valid JSON".
     """
     client = _fake_client(_fake_message('{"BOOK_TITLE":', stop_reason="model_context_window_exceeded"))
     with patch.object(sd, "anthropic") as mock_anthropic:
@@ -187,10 +229,17 @@ def test_call_anthropic_raises_on_context_window_exceeded() -> None:
 
 
 def test_call_anthropic_raises_on_refusal_naming_category() -> None:
-    """Scenario: a refusal stop reason raises and names stop_details.category when present.
-
-    Boundaries: client mocked; create returns stop_reason=refusal + a category.
-    On failure: a refusal would be parsed as content, or the category would be dropped.
+    """
+    [Local] schema detection: verifies call anthropic raises on refusal naming category.
+    
+    Scenario:
+        a refusal stop reason raises and names stop_details.category when present.
+    
+    Boundaries:
+        - client mocked; create returns stop_reason=refusal + a category.
+    
+    On failure, first check:
+        - a refusal would be parsed as content, or the category would be dropped.
     """
     details = SimpleNamespace(category="cyber", explanation="nope")
     client = _fake_client(_fake_message("", stop_reason="refusal", stop_details=details))
@@ -201,10 +250,17 @@ def test_call_anthropic_raises_on_refusal_naming_category() -> None:
 
 
 def test_call_anthropic_skips_thinking_blocks() -> None:
-    """Scenario: _extract_text concatenates only text blocks, skipping thinking blocks.
-
-    Boundaries: client mocked; content carries a thinking block before the text block.
-    On failure: a thinking summary would leak into the JSON parse.
+    """
+    [Local] schema detection: verifies call anthropic skips thinking blocks.
+    
+    Scenario:
+        _extract_text concatenates only text blocks, skipping thinking blocks.
+    
+    Boundaries:
+        - client mocked; content carries a thinking block before the text block.
+    
+    On failure, first check:
+        - a thinking summary would leak into the JSON parse.
     """
     blocks = [
         SimpleNamespace(type="thinking", thinking="let me reason about selectors"),
@@ -220,10 +276,17 @@ def test_call_anthropic_skips_thinking_blocks() -> None:
 
 
 def test_call_anthropic_raises_on_empty_content() -> None:
-    """Scenario: a response with no text blocks fails loudly.
-
-    Boundaries: client mocked; content is empty.
-    On failure: an empty reply would be treated as a valid (empty) proposal set.
+    """
+    [Local] schema detection: verifies call anthropic raises on empty content.
+    
+    Scenario:
+        a response with no text blocks fails loudly.
+    
+    Boundaries:
+        - client mocked; content is empty.
+    
+    On failure, first check:
+        - an empty reply would be treated as a valid (empty) proposal set.
     """
     client = _fake_client(_fake_message("", blocks=[]))
     with patch.object(sd, "anthropic") as mock_anthropic:
@@ -236,10 +299,17 @@ def test_call_anthropic_raises_on_empty_content() -> None:
 # token-budget pre-flight (_fit_snapshot_to_budget via call_anthropic)
 # --------------------------------------------------------------------------- #
 def test_over_budget_prompt_is_repruned_then_sent() -> None:
-    """Scenario: an over-budget prompt is re-pruned until it fits, then sent once.
-
-    Boundaries: count_tokens returns over-budget first, then under-budget; create mocked.
-    On failure: the oversized prompt would be sent, or the snapshot never shrunk.
+    """
+    [Local] schema detection: verifies over budget prompt is repruned then sent.
+    
+    Scenario:
+        an over-budget prompt is re-pruned until it fits, then sent once.
+    
+    Boundaries:
+        - count_tokens returns over-budget first, then under-budget; create mocked.
+    
+    On failure, first check:
+        - the oversized prompt would be sent, or the snapshot never shrunk.
     """
     client = MagicMock()
     client.messages.count_tokens.side_effect = [
@@ -261,10 +331,17 @@ def test_over_budget_prompt_is_repruned_then_sent() -> None:
 
 
 def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
-    """Scenario: a prompt still over budget at the 10k-char floor raises without any send.
-
-    Boundaries: count_tokens always returns over-budget; create must never be called.
-    On failure: unbounded spend on a prompt that can never fit.
+    """
+    [Local] schema detection: verifies still over budget after min prune raises without sending.
+    
+    Scenario:
+        a prompt still over budget at the 10k-char floor raises without any send.
+    
+    Boundaries:
+        - count_tokens always returns over-budget; create must never be called.
+    
+    On failure, first check:
+        - unbounded spend on a prompt that can never fit.
     """
     client = MagicMock()
     client.messages.count_tokens.return_value = SimpleNamespace(input_tokens=99_999)
@@ -279,10 +356,17 @@ def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
 
 
 def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
-    """Scenario: an SDK error during the token-count pre-flight is wrapped without its body.
-
-    Boundaries: count_tokens raises; create must never run.
-    On failure: a raw SDK body (possibly echoing the prompt) would leak.
+    """
+    [Local] schema detection: verifies count tokens sdk error is wrapped body free.
+    
+    Scenario:
+        an SDK error during the token-count pre-flight is wrapped without its body.
+    
+    Boundaries:
+        - count_tokens raises; create must never run.
+    
+    On failure, first check:
+        - a raw SDK body (possibly echoing the prompt) would leak.
     """
     client = MagicMock()
     client.messages.count_tokens.side_effect = RuntimeError("secret body sk-ant-test-XXXX")
@@ -299,10 +383,17 @@ def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
 
 
 def test_create_sdk_error_is_wrapped_body_free() -> None:
-    """Scenario: an SDK error from messages.create is wrapped without its body.
-
-    Boundaries: count_tokens is fine; create raises.
-    On failure: a raw SDK body would leak into the error surface.
+    """
+    [Local] schema detection: verifies create sdk error is wrapped body free.
+    
+    Scenario:
+        an SDK error from messages.create is wrapped without its body.
+    
+    Boundaries:
+        - count_tokens is fine; create raises.
+    
+    On failure, first check:
+        - a raw SDK body would leak into the error surface.
     """
     client = MagicMock()
     client.messages.count_tokens.return_value = SimpleNamespace(input_tokens=100)
@@ -530,16 +621,23 @@ class _HangingLocator(FakeLocator):
     evaluation would block the event loop forever absent the AIS-7 timeout."""
 
     async def count(self) -> int:
+        """Raise after a configurable number of calls to test timeout behavior."""
         await asyncio.Event().wait()  # pragma: no cover - cancelled by the AIS-7 wait_for timeout
         return 0
 
 
 async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch) -> None:
-    """Scenario: a selector whose count() never resolves is bounded by the AIS-7 timeout, recorded
-    as a non-match, and the run completes instead of hanging.
-
-    Boundaries: SELECTOR_EVAL_TIMEOUT_S is shrunk to 50 ms; a hanging fake locator is queried.
-    On failure: a crafted selector/page could block the tool (and a CI drift job) indefinitely.
+    """
+    [Local] schema detection: verifies pathological selector is bounded by timeout not hung.
+    
+    Scenario:
+        a selector whose count() never resolves is bounded by the AIS-7 timeout, recorded as a non-match, and the run completes instead of hanging.
+    
+    Boundaries:
+        - SELECTOR_EVAL_TIMEOUT_S is shrunk to 50 ms; a hanging fake locator is queried.
+    
+    On failure, first check:
+        - a crafted selector/page could block the tool (and a CI drift job) indefinitely.
     """
     monkeypatch.setattr(sd, "SELECTOR_EVAL_TIMEOUT_S", 0.05)
     samples = [{"url": "u0", "page": FakePage(locators={"#hang": _HangingLocator()})}]
@@ -553,11 +651,17 @@ async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch)
 
 
 async def test_check_current_only_still_evaluates_has_text_current_selector(monkeypatch) -> None:
-    """Scenario: --check-current-only still evaluates a current :has-text selector - the AIS-6
-    rejection applies to AI PROPOSALS only, never to the current selectors the drift check queries.
-
-    Boundaries: a one-field site whose ISBN13 is a :has-text selector the FakePage matches; no AI.
-    On failure: the drift check would wrongly reject/skip the project's real :has-text selectors.
+    """
+    [Local] schema detection: verifies check current only still evaluates has text current selector.
+    
+    Scenario:
+        --check-current-only still evaluates a current :has-text selector - the AIS-6 rejection applies to AI PROPOSALS only, never to the current selectors the drift check queries.
+    
+    Boundaries:
+        - a one-field site whose ISBN13 is a :has-text selector the FakePage matches; no AI.
+    
+    On failure, first check:
+        - the drift check would wrongly reject/skip the project's real :has-text selectors.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     has_text_sel = "li:has-text('ISBN:') > span.value.t-isbn"
@@ -643,10 +747,17 @@ async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None
 
 
 async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) -> None:
-    """Scenario: a 3-URL run makes 3 requests and sums each response's usage into one line.
-
-    Boundaries: call_anthropic is mocked per URL; cache-read is non-zero on requests 2-3.
-    On failure: the usage line would reflect one request, or drop cached-token totals.
+    """
+    [Local] schema detection: verifies detect schema sums usage across one request per url.
+    
+    Scenario:
+        a 3-URL run makes 3 requests and sums each response's usage into one line.
+    
+    Boundaries:
+        - call_anthropic is mocked per URL; cache-read is non-zero on requests 2-3.
+    
+    On failure, first check:
+        - the usage line would reflect one request, or drop cached-token totals.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -681,10 +792,17 @@ async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) 
 
 
 async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
-    """Scenario: more than MAX_SAMPLE_URLS sample URLs is rejected before any work.
-
-    Boundaries: no API key set, no browser/anthropic patched - the cap must trip first.
-    On failure: an unbounded sample set runs up unbounded Anthropic spend.
+    """
+    [Local] schema detection: verifies detect schema rejects too many urls.
+    
+    Scenario:
+        more than MAX_SAMPLE_URLS sample URLs is rejected before any work.
+    
+    Boundaries:
+        - no API key set, no browser/anthropic patched - the cap must trip first.
+    
+    On failure, first check:
+        - an unbounded sample set runs up unbounded Anthropic spend.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     too_many = [f"https://x/{i}" for i in range(sd.MAX_SAMPLE_URLS + 1)]
@@ -693,10 +811,17 @@ async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
 
 
 async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
-    """Scenario: a site whose entry defines no detail-page selectors fails loudly.
-
-    Boundaries: site_constants is monkeypatched to an endpoint-only entry; no browser launches.
-    On failure: a run with nothing to propose would proceed to a pointless API call.
+    """
+    [Local] schema detection: verifies detect schema no detail fields fails loudly.
+    
+    Scenario:
+        a site whose entry defines no detail-page selectors fails loudly.
+    
+    Boundaries:
+        - site_constants is monkeypatched to an endpoint-only entry; no browser launches.
+    
+    On failure, first check:
+        - a run with nothing to propose would proceed to a pointless API call.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(sd, "site_constants", {"emptysite": {"BASE_URL": "https://x"}})
@@ -859,6 +984,7 @@ def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_
 
 
 def _search_proposals():
+    """Build a minimal search-proposal dict for search-validation tests."""
     return {
         "SEARCH_BOOK_CARD": {"selector": "CARD", "rationale": "card container"},
         "SEARCH_TITLE": {"selector": "TITLE", "rationale": "card title"},
@@ -867,10 +993,17 @@ def _search_proposals():
 
 
 async def test_search_validation_reports_card_count_and_match_fraction() -> None:
-    """Scenario: each card-relative selector reports the card count and per-sample match fraction.
-
-    Boundaries: FakePage enumerates 8 cards; the title selector matches all of them.
-    On failure: a fully-matching per-card selector would not report its 8/8 fraction.
+    """
+    [Local] schema detection: verifies search validation reports card count and match fraction.
+    
+    Scenario:
+        each card-relative selector reports the card count and per-sample match fraction.
+    
+    Boundaries:
+        - FakePage enumerates 8 cards; the title selector matches all of them.
+    
+    On failure, first check:
+        - a fully-matching per-card selector would not report its 8/8 fraction.
     """
     samples = [{"url": "u0", "page": _search_page(n_title=8)}]
     result = await sd.validate_search_across_samples(_search_proposals(), samples)
@@ -891,11 +1024,17 @@ async def test_search_validation_reports_card_count_and_match_fraction() -> None
 
 
 async def test_search_validation_caps_cards_per_sample() -> None:
-    """Scenario: card-relative validation evaluates at most MAX_CARDS_PER_SAMPLE cards per sample,
-    and the reported fraction is computed over the evaluated cards (auditor card-cap caveat).
-
-    Boundaries: a page with 60 matching cards; the card-relative work must stop at the cap.
-    On failure: a page-controlled card count could multiply the per-card locator work without bound.
+    """
+    [Local] schema detection: verifies search validation caps cards per sample.
+    
+    Scenario:
+        card-relative validation evaluates at most MAX_CARDS_PER_SAMPLE cards per sample, and the reported fraction is computed over the evaluated cards (auditor card-cap caveat).
+    
+    Boundaries:
+        - a page with 60 matching cards; the card-relative work must stop at the cap.
+    
+    On failure, first check:
+        - a page-controlled card count could multiply the per-card locator work without bound.
     """
     samples = [{"url": "u0", "page": _search_page(n_cards=60, n_title=60)}]
     result = await sd.validate_search_across_samples(_search_proposals(), samples)
@@ -908,10 +1047,17 @@ async def test_search_validation_caps_cards_per_sample() -> None:
 
 
 async def test_card_relative_selector_below_80_percent_flagged_partial() -> None:
-    """Scenario: a card-relative selector matching under 80% of cards is flagged partial.
-
-    Boundaries: 8 cards, only 5 carry the title element -> fraction 0.625.
-    On failure: a per-card selector that silently misses a third of the cards looks valid.
+    """
+    [Local] schema detection: verifies card relative selector below 80 percent flagged partial.
+    
+    Scenario:
+        a card-relative selector matching under 80% of cards is flagged partial.
+    
+    Boundaries:
+        - 8 cards, only 5 carry the title element -> fraction 0.625.
+    
+    On failure, first check:
+        - a per-card selector that silently misses a third of the cards looks valid.
     """
     samples = [{"url": "u0", "page": _search_page(n_cards=8, n_title=5)}]
     result = await sd.validate_search_across_samples(_search_proposals(), samples)
@@ -925,10 +1071,17 @@ async def test_card_relative_selector_below_80_percent_flagged_partial() -> None
 
 
 async def test_search_validation_card_relative_query_error_counts_as_miss() -> None:
-    """Scenario: a card-relative selector Playwright rejects on a card counts as a miss, never aborts.
-
-    Boundaries: one card's title locator raises; the run must continue and flag partial.
-    On failure: a hostile/garbage selector would abort the whole validation.
+    """
+    [Local] schema detection: verifies search validation card relative query error counts as miss.
+    
+    Scenario:
+        a card-relative selector Playwright rejects on a card counts as a miss, never aborts.
+    
+    Boundaries:
+        - one card's title locator raises; the run must continue and flag partial.
+    
+    On failure, first check:
+        - a hostile/garbage selector would abort the whole validation.
     """
     card = {"text": "card", "sub": {"TITLE": FakeLocator([], raises=PlaywrightError("bad selector"))}}
     page = FakePage(locators={"CARD": FakeLocator([card]), "NEXT": FakeLocator(["Next"])})
@@ -941,10 +1094,17 @@ async def test_search_validation_card_relative_query_error_counts_as_miss() -> N
 
 
 async def test_search_validation_null_card_relative_selector_is_partial() -> None:
-    """Scenario: a null card-relative proposal matches no card and is flagged partial.
-
-    Boundaries: cards exist, but the title proposal's selector is None.
-    On failure: a null per-card selector would silently appear to validate.
+    """
+    [Local] schema detection: verifies search validation null card relative selector is partial.
+    
+    Scenario:
+        a null card-relative proposal matches no card and is flagged partial.
+    
+    Boundaries:
+        - cards exist, but the title proposal's selector is None.
+    
+    On failure, first check:
+        - a null per-card selector would silently appear to validate.
     """
     proposals = _search_proposals()
     proposals["SEARCH_TITLE"] = {"selector": None, "rationale": "not found"}
@@ -958,10 +1118,17 @@ async def test_search_validation_null_card_relative_selector_is_partial() -> Non
 
 
 async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
-    """Scenario: a null card-container proposal yields zero cards, so card-relative fields are partial.
-
-    Boundaries: the SEARCH_BOOK_CARD proposal's selector is None.
-    On failure: card-relative validation would crash instead of reporting zero cards.
+    """
+    [Local] schema detection: verifies search validation null card selector yields zero cards.
+    
+    Scenario:
+        a null card-container proposal yields zero cards, so card-relative fields are partial.
+    
+    Boundaries:
+        - the SEARCH_BOOK_CARD proposal's selector is None.
+    
+    On failure, first check:
+        - card-relative validation would crash instead of reporting zero cards.
     """
     proposals = _search_proposals()
     proposals["SEARCH_BOOK_CARD"] = {"selector": None, "rationale": "not found"}
@@ -975,10 +1142,17 @@ async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
 
 
 async def test_search_validation_bad_card_selector_does_not_abort() -> None:
-    """Scenario: a card-container selector whose enumeration raises yields zero cards, not a crash.
-
-    Boundaries: page.locator(card).all() raises; card-relative fields must still report.
-    On failure: a bad card selector would abort the whole search validation.
+    """
+    [Local] schema detection: verifies search validation bad card selector does not abort.
+    
+    Scenario:
+        a card-container selector whose enumeration raises yields zero cards, not a crash.
+    
+    Boundaries:
+        - page.locator(card).all() raises; card-relative fields must still report.
+    
+    On failure, first check:
+        - a bad card selector would abort the whole search validation.
     """
 
     class _RaisingAllPage:
@@ -999,10 +1173,17 @@ async def test_search_validation_bad_card_selector_does_not_abort() -> None:
 
 
 async def test_search_validation_no_card_field_in_proposals() -> None:
-    """Scenario: proposals with no card-container key still validate card-relative fields (zero cards).
-
-    Boundaries: only a card-relative field is proposed; next((card key)) is None.
-    On failure: the missing-card-field branch would raise a KeyError.
+    """
+    [Local] schema detection: verifies search validation no card field in proposals.
+    
+    Scenario:
+        proposals with no card-container key still validate card-relative fields (zero cards).
+    
+    Boundaries:
+        - only a card-relative field is proposed; next((card key)) is None.
+    
+    On failure, first check:
+        - the missing-card-field branch would raise a KeyError.
     """
     proposals = {"SEARCH_TITLE": {"selector": "TITLE", "rationale": "title"}}
     samples = [{"url": "u0", "page": _search_page()}]
@@ -1016,10 +1197,17 @@ async def test_search_validation_no_card_field_in_proposals() -> None:
 # detect_schema - search page_type end to end
 # --------------------------------------------------------------------------- #
 async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
-    """Scenario: page_type='search' proposes SEARCH_* selectors and validates per-card fractions.
-
-    Boundaries: Playwright faked, anthropic mocked; two sample search pages.
-    On failure: a search run would use detail-page selectors or skip card-fraction validation.
+    """
+    [Local] schema detection: verifies detect schema search page type end to end.
+    
+    Scenario:
+        page_type='search' proposes SEARCH_* selectors and validates per-card fractions.
+    
+    Boundaries:
+        - Playwright faked, anthropic mocked; two sample search pages.
+    
+    On failure, first check:
+        - a search run would use detail-page selectors or skip card-fraction validation.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1054,10 +1242,17 @@ async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
 # (task 04.0 subtask 07; AIS-9 / AIS-11 / AIS-14)
 # --------------------------------------------------------------------------- #
 def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
-    """Scenario: prompt_hash is a stable sha256 of instruction + blank line + snapshot.
-
-    Boundaries: pure hashing; the same inputs always yield the same 64-char hex key.
-    On failure: a drifting key would strand every committed replay recording.
+    """
+    [Local] schema detection: verifies prompt hash is deterministic and joins blocks.
+    
+    Scenario:
+        prompt_hash is a stable sha256 of instruction + blank line + snapshot.
+    
+    Boundaries:
+        - pure hashing; the same inputs always yield the same 64-char hex key.
+    
+    On failure, first check:
+        - a drifting key would strand every committed replay recording.
     """
     key = sd.prompt_hash("INSTRUCTION", "SNAPSHOT")
     assert key == sd.prompt_hash("INSTRUCTION", "SNAPSHOT")
@@ -1066,10 +1261,17 @@ def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
 
 
 def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> None:
-    """Scenario: the replay usage line reports zero tokens and the replayed count, no key.
-
-    Boundaries: pure formatting.
-    On failure: a replay run would imply live token spend it never incurred.
+    """
+    [Local] schema detection: verifies format replay usage line reports zero tokens and replayed count.
+    
+    Scenario:
+        the replay usage line reports zero tokens and the replayed count, no key.
+    
+    Boundaries:
+        - pure formatting.
+    
+    On failure, first check:
+        - a replay run would imply live token spend it never incurred.
     """
     line = sd.format_replay_usage_line("claude-sonnet-5", 3)
     assert "requests=0" in line
@@ -1080,10 +1282,17 @@ def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> No
 
 
 def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
-    """Scenario: load_replay_file drops _-prefixed keys (e.g. a _provenance note).
-
-    Boundaries: real file I/O via tmp_path.
-    On failure: a provenance note would be treated as a prompt hash and never match.
+    """
+    [Local] schema detection: verifies load replay file ignores underscore keys.
+    
+    Scenario:
+        load_replay_file drops _-prefixed keys (e.g. a _provenance note).
+    
+    Boundaries:
+        - real file I/O via tmp_path.
+    
+    On failure, first check:
+        - a provenance note would be treated as a prompt hash and never match.
     """
     path = tmp_path / "r.json"
     path.write_text(json.dumps({"_provenance": "hand-authored", "abc123": "{}"}), encoding="utf-8")
@@ -1188,20 +1397,34 @@ def test_replay_lookup_returns_recorded_response() -> None:
 
 
 def test_replay_lookup_missing_prompt_fails_loudly() -> None:
-    """Scenario: a prompt absent from the replay map is a hard error, never a live fallthrough.
-
-    Boundaries: pure dict lookup.
-    On failure: a drifted offline run would silently reach for the live API (AIS-9 violation).
+    """
+    [Local] schema detection: verifies replay lookup missing prompt fails loudly.
+    
+    Scenario:
+        a prompt absent from the replay map is a hard error, never a live fallthrough.
+    
+    Boundaries:
+        - pure dict lookup.
+    
+    On failure, first check:
+        - a drifted offline run would silently reach for the live API (AIS-9 violation).
     """
     with pytest.raises(sd.SchemaDetectionError, match="No recorded response"):
         sd.replay_lookup({}, "I", "S")
 
 
 def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) -> None:
-    """Scenario: write_record_file persists hash->response plus a provenance note, no key.
-
-    Boundaries: real file I/O via tmp_path; the fake key must appear nowhere.
-    On failure: a leaked key in a committed recording is a credential disclosure (AIS-8).
+    """
+    [Local] schema detection: verifies write record file writes hash keyed responses and provenance.
+    
+    Scenario:
+        write_record_file persists hash->response plus a provenance note, no key.
+    
+    Boundaries:
+        - real file I/O via tmp_path; the fake key must appear nowhere.
+    
+    On failure, first check:
+        - a leaked key in a committed recording is a credential disclosure (AIS-8).
     """
     path = tmp_path / "rec.json"
     sd.write_record_file(str(path), {"deadbeef": '{"BOOK_TITLE": {"selector": "#t"}}'})
@@ -1236,10 +1459,17 @@ def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
 
 
 async def test_block_all_requests_aborts() -> None:
-    """Scenario: the html-file route handler aborts every request (default-deny, AIS-9).
-
-    Boundaries: a fake Route; assert abort() is awaited and continue_() never is.
-    On failure: a set_content page could fetch a subresource and leave the offline boundary.
+    """
+    [Local] schema detection: verifies block all requests aborts.
+    
+    Scenario:
+        the html-file route handler aborts every request (default-deny, AIS-9).
+    
+    Boundaries:
+        - a fake Route; assert abort() is awaited and continue_() never is.
+    
+    On failure, first check:
+        - a set_content page could fetch a subresource and leave the offline boundary.
     """
     route = MagicMock()
     route.abort = AsyncMock()
@@ -1297,10 +1527,17 @@ def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
 
 
 def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
-    """Scenario: a file over the AIS-11 size cap fails loudly before being read into memory.
-
-    Boundaries: the cap is monkeypatched tiny so a small file trips it (no huge fixture needed).
-    On failure: an oversized/binary file read + set_content is a memory/parse DoS.
+    """
+    [Local] schema detection: verifies read html file oversized fails loudly.
+    
+    Scenario:
+        a file over the AIS-11 size cap fails loudly before being read into memory.
+    
+    Boundaries:
+        - the cap is monkeypatched tiny so a small file trips it (no huge fixture needed).
+    
+    On failure, first check:
+        - an oversized/binary file read + set_content is a memory/parse DoS.
     """
     path = tmp_path / "big.html"
     path.write_text("x" * 100, encoding="utf-8")
@@ -1414,12 +1651,17 @@ async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
 # detect_schema - replay mode (AIS-9: no key, no client constructed, no network)
 # --------------------------------------------------------------------------- #
 async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
-    """Scenario: a replay run with NO ANTHROPIC_API_KEY succeeds and constructs no client.
-
-    Boundaries: the key is deleted and sd.anthropic.Anthropic is wired to raise if ever
-    constructed; call_anthropic is left real so any live attempt would blow up.
-    On failure: a silent fall-through to a live API call (cost + key requirement) - the
-    Boundary-4 / AIS-9 violation this gate exists to prevent.
+    """
+    [Local] schema detection: verifies replay mode requires no api key.
+    
+    Scenario:
+        a replay run with NO ANTHROPIC_API_KEY succeeds and constructs no client.
+    
+    Boundaries:
+        - the key is deleted and sd.anthropic.Anthropic is wired to raise if ever constructed; call_anthropic is left real so any live attempt would blow up.
+    
+    On failure, first check:
+        - a silent fall-through to a live API call (cost + key requirement) - the Boundary-4 / AIS-9 violation this gate exists to prevent.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1448,10 +1690,17 @@ async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
 
 
 async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None:
-    """Scenario: a replay file that lacks the run's prompt hash fails loudly, no live call.
-
-    Boundaries: the replay file is a valid-but-unrelated recording; no key is set.
-    On failure: a stale recording would silently trigger live spend (AIS-9).
+    """
+    [Local] schema detection: verifies replay missing prompt fails loudly.
+    
+    Scenario:
+        a replay file that lacks the run's prompt hash fails loudly, no live call.
+    
+    Boundaries:
+        - the replay file is a valid-but-unrelated recording; no key is set.
+    
+    On failure, first check:
+        - a stale recording would silently trigger live spend (AIS-9).
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1468,10 +1717,17 @@ async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None
 
 
 async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tmp_path) -> None:
-    """Scenario: html_files + replay drives the pipeline fully offline through load_html_file_page.
-
-    Boundaries: FakePage (with set_content) stands in for Chromium; no key, no client.
-    On failure: the from-files branch or the set_content load path would not be exercised offline.
+    """
+    [Local] schema detection: verifies detect schema html file offline replay end to end.
+    
+    Scenario:
+        html_files + replay drives the pipeline fully offline through load_html_file_page.
+    
+    Boundaries:
+        - FakePage (with set_content) stands in for Chromium; no key, no client.
+    
+    On failure, first check:
+        - the from-files branch or the set_content load path would not be exercised offline.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1501,11 +1757,17 @@ async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tm
 # detect_schema - record mode (mocked client; AIS-8 no key in the file)
 # --------------------------------------------------------------------------- #
 async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_path) -> None:
-    """Scenario: a live run with --record writes {sha256(prompt): response}, no key in the file.
-
-    Boundaries: call_anthropic is mocked (no real network); the record file is read back.
-    On failure: a broken record path would strand maintainers unable to refresh replays, or
-    leak the key into a committed artifact (AIS-8).
+    """
+    [Local] schema detection: verifies record mode writes prompt hash keyed responses.
+    
+    Scenario:
+        a live run with --record writes {sha256(prompt): response}, no key in the file.
+    
+    Boundaries:
+        - call_anthropic is mocked (no real network); the record file is read back.
+    
+    On failure, first check:
+        - a broken record path would strand maintainers unable to refresh replays, or leak the key into a committed artifact (AIS-8).
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-XXXX")
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1537,11 +1799,17 @@ def _tiny_site(selector="#t"):
 
 
 async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> None:
-    """Scenario: --check-current-only constructs no client, needs no key, makes no AI call (AIS-9).
-
-    Boundaries: the key is deleted; sd.anthropic.Anthropic and call_anthropic both raise if ever
-    reached; an --html-file sample drives the fully offline path.
-    On failure: a keyless drift check would silently require the key or spend on a live call.
+    """
+    [Local] schema detection: verifies check current only makes no api call.
+    
+    Scenario:
+        --check-current-only constructs no client, needs no key, makes no AI call (AIS-9).
+    
+    Boundaries:
+        - the key is deleted; sd.anthropic.Anthropic and call_anthropic both raise if ever reached; an --html-file sample drives the fully offline path.
+    
+    On failure, first check:
+        - a keyless drift check would silently require the key or spend on a live call.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -1572,10 +1840,17 @@ async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> No
 
 
 async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> None:
-    """Scenario: a run where every current selector matches a sample returns exit 0.
-
-    Boundaries: a one-field site whose selector the FakePage carries; check-current-only (no AI).
-    On failure: a healthy schema would wrongly trip the drift exit code.
+    """
+    [Local] schema detection: verifies exit code zero when all current selectors match.
+    
+    Scenario:
+        a run where every current selector matches a sample returns exit 0.
+    
+    Boundaries:
+        - a one-field site whose selector the FakePage carries; check-current-only (no AI).
+    
+    On failure, first check:
+        - a healthy schema would wrongly trip the drift exit code.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(sd, "site_constants", _tiny_site("#t"))
@@ -1591,10 +1866,17 @@ async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> N
 
 
 async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
-    """Scenario: a current selector matching on no sample yields exit 4 (drift).
-
-    Boundaries: a one-field site whose selector the FakePage does NOT carry; check-current-only.
-    On failure: drift would go unnoticed and a scheduled CI job could not gate on it.
+    """
+    [Local] schema detection: verifies exit code four on broken current selector.
+    
+    Scenario:
+        a current selector matching on no sample yields exit 4 (drift).
+    
+    Boundaries:
+        - a one-field site whose selector the FakePage does NOT carry; check-current-only.
+    
+    On failure, first check:
+        - drift would go unnoticed and a scheduled CI job could not gate on it.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(sd, "site_constants", _tiny_site("#gone"))
@@ -1609,10 +1891,17 @@ async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
 
 
 async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path) -> None:
-    """Scenario: --format json on an offline replay run emits the documented JSON schema + exit code.
-
-    Boundaries: FakePage + hand-built replay; no key, no client.
-    On failure: a CI drift artifact would be malformed, or the exit code would be dropped.
+    """
+    [Local] schema detection: verifies detect schema json format offline replay.
+    
+    Scenario:
+        --format json on an offline replay run emits the documented JSON schema + exit code.
+    
+    Boundaries:
+        - FakePage + hand-built replay; no key, no client.
+    
+    On failure, first check:
+        - a CI drift artifact would be malformed, or the exit code would be dropped.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)

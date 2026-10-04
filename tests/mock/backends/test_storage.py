@@ -47,20 +47,35 @@ def _write_combined_cert(path, expiry: datetime):
 
 
 class TestSaveSummary:
+    """Tests for the SaveSummary dataclass."""
     def test_total_sums_the_three_fields(self) -> None:
         """
-        Scenario: total is the aggregate of inserted + duplicates + errors.
-        Boundaries: mixed non-zero counts.
-        On failure: a caller cannot trust total to equal the batch size.
+        [Local] save summary: verifies total sums the three fields.
+        
+        Scenario:
+            total is the aggregate of inserted + duplicates + errors.
+        
+        Boundaries:
+            - mixed non-zero counts.
+        
+        On failure, first check:
+            - a caller cannot trust total to equal the batch size.
         """
         summary = SaveSummary(inserted=3, duplicates=2, errors=1)
         assert summary.total == 6
 
     def test_is_frozen(self) -> None:
         """
-        Scenario: SaveSummary is an immutable value object.
-        Boundaries: attribute assignment after construction.
-        On failure: a summary could be mutated after the fact, hiding the real outcome.
+        [Local] save summary: verifies is frozen.
+        
+        Scenario:
+            SaveSummary is an immutable value object.
+        
+        Boundaries:
+            - attribute assignment after construction.
+        
+        On failure, first check:
+            - a summary could be mutated after the fact, hiding the real outcome.
         """
         summary = SaveSummary(inserted=1, duplicates=0, errors=0)
         with pytest.raises(AttributeError):
@@ -68,6 +83,7 @@ class TestSaveSummary:
 
 
 class TestMongoBackend:
+    """Tests for storage.MongoBackend."""
     def test_save_books_delegates_to_database(self) -> None:
         """
         [Local] mongo backend: verifies save books delegates to database.
@@ -216,6 +232,7 @@ class TestMongoBackend:
 
 
 class TestJsonBackend:
+    """Tests for storage.JsonBackend."""
     def test_save_books_delegates_to_store(self) -> None:
         """
         [Local] json backend: verifies save books delegates to store.
@@ -250,11 +267,16 @@ class TestJsonBackend:
 
     def test_lookups_read_from_the_cached_index(self, isolated_local_store) -> None:
         """
-        Scenario: hash/asin/book_id/slug lookups resolve against the in-memory index built
-        from the file, returning the same answers the old per-call file reads did.
-        Boundaries: one stored book queried by each identifier, plus a miss and an empty key.
-        On failure: a lookup reads a field the index never captured, so genuine duplicates
-        slip through or new books are wrongly rejected.
+        [Local] json backend: verifies lookups read from the cached index.
+        
+        Scenario:
+            hash/asin/book_id/slug lookups resolve against the in-memory index built from the file, returning the same answers the old per-call file reads did.
+        
+        Boundaries:
+            - one stored book queried by each identifier, plus a miss and an empty key.
+        
+        On failure, first check:
+            - a lookup reads a field the index never captured, so genuine duplicates slip through or new books are wrongly rejected.
         """
         store.save_books(
             [{"hash": "h1", "asin": "B001", "book_id": "42", "slug": "some-book"}],
@@ -275,11 +297,16 @@ class TestJsonBackend:
 
     def test_json_backend_reads_file_once_for_many_lookups(self, isolated_local_store) -> None:
         """
-        Scenario: the index is built once and reused, so N dedup lookups parse the file once
-        (the success criterion: 1,000 lookups against a 5,000-book store parse once).
-        Boundaries: many mixed lookups after a single populated store, spying on _load_books.
-        On failure: each lookup re-reads and re-parses the whole file - O(candidates x size),
-        the exact cost this cache exists to remove.
+        [Local] json backend: verifies json backend reads file once for many lookups.
+        
+        Scenario:
+            the index is built once and reused, so N dedup lookups parse the file once (the success criterion: 1,000 lookups against a 5,000-book store parse once).
+        
+        Boundaries:
+            - many mixed lookups after a single populated store, spying on _load_books.
+        
+        On failure, first check:
+            - each lookup re-reads and re-parses the whole file - O(candidates x size), the exact cost this cache exists to remove.
         """
         store.save_books([{"hash": "h1", "asin": "B001"}], isolated_local_store)
         backend = JsonBackend()
@@ -294,11 +321,16 @@ class TestJsonBackend:
 
     def test_json_backend_cache_sees_books_saved_in_same_process(self, isolated_local_store) -> None:
         """
-        Scenario: save_books keeps the in-memory index current, so a book saved after the
-        index was built is immediately visible to lookups without re-reading the file.
-        Boundaries: build the index (a lookup) before saving, then save and re-query.
-        On failure: the cache goes stale within a run and a just-saved book is re-scraped or
-        re-inserted as if new.
+        [Local] json backend: verifies json backend cache sees books saved in same process.
+        
+        Scenario:
+            save_books keeps the in-memory index current, so a book saved after the index was built is immediately visible to lookups without re-reading the file.
+        
+        Boundaries:
+            - build the index (a lookup) before saving, then save and re-query.
+        
+        On failure, first check:
+            - the cache goes stale within a run and a just-saved book is re-scraped or re-inserted as if new.
         """
         backend = JsonBackend()
         assert backend.book_exists_by_hash("h1") is False  # builds an empty index
@@ -314,18 +346,34 @@ class TestJsonBackend:
         assert backend.leanpub_book_exists("42", None) is True
 
     def test_close_is_noop_default(self) -> None:
-        """JsonBackend inherits the ABC's no-op close(); it must not raise."""
+        """
+        [Local] json backend: verifies close is noop default.
+        
+        Scenario:
+            JsonBackend inherits the ABC's no-op close(); it must not raise.
+        
+        Boundaries:
+            - see test body
+        
+        On failure, first check:
+            - see test body
+        """
         backend = JsonBackend()
         assert backend.close() is None
 
 
 def test_mongo_and_json_backends_return_save_summary() -> None:
     """
-    Scenario: both adapters propagate a SaveSummary from their collaborator, so a
-    caller can treat the two backends interchangeably on the write path.
-    Boundaries: distinct summaries per backend; the adapters must not coerce or drop them.
-    On failure: one backend returns None (or a different type) and the exit-code contract
-    that reads summary.errors breaks for that backend only.
+    [Local] storage: verifies mongo and json backends return save summary.
+    
+    Scenario:
+        both adapters propagate a SaveSummary from their collaborator, so a caller can treat the two backends interchangeably on the write path.
+    
+    Boundaries:
+        - distinct summaries per backend; the adapters must not coerce or drop them.
+    
+    On failure, first check:
+        - one backend returns None (or a different type) and the exit-code contract that reads summary.errors breaks for that backend only.
     """
     mongo_summary = SaveSummary(inserted=5, duplicates=1, errors=2)
     json_summary = SaveSummary(inserted=1, duplicates=0, errors=0)
@@ -345,6 +393,7 @@ def test_mongo_and_json_backends_return_save_summary() -> None:
 
 
 class TestResolveStoreBackend:
+    """Tests for storage.resolve_store_backend."""
     def test_mongo_with_live_collection_returns_mongo_backend(self) -> None:
         """
         [Local] resolve store backend: verifies mongo with live collection returns mongo backend.
@@ -433,11 +482,16 @@ class TestResolveStoreBackend:
 
     def test_preflight_exits_on_corrupt_store(self, isolated_local_store) -> None:
         """
-        Scenario: a corrupt store is caught at pre-flight, before any scraping starts, so a
-        run aborts loudly instead of failing at the first save (or clobbering the store).
-        Boundaries: write permission granted, but the existing store file is invalid JSON.
-        On failure: the process proceeds to scrape and only trips at save time, or worse,
-        overwrites the corrupt store.
+        [Local] resolve store backend: verifies preflight exits on corrupt store.
+        
+        Scenario:
+            a corrupt store is caught at pre-flight, before any scraping starts, so a run aborts loudly instead of failing at the first save (or clobbering the store).
+        
+        Boundaries:
+            - write permission granted, but the existing store file is invalid JSON.
+        
+        On failure, first check:
+            - the process proceeds to scrape and only trips at save time, or worse, overwrites the corrupt store.
         """
         isolated_local_store.write_text("{not valid json", encoding="utf-8")
 
@@ -504,12 +558,19 @@ class TestResolveStoreBackend:
 
 
 class TestCertExpiryPreflight:
+    """Tests for the cert-expiry pre-flight check in resolve_store_backend."""
     def test_preflight_prints_warning_for_soon_expiring_cert(self, tmp_path) -> None:
         """
-        Scenario: the mongo pre-flight prints a renewal warning when the active cert is close
-        to expiry, before it connects, and still returns a working backend.
-        Boundaries: cert ~10 days out; resolver and collection are mocked so no real I/O.
-        On failure: an about-to-expire identity is discovered only when a scrape run fails.
+        [Local] cert expiry preflight: verifies preflight prints warning for soon expiring cert.
+        
+        Scenario:
+            the mongo pre-flight prints a renewal warning when the active cert is close to expiry, before it connects, and still returns a working backend.
+        
+        Boundaries:
+            - cert ~10 days out; resolver and collection are mocked so no real I/O.
+        
+        On failure, first check:
+            - an about-to-expire identity is discovered only when a scrape run fails.
         """
         cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=10))
 
@@ -527,10 +588,16 @@ class TestCertExpiryPreflight:
 
     def test_preflight_parse_failure_is_warning_not_crash(self, tmp_path) -> None:
         """
-        Scenario: an unparseable/key-only cert on the pre-flight path yields a warning, not a
-        crash, and the connection still proceeds (ROT-17).
-        Boundaries: a key-only PEM (no CERTIFICATE block) as the resolved cert.
-        On failure: a bad cert aborts the whole run at pre-flight instead of warning.
+        [Local] cert expiry preflight: verifies preflight parse failure is warning not crash.
+        
+        Scenario:
+            an unparseable/key-only cert on the pre-flight path yields a warning, not a crash, and the connection still proceeds (ROT-17).
+        
+        Boundaries:
+            - a key-only PEM (no CERTIFICATE block) as the resolved cert.
+        
+        On failure, first check:
+            - a bad cert aborts the whole run at pre-flight instead of warning.
         """
         key_only = tmp_path / "key-only.pem"
         key_only.write_bytes(_TEST_KEY_PEM)
@@ -551,9 +618,16 @@ class TestCertExpiryPreflight:
 
     def test_preflight_no_warning_when_cert_far_from_expiry(self, tmp_path) -> None:
         """
-        Scenario: a healthy, far-from-expiry cert produces no pre-flight warning.
-        Boundaries: cert ~200 days out.
-        On failure: healthy certs generate a warning on every run, training users to ignore it.
+        [Local] cert expiry preflight: verifies preflight no warning when cert far from expiry.
+        
+        Scenario:
+            a healthy, far-from-expiry cert produces no pre-flight warning.
+        
+        Boundaries:
+            - cert ~200 days out.
+        
+        On failure, first check:
+            - healthy certs generate a warning on every run, training users to ignore it.
         """
         cert = _write_combined_cert(tmp_path / "X509-cert.pem", datetime.now(UTC) + timedelta(days=200))
 
@@ -569,9 +643,16 @@ class TestCertExpiryPreflight:
 
     def test_preflight_no_cert_configured_is_silent(self) -> None:
         """
-        Scenario: with no x509 cert configured the pre-flight is silent (nothing to warn about).
-        Boundaries: resolver returns cert=None.
-        On failure: a password-auth setup gets a spurious cert warning.
+        [Local] cert expiry preflight: verifies preflight no cert configured is silent.
+        
+        Scenario:
+            with no x509 cert configured the pre-flight is silent (nothing to warn about).
+        
+        Boundaries:
+            - resolver returns cert=None.
+        
+        On failure, first check:
+            - a password-auth setup gets a spurious cert warning.
         """
         with (
             patch.object(storage.config, "resolve_mongo_connection", return_value=("mongodb+srv://x", None)),
@@ -585,10 +666,16 @@ class TestCertExpiryPreflight:
 
     def test_preflight_never_leaks_key_material_to_log_or_console(self, tmp_path, caplog, capsys) -> None:
         """
-        Scenario: with print_log running for real, a key-only cert on the pre-flight path leaks
-        no private-key bytes to the captured log records or to stdout (ROT-3, CWE-532/CWE-312).
-        Boundaries: a key-only PEM; print_log NOT mocked so both sinks are exercised.
-        On failure: the private-key PEM body reaches ~/.bookscrapper/logs or the console.
+        [Local] cert expiry preflight: verifies preflight never leaks key material to log or console.
+        
+        Scenario:
+            with print_log running for real, a key-only cert on the pre-flight path leaks no private-key bytes to the captured log records or to stdout (ROT-3, CWE-532/CWE-312).
+        
+        Boundaries:
+            - a key-only PEM; print_log NOT mocked so both sinks are exercised.
+        
+        On failure, first check:
+            - the private-key PEM body reaches ~/.bookscrapper/logs or the console.
         """
         import logging
 
@@ -612,10 +699,16 @@ class TestCertExpiryPreflight:
 
     def test_preflight_config_error_is_swallowed(self) -> None:
         """
-        Scenario: a resolver ConfigError in the advisory pre-flight is swallowed, leaving the
-        real connection attempt to surface it properly.
-        Boundaries: resolve_mongo_connection raises ConfigError.
-        On failure: an advisory warning path crashes the run before the real error is reported.
+        [Local] cert expiry preflight: verifies preflight config error is swallowed.
+        
+        Scenario:
+            a resolver ConfigError in the advisory pre-flight is swallowed, leaving the real connection attempt to surface it properly.
+        
+        Boundaries:
+            - resolve_mongo_connection raises ConfigError.
+        
+        On failure, first check:
+            - an advisory warning path crashes the run before the real error is reported.
         """
         with (
             patch.object(storage.config, "resolve_mongo_connection", side_effect=ConfigError("bad")),

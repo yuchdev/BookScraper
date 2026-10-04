@@ -68,10 +68,16 @@ def backend(request: pytest.FixtureRequest, isolated_local_store) -> Backend:
 
 def test_saved_book_found_by_hash(backend: Backend) -> None:
     """
-    Scenario: a saved book is found by its hash; an unknown hash and an empty hash are not.
-    Boundaries: exactly one stored book, queried by its own hash, a miss, and "".
-    On failure: a genuine duplicate slips past ``book_exists_by_hash`` (re-scraped/re-saved
-    forever), or an empty hash is treated as a match and blocks every new book.
+    [Local] storage backend parity: verifies saved book found by hash.
+    
+    Scenario:
+        a saved book is found by its hash; an unknown hash and an empty hash are not.
+    
+    Boundaries:
+        - exactly one stored book, queried by its own hash, a miss, and "".
+    
+    On failure, first check:
+        - a genuine duplicate slips past ``book_exists_by_hash`` (re-scraped/re-saved forever), or an empty hash is treated as a match and blocks every new book.
     """
     summary = backend.save_books([{"hash": "h1", "title": "Only Book"}])
 
@@ -83,11 +89,16 @@ def test_saved_book_found_by_hash(backend: Backend) -> None:
 
 def test_duplicate_hash_counted_once(backend: Backend) -> None:
     """
-    Scenario: the same hash saved twice - once within a single batch, once across two
-    calls - is counted as exactly one duplicate each time and stored only once.
-    Boundaries: a two-doc batch sharing a hash, then a third call repeating that hash.
-    On failure: a duplicate is silently inserted twice (corpus corruption) or miscounted,
-    so the run's "N duplicates" figure no longer matches what the store actually rejected.
+    [Local] storage backend parity: verifies duplicate hash counted once.
+    
+    Scenario:
+        the same hash saved twice - once within a single batch, once across two calls - is counted as exactly one duplicate each time and stored only once.
+    
+    Boundaries:
+        - a two-doc batch sharing a hash, then a third call repeating that hash.
+    
+    On failure, first check:
+        - a duplicate is silently inserted twice (corpus corruption) or miscounted, so the run's "N duplicates" figure no longer matches what the store actually rejected.
     """
     within_batch = backend.save_books([{"hash": "dup", "title": "First"}, {"hash": "dup", "title": "Second"}])
     assert within_batch == SaveSummary(inserted=1, duplicates=1, errors=0)
@@ -100,12 +111,16 @@ def test_duplicate_hash_counted_once(backend: Backend) -> None:
 
 def test_book_without_hash_is_error(backend: Backend) -> None:
     """
-    Scenario: a book carrying no ``hash`` is counted as an error and never stored, on both
-    backends - a hash-less document cannot be de-duplicated (Mongo's unique index would
-    index it as null and silently accept it), so it must be rejected up front.
-    Boundaries: a single hash-less document with a live/empty store.
-    On failure: one backend quietly stores an un-dedupable book, so the corpus accumulates
-    duplicates that the next run's hash check can never catch.
+    [Local] storage backend parity: verifies book without hash is error.
+    
+    Scenario:
+        a book carrying no ``hash`` is counted as an error and never stored, on both backends - a hash-less document cannot be de-duplicated (Mongo's unique index would index it as null and silently accept it), so it must be rejected up front.
+    
+    Boundaries:
+        - a single hash-less document with a live/empty store.
+    
+    On failure, first check:
+        - one backend quietly stores an un-dedupable book, so the corpus accumulates duplicates that the next run's hash check can never catch.
     """
     summary = backend.save_books([{"title": "No Hash Here", "asin": "B999"}])
 
@@ -116,11 +131,16 @@ def test_book_without_hash_is_error(backend: Backend) -> None:
 
 def test_asin_lookup(backend: Backend) -> None:
     """
-    Scenario: ``book_exists_by_asin`` is true for a stored ASIN, false for an unknown one,
-    and false for an empty string.
-    Boundaries: one stored book, queried by its ASIN, a miss, and "".
-    On failure: Amazon dedup either re-scrapes known ASINs or treats "" as a universal
-    match that blocks every new Amazon book.
+    [Local] storage backend parity: verifies asin lookup.
+    
+    Scenario:
+        ``book_exists_by_asin`` is true for a stored ASIN, false for an unknown one, and false for an empty string.
+    
+    Boundaries:
+        - one stored book, queried by its ASIN, a miss, and "".
+    
+    On failure, first check:
+        - Amazon dedup either re-scrapes known ASINs or treats "" as a universal match that blocks every new Amazon book.
     """
     backend.save_books([{"hash": "h1", "asin": "B001", "title": "Amazon Book"}])
 
@@ -131,12 +151,16 @@ def test_asin_lookup(backend: Backend) -> None:
 
 def test_leanpub_lookup_by_id_or_slug(backend: Backend) -> None:
     """
-    Scenario: ``leanpub_book_exists`` matches on book_id alone, on slug alone, and is false
-    when neither identifier matches and when both are absent.
-    Boundaries: one stored Leanpub book; queried by id-only, slug-only, a double miss, and
-    (None, None).
-    On failure: half of the id-OR-slug match goes dead (the exact bug CLAUDE.md warns of)
-    and Leanpub dedup silently degrades to a single field.
+    [Local] storage backend parity: verifies leanpub lookup by id or slug.
+    
+    Scenario:
+        ``leanpub_book_exists`` matches on book_id alone, on slug alone, and is false when neither identifier matches and when both are absent.
+    
+    Boundaries:
+        - one stored Leanpub book; queried by id-only, slug-only, a double miss, and (None, None).
+    
+    On failure, first check:
+        - half of the id-OR-slug match goes dead (the exact bug CLAUDE.md warns of) and Leanpub dedup silently degrades to a single field.
     """
     backend.save_books([{"hash": "h1", "book_id": "42", "slug": "the-book"}])
 
@@ -148,13 +172,16 @@ def test_leanpub_lookup_by_id_or_slug(backend: Backend) -> None:
 
 def test_stored_documents_identical_across_backends(isolated_local_store) -> None:
     """
-    Scenario: saving the same batch to a fresh json store and a fresh mongo collection
-    yields byte-for-byte identical stored content (minus Mongo's synthetic ``_id``),
-    compared as order-independent sets of canonical JSON - the "one-to-one" promise.
-    Boundaries: a mixed batch with a duplicate hash and a hash-less error, so inserted /
-    duplicate / error handling must agree on *which* documents survive, not just the counts.
-    On failure: the two backends persist different corpora from the same scrape, so a run's
-    output silently depends on which ``--store-backend`` was chosen.
+    [Local] storage backend parity: verifies stored documents identical across backends.
+    
+    Scenario:
+        saving the same batch to a fresh json store and a fresh mongo collection yields byte-for-byte identical stored content (minus Mongo's synthetic ``_id``), compared as order-independent sets of canonical JSON - the "one-to-one" promise.
+    
+    Boundaries:
+        - a mixed batch with a duplicate hash and a hash-less error, so inserted / duplicate / error handling must agree on *which* documents survive, not just the counts.
+    
+    On failure, first check:
+        - the two backends persist different corpora from the same scrape, so a run's output silently depends on which ``--store-backend`` was chosen.
     """
     batch = [
         {"hash": "h1", "title": "Alpha", "asin": "B001", "authors": ["A", "B"], "year": 2021},

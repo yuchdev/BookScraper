@@ -106,6 +106,7 @@ class CorpusMapping:
     """
 
     def __init__(self, mapping: dict[str, Path]) -> None:
+        """Partition the raw mapping into query-keyed and path-only lookup dicts."""
         self._with_query: dict[str, Path] = {}
         self._no_query: dict[str, Path] = {}
         for url, path in mapping.items():
@@ -117,11 +118,13 @@ class CorpusMapping:
 
     @staticmethod
     def _key(url: str, *, keep_query: bool) -> str:
+        """Normalize a URL to scheme+host+path (and query if keep_query)."""
         parts = urlsplit(url)
         query = parts.query if keep_query else ""
         return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
     def lookup(self, url: str) -> Optional[Path]:
+        """Return the fixture path for url, or None if not in the mapping."""
         with_key = self._key(url, keep_query=True)
         if with_key in self._with_query:
             return self._with_query[with_key]
@@ -149,11 +152,13 @@ class PlaywrightRecorder:
     """Default-deny Playwright route: fulfills mapped URLs, aborts and records the rest."""
 
     def __init__(self, mapping: CorpusMapping) -> None:
+        """Store the corpus mapping and initialize served/unexpected URL lists."""
         self._mapping = mapping
         self.served: list[str] = []
         self.unexpected: list[str] = []
 
     async def handle(self, route: Route) -> None:
+        """Fulfill mapped routes from corpus bytes; abort and record unknown ones."""
         url = route.request.url
         fixture = self._mapping.lookup(url)
         if fixture is not None:
@@ -193,11 +198,13 @@ class HttpxRecorder:
     """Default-deny httpx transport handler: serves mapped JSON, rejects the rest."""
 
     def __init__(self, mapping: CorpusMapping) -> None:
+        """Store the corpus mapping and initialize served/unexpected URL lists."""
         self._mapping = mapping
         self.served: list[str] = []
         self.unexpected: list[str] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        """Serve mapped JSON from corpus bytes; raise OfflineNetworkError for unknown URLs."""
         url = str(request.url)
         fixture = self._mapping.lookup(url)
         if fixture is not None:
@@ -255,6 +262,7 @@ async def attach_corpus_route(page: Page, recorder: PlaywrightRecorder) -> None:
     await _route_web_sockets(page, recorder)
 
     async def wrapped_route(pattern: Any, handler: Any, **kwargs: Any) -> None:
+        """Re-append the corpus route after every production route install."""
         await original_route(pattern, handler, **kwargs)
         await original_route("**/*", recorder.handle)
 
@@ -276,6 +284,7 @@ async def attach_corpus_context_route(context: BrowserContext, recorder: Playwri
     await _route_web_sockets(context, recorder)
 
     async def wrapped_context_route(pattern: Any, handler: Any, **kwargs: Any) -> None:
+        """Re-append the corpus route after every production context route install."""
         await original_context_route(pattern, handler, **kwargs)
         await original_context_route("**/*", recorder.handle)
 
@@ -284,6 +293,7 @@ async def attach_corpus_context_route(context: BrowserContext, recorder: Playwri
     original_new_page = context.new_page
 
     async def wrapped_new_page(*args: Any, **kwargs: Any) -> Page:
+        """Create a new page and immediately attach the corpus route to it."""
         page = await original_new_page(*args, **kwargs)
         await attach_corpus_route(page, recorder)
         return page
@@ -354,6 +364,7 @@ async def corpus_router() -> Any:
     restorations: list[Callable[[], None]] = []
 
     def install(browser: Browser, mapping: dict[str, Path]) -> Browser:
+        """Wrap browser.new_page/new_context to serve mapped corpus bytes offline."""
         # One install per test is assumed: each call wraps new_page/new_context afresh and
         # registers its own recorder + restore. The session-scoped browser is shared, but a
         # test that calls install() more than once would stack wrappers and leave several
@@ -365,11 +376,13 @@ async def corpus_router() -> Any:
         original_new_context = browser.new_context
 
         async def wrapped_new_page(*args: Any, **kwargs: Any) -> Page:
+            """Create a page and attach the corpus route before returning it."""
             page = await original_new_page(*args, **kwargs)
             await attach_corpus_route(page, recorder)
             return page
 
         async def wrapped_new_context(*args: Any, **kwargs: Any) -> BrowserContext:
+            """Create a context (service workers blocked) and attach corpus routing."""
             # Force service workers off so a worker cannot bypass the corpus routing.
             kwargs["service_workers"] = "block"
             context = await original_new_context(*args, **kwargs)
@@ -380,6 +393,7 @@ async def corpus_router() -> Any:
         browser.new_context = wrapped_new_context  # type: ignore[method-assign]
 
         def _restore() -> None:
+            """Restore the original browser methods after the test."""
             browser.new_page = original_new_page  # type: ignore[method-assign]
             browser.new_context = original_new_context  # type: ignore[method-assign]
 
@@ -405,11 +419,13 @@ def httpx_corpus(monkeypatch: pytest.MonkeyPatch) -> Any:
     real_async_client = httpx.AsyncClient
 
     def install(mapping: dict[str, Path]) -> HttpxRecorder:
+        """Patch httpx.AsyncClient to use a MockTransport backed by the corpus mapping."""
         recorder = HttpxRecorder(CorpusMapping(mapping))
         recorders.append(recorder)
         transport = httpx.MockTransport(recorder.handle)
 
         def factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+            """Build a real AsyncClient with the corpus transport injected."""
             kwargs.setdefault("transport", transport)
             return real_async_client(*args, **kwargs)
 

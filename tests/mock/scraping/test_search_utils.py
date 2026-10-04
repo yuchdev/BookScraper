@@ -34,6 +34,7 @@ from .playwright_fakes import (
 
 
 def _search_book(book_id, title="A Book", slug="a-book", author_id="a1"):
+    """Build a minimal Leanpub search-result book dict."""
     return {
         "id": book_id,
         "attributes": {"title": title, "slug": slug},
@@ -42,6 +43,7 @@ def _search_book(book_id, title="A Book", slug="a-book", author_id="a1"):
 
 
 def _search_payload(books, author_name="Jane"):
+    """Build a Leanpub search API response payload containing the given books."""
     return {
         "data": books,
         "included": [
@@ -51,11 +53,13 @@ def _search_payload(books, author_name="Jane"):
 
 
 def _patch_httpx(responses=None, get_side_effect=None):
+    """Context manager: patch httpx.AsyncClient with a FakeResponse sequence."""
     factory, _client = build_async_client_factory(responses=responses, get_side_effect=get_side_effect)
     return patch.object(search_utils.httpx, "AsyncClient", factory)
 
 
 def _no_sleep():
+    """Context manager: patch asyncio.sleep to a no-op for speed."""
     return patch.object(search_utils.asyncio, "sleep", new=AsyncMock())
 
 
@@ -489,7 +493,18 @@ async def test_playwright_non_amazon_default_case_returns_empty_cleanly():
 
 
 async def test_playwright_amazon_empty_card_list_breaks_and_returns_empty():
-    """wait_for_selector resolves but the card locator is empty -> break with no books."""
+    """
+    [Local] search utils: verifies playwright amazon empty card list breaks and returns empty.
+    
+    Scenario:
+        wait_for_selector resolves but the card locator is empty -> break with no books.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     page = FakePage(locators={AMAZON_CARD: FakeLocator([])}, title="Amazon")
     browser = FakeBrowser(page=page)
 
@@ -499,14 +514,17 @@ async def test_playwright_amazon_empty_card_list_breaks_and_returns_empty():
 
 
 async def test_playwright_amazon_navigation_failure_returns_empty():
-    """Characterization: a goto() failure aborts the amazon search and returns [].
-
-    The inner handler for a navigation error calls ``logger.error(msg, "error")`` (search_utils
-    line 249) with a stray positional ``"error"`` - a real product bug (subtask 03.3): the
-    logging layer rejects the extra arg, the exception escapes the inner ``except`` into the
-    function's outer handler, and the run ends with whatever was collected so far (nothing, since
-    the failure is on page 1). This locks in that a failed navigation degrades to an empty result
-    rather than crashing the caller; a 03.3 fix (drop the stray arg) would surface as a diff here.
+    """
+    [Local] search utils: verifies playwright amazon navigation failure returns empty.
+    
+    Scenario:
+        Characterization: a goto() failure aborts the amazon search and returns []. The inner handler for a navigation error calls ``logger.error(msg, "error")`` (search_utils line 249) with a stray positional ``"error"`` - a real product bug (subtask 03.3): the logging layer rejects the extra arg, the exception escapes the inner ``except`` into the function's outer handler, and the run ends with whatever was collected so far (nothing, since the failure is on page 1). This locks in that a failed navigation degrades to an empty result rather than crashing the caller; a 03.3 fix (drop the stray arg) would surface as a diff here.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
     """
     card = {
         "attrs": {"data-asin": "B0ABCDEFGH"},
@@ -526,7 +544,18 @@ async def test_playwright_amazon_navigation_failure_returns_empty():
 
 
 async def test_playwright_amazon_sponsored_without_url_param_skips_card(monkeypatch):
-    """A sponsored /sspa/click link with no 'url' param is skipped (continue), not stored."""
+    """
+    [Local] search utils: verifies playwright amazon sponsored without url param skips card.
+    
+    Scenario:
+        A sponsored /sspa/click link with no 'url' param is skipped (continue), not stored.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     bad_sponsored = {
         "attrs": {},
         "sub": {
@@ -544,7 +573,18 @@ async def test_playwright_amazon_sponsored_without_url_param_skips_card(monkeypa
 
 
 async def test_playwright_amazon_without_asin_attribute_still_extracts_url(monkeypatch):
-    """When SEARCH_ASIN_ATTRIBUTE is absent, the book is kept with a URL but asin None."""
+    """
+    [Local] search utils: verifies playwright amazon without asin attribute still extracts url.
+    
+    Scenario:
+        When SEARCH_ASIN_ATTRIBUTE is absent, the book is kept with a URL but asin None.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     sc = copy.deepcopy(search_utils.site_constants)
     del sc["amazon"]["SEARCH_ASIN_ATTRIBUTE"]
     monkeypatch.setattr(search_utils, "site_constants", sc)
@@ -568,7 +608,18 @@ async def test_playwright_amazon_without_asin_attribute_still_extracts_url(monke
 
 
 async def test_playwright_amazon_publication_date_selector_missing_sets_none(monkeypatch):
-    """With no SEARCH_PUBLICATION_DATE selector, publication_date is set to None."""
+    """
+    [Local] search utils: verifies playwright amazon publication date selector missing sets none.
+    
+    Scenario:
+        With no SEARCH_PUBLICATION_DATE selector, publication_date is set to None.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     sc = copy.deepcopy(search_utils.site_constants)
     del sc["amazon"]["SEARCH_PUBLICATION_DATE"]
     monkeypatch.setattr(search_utils, "site_constants", sc)
@@ -591,7 +642,18 @@ async def test_playwright_amazon_publication_date_selector_missing_sets_none(mon
 
 
 async def test_playwright_amazon_publication_date_locator_error_sets_none():
-    """A publication-date locator that raises is caught; the field becomes None, book kept."""
+    """
+    [Local] search utils: verifies playwright amazon publication date locator error sets none.
+    
+    Scenario:
+        A publication-date locator that raises is caught; the field becomes None, book kept.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     date_selector = search_utils.site_constants["amazon"]["SEARCH_PUBLICATION_DATE"]
     card = {
         "attrs": {"data-asin": "B0ABCDEFGH"},
@@ -612,7 +674,18 @@ async def test_playwright_amazon_publication_date_locator_error_sets_none():
 
 
 async def test_playwright_amazon_card_error_is_isolated_and_skips_only_that_card():
-    """A card whose link locator raises is skipped (continue); a good card still returns."""
+    """
+    [Local] search utils: verifies playwright amazon card error is isolated and skips only that card.
+    
+    Scenario:
+        A card whose link locator raises is skipped (continue); a good card still returns.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     bad_card = {
         "attrs": {"data-asin": "B0BADBADBAD"},
         "sub": {AMAZON_LINK: FakeLocator(raises=RuntimeError("boom"))},

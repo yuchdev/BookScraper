@@ -21,6 +21,7 @@ SCRIPT_PATH = REPO_ROOT / "scripts" / "capture_fixtures.py"
 
 
 def _load_capture_module() -> ModuleType:
+    """Import capture_fixtures lazily so tests that skip it don't fail on import."""
     spec = importlib.util.spec_from_file_location("capture_fixtures", SCRIPT_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -32,21 +33,34 @@ capture = _load_capture_module()
 
 
 async def test_assert_logged_out_passes_for_cookieless_context() -> None:
-    """Scenario: a fresh context has no cookies and no stored origins.
-
-    Boundaries: the assertion returns without raising.
-    On failure: a clean context would be wrongly rejected.
+    """
+    [Local] capture fixtures: verifies assert logged out passes for cookieless context.
+    
+    Scenario:
+        a fresh context has no cookies and no stored origins.
+    
+    Boundaries:
+        - the assertion returns without raising.
+    
+    On failure, first check:
+        - a clean context would be wrongly rejected.
     """
     context = FakeContext(cookies=[], origins=[])
     await capture._assert_logged_out(context)
 
 
 async def test_assert_logged_out_aborts_when_cookies_persist() -> None:
-    """FIX-1: cookies that survive clear_cookies abort the capture.
-
-    Scenario: the context carries a session cookie even after clearing.
-    Boundaries: CaptureError is raised; no capture proceeds.
-    On failure: session cookies would be captured into git history.
+    """
+    [Local] capture fixtures: verifies assert logged out aborts when cookies persist.
+    
+    Scenario:
+        the context carries a session cookie even after clearing.
+    
+    Boundaries:
+        - CaptureError is raised; no capture proceeds.
+    
+    On failure, first check:
+        - session cookies would be captured into git history.
     """
     context = FakeContext(
         cookies=[{"name": "session-id", "value": "x"}],
@@ -57,18 +71,35 @@ async def test_assert_logged_out_aborts_when_cookies_persist() -> None:
 
 
 async def test_assert_logged_out_aborts_when_storage_state_has_origins() -> None:
-    """FIX-1: a context with stored origins (localStorage) aborts the capture."""
+    """
+    [Local] capture fixtures: verifies assert logged out aborts when storage state has origins.
+    
+    Scenario:
+        FIX-1: a context with stored origins (localStorage) aborts the capture.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     context = FakeContext(cookies=[], origins=[{"origin": "https://x.test"}])
     with pytest.raises(capture.CaptureError):
         await capture._assert_logged_out(context)
 
 
 async def test_capture_document_uses_fresh_context_and_reasserts_before_content() -> None:
-    """FIX-1: capture_document creates a new_context and returns its page content.
-
-    Scenario: a well-behaved logged-out context yields the DOM snapshot.
-    Boundaries: new_context is used (not a persistent profile) and content is returned.
-    On failure: capture would read a page from a shared/persistent context.
+    """
+    [Local] capture fixtures: verifies capture document uses fresh context and reasserts before content.
+    
+    Scenario:
+        a well-behaved logged-out context yields the DOM snapshot.
+    
+    Boundaries:
+        - new_context is used (not a persistent profile) and content is returned.
+    
+    On failure, first check:
+        - capture would read a page from a shared/persistent context.
     """
     page = FakePage(content="<html><h1>T</h1></html>")
     context = FakeContext(page=page, cookies=[])
@@ -82,7 +113,18 @@ async def test_capture_document_uses_fresh_context_and_reasserts_before_content(
 
 
 async def test_capture_document_aborts_on_dirty_context_without_reading_content() -> None:
-    """FIX-1: a dirty context aborts before page.content() and closes the context."""
+    """
+    [Local] capture fixtures: verifies capture document aborts on dirty context without reading content.
+    
+    Scenario:
+        FIX-1: a dirty context aborts before page.content() and closes the context.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     page = FakePage(content="<html>secret</html>")
     context = FakeContext(
         page=page,
@@ -99,7 +141,18 @@ async def test_capture_document_aborts_on_dirty_context_without_reading_content(
 
 
 def test_keep_selectors_excludes_description() -> None:
-    """The keep-selector set carries factual selectors but never the description."""
+    """
+    [Local] capture fixtures: verifies keep selectors excludes description.
+    
+    Scenario:
+        The keep-selector set carries factual selectors but never the description.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     selectors = capture.keep_selectors_for("amazon")
     from bookscraper.scraping.parameters import site_constants
 
@@ -109,7 +162,18 @@ def test_keep_selectors_excludes_description() -> None:
 
 
 def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
-    """search_selectors_for keeps the SEARCH_* CSS selectors, not the non-selector keys."""
+    """
+    [Local] capture fixtures: verifies search selectors keep css but not base url or page count.
+    
+    Scenario:
+        search_selectors_for keeps the SEARCH_* CSS selectors, not the non-selector keys.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     selectors = capture.search_selectors_for("amazon")
     from bookscraper.scraping.parameters import site_constants
 
@@ -126,7 +190,18 @@ def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
 
 
 def test_trim_repeated_blocks_keeps_only_first_n_matches() -> None:
-    """_trim_repeated_blocks drops all but the first N elements matching the selector."""
+    """
+    [Local] capture fixtures: verifies trim repeated blocks keeps only first n matches.
+    
+    Scenario:
+        _trim_repeated_blocks drops all but the first N elements matching the selector.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     cards = "".join(f'<div class="card"><span>{i}</span></div>' for i in range(5))
     html = f"<html><body><main>{cards}<nav class='pager'>next</nav></main></body></html>"
 
@@ -141,14 +216,36 @@ def test_trim_repeated_blocks_keeps_only_first_n_matches() -> None:
 
 
 def test_trim_repeated_blocks_returns_input_when_under_limit() -> None:
-    """A page with <= limit matches is returned unchanged (no trimming needed)."""
+    """
+    [Local] capture fixtures: verifies trim repeated blocks returns input when under limit.
+    
+    Scenario:
+        A page with <= limit matches is returned unchanged (no trimming needed).
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     html = "<html><body><div class='card'>only</div></body></html>"
 
     assert capture._trim_repeated_blocks(html, ".card", 8) == html
 
 
 def test_strip_subresources_removes_loaders_but_keeps_anchors() -> None:
-    """_strip_subresources removes network-triggering nodes/attrs, keeps <a href>."""
+    """
+    [Local] capture fixtures: verifies strip subresources removes loaders but keeps anchors.
+    
+    Scenario:
+        _strip_subresources removes network-triggering nodes/attrs, keeps <a href>.
+    
+    Boundaries:
+        - see test body
+    
+    On failure, first check:
+        - see test body
+    """
     html = (
         "<html><head><link rel='stylesheet' href='/s.css'></head><body>"
         "<img src='https://img.test/x.jpg'>"
