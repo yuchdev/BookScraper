@@ -1,7 +1,7 @@
 # 01 - Page lifecycle & leak fixes
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Python Expert
 
 ## Context

@@ -216,7 +216,8 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
 
     mock_details.assert_awaited_once_with("https://leanpub.com/x")
     assert result is sentinel
-    browser.new_page.assert_awaited_once()
+    # Leanpub is dispatched before any Playwright page is created.
+    browser.new_page.assert_not_awaited()
 
 
 async def test_scrape_book_site_without_base_url_returns_failed():
@@ -338,3 +339,129 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
     assert result == (None, "FAILED")
     assert page.goto.await_count == 3
     assert mock_sleep.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# scrape_book - page lifecycle & leak fixes (subtask 03.0/01)
+# ---------------------------------------------------------------------------
+
+
+async def test_leanpub_dispatch_opens_no_playwright_page():
+    """Scenario: ``scrape_book`` is called for a Leanpub URL.
+
+    Boundaries: exercises only the pre-loop Leanpub dispatch; the httpx detail
+    helper is stubbed, so no network and no Playwright page are involved.
+    On failure: the Leanpub branch would again open (and leak) a browser page
+    before short-circuiting to the API helper - defect (a) from the parent task.
+    """
+    page = FakePage()
+    browser = FakeBrowser(page=page)
+
+    with patch.object(
+        scrape_details,
+        "get_leanpub_book_details",
+        new=AsyncMock(return_value={"title": "From API"}),
+    ) as mock_details:
+        result = await scrape_book("https://leanpub.com/x", browser, "leanpub")
+
+    assert result == {"title": "From API"}
+    mock_details.assert_awaited_once_with("https://leanpub.com/x")
+    # No Playwright resource is created for Leanpub, so nothing can leak.
+    browser.new_page.assert_not_awaited()
+    page.close.assert_not_awaited()
+
+
+async def test_page_closed_exactly_once_on_success():
+    """Scenario: a happy-path Amazon scrape returns a full book dict.
+
+    Boundaries: single attempt, no duplicate check; asserts the page-open and
+    page-close counts match exactly.
+    On failure: a page was opened without a matching close (a leak) or closed
+    more than once (spurious ``Target closed`` errors).
+    """
+    page = _amazon_page()
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert isinstance(result, dict)
+    assert browser.new_page.await_count == 1
+    assert page.close.await_count == 1
+    assert browser.new_page.await_count == page.close.await_count
+
+
+async def test_page_closed_exactly_once_on_duplicate():
+    """Scenario: a scraped book is already present in the storage backend.
+
+    Boundaries: single attempt that returns ``(None, "DUPLICATE")`` from inside
+    the page context.
+    On failure: the duplicate short-circuit leaked its page or double-closed it.
+    """
+    page = _amazon_page()
+    browser = FakeBrowser(page=page)
+    storage = MagicMock()
+    storage.book_exists_by_hash = MagicMock(return_value=True)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon", storage_backend=storage)
+
+    assert result == (None, "DUPLICATE")
+    assert browser.new_page.await_count == 1
+    assert page.close.await_count == 1
+
+
+async def test_page_closed_exactly_once_on_404():
+    """Scenario: the target serves a 404 page (title matches ``404_PAGE_TITLE``).
+
+    Boundaries: single attempt that returns ``(None, "FAILED")`` from the 404
+    short-circuit inside the page context.
+    On failure: the 404 branch leaked its page or double-closed it.
+    """
+    page = FakePage(title="Sorry - Page Not Found")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result == (None, "FAILED")
+    assert browser.new_page.await_count == 1
+    assert page.close.await_count == 1
+
+
+async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
+    """Scenario: every navigation times out, so all three attempts fail.
+
+    Boundaries: three attempts hand out the same fake page; asserts exactly one
+    open and one close per attempt (3 == 3), never a fourth close from a stale
+    post-loop cleanup.
+    On failure: the removed post-loop ``if page: await page.close()`` block (or a
+    double-close on the final attempt) would push the close count to 4+.
+    """
+    page = _amazon_page()
+    page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
+    browser = FakeBrowser(page=page)
+
+    with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()):
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result == (None, "FAILED")
+    assert browser.new_page.await_count == 3
+    assert page.close.await_count == 3
+    assert browser.new_page.await_count == page.close.await_count
+
+
+async def test_close_failure_does_not_mask_original_error():
+    """Scenario: ``page.close()`` itself raises (e.g. the browser already crashed).
+
+    Boundaries: a happy-path scrape whose page close raises; the close failure
+    must be swallowed so the successful result still propagates.
+    On failure: the close exception masks the real return value, turning a good
+    scrape into a crash.
+    """
+    page = _amazon_page()
+    page.close = AsyncMock(side_effect=RuntimeError("Target page, context or browser has been closed"))
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert isinstance(result, dict)
+    assert result["title"] == "Great Python Book"
+    page.close.assert_awaited_once()

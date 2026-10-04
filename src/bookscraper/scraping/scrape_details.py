@@ -5,13 +5,15 @@ import json
 import logging
 import random
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from html import unescape
 from typing import Optional, Union
 from urllib.parse import urljoin
 
 import httpx
-from playwright.async_api import Browser, Route, TimeoutError
+from playwright.async_api import Browser, Page, Route, TimeoutError
 
 from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
@@ -29,6 +31,28 @@ async def route_handler(route: Route) -> None:
         await route.continue_()
     else:
         await route.abort()
+
+
+@asynccontextmanager
+async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
+    """Yield a fresh page for a single scrape attempt, closing it exactly once on exit.
+
+    The page is closed on **every** exit path - normal return, duplicate/404 short-circuit,
+    timeout, or any other exception - so an attempt can never leak a page. A failure to
+    close (for example when the browser has already crashed) is logged at debug level and
+    swallowed so it never masks the original exception that is unwinding the ``with`` block.
+
+    :param browser: The Playwright browser to open the page on.
+    :returns: An async context manager yielding the attempt's :class:`Page`.
+    """
+    page = await browser.new_page()
+    try:
+        yield page
+    finally:
+        try:
+            await page.close()
+        except Exception as exc:  # noqa: BLE001 - a close failure must never mask the original error
+            module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
 async def get_leanpub_book_details(url: str) -> Optional[dict]:
@@ -149,224 +173,218 @@ async def scrape_book(
         A dictionary of book details on successful scrape, (None, "DUPLICATE") if already exists,
         or (None, "FAILED") on failure.
     """
+    # Leanpub is a pure httpx/JSON path - dispatch it before any Playwright page is created,
+    # so it never opens (and therefore never leaks) a browser page.
+    if site == "leanpub":
+        print("Leanpub book")
+        return await get_leanpub_book_details(url)
+
     retries = 3
     for attempt in range(1, retries + 1):
         print(f"Trying attempt {attempt}...")
-        page = await browser.new_page()
 
         try:
-            user_agent = random.choice(USER_AGENTS)
-            await page.set_extra_http_headers({"User-Agent": user_agent})
-            await page.route("**/*", route_handler)
+            # Each attempt owns exactly one page; the context manager closes it on every
+            # exit path (success, duplicate, 404, timeout, or any other exception).
+            async with _attempt_page(browser) as page:
+                user_agent = random.choice(USER_AGENTS)
+                await page.set_extra_http_headers({"User-Agent": user_agent})
+                await page.route("**/*", route_handler)
 
-            if site == "leanpub":
-                print("Leanpub book")
-                return await get_leanpub_book_details(url)
-
-            # --- Crucial: Construct the full URL using urljoin ---
-            base_url = site_constants[site]["BASE_URL"]
-            if not base_url:
-                module_logger.error(f"BASE_URL not defined for site: {site}. Cannot scrape {url}")
-                print_log(f"Error: BASE_URL not defined for {site}. Skipping {url}.", "error")
-                await page.close()
-                return (None, "FAILED")
-
-            full_url = urljoin(base_url, url)
-            module_logger.info(f"Navigating to {full_url} for detailed scraping.")
-            print_log(f"Navigating to {full_url} for detailed scraping.", "info")
-
-            await page.goto(full_url, timeout=60000)
-
-            # Check for 404 page (if site_constants provides a 404 selector)
-            if site_constants[site].get("404_PAGE_TITLE"):
-                page_title = await page.title()
-                if site_constants[site]["404_PAGE_TITLE"].lower() in page_title.lower():
-                    module_logger.warning(f"404 page detected for {full_url}. Skipping.")
-                    print_log(f"404 page detected for {full_url}. Skipping.", "warning")
-                    await page.close()
+                # --- Crucial: Construct the full URL using urljoin ---
+                base_url = site_constants[site]["BASE_URL"]
+                if not base_url:
+                    module_logger.error(f"BASE_URL not defined for site: {site}. Cannot scrape {url}")
+                    print_log(f"Error: BASE_URL not defined for {site}. Skipping {url}.", "error")
                     return (None, "FAILED")
 
-            # Scrape data fields using selectors from site_constants
-            book_details = {
-                "url": full_url,
-                "site": site,
-            }
-            selectors = site_constants[site]
+                full_url = urljoin(base_url, url)
+                module_logger.info(f"Navigating to {full_url} for detailed scraping.")
+                print_log(f"Navigating to {full_url} for detailed scraping.", "info")
 
-            # Title
-            title_selector = selectors.get("BOOK_TITLE")
-            if title_selector:
-                title_element = await page.locator(title_selector).first.text_content()
-                book_details["title"] = title_element.strip() if title_element else None
-                print(book_details["title"])
-            else:
-                module_logger.warning(f"No BOOK_TITLE selector for {site}. Skipping title extraction.")
+                await page.goto(full_url, timeout=60000)
 
-            # Authors
-            authors_list = []
-            # Metadata authors (e.g., for Leanpub)
-            meta_author_selector_meta = selectors.get("AUTHORS_META")
-            author_selector = selectors.get("AUTHORS")
+                # Check for 404 page (if site_constants provides a 404 selector)
+                if site_constants[site].get("404_PAGE_TITLE"):
+                    page_title = await page.title()
+                    if site_constants[site]["404_PAGE_TITLE"].lower() in page_title.lower():
+                        module_logger.warning(f"404 page detected for {full_url}. Skipping.")
+                        print_log(f"404 page detected for {full_url}. Skipping.", "warning")
+                        return (None, "FAILED")
 
-            if meta_author_selector_meta:
-                all_author_elements = await page.locator(meta_author_selector_meta).all()
-                for author_element in all_author_elements:
-                    author_name = await author_element.get_attribute("content")
-                    if author_name:
-                        authors_list.append(author_name)
+                # Scrape data fields using selectors from site_constants
+                book_details = {
+                    "url": full_url,
+                    "site": site,
+                }
+                selectors = site_constants[site]
 
-            # HTML Scraping alternative
-            elif author_selector:
-                author_elements = await page.locator(author_selector).all()
-                for author_el in author_elements:
-                    author_name = await author_el.text_content()
-                    if author_name:
-                        authors_list.append(author_name.strip())
-                if not authors_list:
-                    alt_author_selector = selectors.get("AUTHORS_ALT")
-                    if alt_author_selector:
-                        author_elements = await page.locator(alt_author_selector).all()
-                        for author_el in author_elements:
-                            author_name = await author_el.text_content()
-                            if author_name:
-                                authors_list.append(author_name.strip())
-
-            book_details["authors"] = authors_list if authors_list else []
-
-            # Publication Date
-            try:
-                # use Metadata (e.g., for Leanpub)
-                meta_publication_date_selector = selectors.get("PUBLICATION_DATE_META")
-                if meta_publication_date_selector:
-                    pub_date_text = await page.locator(meta_publication_date_selector).get_attribute(
-                        "content", timeout=10000
-                    )
-                    book_details["publication_date"] = pub_date_text.split("T")[0]
-                    book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
+                # Title
+                title_selector = selectors.get("BOOK_TITLE")
+                if title_selector:
+                    title_element = await page.locator(title_selector).first.text_content()
+                    book_details["title"] = title_element.strip() if title_element else None
+                    print(book_details["title"])
                 else:
-                    publication_date_selector = selectors.get("PUBLICATION_DATE")
-                    if publication_date_selector:
-                        pub_date_text = await page.locator(publication_date_selector).first.text_content(timeout=10000)
-                        book_details["publication_date"] = pub_date_text.strip() if pub_date_text else None
+                    module_logger.warning(f"No BOOK_TITLE selector for {site}. Skipping title extraction.")
+
+                # Authors
+                authors_list = []
+                # Metadata authors (e.g., for Leanpub)
+                meta_author_selector_meta = selectors.get("AUTHORS_META")
+                author_selector = selectors.get("AUTHORS")
+
+                if meta_author_selector_meta:
+                    all_author_elements = await page.locator(meta_author_selector_meta).all()
+                    for author_element in all_author_elements:
+                        author_name = await author_element.get_attribute("content")
+                        if author_name:
+                            authors_list.append(author_name)
+
+                # HTML Scraping alternative
+                elif author_selector:
+                    author_elements = await page.locator(author_selector).all()
+                    for author_el in author_elements:
+                        author_name = await author_el.text_content()
+                        if author_name:
+                            authors_list.append(author_name.strip())
+                    if not authors_list:
+                        alt_author_selector = selectors.get("AUTHORS_ALT")
+                        if alt_author_selector:
+                            author_elements = await page.locator(alt_author_selector).all()
+                            for author_el in author_elements:
+                                author_name = await author_el.text_content()
+                                if author_name:
+                                    authors_list.append(author_name.strip())
+
+                book_details["authors"] = authors_list if authors_list else []
+
+                # Publication Date
+                try:
+                    # use Metadata (e.g., for Leanpub)
+                    meta_publication_date_selector = selectors.get("PUBLICATION_DATE_META")
+                    if meta_publication_date_selector:
+                        pub_date_text = await page.locator(meta_publication_date_selector).get_attribute(
+                            "content", timeout=10000
+                        )
+                        book_details["publication_date"] = pub_date_text.split("T")[0]
                         book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
                     else:
-                        module_logger.warning(f"No PUBLICATION_DATE selector for {site}.")
-            except Exception as e:
-                module_logger.warning(f"No PUBLICATION_DATE selector for {site}: {e}.")
-
-            # ISBN10 & ISBN13
-            isbn10_selector = selectors.get("ISBN10")
-            isbn13_selector = selectors.get("ISBN13")
-
-            if isbn10_selector:
-                try:
-                    isbn10_text = await page.locator(isbn10_selector).first.text_content(timeout=2000)
-                    book_details["isbn10"] = isbn10_text.strip() if isbn10_text else "N/A"
-                except TimeoutError:
-                    # If a TimeoutError occurs, the element was not found within the timeout
-                    book_details["isbn10"] = "N/A"
-                    module_logger.info(f"ISBN10 element not found for {url}.")
-            else:
-                book_details["isbn10"] = "N/A"
-
-            if isbn13_selector:
-                try:
-                    isbn13_text = await page.locator(isbn13_selector).first.text_content(timeout=2000)
-                    book_details["isbn13"] = isbn13_text.strip() if isbn13_text else "N/A"
-                except TimeoutError:
-                    # If a TimeoutError occurs, the element was not found within the timeout
-                    book_details["isbn13"] = "N/A"
-                    module_logger.info(f"ISBN13 element not found for {url}.")
-            else:
-                # If the selector itself is not defined in parameters.py
-                book_details["isbn13"] = "N/A"
-
-            # Amazon ASIN extraction
-            if site == "amazon":
-                try:
-                    asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
-                    if asin_match:
-                        book_details["asin"] = asin_match.group(1)
-                        module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
+                        publication_date_selector = selectors.get("PUBLICATION_DATE")
+                        if publication_date_selector:
+                            pub_date_text = await page.locator(publication_date_selector).first.text_content(
+                                timeout=10000
+                            )
+                            book_details["publication_date"] = pub_date_text.strip() if pub_date_text else None
+                            book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
+                        else:
+                            module_logger.warning(f"No PUBLICATION_DATE selector for {site}.")
                 except Exception as e:
-                    module_logger.warning(f"Could not extract ASIN from Amazon URL {url}: {e}")
+                    module_logger.warning(f"No PUBLICATION_DATE selector for {site}: {e}.")
 
-            # Description
-            description_selector = selectors.get("DESCRIPTION")
-            if description_selector:
-                description_element = page.locator(description_selector).first
-                if description_element:
-                    # Check for a "Read more" link/button to expand description
-                    read_more_selector = selectors.get("READ_MORE_LINK")
-                    if read_more_selector:
-                        try:
-                            read_more_button = page.locator(read_more_selector).first
-                            if await read_more_button.is_visible():
-                                await read_more_button.click(timeout=5000)  # Click to expand
-                                await page.wait_for_timeout(500)  # Small wait for content to load
-                        except TimeoutError:
-                            module_logger.debug(f"No 'Read more' button found or clickable for {url}.")
-                        except Exception as e:
-                            module_logger.warning(f"Error clicking 'Read more' on {url}: {e}")
+                # ISBN10 & ISBN13
+                isbn10_selector = selectors.get("ISBN10")
+                isbn13_selector = selectors.get("ISBN13")
 
-                    description_text = await description_element.text_content()
-                    book_details["description"] = description_text.strip() if description_text else None
+                if isbn10_selector:
+                    try:
+                        isbn10_text = await page.locator(isbn10_selector).first.text_content(timeout=2000)
+                        book_details["isbn10"] = isbn10_text.strip() if isbn10_text else "N/A"
+                    except TimeoutError:
+                        # If a TimeoutError occurs, the element was not found within the timeout
+                        book_details["isbn10"] = "N/A"
+                        module_logger.info(f"ISBN10 element not found for {url}.")
                 else:
+                    book_details["isbn10"] = "N/A"
+
+                if isbn13_selector:
+                    try:
+                        isbn13_text = await page.locator(isbn13_selector).first.text_content(timeout=2000)
+                        book_details["isbn13"] = isbn13_text.strip() if isbn13_text else "N/A"
+                    except TimeoutError:
+                        # If a TimeoutError occurs, the element was not found within the timeout
+                        book_details["isbn13"] = "N/A"
+                        module_logger.info(f"ISBN13 element not found for {url}.")
+                else:
+                    # If the selector itself is not defined in parameters.py
+                    book_details["isbn13"] = "N/A"
+
+                # Amazon ASIN extraction
+                if site == "amazon":
+                    try:
+                        asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
+                        if asin_match:
+                            book_details["asin"] = asin_match.group(1)
+                            module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
+                    except Exception as e:
+                        module_logger.warning(f"Could not extract ASIN from Amazon URL {url}: {e}")
+
+                # Description
+                description_selector = selectors.get("DESCRIPTION")
+                if description_selector:
+                    description_element = page.locator(description_selector).first
+                    if description_element:
+                        # Check for a "Read more" link/button to expand description
+                        read_more_selector = selectors.get("READ_MORE_LINK")
+                        if read_more_selector:
+                            try:
+                                read_more_button = page.locator(read_more_selector).first
+                                if await read_more_button.is_visible():
+                                    await read_more_button.click(timeout=5000)  # Click to expand
+                                    await page.wait_for_timeout(500)  # Small wait for content to load
+                            except TimeoutError:
+                                module_logger.debug(f"No 'Read more' button found or clickable for {url}.")
+                            except Exception as e:
+                                module_logger.warning(f"Error clicking 'Read more' on {url}: {e}")
+
+                        description_text = await description_element.text_content()
+                        book_details["description"] = description_text.strip() if description_text else None
+                    else:
+                        book_details["description"] = None
+                else:
+                    module_logger.warning(f"No DESCRIPTION selector for {site}.")
                     book_details["description"] = None
-            else:
-                module_logger.warning(f"No DESCRIPTION selector for {site}.")
-                book_details["description"] = None
 
-            # Generate hash
-            book_details["hash"] = hash_book(
-                book_details["title"], book_details["authors"], book_details["publication_year"]
-            )
+                # Generate hash
+                book_details["hash"] = hash_book(
+                    book_details["title"], book_details["authors"], book_details["publication_year"]
+                )
 
-            # Check for duplicates BEFORE returning, if a storage backend is provided
-            if storage_backend is not None:
-                is_duplicate = storage_backend.book_exists_by_hash(book_details["hash"])
-                if is_duplicate:
-                    module_logger.info(
-                        f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
-                    )
-                    print_log(f"Skipping duplicate book for URL: {url}", "warning")
-                    await page.close()
-                    return (None, "DUPLICATE")  # Indicate duplicate status
+                # Check for duplicates BEFORE returning, if a storage backend is provided
+                if storage_backend is not None:
+                    is_duplicate = storage_backend.book_exists_by_hash(book_details["hash"])
+                    if is_duplicate:
+                        module_logger.info(
+                            f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
+                        )
+                        print_log(f"Skipping duplicate book for URL: {url}", "warning")
+                        return (None, "DUPLICATE")  # Indicate duplicate status
 
-            # If all successful and not a duplicate:
-            module_logger.info(f"Successfully scraped details for {book_details['title']}")
-            await page.close()
-            return book_details
+                # If all successful and not a duplicate:
+                module_logger.info(f"Successfully scraped details for {book_details['title']}")
+                return book_details
 
         except TimeoutError as e:
             module_logger.error(f"Timeout while scraping {url} on attempt {attempt}: {e}")
             print_log(f"Timeout scraping {url}. Retrying...", "error")
-            if page:
-                await page.close()
             if attempt < retries:
                 await asyncio.sleep(random.uniform(2, 4))  # Wait before retrying
                 continue  # Try next attempt
-            else:
-                module_logger.error(f"Failed to scrape {url} after {retries} attempts due to timeout.")
-                print_log(f"Failed to scrape {url} after {retries} attempts due to timeout.", "error")
-                if page:
-                    await page.close()
-                return (None, "FAILED")
+            module_logger.error(f"Failed to scrape {url} after {retries} attempts due to timeout.")
+            print_log(f"Failed to scrape {url} after {retries} attempts due to timeout.", "error")
+            return (None, "FAILED")
 
         except Exception as e:
             module_logger.error(f"Error scraping {url} on attempt {attempt}: {e}", exc_info=True)
             print_log(f"Error scraping {url}. Retrying...", "error")
-            if page:
-                await page.close()
             if attempt < retries:
                 await asyncio.sleep(random.uniform(2, 4))  # Wait before retrying
-            else:
-                module_logger.error(f"Failed to scrape {url} after {retries} attempts.")
-                print_log(f"Failed to scrape {url} after {retries} attempts.", "error")
-                return (None, "FAILED")
+                continue  # Try next attempt
+            module_logger.error(f"Failed to scrape {url} after {retries} attempts.")
+            print_log(f"Failed to scrape {url} after {retries} attempts.", "error")
+            return (None, "FAILED")
 
-    # If the loop finishes without a successful scrape (e.g., all retries failed)
-    # This part should theoretically be unreachable if all errors are caught, but added for robustness.
-    if page:
-        await page.close()
+    # The loop only exits here if every attempt fell through without returning; the
+    # per-attempt handlers above already return (None, "FAILED") on the final attempt,
+    # so this is the explicit post-loop failure return.
     return (None, "FAILED")

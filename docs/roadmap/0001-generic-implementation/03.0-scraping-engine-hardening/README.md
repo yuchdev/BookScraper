@@ -1,7 +1,7 @@
 # Task 03.0 - Scraping Engine Hardening
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress
 **Category:** bugfix | **Priority:** P0
 **Depends on:** [Task 06.0](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md) (golden fixtures must characterize current behavior first)
 
@@ -27,7 +27,7 @@ stay attributable.
 
 | #  | Document                                                                   | Status         | Blocks     |
 |----|----------------------------------------------------------------------------|----------------|------------|
-| 01 | [Page lifecycle & leak fixes](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks.md)          | ⬜ Not started | 02         |
+| 01 | [Page lifecycle & leak fixes](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks.md)          | ✅ Complete    | 02         |
 | 02 | [Typed scrape result](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)                      | ⬜ Not started | 03, 05     |
 | 03 | [Missing-field resilience & retry policy](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/03-missing-field-resilience.md) | ⬜ Not started | 04     |
 | 04 | [Wire unused selectors (tags, fallbacks, expanders)](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/04-wire-unused-selectors.md) | ⬜ Not started | - |
