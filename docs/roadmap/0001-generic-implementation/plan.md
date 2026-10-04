@@ -22,6 +22,7 @@ Progress lives in [status.md](/docs/roadmap/0001-generic-implementation/status.m
 | 03.2 | Politeness & anti-bot resilience       | feature     | P1       | 03.0             | Per-domain rate limiting, robots.txt, shared backoff/`Retry-After`, bot-wall detection, modern UA handling       |
 | 03.3 | Multi-site search pipeline             | feature     | P1       | 03.0, 03.2, 05.0 | `search` works end-to-end for Amazon/Packtpub/O'Reilly, applies `SCRAPE_FILTERS`, cross-site dedup               |
 | 04.0 | AI-assisted schema detection           | feature     | P1       | 06.0 (sub. 07)   | `bookscraper detect-schema` (Playwright + Claude), plus model/cost guard, JSON report, golden tests, injection guard |
+| 04.1 | LLM extraction fallback                | feature     | P2       | 03.0, 03.1, 04.0, 05.0 (01) | Opt-in `--ai-fallback`: Claude fills single drifted fields, evidence- and normalizer-validated, provenance-marked |
 | 05.0 | CLI improvements                       | feature     | P1       | -                | Shared flags, wired `--max-search-pages`, `--site`/`--query`/`--headless`/`--dry-run`, exit-code contract, `doctor` |
 | 06.0 | Real-HTML mock test corpus             | test        | P0       | -                | Captured, sanitized per-site HTML/JSON fixtures served through real Chromium; golden tests for every site          |
 | 06.1 | 90% coverage gate                      | test        | P0       | 06.0             | `fail_under = 90` enforced in config, every module ≥90%, accurate coverage docs                                  |
@@ -41,6 +42,8 @@ The dependency column is the hard constraint; within it, the recommended order i
 4. **05.0** in parallel with 03.x - it is CLI-only and unblocks 03.3's `--site` / `--query`.
 5. **03.2 → 03.3**: the search pipeline must not fan out to three more sites before politeness exists.
 6. **06.2, 07.0, 08.0** last, or whenever a free slot appears.
+7. **04.1** after 03.1 and 05.0/01. It borrows two ideas from the
+   [Scrapegraph-ai evaluation](/docs/reviews/2026-10-04-scrapegraph-ai-evaluation.md), not the dependency.
 
 ```mermaid
 graph LR
@@ -55,6 +58,9 @@ graph LR
   T032 --> T033[03.3 Search pipeline]
   T050[05.0 CLI] --> T033
   T050 --> T080[08.0 Hygiene]
+  T031 --> T041[04.1 LLM fallback]
+  T040 --> T041
+  T050 --> T041
 ```
 
 ## Cross-cutting guidelines

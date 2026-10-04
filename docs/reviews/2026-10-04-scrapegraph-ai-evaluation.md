@@ -88,9 +88,12 @@ dependency and license audit, and it would greatly enlarge the supply-chain surf
 1. **LLM extraction fallback for one drifted field.** When a *needed* selector breaks (e.g. the live Amazon
    `DESCRIPTION` now matches an empty element, a 04.0/08 follow-up), extract only that field with Claude. Build it
    on the existing `detect-schema` stack (sanitizer, `<page_html>` fence, token budget, offline replays), and mark
-   records produced that way so they can be told apart.
+   records produced that way so they can be told apart. **Planned as task
+   [04.1](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md), subtasks 01-03 and 05.**
 2. **Markdown conversion before prompting** (`utils/convert_to_md.py`) could shrink prompts compared with our HTML
-   pruning. Worth evaluating only if token cost becomes a concern.
+   pruning. It fits value extraction only: `detect-schema` proposes CSS selectors and needs the HTML structure.
+   **Planned as a measured spike,
+   [04.1/04](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/04-markdown-snapshot-spike.md).**
 
 ## 3. Proxy rotation
 
@@ -176,8 +179,9 @@ Scrapegraph-ai's distinctive features are either outside our model (per-page LLM
    on and credentials out of logs (consistent with the redaction rules in `docs/security/`).
 3. **Keep rotating proxies out of scope**, per 03.2, unless the policy is deliberately revisited. Rotation to get
    past blocks conflicts with the sites' terms and the project's dual-use boundary.
-4. **Consider the LLM extraction fallback** for a single drifted field as a future 04.0 iteration, built on the
-   existing hardened `detect-schema` stack.
+4. **LLM extraction fallback** for a single drifted field, built on the existing hardened `detect-schema` stack:
+   planned as roadmap task
+   [04.1](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md).
 5. **Housekeeping:**
    - add `/Scrapegraph-ai` (and `restore-atlas.txt`) to `.gitignore`, so the local symlink can't be committed;
    - pytest collection is already limited to `tests/` (`testpaths`, commit `96099eb`), after the symlink caused 44

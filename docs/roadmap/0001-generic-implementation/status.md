@@ -15,6 +15,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
+| 04.1 | LLM extraction fallback            | ⬜ Not started | 0 / 5         | -                                                                                                      |
 | 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
@@ -24,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 40 / 94 subtasks complete.
+**Totals:** 40 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -379,3 +380,10 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
      Playwright Chromium won't launch on macOS 13. So on this machine no browser-based command (`scrape-urls`,
      `detect-schema --url/--html-file`) can run outside the tests. Route to 05.0/03 (browser flags): add a
      Chromium executable-path option.
+- **2026-10-04 - Task 04.1 added (from the Scrapegraph-ai evaluation):** the evaluation's two "worth borrowing"
+  ideas ([report](/docs/reviews/2026-10-04-scrapegraph-ai-evaluation.md)) become task
+  [04.1 LLM extraction fallback](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md)
+  (5 subtasks, P2): an opt-in `--ai-fallback` that fills single drifted fields with evidence- and
+  normalizer-validated, provenance-marked values, plus a Markdown-snapshot measurement spike. The ideas are
+  borrowed, not the dependency. 03.1/01 reserves `ai_extracted_fields` now, so 04.1 needs no schema bump. The
+  Amazon `DESCRIPTION` empty-match case (follow-up 1 above) is its first golden target. Totals 94 → 99.

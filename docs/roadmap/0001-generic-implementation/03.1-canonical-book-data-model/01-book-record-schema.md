@@ -25,6 +25,7 @@
   | `publication_year` | `Optional[int]`       | no       | derived from `publication_date`                                |
   | `description`      | `Optional[str]`       | no       | plain text (via `scraping/text.html_to_text` where HTML)       |
   | `tags`             | `list[str]`           | yes      | may be empty                                                   |
+| `ai_extracted_fields` | `list[str]`        | yes      | always `[]` until 04.1 lands; sorted names of fields filled by the [04.1 LLM fallback](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md) |
   | `scraped_at`       | `str`                 | yes      | UTC ISO-8601 with `Z`                                          |
   | `hash`             | `str`                 | yes      | `hash_book(title, authors, publication_year)`                  |
 
