@@ -49,3 +49,8 @@ markers = [
     "chromium: runs the offline corpus harness in real headless Chromium; offline and fast, included by default (CI installs Chromium via task 06.2), skips cleanly when no browser is usable",
 ]
 asyncio_mode = "auto"
+
+[tool.flakeforge]
+# Rules are enabled one at a time; each code is added only once the tree is clean for it.
+# Run: uv run flakeforge check src tests scripts
+select = ["X001"]
