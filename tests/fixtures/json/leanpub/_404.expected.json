@@ -1,7 +1,4 @@
 {
-  "_known_issues": [
-    "03.0/05 Leanpub API detail hardening (a not-found response with data=null takes the 'no data' branch; since 03.0/02 get_leanpub_book_details returns a typed FAILED ScrapeResult instead of None; 03.0/05 would refine this into a typed NOT_FOUND result)"
-  ],
   "_scrape_error": "no 'data' in response",
-  "_scrape_status": "FAILED"
+  "_scrape_status": "PARSE_ERROR"
 }

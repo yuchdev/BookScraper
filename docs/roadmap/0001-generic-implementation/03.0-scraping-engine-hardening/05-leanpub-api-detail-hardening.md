@@ -1,7 +1,7 @@
 # 05 - Leanpub API detail hardening
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-typed-scrape-result.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)
 **Role:** Python Expert
 

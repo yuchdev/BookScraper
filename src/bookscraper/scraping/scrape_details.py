@@ -8,7 +8,6 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from html import unescape
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -19,6 +18,7 @@ from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
 from .parameters import USER_AGENTS, site_constants
 from .results import ScrapeResult, ScrapeStatus
+from .text import html_to_text
 
 # The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
 LEANPUB_SITE = "leanpub"
@@ -247,108 +247,136 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
             module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
-async def get_leanpub_book_details(url: str) -> ScrapeResult:
+async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient] = None) -> ScrapeResult:
     """Fetch detailed information for a single Leanpub book from its JSON:API endpoint.
 
     Every path returns a :class:`ScrapeResult`: a :attr:`ScrapeStatus.SUCCESS` carrying the
-    book document, or a :attr:`ScrapeStatus.FAILED` carrying a short, secret-free ``error``
-    (the raw HTTP response body is never put in ``error``; only the status code is). Refining
-    the "no data" / unparseable-field cases into richer statuses is deferred to subtask 03.0/05.
+    book document, a :attr:`ScrapeStatus.PARSE_ERROR` when the response is well-formed but
+    missing the ``data`` block or the ``title`` the record cannot exist without, or a
+    :attr:`ScrapeStatus.FAILED` carrying a short, secret-free ``error``. The raw HTTP response
+    body never reaches ``error``, the log, or the console: an HTTP status surfaces only its
+    code (``HTTP <code>``), a transport error only its exception class name.
+
+    When ``client`` is supplied it is reused (so :mod:`commands.search` can share one pooled
+    client across hundreds of concurrent calls) and left open for the caller to close; when it
+    is ``None`` a short-lived client is created and closed for this single call.
 
     :param url: The API endpoint of the book (e.g.
         ``https://leanpub.com/api/v1/cache/books/quickguidetodatasciencewithpython.json``).
+    :param client: An existing :class:`httpx.AsyncClient` to reuse, or ``None`` to create and
+        close a dedicated one for this call.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
-    # In a real application, you would make an HTTP request here:
-    params = {"include": "accepted_authors"}  # Keep this if 'included' authors are still needed from API
+    params = {"include": "accepted_authors"}  # 'included' authors are resolved from this expansion.
+    owns_client = client is None
+    active_client = (
+        client
+        if client is not None
+        else httpx.AsyncClient(timeout=httpx.Timeout(30.0), limits=httpx.Limits(max_connections=10))
+    )
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
-            response.raise_for_status()
-            response_data = response.json()
+        response = await active_client.get(url, params=params)
+        response.raise_for_status()
+        response_data = response.json()
 
-            book_data = response_data.get("data")
-            if not book_data:
-                print(f"No 'data' found in response for book slug: {url}")
-                return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="no 'data' in response")
+        book_data = response_data.get("data")
+        if not book_data:
+            module_logger.warning(f"Leanpub response for {url} contained no 'data' block.")
+            print_log(f"No 'data' found in Leanpub response for {url}.", "error")
+            return ScrapeResult(ScrapeStatus.PARSE_ERROR, url=url, site=LEANPUB_SITE, error="no 'data' in response")
 
-            attributes = book_data.get("attributes", {})
-            relationships = book_data.get("relationships", {})
-            included = response_data.get("included", [])  # Relevant for authors
-            about_the_book = unescape(attributes.get("about_the_book"))
-            about_the_book = re.sub(r"</p>", "\n\n", about_the_book, flags=re.IGNORECASE)
-            about_the_book = re.sub(r"</li>", "\n", about_the_book, flags=re.IGNORECASE)
-            about_the_book = re.sub(r"<[^>]*>", "", about_the_book)
-            about_the_book = re.sub(r"\n\n+", "\n\n", about_the_book).strip()
-            about_the_book = re.sub(r" +", " ", about_the_book)
+        attributes = book_data.get("attributes", {})
+        title = attributes.get("title")
+        if not title:
+            module_logger.warning(f"Leanpub response for {url} had no title.")
+            print_log(f"Leanpub response for {url} had no title.", "error")
+            return ScrapeResult(ScrapeStatus.PARSE_ERROR, url=url, site=LEANPUB_SITE, error="title not found")
 
-            extracted_details = {
-                "site": "leanpub.com",
-                "title": attributes.get("title"),
-                "book_id": book_data.get("id"),
-                "slug": attributes.get("slug"),
-                "authors": [],
-                "about_the_book": about_the_book,
-                "categories": [],
-                "last_published_at": None,
-                "hash": "",
-            }
+        relationships = book_data.get("relationships", {})
+        included = response_data.get("included", [])  # Relevant for authors
+        # A missing / null about_the_book is no longer fatal: html_to_text(None) is "".
+        about_the_book = html_to_text(attributes.get("about_the_book"))
 
-            # Extract Last published at
-            last_published_at_str = attributes.get("last_published_at")
-            if last_published_at_str:
-                try:
-                    # 'Z' indicates UTC. datetime.fromisoformat handles '+00:00'
-                    dt_object = datetime.fromisoformat(last_published_at_str.replace("Z", "+00:00"))
-                    extracted_details["last_published_at"] = dt_object.strftime("%Y-%m-%d")
-                except ValueError:
-                    print_log(f"Warning: Could not parse date string: '{last_published_at_str}'", "warning")
-                    extracted_details["last_published_at"] = None
+        extracted_details = {
+            "site": "leanpub.com",
+            "title": title,
+            "book_id": book_data.get("id"),
+            "slug": attributes.get("slug"),
+            "authors": [],
+            "about_the_book": about_the_book,
+            "categories": [],
+            "last_published_at": None,
+            "hash": "",
+        }
 
-            # Extract authors
-            author_lookup = {}
-            for item in included:
-                # Ensure the 'type' matches 'Author' now, not 'SimpleAuthor'
-                if item.get("type") == "Author":
-                    author_id = item.get("id")
-                    author_name = item.get("attributes", {}).get("name")
-                    if author_id and author_name:
-                        author_lookup[author_id] = author_name
+        # Extract last published at.
+        last_published_at_str = attributes.get("last_published_at")
+        if last_published_at_str:
+            try:
+                # 'Z' indicates UTC. datetime.fromisoformat handles '+00:00'.
+                dt_object = datetime.fromisoformat(last_published_at_str.replace("Z", "+00:00"))
+                extracted_details["last_published_at"] = dt_object.strftime("%Y-%m-%d")
+            except ValueError:
+                print_log(f"Warning: Could not parse date string: '{last_published_at_str}'", "warning")
+                extracted_details["last_published_at"] = None
 
-            accepted_authors_data = relationships.get("accepted_authors", {}).get("data", [])
-            for author_rel in accepted_authors_data:
-                author_id = author_rel.get("id")
-                if author_id and author_id in author_lookup:
-                    extracted_details["authors"].append(author_lookup[author_id])
+        # Extract authors.
+        author_lookup = {}
+        for item in included:
+            if item.get("type") == "Author":
+                author_id = item.get("id")
+                author_name = item.get("attributes", {}).get("name")
+                if author_id and author_name:
+                    author_lookup[author_id] = author_name
 
-            # Extract Categories from data.attributes.categories
-            categories_data = attributes.get("categories", [])
-            for category_item in categories_data:
-                category_name = category_item.get("name")
-                if category_name:
-                    extracted_details["categories"].append(category_name)
+        accepted_authors_data = relationships.get("accepted_authors", {}).get("data", [])
+        for author_rel in accepted_authors_data:
+            author_id = author_rel.get("id")
+            if author_id and author_id in author_lookup:
+                extracted_details["authors"].append(author_lookup[author_id])
 
-            extracted_details["hash"] = hash_book(
-                extracted_details["title"],
-                extracted_details["authors"],
-                extract_year_from_date(extracted_details["last_published_at"]),
-            )
+        # Extract categories from data.attributes.categories.
+        categories_data = attributes.get("categories", [])
+        for category_item in categories_data:
+            category_name = category_item.get("name")
+            if category_name:
+                extracted_details["categories"].append(category_name)
 
-            return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site=LEANPUB_SITE, book=extracted_details)
+        extracted_details["hash"] = hash_book(
+            extracted_details["title"],
+            extracted_details["authors"],
+            extract_year_from_date(extracted_details["last_published_at"]),
+        )
 
-    except httpx.HTTPStatusError as e:
-        print(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
-        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"HTTP {e.response.status_code}")
+        return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site=LEANPUB_SITE, book=extracted_details)
+
+    except httpx.HTTPStatusError as exc:
+        # Only the status code is surfaced - never exc.response.text (the raw body).
+        status_code = exc.response.status_code
+        module_logger.warning(f"Leanpub HTTP error for {url}: HTTP {status_code}")
+        print_log(f"Leanpub HTTP error for {url}: HTTP {status_code}.", "error")
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"HTTP {status_code}")
     except httpx.RequestError as exc:
-        print(f"An HTTP error occurred while requesting {exc.request.url!r}: {exc}")
-        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="request error")
+        # Transport failures surface only the exception class name, never the request detail.
+        exc_name = type(exc).__name__
+        module_logger.warning(f"Leanpub transport error for {url}: {exc_name}")
+        print_log(f"Leanpub transport error for {url}: {exc_name}.", "error")
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=exc_name)
     except json.JSONDecodeError:
-        print(f"Failed to decode JSON response for url '{url}'. Response content: {response.text[:200]}...")
-        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="invalid JSON response")
-    except Exception as e:  # noqa: X002 - fail-soft boundary: get_leanpub_book_details must always return a ScrapeResult (never raise); so any unexpected JSON-shape/processing error is converted to a FAILED result
-        print(f"An unexpected error occurred for url '{url}': {e}")
-        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"{type(e).__name__}: {e}")
+        # The response body is never logged (it may be an error page); only that it was unparseable.
+        module_logger.warning(f"Leanpub response for {url} was not valid JSON.")
+        print_log(f"Leanpub response for {url} was not valid JSON.", "error")
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="invalid JSON")
+    except Exception as exc:  # noqa: X002 - fail-soft boundary: get_leanpub_book_details must always return a ScrapeResult (never raise); any unexpected JSON-shape/processing error becomes a FAILED result carrying only the exception class name
+        exc_name = type(exc).__name__
+        module_logger.error(f"Unexpected error scraping Leanpub book {url}: {exc_name}")
+        print_log(f"Unexpected error scraping Leanpub book {url}.", "error")
+        return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=exc_name)
+    finally:
+        # Only a client we created is ours to close; a caller-supplied one outlives this call.
+        if owns_client:
+            await active_client.aclose()
 
 
 async def scrape_book(

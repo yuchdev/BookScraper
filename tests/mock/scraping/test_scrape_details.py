@@ -61,9 +61,16 @@ def _leanpub_payload(
 
 
 def _patch_httpx(responses=None, get_side_effect=None) -> AbstractContextManager[Any]:
-    """Patch scrape_details.httpx.AsyncClient; returns the patch context manager."""
-    factory, _client = build_async_client_factory(responses=responses, get_side_effect=get_side_effect)
-    return patch.object(scrape_details.httpx, "AsyncClient", factory)
+    """Patch scrape_details.httpx.AsyncClient; returns the patch context manager.
+
+    Since subtask 03.0/05 get_leanpub_book_details instantiates the client directly (not via
+    ``async with``) and closes it with ``aclose()``, so the factory returns the fake client
+    itself (with an awaitable ``aclose``) rather than an async context manager.
+    """
+    _factory, client = build_async_client_factory(responses=responses, get_side_effect=get_side_effect)
+    client.aclose = AsyncMock()
+    direct_factory = MagicMock(return_value=client)
+    return patch.object(scrape_details.httpx, "AsyncClient", direct_factory)
 
 
 def _amazon_page(title="Great Python Book - Amazon") -> FakePage:
@@ -283,28 +290,120 @@ async def test_get_leanpub_book_details_cleans_html_description():
     assert "Item two" in about
 
 
-async def test_get_leanpub_book_details_missing_data_key_returns_failed():
+async def test_leanpub_missing_data_is_parse_error():
     """
-    [Local] scrape details: verifies that a response without a "data" key returns FAILED.
+    [Local] scrape details: verifies that a response without a "data" key returns PARSE_ERROR.
 
     Scenario:
-        Given a mock HTTP response whose JSON body has no top-level "data" key
+        Given a well-formed JSON response whose body has no top-level "data" key
         When get_leanpub_book_details is called
-        Then the result has status FAILED, book is None, and url equals the request URL.
+        Then the result has status PARSE_ERROR (not the old opaque FAILED), book is None, and
+        url equals the request URL.
 
     Boundaries:
-        - Covers the KeyError/missing-data branch only; other error types are separate.
+        - Covers the missing-data branch only; a missing title is a separate PARSE_ERROR path
+          and transport/decode errors are their own FAILED tests.
 
     On failure, first check:
-        - The guard that checks for "data" in the response JSON.
+        - The guard that returns PARSE_ERROR when "data" is absent from the response JSON.
     """
     response = FakeResponse(json_data={"meta": "no data here"})
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    assert result.status is ScrapeStatus.FAILED
+    assert result.status is ScrapeStatus.PARSE_ERROR
     assert result.book is None
     assert result.url == LEANPUB_URL
+
+
+async def test_leanpub_missing_title_is_parse_error():
+    """
+    [Local] scrape details: verifies a response with data but no title returns PARSE_ERROR.
+
+    Scenario:
+        Given a well-formed response whose data.attributes carries no title (the field the
+        record cannot exist without)
+        When get_leanpub_book_details is called
+        Then the result is PARSE_ERROR with error "title not found", book is None, and url is
+        the request URL.
+
+    Boundaries:
+        - Covers the missing-title branch only; missing-data is a separate PARSE_ERROR test.
+
+    On failure, first check:
+        - The required-title guard that returns PARSE_ERROR when data.attributes has no title.
+    """
+    payload = {"data": {"id": "book-123", "attributes": {"slug": "no-title"}}}
+    response = FakeResponse(json_data=payload)
+    with _patch_httpx(responses=[response]):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.PARSE_ERROR
+    assert result.error == "title not found"
+    assert result.book is None
+    assert result.url == LEANPUB_URL
+
+
+async def test_leanpub_missing_about_the_book_still_succeeds():
+    """
+    [Local] scrape details: verifies a null about_the_book no longer fails the scrape.
+
+    Scenario:
+        Given a Leanpub payload whose about_the_book is null (the case that used to raise
+        TypeError inside unescape(None) and was caught as an "unexpected error", losing the book)
+        When get_leanpub_book_details is called
+        Then the result is SUCCESS, about_the_book is an empty string, and the other fields
+        (title, authors, hash) are still populated.
+
+    Boundaries:
+        - Covers the missing-about regression only; HTML cleaning of a present about_the_book is
+          a separate test.
+
+    On failure, first check:
+        - get_leanpub_book_details passes about_the_book through html_to_text (which maps None to
+          "") rather than the old unescape(None) that raised.
+    """
+    payload = _leanpub_payload(about=None)
+    response = FakeResponse(json_data=payload)
+    with _patch_httpx(responses=[response]):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["about_the_book"] == ""
+    assert result.book["title"] == "Example Book"
+    assert result.book["authors"] == ["Jane Doe"]
+    assert isinstance(result.book["hash"], str) and result.book["hash"]
+
+
+async def test_leanpub_http_error_reports_status_without_body():
+    """
+    [Local] scrape details: verifies an HTTP error surfaces the status code but never the body.
+
+    Scenario:
+        Given the mock client raises HTTPStatusError carrying a 404 response whose body text is
+        "secret error body"
+        When get_leanpub_book_details is called
+        Then the result is FAILED, error is exactly "HTTP 404", and the response body text never
+        appears in error.
+
+    Boundaries:
+        - Pins the SEC requirement that no Leanpub response body reaches error/log/console; the
+          generic not-None regression is covered by a separate test.
+
+    On failure, first check:
+        - The HTTPStatusError branch includes exc.response.text in the error or log instead of
+          only the status code.
+    """
+    request = httpx.Request("GET", LEANPUB_URL)
+    resp = httpx.Response(404, request=request, text="secret error body")
+    status_exc = httpx.HTTPStatusError("boom", request=request, response=resp)
+    response = FakeResponse(raise_status_exc=status_exc)
+    with _patch_httpx(responses=[response]):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.FAILED
+    assert result.error == "HTTP 404"
+    assert "secret error body" not in (result.error or "")
 
 
 async def test_get_leanpub_book_details_malformed_date_yields_none_date():
@@ -387,20 +486,22 @@ async def test_get_leanpub_book_details_request_error_returns_failed():
     assert result.book is None
 
 
-async def test_get_leanpub_book_details_json_decode_error_returns_failed():
+async def test_leanpub_invalid_json_is_failed_not_unbound_error():
     """
-    [Local] scrape details: verifies that a JSONDecodeError from the response yields FAILED.
+    [Local] scrape details: verifies a JSONDecodeError yields FAILED without an unbound-name crash.
 
     Scenario:
         Given the mock response's .json() raises json.JSONDecodeError
         When get_leanpub_book_details is called
-        Then the result has status FAILED and book is None.
+        Then the result is FAILED, error is exactly "invalid JSON", and no NameError is raised
+        from the old branch that referenced an unbound ``response`` variable.
 
     Boundaries:
         - Covers the JSON-parse failure branch; network and missing-key errors are separate.
 
     On failure, first check:
-        - The except json.JSONDecodeError branch in get_leanpub_book_details.
+        - The except json.JSONDecodeError branch references an unbound variable, or no longer
+          reports the secret-free "invalid JSON" error string.
     """
     decode_exc = json.JSONDecodeError("Expecting value", "", 0)
     response = FakeResponse(json_exc=decode_exc, text="<html>not json</html>")
@@ -409,6 +510,7 @@ async def test_get_leanpub_book_details_json_decode_error_returns_failed():
 
     assert result.status is ScrapeStatus.FAILED
     assert result.book is None
+    assert result.error == "invalid JSON"
 
 
 async def test_get_leanpub_book_details_generic_exception_returns_failed():

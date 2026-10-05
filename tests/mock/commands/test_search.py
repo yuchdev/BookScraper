@@ -526,6 +526,70 @@ async def test_run_generic_exception_is_caught_and_backend_closed():
     backend.close.assert_called_once_with()
 
 
+async def test_search_reuses_single_async_client():
+    """
+    [Local] search: verifies that one AsyncClient is constructed per run and reused for every book.
+
+    Scenario:
+        Given a run with three fresh (non-duplicate) Leanpub books and httpx.AsyncClient patched
+        to count its constructions
+        When run() is called
+        Then httpx.AsyncClient is constructed exactly once, and every get_leanpub_book_details
+        call is passed that same client instance as its client kwarg.
+
+    Boundaries:
+        - Pins the connection-reuse requirement (one pooled client per run, not one per book);
+          the detail helper itself is mocked, so no real request is made.
+
+    On failure, first check:
+        - run() builds a new httpx.AsyncClient per book, or stops passing the shared client into
+          get_leanpub_book_details.
+    """
+    args = SimpleNamespace(store_backend="json")
+
+    books = [_leanpub_book(f"book-{i}", f"Book {i}") for i in range(3)]
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=3, duplicates=0, errors=0)
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+
+    search_api = AsyncMock(return_value=books)
+    detail = AsyncMock(
+        side_effect=[
+            ScrapeResult(
+                ScrapeStatus.SUCCESS,
+                url=f"https://leanpub.com/api/v1/cache/books/book-{i}.json",
+                site="leanpub",
+                book={"title": f"Book {i}", "hash": f"h{i}"},
+            )
+            for i in range(3)
+        ]
+    )
+
+    # One AsyncClient instance, reused as an async context manager across all three books.
+    fake_client = MagicMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=fake_client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    client_factory = MagicMock(return_value=cm)
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.httpx.AsyncClient", client_factory),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    # Exactly one client built for the whole run, reused across all three detail scrapes.
+    client_factory.assert_called_once()
+    assert detail.await_count == 3
+    for call in detail.call_args_list:
+        assert call.kwargs["client"] is fake_client
+
+
 def test_search_module_uses_real_leanpub_only_sites():
     # Sanity guard: the run() tests monkeypatch SEARCH_QUERIES but rely on the real
     # single-site config; if this changes the run() tests may need revisiting.

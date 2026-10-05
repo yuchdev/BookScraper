@@ -1,7 +1,15 @@
 {
-  "_known_issues": [
-    "03.0/05 Leanpub API detail hardening (about_the_book=null makes unescape(None) raise TypeError, caught by the broad except; since 03.0/02 get_leanpub_book_details returns a typed FAILED ScrapeResult instead of None; 03.0/05 would succeed with an empty description)"
+  "about_the_book": "",
+  "authors": [
+    "Bartlomiej Filipek"
   ],
-  "_scrape_error": "TypeError: argument of type 'NoneType' is not iterable",
-  "_scrape_status": "FAILED"
+  "book_id": "102",
+  "categories": [
+    "C and C++"
+  ],
+  "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
+  "last_published_at": "2020-09-01",
+  "site": "leanpub.com",
+  "slug": "cpplambda",
+  "title": "C++ Lambda Story"
 }

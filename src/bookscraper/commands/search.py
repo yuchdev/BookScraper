@@ -7,6 +7,8 @@ import logging
 import time
 from collections import Counter
 
+import httpx
+
 from ..backends import resolve_store_backend
 from ..book_utils import print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
@@ -137,21 +139,24 @@ async def run(args: argparse.Namespace):
         new_books_for_detailed_scrape = books_from_search
 
         # --- Queue Detailed Scraping Tasks for current site ---
-        site_scrape_tasks = []
-        for book_data_to_scrape in new_books_for_detailed_scrape:
-            if book_data_to_scrape["site"].lower() == "leanpub":
-                print_log(f"--- Scraping {len(book_data_to_scrape)} Book Data ---", "step")
-                # Scraping Leanpub details via httpx API
-                site_scrape_tasks.append(get_leanpub_book_details(url=book_data_to_scrape.get("book_url")))
+        leanpub_books = [book for book in new_books_for_detailed_scrape if book["site"].lower() == "leanpub"]
 
         # Run detailed scraping tasks for the current site concurrently
-        if site_scrape_tasks:
-            current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
+        if leanpub_books:
+            # One AsyncClient is created per run and reused across every Leanpub detail fetch,
+            # so hundreds of concurrent calls share a bounded connection pool instead of each
+            # opening (and leaking) its own.
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0), limits=httpx.Limits(max_connections=10)
+            ) as detail_client:
+                print_log(f"--- Scraping {len(leanpub_books)} Leanpub book(s) ---", "step")
+                site_scrape_tasks = [
+                    get_leanpub_book_details(url=book.get("book_url"), client=detail_client) for book in leanpub_books
+                ]
+                current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
 
             # Process results from detailed scraping for the current site
-            for original_book_data, result in zip(
-                new_books_for_detailed_scrape, current_site_scraped_results, strict=True
-            ):
+            for original_book_data, result in zip(leanpub_books, current_site_scraped_results, strict=True):
                 if isinstance(result, ScrapeResult):
                     status_counts[result.status] += 1
                     if result.status is ScrapeStatus.SUCCESS:
