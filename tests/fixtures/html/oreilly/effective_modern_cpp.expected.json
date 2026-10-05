@@ -1,7 +1,14 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED'))"
+  "authors": [
+    "Scott Meyers"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "e07480c6c71ce5b366c037e8455949ba07c57875912779563b15d259ec69a819",
+  "isbn10": "N/A",
+  "isbn13": "9781491903995",
+  "publication_date": "November 2014",
+  "publication_year": 2014,
+  "site": "oreilly",
+  "title": "Effective Modern C++",
+  "url": "https://www.oreilly.com/library/view/effective-modern-c/9781491908419/"
 }

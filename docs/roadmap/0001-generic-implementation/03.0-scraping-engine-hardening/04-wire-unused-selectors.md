@@ -18,6 +18,8 @@
 
 ## Requirements
 
+- **Tags neutral init (carried over from 03):** initialize `"tags": []` with the other neutral keys in
+  `scrape_book()`. Subtask 03 left it out because adding the key changes the document shape, which belongs here.
 - **Tags:** `book_details["tags"] = _texts(page, TAGS)`: every match, stripped, empty strings dropped,
   de-duplicated **preserving order**, capped at 50. A missing selector or no matches → `[]`.
 - **Description fallback:** if `DESCRIPTION` yields `None` or empty and `DESCRIPTION_ALT` is set, use it.

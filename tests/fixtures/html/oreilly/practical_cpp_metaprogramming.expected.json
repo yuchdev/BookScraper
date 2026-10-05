@@ -1,7 +1,15 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED'))"
+  "authors": [
+    "Edouard Alligand",
+    "Joel Falcou"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "8bca269653bba5c46a530b4bb04851bf33af01d510fe0c1f1d3f09b2aa9b5ce2",
+  "isbn10": "N/A",
+  "isbn13": "9781492042778",
+  "publication_date": "August 2016",
+  "publication_year": 2016,
+  "site": "oreilly",
+  "title": "Practical C++ Metaprogramming",
+  "url": "https://www.oreilly.com/library/view/practical-c-metaprogramming/9781492042778/"
 }

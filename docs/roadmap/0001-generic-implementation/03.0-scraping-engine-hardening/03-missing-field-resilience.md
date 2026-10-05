@@ -1,7 +1,7 @@
 # 03 - Missing-field resilience & retry policy
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (tags init moved to 04; single classify-then-retry boundary via `_is_transient_error`)
 **Depends on:** [02-typed-scrape-result.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)
 **Role:** Python Expert
 

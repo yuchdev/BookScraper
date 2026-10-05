@@ -1,7 +1,15 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['packtpub'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED'))"
+  "authors": [
+    "Adrian Ostrowski",
+    "Piotr Gaczkowski"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "306f9e5287290775bd7ddb8f490c933d7ca9263dfc156a0c162933f37516d2d6",
+  "isbn10": "N/A",
+  "isbn13": "9781838554590",
+  "publication_date": "April 2021",
+  "publication_year": 2021,
+  "site": "packtpub",
+  "title": "Software Architecture with C++",
+  "url": "https://www.packtpub.com/product/software-architecture-with-c/9781838554590"
 }

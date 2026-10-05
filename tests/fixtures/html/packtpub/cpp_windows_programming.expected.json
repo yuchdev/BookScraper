@@ -1,7 +1,14 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['packtpub'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED'))"
+  "authors": [
+    "Stefan Bjornander"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "bfc97faa0f5cdaee735dae7f1109efc10eea27df1f2a0587b12a0d84cd606743",
+  "isbn10": "N/A",
+  "isbn13": "9781786464224",
+  "publication_date": "September 2016",
+  "publication_year": 2016,
+  "site": "packtpub",
+  "title": "C++ Windows Programming",
+  "url": "https://www.packtpub.com/product/c-windows-programming/9781786464224"
 }

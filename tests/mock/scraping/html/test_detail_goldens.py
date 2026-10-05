@@ -58,11 +58,13 @@ def _load_capture_module() -> ModuleType:
 
 normalize_result = _load_capture_module()._normalize_scrape_result
 
-# A low per-page default timeout keeps the Chromium leg fast: the only unbounded wait in
-# scrape_book is the DESCRIPTION text_content() (every other locator sets an explicit timeout),
-# and on static local fixtures a present element resolves in <100 ms, so lowering this never
-# flips a passing fixture - it only shortens the deterministic timeout the Amazon fixture
-# already hits. The recorded golden is identical either way.
+# A low per-read timeout keeps the Chromium leg fast. Since subtask 03.0/03 every scrape_book
+# locator read is explicitly bounded (title by FIELD_TIMEOUT_MS, optional fields by
+# OPTIONAL_FIELD_TIMEOUT_MS), so the test shrinks those module constants (and the page default)
+# down to this value. On static local fixtures a present element resolves in <100 ms, so this
+# never flips a passing fixture - it only shortens the deterministic timeout the title-less
+# Amazon fixtures (_missing_title / _bot_wall) now hit once each on their PARSE_ERROR path. The
+# recorded golden is identical either way.
 DETAIL_TIMEOUT_MS = 2000
 
 
@@ -197,6 +199,11 @@ async def test_detail_golden(
     # Zero the inter-retry backoff (output-neutral) so the deterministically-FAILED
     # Playwright fixtures (packtpub/oreilly, missing BASE_URL) don't each sleep 2-4 s per retry.
     monkeypatch.setattr(scrape_details.random, "uniform", lambda _a, _b: 0)
+    # Every scrape_book read is now explicitly bounded (03.0/03), so an explicit field timeout
+    # overrides the page default; shrink the module constants too to keep title-less fixtures
+    # fast. Output-neutral on static fixtures (present elements resolve immediately).
+    monkeypatch.setattr(scrape_details, "FIELD_TIMEOUT_MS", DETAIL_TIMEOUT_MS)
+    monkeypatch.setattr(scrape_details, "OPTIONAL_FIELD_TIMEOUT_MS", DETAIL_TIMEOUT_MS)
     original_new_page = browser.new_page
 
     async def _timed_new_page(*args: Any, **kwargs: Any) -> Any:

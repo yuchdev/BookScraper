@@ -78,6 +78,81 @@ def _amazon_page(title="Great Python Book - Amazon") -> FakePage:
     return FakePage(locators=locators, title=title)
 
 
+class _RaisingLocator(FakeLocator):
+    """A FakeLocator whose text read raises a given Playwright error (missing-field resilience)."""
+
+    def __init__(self, exc: BaseException):
+        """Store the exception to raise on every text read."""
+        super().__init__([])
+        self._exc = exc
+
+    @property
+    def first(self) -> "_RaisingLocator":
+        """Return self so a ``.first.text_content()`` chain also raises."""
+        return self
+
+    async def text_content(self, *args: Any, **kwargs: Any) -> str:
+        """Raise the configured Playwright error instead of returning text."""
+        raise self._exc
+
+
+class _RecordingLocator:
+    """A locator wrapper that records the ``timeout`` kwarg of every text/attribute read."""
+
+    def __init__(self, inner: FakeLocator, reads: list):
+        """Wrap ``inner`` and append each read's timeout to the shared ``reads`` list."""
+        self._inner = inner
+        self._reads = reads
+
+    @property
+    def first(self) -> "_RecordingLocator":
+        """Return a recording wrapper around the inner locator's first match."""
+        return _RecordingLocator(self._inner.first, self._reads)
+
+    async def text_content(self, *args: Any, **kwargs: Any) -> Any:
+        """Record the timeout kwarg, then delegate to the inner locator."""
+        self._reads.append(kwargs.get("timeout"))
+        return await self._inner.text_content(*args, **kwargs)
+
+    async def get_attribute(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Record the timeout kwarg, then delegate to the inner locator."""
+        self._reads.append(kwargs.get("timeout"))
+        return await self._inner.get_attribute(name, *args, **kwargs)
+
+    async def all(self) -> list:
+        """Return recording wrappers around each inner match."""
+        return [_RecordingLocator(child, self._reads) for child in await self._inner.all()]
+
+    async def count(self) -> int:
+        """Delegate the match count to the inner locator."""
+        return await self._inner.count()
+
+    async def is_visible(self, *args: Any, **kwargs: Any) -> bool:
+        """Delegate the visibility check to the inner locator."""
+        return await self._inner.is_visible(*args, **kwargs)
+
+    async def click(self, *args: Any, **kwargs: Any) -> Any:
+        """Delegate the click to the inner locator."""
+        return await self._inner.click(*args, **kwargs)
+
+    def locator(self, selector: str) -> "_RecordingLocator":
+        """Return a recording wrapper around a nested locator lookup."""
+        return _RecordingLocator(self._inner.locator(selector), self._reads)
+
+
+class _RecordingPage(FakePage):
+    """A FakePage whose ``locator()`` returns recording wrappers, capturing every read's timeout."""
+
+    def __init__(self, reads: list, **kwargs: Any):
+        """Set up the underlying FakePage and attach the shared ``reads`` recorder."""
+        super().__init__(**kwargs)
+        self._reads = reads
+
+    def locator(self, selector: str) -> _RecordingLocator:
+        """Return a recording wrapper around the pre-configured FakeLocator for ``selector``."""
+        return _RecordingLocator(super().locator(selector), self._reads)
+
+
 # ---------------------------------------------------------------------------
 # route_handler
 # ---------------------------------------------------------------------------
@@ -397,32 +472,42 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
     browser.new_page.assert_not_awaited()
 
 
-async def test_scrape_book_site_without_base_url_returns_failed():
-    # packtpub has no BASE_URL key at all -> KeyError -> caught -> retried -> FAILED.
+async def test_missing_base_url_is_no_longer_fatal():
     """
-    [Local] scrape details: verifies that a missing BASE_URL for a site yields FAILED after retries.
+    [Local] scrape details: verifies a site without a BASE_URL still scrapes an absolute URL.
 
     Scenario:
-        Given the "packtpub" site config has no BASE_URL key (KeyError on access)
-        When scrape_book is called
-        Then the result is FAILED with book=None and site="packtpub" after exhausting
-        the retry loop.
+        the "packtpub" site config has no BASE_URL key, and scrape_book is called with an
+        already-absolute detail URL and a page whose title element is present.
 
     Boundaries:
-        - Covers the KeyError/missing-config path; other failure modes are separate.
+        - single attempt, no storage backend; ``urljoin`` leaves the absolute URL untouched so
+          the scrape proceeds to a SUCCESS record instead of the old KeyError-driven FAILED
+          that wasted all three retries (defect (c)); ``new_page`` is opened exactly once.
 
     On failure, first check:
-        - The BASE_URL lookup in scrape_book's inner loop and how KeyError is caught.
+        - the BASE_URL lookup in scrape_book again subscripts ``site_constants[site]["BASE_URL"]``
+          directly (raising KeyError) rather than using ``.get("BASE_URL") or ""``.
     """
-    page = FakePage(title="Some Packt Book")
+    url = "https://www.packtpub.com/product/x/9781838554590"
+    page = FakePage(
+        locators={
+            "h1.product-title": FakeLocator("Some Packt Book"),
+            "div.authors span": FakeLocator([{"text": "Adrian Ostrowski"}]),
+        },
+        title="Some Packt Book | Packt",
+    )
     browser = FakeBrowser(page=page)
 
-    with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()):
-        result = await scrape_book("/some/book", browser, "packtpub")
+    result = await scrape_book(url, browser, "packtpub")
 
-    assert result.status is ScrapeStatus.FAILED
-    assert result.book is None
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["title"] == "Some Packt Book"
+    assert result.book["authors"] == ["Adrian Ostrowski"]
+    # packtpub has no ISBN10 selector, so the sentinel survives (03.1 replaces it).
+    assert result.book["isbn10"] == "N/A"
     assert result.site == "packtpub"
+    assert browser.new_page.await_count == 1
 
 
 async def test_scrape_book_404_returns_not_found():
@@ -609,25 +694,26 @@ async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count(
     assert mock_sleep.await_count == 2
 
 
-async def test_scrape_book_retries_three_times_on_generic_exception_then_failed():
+async def test_keyerror_like_bug_is_not_retried():
     """
-    [Local] scrape details: verifies that three consecutive generic exceptions yield FAILED after 2 sleeps.
+    [Local] scrape details: verifies a deterministic bug fails immediately with no retry.
 
     Scenario:
-        Given a FakePage whose goto raises ValueError on every attempt
-        When scrape_book is called for an amazon URL
-        Then the result is FAILED, goto is awaited exactly 3 times, and asyncio.sleep
-        is awaited exactly 2 times (between attempts, not after the last).
+        a FakePage whose ``goto`` raises ``KeyError`` on every attempt (a deterministic
+        programming bug, not a transient fault).
 
     Boundaries:
-        - Covers the generic-exception retry path; the TimeoutError path (TIMEOUT status)
-          is covered by test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count.
+        - the new retry policy retries ONLY transient failures; a KeyError-class bug must go
+          straight to FAILED - ``goto`` and ``new_page`` are each awaited exactly once and
+          ``asyncio.sleep`` is never awaited, so a bug that can never succeed no longer burns
+          3x the latency (defect (g)).
 
     On failure, first check:
-        - The retry loop in scrape_book and the sleep placement between attempts.
+        - the retry loop again retries non-transient exceptions instead of consulting
+          ``_is_transient_error`` and returning FAILED on the first attempt.
     """
     page = _amazon_page()
-    page.goto = AsyncMock(side_effect=ValueError("boom"))
+    page.goto = AsyncMock(side_effect=KeyError("boom"))
     browser = FakeBrowser(page=page)
 
     with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep:
@@ -635,8 +721,209 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
 
     assert result.status is ScrapeStatus.FAILED
     assert result.book is None
-    assert page.goto.await_count == 3
-    assert mock_sleep.await_count == 2
+    assert page.goto.await_count == 1
+    assert browser.new_page.await_count == 1
+    assert mock_sleep.await_count == 0
+
+
+async def test_timeout_is_retried_up_to_max_attempts():
+    """
+    [Local] scrape details: verifies a transient timeout is retried up to MAX_ATTEMPTS.
+
+    Scenario:
+        every navigation raises a Playwright ``TimeoutError`` (a transient fault).
+
+    Boundaries:
+        - a transient failure IS retried: ``goto`` is awaited ``MAX_ATTEMPTS`` times with a
+          sleep between each attempt (``MAX_ATTEMPTS - 1`` sleeps), and the exhausted result is
+          a typed TIMEOUT recording ``attempts == MAX_ATTEMPTS``.
+
+    On failure, first check:
+        - ``_is_transient_error`` no longer classifies a Playwright TimeoutError as transient,
+          or the retry budget stopped honouring ``MAX_ATTEMPTS``.
+    """
+    page = _amazon_page()
+    page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
+    browser = FakeBrowser(page=page)
+
+    with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep:
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.TIMEOUT
+    assert result.attempts == scrape_details.MAX_ATTEMPTS
+    assert page.goto.await_count == scrape_details.MAX_ATTEMPTS
+    assert mock_sleep.await_count == scrape_details.MAX_ATTEMPTS - 1
+
+
+async def test_missing_title_selector_returns_parse_error_without_retry():
+    """
+    [Local] scrape details: verifies a missing title element yields PARSE_ERROR with no retry.
+
+    Scenario:
+        an amazon page loads but has no ``#productTitle`` element (the required title is absent).
+
+    Boundaries:
+        - a missing required field after the page loads is a parse error, not a transient
+          fault: the result is a typed PARSE_ERROR carrying ``error == "title not found"`` and
+          ``new_page`` is opened exactly once (no retry burned on a deterministically empty page).
+
+    On failure, first check:
+        - the required-title guard no longer short-circuits to PARSE_ERROR before the retry
+          loop, or it is wrongly treated as a transient failure and retried.
+    """
+    page = FakePage(locators={}, title="Some Title - Amazon")
+    browser = FakeBrowser(page=page)
+
+    with patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep:
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.PARSE_ERROR
+    assert result.book is None
+    assert result.error == "title not found"
+    assert browser.new_page.await_count == 1
+    assert mock_sleep.await_count == 0
+
+
+async def test_empty_title_text_returns_parse_error():
+    """
+    [Local] scrape details: verifies a whitespace-only title yields PARSE_ERROR.
+
+    Scenario:
+        the ``#productTitle`` element is present but its text is only whitespace.
+
+    Boundaries:
+        - an empty title is treated identically to a missing one - stripped to empty, it fails
+          the required-field rule and returns PARSE_ERROR rather than a book with a blank title.
+
+    On failure, first check:
+        - the title emptiness check uses ``if not title`` after stripping, not merely a
+          presence check on the element.
+    """
+    page = FakePage(locators={"#productTitle": FakeLocator("   ")}, title="x - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.PARSE_ERROR
+    assert result.error == "title not found"
+
+
+async def test_publication_date_exception_still_returns_book_with_none_year():
+    """
+    [Local] scrape details: verifies a failing publication-date read never aborts the scrape.
+
+    Scenario:
+        the publication-date locator's ``text_content`` raises a Playwright error while every
+        other field reads normally.
+
+    Boundaries:
+        - a missing/slow optional field resolves to ``None`` through the ``_text`` helper, so the
+          book is still returned SUCCESS with ``publication_date``/``publication_year`` left
+          ``None`` instead of raising out of the loop.
+
+    On failure, first check:
+        - the publication-date read bypasses ``_text`` (so the Playwright error escapes) or the
+          neutral ``None`` initialisation of the date keys was dropped.
+    """
+    pub_selector = scrape_details.site_constants["amazon"]["PUBLICATION_DATE"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        pub_selector: _RaisingLocator(scrape_details.PlaywrightError("boom")),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["title"] == "Great Python Book"
+    assert result.book["publication_date"] is None
+    assert result.book["publication_year"] is None
+
+
+async def test_meta_date_without_content_attribute_is_none_not_crash():
+    """
+    [Local] scrape details: verifies a meta date tag with no content attribute yields None.
+
+    Scenario:
+        a site configured with a ``PUBLICATION_DATE_META`` selector whose matched ``<meta>`` tag
+        carries no ``content`` attribute.
+
+    Boundaries:
+        - reading the absent attribute returns ``None`` through ``_attr`` and the subsequent
+          ``.split("T")`` is never reached, so the scrape succeeds with a ``None`` date rather
+          than crashing with ``AttributeError`` on ``None.split``.
+
+    On failure, first check:
+        - the meta-date branch calls ``.split("T")`` on an unchecked value instead of guarding
+          the ``_attr`` result first.
+    """
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        'meta[name="date"]': FakeLocator([{"attrs": {}}]),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    with patch.dict(scrape_details.site_constants["amazon"], {"PUBLICATION_DATE_META": 'meta[name="date"]'}):
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["publication_date"] is None
+    assert result.book["publication_year"] is None
+
+
+async def test_text_helper_returns_none_on_timeout():
+    """
+    [Local] scrape details: verifies the _text helper swallows a timeout and returns None.
+
+    Scenario:
+        the located element's ``text_content`` raises a Playwright ``TimeoutError``.
+
+    Boundaries:
+        - ``_text`` is the single per-field extraction primitive; it must never propagate a
+          timeout (or any Playwright error) - it returns ``None`` so a slow optional field can
+          never abort a scrape or trigger a retry.
+
+    On failure, first check:
+        - ``_text`` catches too narrow an exception type, letting the Playwright error escape.
+    """
+    page = FakePage(locators={".slow": _RaisingLocator(PlaywrightTimeoutError("slow"))})
+
+    result = await scrape_details._text(page, ".slow", timeout_ms=1000)
+
+    assert result is None
+
+
+async def test_every_locator_read_passes_explicit_timeout():
+    """
+    [Local] scrape details: verifies every field read passes an explicit positive timeout.
+
+    Scenario:
+        a fully-populated amazon scrape is run against a page that records the ``timeout`` kwarg
+        of every ``text_content`` / ``get_attribute`` call.
+
+    Boundaries:
+        - a missing title/ISBN/description element must never block on Playwright's 30 s default;
+          every recorded read carries one of the module's explicit timeout constants and no read
+          is left unbounded (``timeout is None``).
+
+    On failure, first check:
+        - a field extraction reads a locator without passing an explicit ``timeout``/``timeout_ms``.
+    """
+    reads: list = []
+    src = _amazon_page()
+    page = _RecordingPage(reads, locators=dict(src._locators), title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert reads  # at least one bounded read happened
+    allowed = {scrape_details.FIELD_TIMEOUT_MS, scrape_details.OPTIONAL_FIELD_TIMEOUT_MS}
+    assert all(timeout in allowed for timeout in reads)
 
 
 # ---------------------------------------------------------------------------
@@ -794,3 +1081,260 @@ async def test_close_failure_does_not_mask_original_error():
     assert result.status is ScrapeStatus.SUCCESS
     assert result.book["title"] == "Great Python Book"
     page.close.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# scrape_book - field-extraction branches & retry classification (subtask 03.0/03)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (PlaywrightTimeoutError("slow"), True),
+        (httpx.ConnectError("refused"), True),
+        (scrape_details.PlaywrightError("net::ERR_NAME_NOT_RESOLVED at x"), True),
+        (scrape_details.PlaywrightError("Target closed"), True),
+        (scrape_details.PlaywrightError("Navigation failed because page crashed"), True),
+        (scrape_details.PlaywrightError("strict mode violation: resolved to 2 elements"), False),
+        (KeyError("title"), False),
+        (ValueError("boom"), False),
+    ],
+)
+def test_is_transient_error_classifies_failures(exc, expected):
+    """
+    [Local] scrape details: verifies the transient/non-transient classifier.
+
+    Scenario:
+        a representative exception is handed to ``_is_transient_error``.
+
+    Boundaries:
+        - a Playwright timeout, an httpx transport error, and a Playwright error naming a
+          navigation/network fault are transient (retry-worthy); a non-navigation Playwright
+          error and plain bugs (KeyError/ValueError) are not.
+
+    On failure, first check:
+        - the marker list ``_TRANSIENT_PLAYWRIGHT_MARKERS`` or the isinstance ladder in
+          ``_is_transient_error`` changed.
+    """
+    assert scrape_details._is_transient_error(exc) is expected
+
+
+async def test_attr_helper_returns_none_on_error():
+    """
+    [Local] scrape details: verifies the _attr helper swallows a Playwright error and returns None.
+
+    Scenario:
+        the located element's attribute read raises a Playwright error.
+
+    Boundaries:
+        - ``_attr`` mirrors ``_text`` for attribute reads; it must never propagate a Playwright
+          error, returning ``None`` so an absent metadata attribute cannot abort a scrape.
+
+    On failure, first check:
+        - ``_attr`` catches too narrow an exception type.
+    """
+
+    class _RaisingAttr(FakeLocator):
+        """A FakeLocator whose get_attribute raises a Playwright error."""
+
+        @property
+        def first(self) -> "_RaisingAttr":
+            """Return self so the ``.first.get_attribute`` chain also raises."""
+            return self
+
+        async def get_attribute(self, name: str, *args: Any, **kwargs: Any) -> Any:
+            """Raise a Playwright error instead of returning an attribute value."""
+            raise scrape_details.PlaywrightError("boom")
+
+    page = FakePage(locators={".m": _RaisingAttr([])})
+
+    result = await scrape_details._attr(page, ".m", "content", timeout_ms=1000)
+
+    assert result is None
+
+
+async def test_collect_texts_handles_errors():
+    """
+    [Local] scrape details: verifies _collect_texts skips unreadable elements and empties on error.
+
+    Scenario:
+        one matched element reads normally while a second raises on ``text_content``.
+
+    Boundaries:
+        - the helper collects the readable text and silently skips the failing element, never
+          raising for a detached/unreadable element in a multi-valued field.
+
+    On failure, first check:
+        - the per-element try/except in ``_collect_texts`` narrowed or widened its catch.
+    """
+
+    class _PartlyRaising(FakeLocator):
+        """A FakeLocator whose ``all()`` yields one good and one raising element."""
+
+        async def all(self) -> list:
+            """Return a readable locator and one whose text read raises."""
+            good = FakeLocator("Jane Doe")
+            return [good, _RaisingLocator(scrape_details.PlaywrightError("boom"))]
+
+    page = FakePage(locators={".a": _PartlyRaising([{"text": "x"}])})
+
+    result = await scrape_details._collect_texts(page, ".a", timeout_ms=1000)
+
+    assert result == ["Jane Doe"]
+
+
+async def test_publication_date_text_is_extracted():
+    """
+    [Local] scrape details: verifies the page-text publication date populates date and year.
+
+    Scenario:
+        an amazon page whose PUBLICATION_DATE element carries a human date string.
+
+    Boundaries:
+        - the non-meta date branch reads the text, stores it verbatim (03.1 normalizes later),
+          and derives the publication year from it.
+
+    On failure, first check:
+        - the PUBLICATION_DATE branch stopped reading via ``_text`` or stopped calling
+          ``extract_year_from_date``.
+    """
+    pub_selector = scrape_details.site_constants["amazon"]["PUBLICATION_DATE"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        pub_selector: FakeLocator("August 16, 2012"),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["publication_date"] == "August 16, 2012"
+    assert result.book["publication_year"] == 2012
+
+
+async def test_meta_publication_date_parsed_from_content():
+    """
+    [Local] scrape details: verifies an ISO meta date is split to a date and year.
+
+    Scenario:
+        a site configured with PUBLICATION_DATE_META whose ``<meta>`` carries an ISO
+        ``content`` timestamp.
+
+    Boundaries:
+        - the meta branch reads the attribute, keeps the date portion before the ``T``, and
+          derives the year; this is the positive counterpart to the no-content crash test.
+
+    On failure, first check:
+        - the meta-date branch no longer splits on ``T`` or skips year extraction.
+    """
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        'meta[name="date"]': FakeLocator([{"attrs": {"content": "2014-11-01T00:00:00Z"}}]),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    with patch.dict(scrape_details.site_constants["amazon"], {"PUBLICATION_DATE_META": 'meta[name="date"]'}):
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["publication_date"] == "2014-11-01"
+    assert result.book["publication_year"] == 2014
+
+
+async def test_meta_authors_extracted_from_content():
+    """
+    [Local] scrape details: verifies authors are read from meta ``content`` attributes.
+
+    Scenario:
+        a site configured with AUTHORS_META whose ``<meta>`` tags carry author names in
+        ``content``.
+
+    Boundaries:
+        - when AUTHORS_META is present it takes precedence over the linked-text AUTHORS path and
+          each tag's ``content`` becomes one author.
+
+    On failure, first check:
+        - the AUTHORS_META loop stopped reading the ``content`` attribute or lost its timeout.
+    """
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        'meta[name="author"]': FakeLocator(
+            [{"attrs": {"content": "Jane Doe"}}, {"attrs": {"content": "John Smith"}}]
+        ),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    with patch.dict(scrape_details.site_constants["amazon"], {"AUTHORS_META": 'meta[name="author"]'}):
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["authors"] == ["Jane Doe", "John Smith"]
+
+
+async def test_authors_alt_fallback_used_when_primary_empty():
+    """
+    [Local] scrape details: verifies the AUTHORS_ALT fallback fires when AUTHORS matches nothing.
+
+    Scenario:
+        an amazon page whose primary AUTHORS selector matches no elements but whose AUTHORS_ALT
+        selector does.
+
+    Boundaries:
+        - the primary selector yields an empty list, so the alternative selector is queried and
+          supplies the authors (defect-free degradation, not a parse failure).
+
+    On failure, first check:
+        - the ``if not authors_list`` fallback to AUTHORS_ALT was removed or reordered.
+    """
+    alt_selector = scrape_details.site_constants["amazon"]["AUTHORS_ALT"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([]),
+        alt_selector: FakeLocator([{"text": "Alt Author"}]),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["authors"] == ["Alt Author"]
+
+
+async def test_read_more_expander_is_clicked_before_reading_description():
+    """
+    [Local] scrape details: verifies a visible 'Read more' expander is clicked before the read.
+
+    Scenario:
+        an oreilly page exposing a visible READ_MORE_LINK and a DESCRIPTION element.
+
+    Boundaries:
+        - the expander branch clicks the link (best-effort) and then reads the full description;
+          the click is bounded and its absence/failure is non-fatal.
+
+    On failure, first check:
+        - the READ_MORE_LINK branch stopped gating on ``is_visible`` or stopped reading the
+          description afterwards.
+    """
+    read_more = FakeLocator([{"text": "Read more", "visible": True}])
+    description_selector = scrape_details.site_constants["oreilly"]["DESCRIPTION"]
+    locators = {
+        "h1.t-title": FakeLocator("Effective Modern C++"),
+        "a.author-name": FakeLocator([{"text": "Scott Meyers"}]),
+        "a.read-more-link": read_more,
+        description_selector: FakeLocator("  Full description.  "),
+    }
+    page = FakePage(locators=locators, title="Effective Modern C++")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.oreilly.com/library/view/x/9/", browser, "oreilly")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["description"] == "Full description."
+    page.wait_for_timeout.assert_awaited()

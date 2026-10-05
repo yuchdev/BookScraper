@@ -1,7 +1,14 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['packtpub'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED'))"
+  "authors": [
+    "Arthur O'Dwyer"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "0d3ebb02d2681413a5c3acb2a1a1fdf9ce530a11c5b52ec44f269292666256a1",
+  "isbn10": "N/A",
+  "isbn13": "9781787126824",
+  "publication_date": "September 2017",
+  "publication_year": 2017,
+  "site": "packtpub",
+  "title": "Mastering the C++17 STL",
+  "url": "https://www.packtpub.com/product/mastering-the-c-17-stl/9781787126824"
 }

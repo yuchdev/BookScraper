@@ -1,7 +1,19 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['oreilly'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED')); the 6-author (one duplicate) AUTHORS parsing is never reached today"
+  "authors": [
+    "Ada Lovelace",
+    "Grace Hopper",
+    "Alan Turing",
+    "Edsger Dijkstra",
+    "Donald Knuth",
+    "Ada Lovelace"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "3b0a3899b10e6717f1063ee45653e14f47f6e1b1472b1adc0fbefde0179d3038",
+  "isbn10": "N/A",
+  "isbn13": "9781491903995",
+  "publication_date": "November 2014",
+  "publication_year": 2014,
+  "site": "oreilly",
+  "title": "Effective Modern C++",
+  "url": "https://www.oreilly.com/library/view/many-authors/9781492000000/"
 }

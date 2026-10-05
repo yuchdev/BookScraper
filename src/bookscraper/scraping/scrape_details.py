@@ -23,8 +23,121 @@ from .results import ScrapeResult, ScrapeStatus
 # The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
 LEANPUB_SITE = "leanpub"
 
+# Per-read / per-attempt timeout budgets (milliseconds) and the retry cap. These are module
+# constants so a later CLI (subtask 05.0) can override them; required fields get the longer
+# FIELD_TIMEOUT_MS, optional ones the shorter OPTIONAL_FIELD_TIMEOUT_MS.
+NAVIGATION_TIMEOUT_MS = 60_000
+FIELD_TIMEOUT_MS = 10_000
+OPTIONAL_FIELD_TIMEOUT_MS = 2_000
+MAX_ATTEMPTS = 3
+
+# Substrings (compared case-insensitively) in a Playwright error message that mark a
+# *transient* navigation/network fault worth retrying - as opposed to a deterministic
+# selector/parse bug that would fail identically on every attempt.
+_TRANSIENT_PLAYWRIGHT_MARKERS: tuple[str, ...] = ("net::err_", "target closed", "navigation failed")
+
 # Get a logger instance specifically for this module
 module_logger = logging.getLogger("scrape_details")
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    """Return whether ``exc`` is a transient failure a retry could plausibly recover from.
+
+    Transient failures are a Playwright navigation timeout
+    (:class:`playwright.async_api.TimeoutError`), a :class:`playwright.async_api.Error` whose
+    message names a navigation/network fault (``net::ERR_*`` / ``Target closed`` /
+    ``Navigation failed``), or an :mod:`httpx` transport error. Deterministic bugs -
+    ``KeyError``, ``AttributeError``, ``ValueError``, ``TypeError``, a malformed selector -
+    are **not** transient and must fail immediately rather than waste the retry budget.
+
+    :param exc: The exception raised while scraping a single attempt.
+    :returns: ``True`` iff retrying the attempt could plausibly succeed.
+    """
+    if isinstance(exc, TimeoutError):
+        return True
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, PlaywrightError):
+        message = str(exc).lower()
+        return any(marker in message for marker in _TRANSIENT_PLAYWRIGHT_MARKERS)
+    return False
+
+
+async def _text(page: Page, selector: str, *, timeout_ms: int, first: bool = True) -> Optional[str]:
+    """Return stripped text for ``selector`` within ``timeout_ms``, or ``None`` if absent.
+
+    This is the single per-field text-extraction primitive. It never raises for a missing or
+    slow element - a Playwright timeout or a malformed-selector error both resolve to
+    ``None`` - so a missing optional field can never abort a scrape or trigger a retry.
+
+    :param page: The Playwright page to query.
+    :param selector: The CSS selector to read.
+    :param timeout_ms: The per-read wall-clock budget in milliseconds.
+    :param first: Whether to read only the first match (``True``) or the locator as given.
+    :returns: The element's stripped text, or ``None`` on timeout/absence/empty text.
+    """
+    locator = page.locator(selector)
+    if first:
+        locator = locator.first
+    try:
+        text = await locator.text_content(timeout=timeout_ms)
+    except PlaywrightError as exc:
+        module_logger.debug(f"No text for selector {selector!r}: {exc}")
+        return None
+    return text.strip() if text else None
+
+
+async def _attr(page: Page, selector: str, name: str, *, timeout_ms: int, first: bool = True) -> Optional[str]:
+    """Return a stripped attribute value for ``selector`` within ``timeout_ms``, or ``None``.
+
+    The attribute sibling of :func:`_text` (used for e.g. a ``<meta content="...">`` date). Like
+    :func:`_text`, it never raises for a missing/slow element or an absent attribute.
+
+    :param page: The Playwright page to query.
+    :param selector: The CSS selector to read.
+    :param name: The attribute name to read (e.g. ``"content"``).
+    :param timeout_ms: The per-read wall-clock budget in milliseconds.
+    :param first: Whether to read only the first match (``True``) or the locator as given.
+    :returns: The attribute's stripped value, or ``None`` on timeout/absence/empty value.
+    """
+    locator = page.locator(selector)
+    if first:
+        locator = locator.first
+    try:
+        value = await locator.get_attribute(name, timeout=timeout_ms)
+    except PlaywrightError as exc:
+        module_logger.debug(f"No attribute {name!r} for selector {selector!r}: {exc}")
+        return None
+    return value.strip() if value else None
+
+
+async def _collect_texts(page: Page, selector: str, *, timeout_ms: int) -> list[str]:
+    """Return the stripped, non-empty text of every element matching ``selector``.
+
+    Used for multi-valued fields (authors). Every per-element read is bounded by ``timeout_ms``
+    and any Playwright failure on an individual element is skipped, so the helper never raises
+    for a missing or detached element.
+
+    :param page: The Playwright page to query.
+    :param selector: The CSS selector whose matches to read.
+    :param timeout_ms: The per-read wall-clock budget in milliseconds.
+    :returns: A list of stripped text values (possibly empty).
+    """
+    texts: list[str] = []
+    try:
+        elements = await page.locator(selector).all()
+    except PlaywrightError as exc:
+        module_logger.debug(f"No matches for selector {selector!r}: {exc}")
+        return texts
+    for element in elements:
+        try:
+            text = await element.text_content(timeout=timeout_ms)
+        except PlaywrightError as exc:
+            module_logger.debug(f"Skipping unreadable element for selector {selector!r}: {exc}")
+            continue
+        if text and text.strip():
+            texts.append(text.strip())
+    return texts
 
 
 async def route_handler(route: Route):
@@ -193,41 +306,33 @@ async def scrape_book(
         print("Leanpub book")
         return await get_leanpub_book_details(url)
 
-    retries = 3
-    for attempt in range(1, retries + 1):
-        print(f"Trying attempt {attempt}...")
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        module_logger.debug(f"Scrape attempt {attempt} of {MAX_ATTEMPTS} for {url}.")
 
         try:
             # Each attempt owns exactly one page; the context manager closes it on every
-            # exit path (success, duplicate, 404, timeout, or any other exception).
+            # exit path (success, duplicate, 404, parse error, timeout, or any other exception).
             async with _attempt_page(browser) as page:
                 user_agent = random.choice(USER_AGENTS)
                 await page.set_extra_http_headers({"User-Agent": user_agent})
                 await page.route("**/*", route_handler)
 
-                # --- Crucial: Construct the full URL using urljoin ---
-                base_url = site_constants[site]["BASE_URL"]
-                if not base_url:
-                    module_logger.error(f"BASE_URL not defined for site: {site}. Cannot scrape {url}")
-                    print_log(f"Error: BASE_URL not defined for {site}. Skipping {url}.", "error")
-                    return ScrapeResult(
-                        ScrapeStatus.FAILED,
-                        url=url,
-                        site=site,
-                        error=f"BASE_URL not defined for site '{site}'",
-                        attempts=attempt,
-                    )
-
+                selectors = site_constants[site]
+                # A missing BASE_URL is no longer fatal: ``urljoin`` leaves an already-absolute
+                # URL untouched, so a site whose constants omit BASE_URL still scrapes an
+                # absolute detail URL (previously this raised KeyError and wasted all retries).
+                base_url = selectors.get("BASE_URL") or ""
                 full_url = urljoin(base_url, url)
                 module_logger.info(f"Navigating to {full_url} for detailed scraping.")
                 print_log(f"Navigating to {full_url} for detailed scraping.", "info")
 
-                await page.goto(full_url, timeout=60000)
+                await page.goto(full_url, timeout=NAVIGATION_TIMEOUT_MS)
 
                 # Check for 404 page (if site_constants provides a 404 selector)
-                if site_constants[site].get("404_PAGE_TITLE"):
+                not_found_title = selectors.get("404_PAGE_TITLE")
+                if not_found_title:
                     page_title = await page.title()
-                    if site_constants[site]["404_PAGE_TITLE"].lower() in page_title.lower():
+                    if not_found_title.lower() in page_title.lower():
                         module_logger.warning(f"404 page detected for {full_url}. Skipping.")
                         print_log(f"404 page detected for {full_url}. Skipping.", "warning")
                         return ScrapeResult(
@@ -238,143 +343,104 @@ async def scrape_book(
                             attempts=attempt,
                         )
 
-                # Scrape data fields using selectors from site_constants
-                book_details = {
+                # Every output key is initialized up front with a neutral value, so a missing
+                # optional field can never raise a KeyError downstream (e.g. at the hash line).
+                book_details: dict = {
                     "url": full_url,
                     "site": site,
+                    "title": None,
+                    "authors": [],
+                    "publication_date": None,
+                    "publication_year": None,
+                    "isbn10": "N/A",
+                    "isbn13": "N/A",
+                    "description": None,
                 }
-                selectors = site_constants[site]
 
-                # Title
+                # Title (required): a missing or empty title after the page loads is a parse
+                # error, not a transient fault - return immediately with no retry.
                 title_selector = selectors.get("BOOK_TITLE")
-                if title_selector:
-                    title_element = await page.locator(title_selector).first.text_content()
-                    book_details["title"] = title_element.strip() if title_element else None
-                    print(book_details["title"])
-                else:
-                    module_logger.warning(f"No BOOK_TITLE selector for {site}. Skipping title extraction.")
+                title = await _text(page, title_selector, timeout_ms=FIELD_TIMEOUT_MS) if title_selector else None
+                if not title:
+                    module_logger.warning(f"Required title not found for {full_url}.")
+                    print_log(f"Required title not found for {full_url}.", "warning")
+                    return ScrapeResult(
+                        ScrapeStatus.PARSE_ERROR,
+                        url=full_url,
+                        site=site,
+                        error="title not found",
+                        attempts=attempt,
+                    )
+                book_details["title"] = title
 
-                # Authors
-                authors_list = []
-                # Metadata authors (e.g., for Leanpub)
-                meta_author_selector_meta = selectors.get("AUTHORS_META")
+                # Authors (metadata tags, else linked text, else the alternative selector).
+                meta_author_selector = selectors.get("AUTHORS_META")
                 author_selector = selectors.get("AUTHORS")
-
-                if meta_author_selector_meta:
-                    all_author_elements = await page.locator(meta_author_selector_meta).all()
-                    for author_element in all_author_elements:
-                        author_name = await author_element.get_attribute("content")
-                        if author_name:
-                            authors_list.append(author_name)
-
-                # HTML Scraping alternative
+                if meta_author_selector:
+                    authors_list: list[str] = []
+                    for element in await page.locator(meta_author_selector).all():
+                        name = await element.get_attribute("content", timeout=OPTIONAL_FIELD_TIMEOUT_MS)
+                        if name and name.strip():
+                            authors_list.append(name.strip())
+                    book_details["authors"] = authors_list
                 elif author_selector:
-                    author_elements = await page.locator(author_selector).all()
-                    for author_el in author_elements:
-                        author_name = await author_el.text_content()
-                        if author_name:
-                            authors_list.append(author_name.strip())
+                    authors_list = await _collect_texts(page, author_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
                     if not authors_list:
                         alt_author_selector = selectors.get("AUTHORS_ALT")
                         if alt_author_selector:
-                            author_elements = await page.locator(alt_author_selector).all()
-                            for author_el in author_elements:
-                                author_name = await author_el.text_content()
-                                if author_name:
-                                    authors_list.append(author_name.strip())
+                            authors_list = await _collect_texts(
+                                page, alt_author_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS
+                            )
+                    book_details["authors"] = authors_list
 
-                book_details["authors"] = authors_list if authors_list else []
-
-                # Publication Date
-                try:
-                    # use Metadata (e.g., for Leanpub)
-                    meta_publication_date_selector = selectors.get("PUBLICATION_DATE_META")
-                    if meta_publication_date_selector:
-                        pub_date_text = await page.locator(meta_publication_date_selector).get_attribute(
-                            "content", timeout=10000
-                        )
+                # Publication date (metadata ``content`` attribute, else page text).
+                meta_date_selector = selectors.get("PUBLICATION_DATE_META")
+                if meta_date_selector:
+                    pub_date_text = await _attr(page, meta_date_selector, "content", timeout_ms=FIELD_TIMEOUT_MS)
+                    if pub_date_text:
                         book_details["publication_date"] = pub_date_text.split("T")[0]
                         book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
-                    else:
-                        publication_date_selector = selectors.get("PUBLICATION_DATE")
-                        if publication_date_selector:
-                            pub_date_text = await page.locator(publication_date_selector).first.text_content(
-                                timeout=10000
-                            )
-                            book_details["publication_date"] = pub_date_text.strip() if pub_date_text else None
-                            book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
-                        else:
-                            module_logger.warning(f"No PUBLICATION_DATE selector for {site}.")
-                except (PlaywrightError, AttributeError) as e:
-                    # A missing/slow date element raises a Playwright error; a None
-                    # get_attribute/text_content result makes the subsequent .split()/.strip()
-                    # raise AttributeError. Either leaves publication_date unset, not fatal.
-                    module_logger.warning(f"No PUBLICATION_DATE selector for {site}: {e}.")
+                else:
+                    date_selector = selectors.get("PUBLICATION_DATE")
+                    if date_selector:
+                        pub_date_text = await _text(page, date_selector, timeout_ms=FIELD_TIMEOUT_MS)
+                        if pub_date_text:
+                            book_details["publication_date"] = pub_date_text
+                            book_details["publication_year"] = extract_year_from_date(pub_date_text)
 
-                # ISBN10 & ISBN13
+                # ISBN10 & ISBN13 (optional - keep the "N/A" sentinel when absent; 03.1 replaces it).
                 isbn10_selector = selectors.get("ISBN10")
-                isbn13_selector = selectors.get("ISBN13")
-
                 if isbn10_selector:
-                    try:
-                        isbn10_text = await page.locator(isbn10_selector).first.text_content(timeout=2000)
-                        book_details["isbn10"] = isbn10_text.strip() if isbn10_text else "N/A"
-                    except TimeoutError:
-                        # If a TimeoutError occurs, the element was not found within the timeout
-                        book_details["isbn10"] = "N/A"
-                        module_logger.info(f"ISBN10 element not found for {url}.")
-                else:
-                    book_details["isbn10"] = "N/A"
-
+                    isbn10 = await _text(page, isbn10_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
+                    if isbn10:
+                        book_details["isbn10"] = isbn10
+                isbn13_selector = selectors.get("ISBN13")
                 if isbn13_selector:
-                    try:
-                        isbn13_text = await page.locator(isbn13_selector).first.text_content(timeout=2000)
-                        book_details["isbn13"] = isbn13_text.strip() if isbn13_text else "N/A"
-                    except TimeoutError:
-                        # If a TimeoutError occurs, the element was not found within the timeout
-                        book_details["isbn13"] = "N/A"
-                        module_logger.info(f"ISBN13 element not found for {url}.")
-                else:
-                    # If the selector itself is not defined in parameters.py
-                    book_details["isbn13"] = "N/A"
+                    isbn13 = await _text(page, isbn13_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
+                    if isbn13:
+                        book_details["isbn13"] = isbn13
 
-                # Amazon ASIN extraction
+                # Amazon ASIN extraction (the URL is always a string and the title is set above,
+                # so neither TypeError nor KeyError can arise here any more).
                 if site == "amazon":
-                    try:
-                        asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
-                        if asin_match:
-                            book_details["asin"] = asin_match.group(1)
-                            module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
-                    except (KeyError, TypeError) as e:
-                        # KeyError if 'title' was never set (no title selector); TypeError if
-                        # the URL is not a string. A missing ASIN is non-fatal.
-                        module_logger.warning(f"Could not extract ASIN from Amazon URL {url}: {e}")
+                    asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
+                    if asin_match:
+                        book_details["asin"] = asin_match.group(1)
+                        module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
 
-                # Description
+                # Description (optionally behind a "Read more" expander).
                 description_selector = selectors.get("DESCRIPTION")
                 if description_selector:
-                    description_element = page.locator(description_selector).first
-                    if description_element:
-                        # Check for a "Read more" link/button to expand description
-                        read_more_selector = selectors.get("READ_MORE_LINK")
-                        if read_more_selector:
-                            try:
-                                read_more_button = page.locator(read_more_selector).first
-                                if await read_more_button.is_visible():
-                                    await read_more_button.click(timeout=5000)  # Click to expand
-                                    await page.wait_for_timeout(500)  # Small wait for content to load
-                            except TimeoutError:
-                                module_logger.debug(f"No 'Read more' button found or clickable for {url}.")
-                            except PlaywrightError as e:
-                                module_logger.warning(f"Error clicking 'Read more' on {url}: {e}")
-
-                        description_text = await description_element.text_content()
-                        book_details["description"] = description_text.strip() if description_text else None
-                    else:
-                        book_details["description"] = None
-                else:
-                    module_logger.warning(f"No DESCRIPTION selector for {site}.")
-                    book_details["description"] = None
+                    read_more_selector = selectors.get("READ_MORE_LINK")
+                    if read_more_selector:
+                        try:
+                            read_more_button = page.locator(read_more_selector).first
+                            if await read_more_button.is_visible():
+                                await read_more_button.click(timeout=5000)
+                                await page.wait_for_timeout(500)
+                        except PlaywrightError as exc:
+                            module_logger.debug(f"No usable 'Read more' expander for {full_url}: {exc}")
+                    book_details["description"] = await _text(page, description_selector, timeout_ms=FIELD_TIMEOUT_MS)
 
                 # Generate hash
                 book_details["hash"] = hash_book(
@@ -395,45 +461,43 @@ async def scrape_book(
                 module_logger.info(f"Successfully scraped details for {book_details['title']}")
                 return ScrapeResult(ScrapeStatus.SUCCESS, url=full_url, site=site, book=book_details, attempts=attempt)
 
-        except TimeoutError as e:
-            module_logger.error(f"Timeout while scraping {url} on attempt {attempt}: {e}")
-            print_log(f"Timeout scraping {url}. Retrying...", "error")
-            if attempt < retries:
+        except Exception as exc:  # noqa: X002 - single retry/fail boundary - every per-attempt exception is classified by _is_transient_error and then either retried or converted to a FAILED/TIMEOUT ScrapeResult so one URL can never raise out of scrape_book and abort the asyncio.gather batch
+            transient = _is_transient_error(exc)
+            if transient and attempt < MAX_ATTEMPTS:
+                module_logger.warning(f"Transient error scraping {url} on attempt {attempt}: {exc}. Retrying.")
+                print_log(f"Transient error scraping {url}. Retrying...", "warning")
                 await asyncio.sleep(random.uniform(2, 4))  # Wait before retrying
                 continue  # Try next attempt
-            module_logger.error(f"Failed to scrape {url} after {retries} attempts due to timeout.")
-            print_log(f"Failed to scrape {url} after {retries} attempts due to timeout.", "error")
-            return ScrapeResult(
-                ScrapeStatus.TIMEOUT,
-                url=url,
-                site=site,
-                error=f"timed out after {retries} attempts",
-                attempts=attempt,
-            )
-
-        except Exception as e:  # noqa: X002 - per-attempt retry boundary: any non-timeout scrape failure is retried then reported as FAILED; the retry policy is reworked by subtask 03.0/03; so narrowing is deferred to avoid redesigning it here
-            module_logger.error(f"Error scraping {url} on attempt {attempt}: {e}", exc_info=True)
-            print_log(f"Error scraping {url}. Retrying...", "error")
-            if attempt < retries:
-                await asyncio.sleep(random.uniform(2, 4))  # Wait before retrying
-                continue  # Try next attempt
-            module_logger.error(f"Failed to scrape {url} after {retries} attempts.")
-            print_log(f"Failed to scrape {url} after {retries} attempts.", "error")
+            if transient:
+                # Exhausted the retry budget on a transient failure.
+                status = ScrapeStatus.TIMEOUT if isinstance(exc, TimeoutError) else ScrapeStatus.FAILED
+                error_text = (
+                    f"timed out after {MAX_ATTEMPTS} attempts"
+                    if status is ScrapeStatus.TIMEOUT
+                    else f"transient failure after {MAX_ATTEMPTS} attempts"
+                )
+                module_logger.error(f"Failed to scrape {url} after {MAX_ATTEMPTS} attempts: {exc}")
+                print_log(f"Failed to scrape {url} after {MAX_ATTEMPTS} attempts.", "error")
+                return ScrapeResult(status, url=url, site=site, error=error_text, attempts=attempt)
+            # Deterministic bug (KeyError / AttributeError / ValueError / TypeError) or any
+            # unexpected error: never retried - it would fail identically on every attempt.
+            module_logger.error(f"Non-transient error scraping {url} on attempt {attempt}: {exc}", exc_info=True)
+            print_log(f"Error scraping {url}.", "error")
             return ScrapeResult(
                 ScrapeStatus.FAILED,
                 url=url,
                 site=site,
-                error=f"{type(e).__name__}: {e}",
+                error=f"{type(exc).__name__}: {exc}",
                 attempts=attempt,
             )
 
     # The loop only exits here if every attempt fell through without returning; the
-    # per-attempt handlers above already return on the final attempt, so this is the
-    # explicit post-loop failure return.
+    # per-attempt handler above already returns on the final attempt, so this is the
+    # explicit (defensive) post-loop failure return.
     return ScrapeResult(
         ScrapeStatus.FAILED,
         url=url,
         site=site,
         error="scrape exhausted all attempts",
-        attempts=retries,
+        attempts=MAX_ATTEMPTS,
     )

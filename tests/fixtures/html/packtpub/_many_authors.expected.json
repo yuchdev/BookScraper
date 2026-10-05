@@ -1,7 +1,19 @@
 {
-  "_known_issues": [
-    "03.0/03 missing-field resilience & retry policy (site_constants['packtpub'] has no BASE_URL key -> KeyError on the unconditional subscript -> retried 3x then returns (None, 'FAILED')); the 6-author (one duplicate) AUTHORS parsing is never reached today"
+  "authors": [
+    "Ada Lovelace",
+    "Grace Hopper",
+    "Alan Turing",
+    "Edsger Dijkstra",
+    "Donald Knuth",
+    "Ada Lovelace"
   ],
-  "_scrape_error": "KeyError: 'BASE_URL'",
-  "_scrape_status": "FAILED"
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "368c42aecc7ad6573af145d23b6c4f76899664d70360b9e4b7774bbd68c536e3",
+  "isbn10": "N/A",
+  "isbn13": "9781787126824",
+  "publication_date": "September 2017",
+  "publication_year": 2017,
+  "site": "packtpub",
+  "title": "Mastering the C++17 STL",
+  "url": "https://www.packtpub.com/product/many-authors/9781800000000"
 }
