@@ -327,7 +327,7 @@ async def launch_chromium(playwright: Any) -> Browser:
 
     try:
         return await playwright.chromium.launch(**launch_kwargs)
-    except Exception as exc:  # noqa: BLE001,X002 - any launch failure means "no usable browser"; skip, never fail the suite
+    except Exception as exc:  # noqa: X002 - any launch failure means "no usable browser"; skip; never fail the suite
         pytest.skip(
             f"headless Chromium could not be launched ({type(exc).__name__}: {exc}); "
             "install it with `uv run playwright install chromium`."

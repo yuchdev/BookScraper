@@ -23,15 +23,17 @@ from . import config
 # The single MongoClient factory lives in client.py so there is exactly one client
 # construction site in src/. These names are re-exported here (rather than only imported)
 # so existing `from ...database import uri_selects_x509_auth` / patch targets keep working.
-from .client import (  # noqa: F401 - re-exported for backward compatibility
-    X509_AUTH_MECHANISM,
-    MongoConnectionError,
-    _warn_if_x509_mechanism_missing,
-    build_mongo_client,
-    ping,
-    resolve_server_selection_timeout_ms,
-    uri_has_embedded_credentials,
-    uri_selects_x509_auth,
+# The `name as name` form marks each one as an explicit re-export (PEP 484), so no linter
+# suppression is needed.
+from .client import (
+    X509_AUTH_MECHANISM as X509_AUTH_MECHANISM,
+    MongoConnectionError as MongoConnectionError,
+    _warn_if_x509_mechanism_missing as _warn_if_x509_mechanism_missing,
+    build_mongo_client as build_mongo_client,
+    ping as ping,
+    resolve_server_selection_timeout_ms as resolve_server_selection_timeout_ms,
+    uri_has_embedded_credentials as uri_has_embedded_credentials,
+    uri_selects_x509_auth as uri_selects_x509_auth,
 )
 
 module_logger = logging.getLogger(__name__)
@@ -126,7 +128,7 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         _mongo_db = None
         _mongo_collection = None
         return None, None
-    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure on the connection path must surface as a class name only, never raw text
+    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure on the connection path must surface as a class name only; never raw text
         # Defensive: any non-pymongo failure here. Log only the exception CLASS NAME - never
         # the raw text and never exc_info=True, since an OS/other exception may embed the
         # cert path or other sensitive detail (SEC-4).
@@ -163,7 +165,7 @@ def get_mongo_collection() -> Optional[Collection]:
                 success_message = f"Connection to MongoDB Atlas successful ({_mongo_db_name}.{_mongo_collection_name})."
                 print_log(success_message, "success")
                 module_logger.info(success_message)
-        except Exception as e:  # noqa: X002 - security redaction boundary: a future init that raises must surface as a class name only, never raw text
+        except Exception as e:  # noqa: X002 - security redaction boundary: a future init that raises must surface as a class name only; never raw text
             # Defensive: _initialize_mongodb_connection() catches everything today, so
             # this branch is currently unreachable. It is kept for a future refactor
             # that lets init raise, and is covered by a unit test.
@@ -497,7 +499,7 @@ def check_mongodb_connection() -> Optional[bool]:
             "error",
         )
         return False
-    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure must surface as a class name only, never raw text
+    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure must surface as a class name only; never raw text
         # Defensive: any non-pymongo failure. Log the class name only - never the raw text or
         # exc_info, which could embed the cert path or other sensitive detail (SEC-4).
         module_logger.critical(f"Unexpected error during MongoDB connection test: {type(e).__name__}.")

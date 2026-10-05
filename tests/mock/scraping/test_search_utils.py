@@ -13,8 +13,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
-from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import search_utils
 from bookscraper.scraping.search_utils import (

@@ -29,3 +29,12 @@ ignore = [
     "E402",
     "E501"
 ]
+
+[lint.per-file-ignores]
+# B027: StorageBackend.close() is an intentional no-op default hook (not every backend holds
+# a connection), not a forgotten @abstractmethod.
+"src/bookscraper/backends/storage.py" = ["B027"]
+
+[lint.isort]
+# Keep explicit `name as name` re-exports in one import statement.
+combine-as-imports = true

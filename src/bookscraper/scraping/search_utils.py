@@ -14,8 +14,7 @@ from urllib.parse import (
 )  # Added for URL parsing
 
 import httpx
-from playwright.async_api import Browser
-from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Browser, Error as PlaywrightError
 
 from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
@@ -391,7 +390,7 @@ async def get_search_results_via_playwright(
                                 f"Extracted: {book_data.get('title')} by {book_data.get('authors_from_search')} ({site_name}) (URL: {book_data.get('url')}, ASIN: {book_data.get('asin')})"
                             )
 
-                        except Exception as e:  # noqa: X002 - per-card isolation boundary: one malformed card (Playwright, URL-parse, indexing, or missing-attribute error) must skip only that card, not abort the page
+                        except Exception as e:  # noqa: X002 - per-card isolation boundary: one malformed card (Playwright; URL-parse; indexing; or missing-attribute error) must skip only that card; not abort the page
                             logger.error(
                                 f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}): {e}",
                                 exc_info=True,

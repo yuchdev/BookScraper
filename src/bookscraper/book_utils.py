@@ -222,7 +222,7 @@ def extract_year_from_date(date_string: str) -> Optional[int]:
         )
         return None
 
-    except Exception as e:  # noqa: X002 - defensive isolation boundary: strptime only raises ValueError (handled inline), so this catches an unexpected non-ValueError without propagating
+    except Exception as e:  # noqa: X002 - defensive isolation boundary: strptime only raises ValueError (handled inline); so this catches an unexpected non-ValueError without propagating
         logger.error(f"Error in extract_year_from_date for '{date_string}': {e}", exc_info=True)
         return None
 

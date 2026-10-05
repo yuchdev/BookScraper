@@ -50,9 +50,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 import anthropic
-from playwright.async_api import Browser, Page, Route, async_playwright
-from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import (
+    Browser,
+    Error as PlaywrightError,
+    Page,
+    Route,
+    TimeoutError as PlaywrightTimeoutError,
+    async_playwright,
+)
 
 from ..book_utils import print_log
 from .parameters import (
@@ -1022,7 +1027,7 @@ def _fit_snapshot_to_budget(
                 system=[{"type": "text", "text": instruction_block}],
                 messages=[{"role": "user", "content": current}],
             ).input_tokens
-        except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
+        except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
             raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
         if tokens <= max_input_tokens:
             return current
@@ -1055,7 +1060,7 @@ def call_anthropic(
     """
     try:
         client = anthropic.Anthropic(api_key=api_key, max_retries=MAX_API_RETRIES)
-    except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
+    except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
         raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
     fitted = _fit_snapshot_to_budget(client, model, instruction_block, snapshot, max_input_tokens)
     try:
@@ -1071,7 +1076,7 @@ def call_anthropic(
             ],
             messages=[{"role": "user", "content": fitted}],
         )
-    except Exception as exc:  # noqa: BLE001,X002 - deliberately uniform, body-free SDK failure surface (redacts to class name + HTTP status, never the response body)
+    except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
         raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
     _check_stop_reason(message)
     return _extract_text(message), getattr(message, "usage", None)

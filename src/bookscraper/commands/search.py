@@ -199,7 +199,7 @@ async def run(args: argparse.Namespace):
     except KeyboardInterrupt:
         print_log("Scraping interrupted by user.", "warning")
         module_logger.warning("Application interrupted by user.")
-    except Exception as e:  # noqa: X002 - top-level isolation boundary: any unhandled failure in the search/scrape orchestration is logged and the run still writes diagnostics, saves what it has, and closes the backend
+    except Exception as e:  # noqa: X002 - top-level isolation boundary: any unhandled failure in the search/scrape orchestration is logged and the run still writes diagnostics; saves what it has; and closes the backend
         module_logger.critical(f"An unhandled error occurred in main execution: {e}", exc_info=True)
         print_log(f"Critical error in main execution. Check logs: {e}", "error")
 

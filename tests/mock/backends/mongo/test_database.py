@@ -772,7 +772,7 @@ class TestSaveBooksToMongodb:
         """
         collection = Mock(name="collection")
 
-        def _stamp_id(docs, ordered) -> Mock:  # noqa: ARG001 - mirrors pymongo's in-place _id assignment
+        def _stamp_id(docs, ordered) -> Mock:  # signature mirrors insert_many(docs, ordered=...)
             """Side-effect mimicking pymongo's in-place _id stamping on insert_many docs."""
             for doc in docs:
                 doc["_id"] = "stamped-object-id"

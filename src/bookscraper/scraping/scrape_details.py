@@ -13,8 +13,7 @@ from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
-from playwright.async_api import Browser, Page, Route, TimeoutError
-from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Browser, Error as PlaywrightError, Page, Route, TimeoutError
 
 from ..backends import StorageBackend
 from ..book_utils import extract_year_from_date, hash_book, print_log
@@ -63,7 +62,7 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
     finally:
         try:
             await page.close()
-        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a page-close failure (any type, e.g. "browser already closed") must never mask the original error unwinding the with-block
+        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a page-close failure (any type; e.g. "browser already closed") must never mask the original error unwinding the with-block
             module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
@@ -166,7 +165,7 @@ async def get_leanpub_book_details(url: str) -> ScrapeResult:
     except json.JSONDecodeError:
         print(f"Failed to decode JSON response for url '{url}'. Response content: {response.text[:200]}...")
         return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error="invalid JSON response")
-    except Exception as e:  # noqa: X002 - fail-soft boundary: get_leanpub_book_details must always return a ScrapeResult (never raise), so any unexpected JSON-shape/processing error is converted to a FAILED result
+    except Exception as e:  # noqa: X002 - fail-soft boundary: get_leanpub_book_details must always return a ScrapeResult (never raise); so any unexpected JSON-shape/processing error is converted to a FAILED result
         print(f"An unexpected error occurred for url '{url}': {e}")
         return ScrapeResult(ScrapeStatus.FAILED, url=url, site=LEANPUB_SITE, error=f"{type(e).__name__}: {e}")
 
@@ -412,7 +411,7 @@ async def scrape_book(
                 attempts=attempt,
             )
 
-        except Exception as e:  # noqa: X002 - per-attempt retry boundary: any non-timeout scrape failure is retried then reported as FAILED; the retry policy is reworked by subtask 03.0/03, so narrowing is deferred to avoid redesigning it here
+        except Exception as e:  # noqa: X002 - per-attempt retry boundary: any non-timeout scrape failure is retried then reported as FAILED; the retry policy is reworked by subtask 03.0/03; so narrowing is deferred to avoid redesigning it here
             module_logger.error(f"Error scraping {url} on attempt {attempt}: {e}", exc_info=True)
             print_log(f"Error scraping {url}. Retrying...", "error")
             if attempt < retries:

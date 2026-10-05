@@ -14,8 +14,7 @@ from typing import Any
 
 import pytest
 
-from bookscraper.scraping import parameters
-from bookscraper.scraping import schema_detection as sd
+from bookscraper.scraping import parameters, schema_detection as sd
 from bookscraper.scraping.schema_detection import (
     DEFAULT_MODEL,
     RATIONALE_MAX_CHARS,

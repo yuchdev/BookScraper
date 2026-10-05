@@ -50,7 +50,7 @@ class StorageBackend(ABC):
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Report whether a Leanpub book matching ``book_id`` or ``book_slug`` already exists in the backend."""
 
-    def close(self):  # noqa: B027 - intentional no-op default, not every backend holds a connection
+    def close(self):
         """Optional cleanup hook; no-op unless a backend holds a live connection."""
 
 
