@@ -449,6 +449,7 @@ async def test_check_current_only_html_file_makes_no_network_request(
 # prune_html regression: every currently-matching selector survives pruning
 # --------------------------------------------------------------------------- #
 def _detail_fixture_params() -> list[Any]:
+    """Build pytest.param entries for every detail-page fixture across all detail sites."""
     params: list[Any] = []
     for site in DETAIL_SITES:
         for fixture in _detail_fixtures(site):

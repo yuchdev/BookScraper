@@ -25,22 +25,19 @@ def _fake_parser(args) -> Mock:
 @pytest.mark.asyncio
 async def test_main_dispatches_to_scrape_urls_run() -> None:
     """
-    [Local] main: verifies main dispatches to scrape urls run.
+    [Local] main: verifies that command="scrape-urls" dispatches to scrape_urls.run().
 
     Scenario:
-        Given test inputs and fixtures for main dispatches to scrape urls run
-        When test_main_dispatches_to_scrape_urls_run executes the target flow
-        Then the expected outcome for main dispatches to scrape urls run is confirmed.
+        Given args with command="scrape-urls" and log_severity="info"
+        When main() is called
+        Then configure_logging is called with logging.INFO, scrape_urls.run() is awaited
+        with args, and search.run() is not called.
 
     Boundaries:
-        - Focus: main dispatches to scrape urls run
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the scrape-urls branch is tested; other commands are separate tests.
 
     On failure, first check:
-        - Assertion details tied to main dispatches to scrape urls run
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by main
+        - The "scrape-urls" branch in main()'s command dispatch.
     """
     args = SimpleNamespace(command="scrape-urls", log_severity="info")
 
@@ -60,22 +57,19 @@ async def test_main_dispatches_to_scrape_urls_run() -> None:
 @pytest.mark.asyncio
 async def test_main_dispatches_to_search_run() -> None:
     """
-    [Local] main: verifies main dispatches to search run.
+    [Local] main: verifies that command="search" dispatches to search.run().
 
     Scenario:
-        Given test inputs and fixtures for main dispatches to search run
-        When test_main_dispatches_to_search_run executes the target flow
-        Then the expected outcome for main dispatches to search run is confirmed.
+        Given args with command="search" and log_severity="debug"
+        When main() is called
+        Then configure_logging is called with logging.DEBUG, search.run() is awaited with
+        args, and scrape_urls.run() is not called.
 
     Boundaries:
-        - Focus: main dispatches to search run
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the search branch is tested; other commands are separate tests.
 
     On failure, first check:
-        - Assertion details tied to main dispatches to search run
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by main
+        - The "search" branch in main()'s command dispatch and the debug-level logging setup.
     """
     args = SimpleNamespace(command="search", log_severity="debug")
 
@@ -95,22 +89,19 @@ async def test_main_dispatches_to_search_run() -> None:
 @pytest.mark.asyncio
 async def test_main_dispatches_to_rotate_cert_run() -> None:
     """
-    [Local] main: verifies main dispatches to rotate cert run.
+    [Local] main: verifies that command="rotate-cert" dispatches to rotate_cert.run().
 
     Scenario:
-        Given test inputs and fixtures for main dispatches to rotate cert run
-        When test_main_dispatches_to_rotate_cert_run executes the target flow
-        Then the expected outcome for main dispatches to rotate cert run is confirmed.
+        Given args with command="rotate-cert" and log_severity="info"
+        When main() is called
+        Then rotate_cert.run() is awaited with args, and scrape_urls.run() and
+        search.run() are not called.
 
     Boundaries:
-        - Focus: main dispatches to rotate cert run
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the rotate-cert branch is tested; other commands are separate tests.
 
     On failure, first check:
-        - Assertion details tied to main dispatches to rotate cert run
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by main
+        - The "rotate-cert" branch in main()'s command dispatch.
     """
     args = SimpleNamespace(command="rotate-cert", log_severity="info")
 
@@ -132,22 +123,19 @@ async def test_main_dispatches_to_rotate_cert_run() -> None:
 @pytest.mark.asyncio
 async def test_main_dispatches_to_detect_schema_run() -> None:
     """
-    [Local] main: verifies main dispatches to detect schema run.
+    [Local] main: verifies that command="detect-schema" dispatches to detect_schema.run().
 
     Scenario:
-        Given test inputs and fixtures for main dispatches to detect schema run
-        When test_main_dispatches_to_detect_schema_run executes the target flow
-        Then the expected outcome for main dispatches to detect schema run is confirmed.
+        Given args with command="detect-schema" and log_severity="info"
+        When main() is called
+        Then detect_schema.run() is awaited with args, and scrape_urls.run() and
+        search.run() are not called.
 
     Boundaries:
-        - Focus: main dispatches to detect schema run
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the detect-schema branch is tested; other commands are separate tests.
 
     On failure, first check:
-        - Assertion details tied to main dispatches to detect schema run
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by main
+        - The "detect-schema" branch in main()'s command dispatch.
     """
     args = SimpleNamespace(command="detect-schema", log_severity="info")
 
@@ -170,13 +158,13 @@ async def test_main_dispatches_to_detect_schema_run() -> None:
 async def test_main_unknown_command_calls_parser_error() -> None:
     """
     [Local] main: verifies main unknown command calls parser error.
-    
+
     Scenario:
         The else branch delegates to parser.error() for an unrecognized command.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -201,13 +189,13 @@ async def test_main_unknown_command_calls_parser_error() -> None:
 def test_main_sync_wraps_main_in_asyncio_run() -> None:
     """
     [Local] main: verifies main sync wraps main in asyncio run.
-    
+
     Scenario:
         main_sync() drives the main() coroutine through asyncio.run exactly once. main is `async def`, so patch.object auto-promotes it to an AsyncMock: calling it synchronously (as main_sync() does, passing the result into asyncio.run) returns a fresh coroutine object each time, not a comparable sentinel - assert on the call shape (one positional arg, itself a coroutine) rather than object identity.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """

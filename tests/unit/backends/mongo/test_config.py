@@ -33,65 +33,59 @@ class TestResolveField:
 
     def test_literal_returns_value_as_is(self) -> None:
         """
-        [Unit] resolve field: verifies literal returns value as is.
+        [Unit] resolve field: verifies a literal source field returns its value without modification.
 
         Scenario:
-            Given test inputs and fixtures for literal returns value as is
-            When test_literal_returns_value_as_is executes the target flow
-            Then the expected outcome for literal returns value as is is confirmed.
+            Given a field dict with source "literal" and a URI string as value
+            When _resolve_field is called
+            Then the URI string is returned unchanged
 
         Boundaries:
-            - Focus: literal returns value as is
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - No env vars consulted; only the "value" key is read
+            - No filesystem or network access
 
         On failure, first check:
-            - Assertion details tied to literal returns value as is
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - Whether _resolve_field applies any transformation to literal values
+            - Recent changes to the "literal" branch in _resolve_field
         """
         assert config._resolve_field({"source": "literal", "value": URI}, "f") == URI
 
     def test_env_returns_looked_up_value(self, monkeypatch) -> None:
         """
-        [Local] resolve field: verifies env returns looked up value.
+        [Local] resolve field: verifies an env source field returns the looked-up env variable value.
 
         Scenario:
-            Given test inputs and fixtures for env returns looked up value
-            When test_env_returns_looked_up_value executes the target flow
-            Then the expected outcome for env returns looked up value is confirmed.
+            Given SOME_VAR set to a URI string and a field dict with source "env" and value "SOME_VAR"
+            When _resolve_field is called
+            Then the URI string is returned
 
         Boundaries:
-            - Focus: env returns looked up value
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - Env var must be set; name is taken from the "value" key
+            - No filesystem access; pure os.environ lookup
 
         On failure, first check:
-            - Assertion details tied to env returns looked up value
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - Whether the "env" branch reads the var name from "value" and looks it up in os.environ
+            - Recent changes to the "env" branch in _resolve_field
         """
         monkeypatch.setenv("SOME_VAR", URI)
         assert config._resolve_field({"source": "env", "value": "SOME_VAR"}, "f") == URI
 
     def test_env_unset_raises(self, monkeypatch) -> None:
         """
-        [Local] resolve field: verifies env unset raises.
+        [Local] resolve field: verifies a missing env variable raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for env unset raises
-            When test_env_unset_raises executes the target flow
-            Then the expected outcome for env unset raises is confirmed.
+            Given MISSING_VAR not set in the environment
+            When _resolve_field is called with source "env" and value "MISSING_VAR"
+            Then ConfigError is raised
 
         Boundaries:
-            - Focus: env unset raises
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - Absent env var raises rather than returning None or empty string
+            - Fail-loud: missing config is always an error, not a silent default
 
         On failure, first check:
-            - Assertion details tied to env unset raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - Whether a missing env var returns None instead of raising ConfigError
+            - Recent changes to the missing-var error path in _resolve_field
         """
         monkeypatch.delenv("MISSING_VAR", raising=False)
         with pytest.raises(ConfigError):
@@ -389,24 +383,24 @@ class TestLoadSettings:
 
 
 class TestResolveMongoConnectionSettings:
+    """Tests for config.resolve_mongo_connection() with settings.json: all six valid auth shapes plus error paths."""
+
     def test_pass_literal_uri(self, tmp_path) -> None:
         """
-        [Unit] resolve mongo connection settings: verifies pass literal uri.
+        [Unit] resolve mongo connection settings: verifies pass auth with a literal URI resolves to (uri, None).
 
         Scenario:
-            Given test inputs and fixtures for pass literal uri
-            When test_pass_literal_uri executes the target flow
-            Then the expected outcome for pass literal uri is confirmed.
+            Given settings.json with auth_type "pass" and a literal-sourced URI
+            When resolve_mongo_connection(path) is called
+            Then (URI, None) is returned
 
         Boundaries:
-            - Focus: pass literal uri
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - No env vars consulted; value read directly from "value" key
+            - cert is always None for password auth
 
         On failure, first check:
-            - Assertion details tied to pass literal uri
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the "pass" block resolver reads the "value" key correctly
+            - Recent changes to the password-auth resolution path in config.py
         """
         path = tmp_path / "settings.json"
         _write_settings(
@@ -417,22 +411,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_pass_env_uri(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] resolve mongo connection settings: verifies pass env uri.
+        [Local] resolve mongo connection settings: verifies pass auth with an env-sourced URI resolves correctly.
 
         Scenario:
-            Given test inputs and fixtures for pass env uri
-            When test_pass_env_uri executes the target flow
-            Then the expected outcome for pass env uri is confirmed.
+            Given MONGODB_URI set in the environment and settings.json with source "env" pointing to it
+            When resolve_mongo_connection(path) is called
+            Then (URI, None) is returned
 
         Boundaries:
-            - Focus: pass env uri
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - env var lookup via source "env"; cert is always None for password auth
+            - MONGODB_URI must be set before the resolver is called
 
         On failure, first check:
-            - Assertion details tied to pass env uri
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the "env" source branch reads the var name from "value" correctly
+            - Recent changes to the env-var resolution path in config.py
         """
         monkeypatch.setenv("MONGODB_URI", URI)
         path = tmp_path / "settings.json"
@@ -447,22 +439,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_x509_literal_uri_literal_bare_cert(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] resolve mongo connection settings: verifies x509 literal uri literal bare cert.
+        [Local] resolve mongo connection settings: verifies x509 with a literal URI and bare cert filename resolves the cert under CONFIG_DIR.
 
         Scenario:
-            Given test inputs and fixtures for x509 literal uri literal bare cert
-            When test_x509_literal_uri_literal_bare_cert executes the target flow
-            Then the expected outcome for x509 literal uri literal bare cert is confirmed.
+            Given x509 settings with literal URI and cert filename "cert.pem" and CONFIG_DIR patched to a subdirectory
+            When resolve_mongo_connection(path) is called
+            Then uri equals URI and cert equals str(CONFIG_DIR / "cert.pem")
 
         Boundaries:
-            - Focus: x509 literal uri literal bare cert
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - A bare (non-absolute) cert filename is joined to CONFIG_DIR
+            - Absolute cert paths are passed through untouched (tested separately)
 
         On failure, first check:
-            - Assertion details tied to x509 literal uri literal bare cert
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether _resolve_cert_field joins bare names to CONFIG_DIR
+            - Recent changes to the cert-field resolution path in config.py
         """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
@@ -484,22 +474,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_all_four_x509_source_combos_resolve_identically(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] resolve mongo connection settings: verifies all four x509 source combos resolve identically.
+        [Local] resolve mongo connection settings: verifies all four x509 source combinations resolve to the same (uri, cert).
 
         Scenario:
-            Given test inputs and fixtures for all four x509 source combos resolve identically
-            When test_all_four_x509_source_combos_resolve_identically executes the target flow
-            Then the expected outcome for all four x509 source combos resolve identically is confirmed.
+            Given literal and env variants set to identical underlying values
+            When all four {literal,env}x{literal,env} settings files are resolved
+            Then all four results equal (URI, expected_cert_path)
 
         Boundaries:
-            - Focus: all four x509 source combos resolve identically
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - Source mechanism is the only variable; underlying values are identical for all four combos
+            - Both env vars (MONGODB_URI and TLS_CERT_FILE) are set to the same values as the literals
 
         On failure, first check:
-            - Assertion details tied to all four x509 source combos resolve identically
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether one source combo (e.g. env cert) resolves differently (e.g. not joined to CONFIG_DIR)
+            - Recent changes to the source-dispatch logic in _resolve_field / _resolve_cert_field
         """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
@@ -538,22 +526,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_missing_auth_type_raises(self, tmp_path) -> None:
         """
-        [Unit] resolve mongo connection settings: verifies missing auth type raises.
+        [Unit] resolve mongo connection settings: verifies a settings.json without auth_type raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for missing auth type raises
-            When test_missing_auth_type_raises executes the target flow
-            Then the expected outcome for missing auth type raises is confirmed.
+            Given settings.json with a "pass" block but no "auth_type" key
+            When resolve_mongo_connection(path) is called
+            Then ConfigError is raised
 
         Boundaries:
-            - Focus: missing auth type raises
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - auth_type is required; a "pass" block alone is not enough to infer the type
+            - Fail-loud contract: no silent default
 
         On failure, first check:
-            - Assertion details tied to missing auth type raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the resolver falls back to "pass" when auth_type is absent
+            - Recent changes to the auth_type presence check in resolve_mongo_connection
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"pass": {"uri": {"source": "literal", "value": URI}}})
@@ -562,22 +548,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_unrecognized_auth_type_raises(self, tmp_path) -> None:
         """
-        [Unit] resolve mongo connection settings: verifies unrecognized auth type raises.
+        [Unit] resolve mongo connection settings: verifies an unsupported auth_type raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for unrecognized auth type raises
-            When test_unrecognized_auth_type_raises executes the target flow
-            Then the expected outcome for unrecognized auth type raises is confirmed.
+            Given settings.json with auth_type "kerberos"
+            When resolve_mongo_connection(path) is called
+            Then ConfigError is raised
 
         Boundaries:
-            - Focus: unrecognized auth type raises
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Only "pass" and "x509" are recognized; anything else fails loudly
+            - No silent fallback or default
 
         On failure, first check:
-            - Assertion details tied to unrecognized auth type raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the auth_type dispatcher has a catch-all default branch
+            - Recent changes to the auth_type dispatch in resolve_mongo_connection
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "kerberos"})
@@ -586,22 +570,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_pass_without_pass_block_raises(self, tmp_path) -> None:
         """
-        [Unit] resolve mongo connection settings: verifies pass without pass block raises.
+        [Unit] resolve mongo connection settings: verifies auth_type "pass" without a "pass" block raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for pass without pass block raises
-            When test_pass_without_pass_block_raises executes the target flow
-            Then the expected outcome for pass without pass block raises is confirmed.
+            Given settings.json with auth_type "pass" but no "pass" key
+            When resolve_mongo_connection(path) is called
+            Then ConfigError is raised
 
         Boundaries:
-            - Focus: pass without pass block raises
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Type is valid but the required sub-block is absent; no silent default
+            - Mirrors the symmetric test for x509
 
         On failure, first check:
-            - Assertion details tied to pass without pass block raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the "pass" resolver silently uses a default URI when the block is absent
+            - Recent changes to the sub-block presence check in resolve_mongo_connection
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "pass"})
@@ -610,22 +592,20 @@ class TestResolveMongoConnectionSettings:
 
     def test_x509_without_x509_block_raises(self, tmp_path) -> None:
         """
-        [Unit] resolve mongo connection settings: verifies x509 without x509 block raises.
+        [Unit] resolve mongo connection settings: verifies auth_type "x509" without an "x509" block raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for x509 without x509 block raises
-            When test_x509_without_x509_block_raises executes the target flow
-            Then the expected outcome for x509 without x509 block raises is confirmed.
+            Given settings.json with auth_type "x509" but no "x509" key
+            When resolve_mongo_connection(path) is called
+            Then ConfigError is raised
 
         Boundaries:
-            - Focus: x509 without x509 block raises
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Type is valid but the required sub-block is absent; no silent default
+            - Mirrors the symmetric test for pass auth
 
         On failure, first check:
-            - Assertion details tied to x509 without x509 block raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection settings
+            - Whether the "x509" resolver silently uses env vars when the block is absent
+            - Recent changes to the sub-block presence check in resolve_mongo_connection
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "x509"})
@@ -634,24 +614,24 @@ class TestResolveMongoConnectionSettings:
 
 
 class TestResolveMongoConnectionLegacyFallback:
+    """Tests for config.resolve_mongo_connection() legacy fallback (no settings.json): MONGODB_URI / TLS_CERT_FILE / X509 glob."""
+
     def test_env_uri_no_cert(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
-        [Local] resolve mongo connection legacy fallback: verifies env uri no cert.
+        [Local] resolve mongo connection legacy fallback: verifies MONGODB_URI without a cert resolves to (uri, None).
 
         Scenario:
-            Given test inputs and fixtures for env uri no cert
-            When test_env_uri_no_cert executes the target flow
-            Then the expected outcome for env uri no cert is confirmed.
+            Given MONGODB_URI set, no settings.json, no TLS_CERT_FILE, and an empty CONFIG_DIR
+            When resolve_mongo_connection is called with a nonexistent settings path
+            Then (URI, None) is returned via legacy fallback
 
         Boundaries:
-            - Focus: env uri no cert
-            - Fixtures/params: monkeypatch, tmp_path, no_real_env
-            - Scope: assertions and setup in this test case only
+            - Nonexistent settings path triggers legacy mode; no TLS cert present
+            - no_real_env fixture strips real MongoDB vars so the test controls the full env
 
         On failure, first check:
-            - Assertion details tied to env uri no cert
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+            - Whether the legacy fallback is triggered correctly on a missing settings.json
+            - Recent changes to the MONGODB_URI / legacy-mode path in config.py
         """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
@@ -663,22 +643,20 @@ class TestResolveMongoConnectionLegacyFallback:
 
     def test_cert_glob_used_when_no_tls_cert_env(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
-        [Local] resolve mongo connection legacy fallback: verifies cert glob used when no tls cert env.
+        [Local] resolve mongo connection legacy fallback: verifies the newest X509-cert-*.pem is used when TLS_CERT_FILE is unset.
 
         Scenario:
-            Given test inputs and fixtures for cert glob used when no tls cert env
-            When test_cert_glob_used_when_no_tls_cert_env executes the target flow
-            Then the expected outcome for cert glob used when no tls cert env is confirmed.
+            Given a cert file in CONFIG_DIR, MONGODB_URI set, and TLS_CERT_FILE absent
+            When resolve_mongo_connection is called without settings.json
+            Then the glob-found cert path is returned
 
         Boundaries:
-            - Focus: cert glob used when no tls cert env
-            - Fixtures/params: monkeypatch, tmp_path, no_real_env
-            - Scope: assertions and setup in this test case only
+            - Only one cert file present; glob-by-mtime picks it
+            - TLS_CERT_FILE absent is the trigger for the glob fallback
 
         On failure, first check:
-            - Assertion details tied to cert glob used when no tls cert env
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+            - Whether get_default_tls_cert_file is called in legacy mode when TLS_CERT_FILE is absent
+            - Recent changes to the cert fallback order in config.py
         """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
@@ -692,22 +670,20 @@ class TestResolveMongoConnectionLegacyFallback:
 
     def test_explicit_tls_cert_env_wins_over_glob(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
-        [Local] resolve mongo connection legacy fallback: verifies explicit tls cert env wins over glob.
+        [Local] resolve mongo connection legacy fallback: verifies TLS_CERT_FILE takes precedence over the X509 glob.
 
         Scenario:
-            Given test inputs and fixtures for explicit tls cert env wins over glob
-            When test_explicit_tls_cert_env_wins_over_glob executes the target flow
-            Then the expected outcome for explicit tls cert env wins over glob is confirmed.
+            Given TLS_CERT_FILE set to an explicit path AND a cert glob match in CONFIG_DIR
+            When resolve_mongo_connection is called without settings.json
+            Then TLS_CERT_FILE is returned, not the glob match
 
         Boundaries:
-            - Focus: explicit tls cert env wins over glob
-            - Fixtures/params: monkeypatch, tmp_path, no_real_env
-            - Scope: assertions and setup in this test case only
+            - Glob file exists and has a later mtime; precedence under test
+            - time.sleep used to ensure distinct mtimes for the two files
 
         On failure, first check:
-            - Assertion details tied to explicit tls cert env wins over glob
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve mongo connection legacy fallback
+            - Whether TLS_CERT_FILE is checked before the glob in legacy mode
+            - Recent changes to the env-vs-glob precedence in config.py
         """
         config_dir = tmp_path / ".bookscrapper"
         config_dir.mkdir()
@@ -741,10 +717,19 @@ class TestSettingsFileSecurity:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
     def test_world_readable_settings_warns_once(self, tmp_path, caplog) -> None:
         """
-        Scenario: a group/other-readable settings.json warns exactly once no matter how many
-        times it is loaded in one process.
-        Boundaries: mode 0o644, loaded twice; a single warning naming the file and the fix.
-        On failure: the warning is missing, repeats per load, or omits the chmod fix.
+        [Local] settings file security: verifies a world-readable settings.json emits the warning exactly once per process.
+
+        Scenario:
+            Given a settings.json with mode 0o644 and the warning guard cleared by the autouse fixture
+            When load_settings() is called twice on the same path
+            Then exactly one caplog WARNING names the file and includes the "chmod 600" fix
+
+        Boundaries:
+            - POSIX only (test is skipif on Windows); mode 0o644
+            - Per-process deduplication via _SECURITY_WARNINGS_EMITTED prevents double-firing
+
+        On failure, first check:
+            - Warning is missing, fires twice, or omits the "chmod 600" text
         """
         path = tmp_path / "settings.json"
         _write_settings(path, _pass_settings())
@@ -760,10 +745,19 @@ class TestSettingsFileSecurity:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
     def test_security_warning_reaches_console(self, tmp_path, capsys) -> None:
         """
-        Scenario: the settings.json warning must be visible on the console, not only in the
-        run log - the root logger has just a file handler, so a logger-only warning is unseen.
-        Boundaries: mode 0o644, one load; stdout carries the warning text.
-        On failure: the user is never told their credentials file is group/other-readable.
+        [Local] settings file security: verifies the world-readable warning is printed to stdout, not only logged.
+
+        Scenario:
+            Given a settings.json with mode 0o644
+            When load_settings() is called once
+            Then stdout contains the "readable by group/other" text
+
+        Boundaries:
+            - POSIX only; root logger has only a file handler, so logger-only writes are invisible on console
+            - capsys captures stdout; the warning must reach print_log, not only logging
+
+        On failure, first check:
+            - Warning is emitted via logger only and not via print_log to stdout
         """
         path = tmp_path / "settings.json"
         _write_settings(path, _pass_settings())
@@ -774,10 +768,19 @@ class TestSettingsFileSecurity:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
     def test_owner_only_settings_does_not_warn(self, tmp_path, caplog) -> None:
         """
-        Scenario: an owner-only, non-symlinked settings.json owned by the current user loads
-        with no security warning.
-        Boundaries: mode 0o600, real owner, regular file.
-        On failure: a false-positive warning fires on a correctly locked-down file.
+        [Unit] settings file security: verifies a correctly locked-down settings.json loads without a warning.
+
+        Scenario:
+            Given a settings.json with mode 0o600 owned by the current user
+            When load_settings() is called
+            Then no WARNING-level log records are emitted
+
+        Boundaries:
+            - POSIX only; mode 0o600, regular file (not a symlink), current user's UID
+            - Covers the "all-clear" path to guard against false positives
+
+        On failure, first check:
+            - False-positive warning fires on a correctly locked-down file
         """
         path = tmp_path / "settings.json"
         _write_settings(path, _pass_settings())
@@ -788,9 +791,19 @@ class TestSettingsFileSecurity:
 
     def test_permission_check_skipped_on_windows(self, tmp_path, caplog, monkeypatch) -> None:
         """
-        Scenario: on Windows the POSIX permission/ownership check is skipped entirely.
-        Boundaries: os.name forced to 'nt' with a world-readable file present.
-        On failure: a POSIX-only check runs on Windows and warns spuriously.
+        [Local] settings file security: verifies the POSIX permission check is skipped when os.name is "nt".
+
+        Scenario:
+            Given os.name patched to "nt" and a settings.json with mode 0o644
+            When load_settings() is called
+            Then no WARNING-level log records are emitted
+
+        Boundaries:
+            - os.name monkeypatched; the actual OS is not changed
+            - Ensures the guard is conditional on POSIX, not just the skipif decorator on other tests
+
+        On failure, first check:
+            - POSIX permission check runs even when os.name is "nt"
         """
         monkeypatch.setattr(config.os, "name", "nt")
         path = tmp_path / "settings.json"
@@ -803,10 +816,19 @@ class TestSettingsFileSecurity:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink semantics")
     def test_symlinked_settings_warns(self, tmp_path, caplog) -> None:
         """
-        Scenario: a settings.json that is a symlink warns that its target is trusted, since
-        an attacker-controlled target would redirect the connection.
-        Boundaries: symlink -> owner-only regular target.
-        On failure: the symlink slips through and its target is trusted silently.
+        [Local] settings file security: verifies a symlinked settings.json emits an "is a symlink" warning.
+
+        Scenario:
+            Given settings.json is a symlink pointing to an owner-only regular target
+            When load_settings() is called via the symlink path
+            Then a caplog WARNING includes "is a symlink"
+
+        Boundaries:
+            - POSIX only; the target itself is 0o600, so only the symlink check fires
+            - An attacker-controlled symlink target could redirect auth credentials
+
+        On failure, first check:
+            - Symlink path is resolved before the check, causing the warning to be skipped
         """
         target = tmp_path / "real.json"
         _write_settings(target, _pass_settings())
@@ -820,9 +842,19 @@ class TestSettingsFileSecurity:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX ownership semantics")
     def test_foreign_owned_settings_warns(self, tmp_path, caplog, monkeypatch) -> None:
         """
-        Scenario: a settings.json owned by another UID warns it may have been planted.
-        Boundaries: os.getuid patched so it never equals the file's owner.
-        On failure: a foreign-owned config is trusted without warning.
+        [Local] settings file security: verifies a settings.json owned by a different UID emits a warning.
+
+        Scenario:
+            Given os.getuid patched to return file_owner_uid + 1 and a settings.json with mode 0o600
+            When load_settings() is called
+            Then a caplog WARNING includes "not owned by the current user"
+
+        Boundaries:
+            - POSIX only; monkeypatched UID avoids needing to chown the file
+            - Mode is 0o600 so only the ownership check fires, not the permission check
+
+        On failure, first check:
+            - Foreign-owned config is trusted without warning
         """
         path = tmp_path / "settings.json"
         _write_settings(path, _pass_settings())
@@ -834,12 +866,23 @@ class TestSettingsFileSecurity:
 
 
 class TestUnknownTopLevelKeys:
+    """Tests for settings.json unknown-key detection: ConfigError raised loudly, values never leaked (SEC-11)."""
+
     def test_unknown_top_level_key_raises(self, tmp_path) -> None:
         """
-        Scenario: a typo'd top-level key (e.g. 'x059' for 'x509') fails loudly instead of
-        being silently ignored.
-        Boundaries: an otherwise-valid file carrying one unrecognized key.
-        On failure: the typo is dropped and the config resolves with the wrong shape.
+        [Unit] unknown top-level keys: verifies an unrecognized top-level key raises ConfigError naming the key.
+
+        Scenario:
+            Given settings.json with a typo'd key "x059" (instead of "x509")
+            When load_settings() is called
+            Then ConfigError is raised and "x059" appears in the exception message
+
+        Boundaries:
+            - Otherwise-valid file structure; only the key name is wrong
+            - Check happens in load_settings before resolution
+
+        On failure, first check:
+            - Unknown key is silently dropped and the config resolves to a wrong shape
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "x509", "x059": {"uri": {}}})
@@ -849,10 +892,19 @@ class TestUnknownTopLevelKeys:
 
     def test_unknown_key_error_lists_only_key_names_not_values(self, tmp_path) -> None:
         """
-        Scenario (SEC-11): the unknown-key error names the offending key but never echoes its
-        (possibly secret) value.
-        Boundaries: an unknown block whose value embeds a connection string with a password.
-        On failure: the value leaks into the ConfigError -> log -> console path.
+        [Unit] unknown top-level keys: verifies the ConfigError names the offending key but never leaks its value (SEC-11).
+
+        Scenario:
+            Given settings.json with unknown key "bogus" whose value embeds a URI containing "hunter2placeholder"
+            When load_settings() is called
+            Then ConfigError is raised, "bogus" is in the message, and "hunter2placeholder" is not
+
+        Boundaries:
+            - SEC-11: error messages must never echo field values, only key names
+            - Distinctive placeholder "hunter2placeholder" used as the credential marker
+
+        On failure, first check:
+            - The raw value (including the password) leaks into the ConfigError message
         """
         leaky_uri = "mongodb+srv://user:hunter2placeholder@cluster/db"
         path = tmp_path / "settings.json"
@@ -866,12 +918,23 @@ class TestUnknownTopLevelKeys:
 
 
 class TestResolveMongoNamespace:
+    """Tests for config.resolve_mongo_namespace(): database block resolution, defaults, and legacy env-var fallback."""
+
     def test_database_block_resolves_name_and_collection(self, monkeypatch, tmp_path) -> None:
         """
-        Scenario: a settings.json 'database' block resolves both names and the env vars are
-        ignored (determinism).
-        Boundaries: literal-sourced block present while MONGODB_DB_NAME/COLLECTION differ.
-        On failure: the env-var namespace leaks in despite settings.json being present.
+        [Local] resolve mongo namespace: verifies a settings.json database block resolves name and collection, ignoring env vars.
+
+        Scenario:
+            Given settings.json with a literal database block and MONGODB_DB_NAME/COLLECTION set to different values
+            When resolve_mongo_namespace(path) is called
+            Then ("custom_db", "custom_books") is returned, not the env-var values
+
+        Boundaries:
+            - settings.json is the sole source of truth; env vars are only consulted in legacy mode
+            - Both env vars set to non-defaults to confirm they are not consulted
+
+        On failure, first check:
+            - Env-var namespace leaks in despite settings.json being present
         """
         monkeypatch.setenv("MONGODB_DB_NAME", "env_db")
         monkeypatch.setenv("MONGODB_COLLECTION_NAME", "env_coll")
@@ -891,9 +954,19 @@ class TestResolveMongoNamespace:
 
     def test_database_block_env_sourced(self, monkeypatch, tmp_path) -> None:
         """
-        Scenario: a 'database' block field with source 'env' is looked up like any other field.
-        Boundaries: name via env, collection literal.
-        On failure: env-sourced namespace fields are not resolved.
+        [Local] resolve mongo namespace: verifies a database block field with source "env" is resolved from the environment.
+
+        Scenario:
+            Given settings.json with database.name sourced from DB_NAME_VAR set to "resolved_db" and collection literal
+            When resolve_mongo_namespace(path) is called
+            Then ("resolved_db", "books") is returned
+
+        Boundaries:
+            - Mixed sources: name from env, collection literal
+            - Same _resolve_field resolution path as auth fields
+
+        On failure, first check:
+            - Env-sourced database field returns the var name string instead of its looked-up value
         """
         monkeypatch.setenv("DB_NAME_VAR", "resolved_db")
         path = tmp_path / "settings.json"
@@ -911,10 +984,19 @@ class TestResolveMongoNamespace:
 
     def test_settings_without_database_block_uses_defaults_and_ignores_env(self, monkeypatch, tmp_path) -> None:
         """
-        Scenario: settings.json without a 'database' block uses the defaults and does NOT
-        consult MONGODB_DB_NAME / MONGODB_COLLECTION_NAME.
-        Boundaries: no block present while both env vars are set to non-defaults.
-        On failure: env vars leak in, breaking settings.json's sole-source-of-truth promise.
+        [Local] resolve mongo namespace: verifies settings.json without a database block returns defaults, not env vars.
+
+        Scenario:
+            Given settings.json with no database block and MONGODB_DB_NAME/COLLECTION set to non-defaults
+            When resolve_mongo_namespace(path) is called
+            Then (DEFAULT_DB_NAME, DEFAULT_COLLECTION_NAME) is returned
+
+        Boundaries:
+            - Absent database block means use defaults; env vars are NOT consulted
+            - Contrast with legacy mode (no settings.json) where env vars DO apply
+
+        On failure, first check:
+            - Env vars leak in despite settings.json being present (breaks sole-source-of-truth)
         """
         monkeypatch.setenv("MONGODB_DB_NAME", "env_db")
         monkeypatch.setenv("MONGODB_COLLECTION_NAME", "env_coll")
@@ -924,10 +1006,19 @@ class TestResolveMongoNamespace:
 
     def test_database_block_missing_field_raises(self, tmp_path) -> None:
         """
-        Scenario: a 'database' block missing 'collection' fails loudly rather than half-
-        defaulting.
-        Boundaries: block with only 'name'.
-        On failure: a partial block silently resolves with a defaulted field.
+        [Unit] resolve mongo namespace: verifies a database block missing "collection" raises ConfigError.
+
+        Scenario:
+            Given settings.json with a database block containing only "name"
+            When resolve_mongo_namespace(path) is called
+            Then ConfigError is raised
+
+        Boundaries:
+            - Both "name" and "collection" must be present; partial block is never half-defaulted
+            - Fail-loud: present means "I'm configuring this", so a partial block is an error
+
+        On failure, first check:
+            - A partial database block silently defaults the missing field
         """
         path = tmp_path / "settings.json"
         _write_settings(
@@ -940,10 +1031,19 @@ class TestResolveMongoNamespace:
     @pytest.mark.parametrize("block", [{}, "bookscraper_db", []])
     def test_database_block_empty_or_malformed_raises(self, tmp_path, block) -> None:
         """
-        Scenario: a 'database' key that is present but empty or not an object fails loudly -
-        present means "I'm configuring this", so silently using defaults would be a guess.
-        Boundaries: empty dict, a bare string, an empty list.
-        On failure: the typo'd/empty block resolves to bookscraper_db.books without a word.
+        [Unit] resolve mongo namespace: verifies an empty or non-object database key raises ConfigError.
+
+        Scenario:
+            Given settings.json with a database key that is an empty dict, a bare string, or an empty list
+            When resolve_mongo_namespace(path) is called
+            Then ConfigError is raised for each invalid shape
+
+        Boundaries:
+            - Parametrized over {}, "bookscraper_db", []; present-but-wrong shapes are always rejected
+            - "Present means I'm configuring this": silently defaulting would be a guess
+
+        On failure, first check:
+            - Empty or malformed block silently resolves to bookscraper_db.books
         """
         path = tmp_path / "settings.json"
         _write_settings(path, {"auth_type": "pass", "database": block})
@@ -952,10 +1052,19 @@ class TestResolveMongoNamespace:
 
     def test_legacy_mode_honors_db_name_env_vars(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
-        Scenario: with no settings.json, MONGODB_DB_NAME / MONGODB_COLLECTION_NAME still drive
-        the namespace (backward compatibility).
-        Boundaries: nonexistent settings path, both env vars set.
-        On failure: legacy env-var configuration stops working.
+        [Local] resolve mongo namespace: verifies legacy mode uses MONGODB_DB_NAME and MONGODB_COLLECTION_NAME.
+
+        Scenario:
+            Given MONGODB_DB_NAME and MONGODB_COLLECTION_NAME set to non-defaults and no settings.json
+            When resolve_mongo_namespace(tmp_path / "nope.json") is called
+            Then ("legacy_db", "legacy_coll") is returned
+
+        Boundaries:
+            - Nonexistent path triggers legacy mode; env vars are the only namespace source
+            - Backward compatibility contract for users without settings.json
+
+        On failure, first check:
+            - Legacy env-var namespace configuration stops working
         """
         monkeypatch.setenv("MONGODB_DB_NAME", "legacy_db")
         monkeypatch.setenv("MONGODB_COLLECTION_NAME", "legacy_coll")
@@ -963,9 +1072,19 @@ class TestResolveMongoNamespace:
 
     def test_legacy_mode_defaults_when_env_unset(self, monkeypatch, tmp_path, no_real_env) -> None:
         """
-        Scenario: with no settings.json and no env vars, the defaults apply.
-        Boundaries: nonexistent settings path, both env vars unset.
-        On failure: a missing namespace crashes instead of defaulting.
+        [Local] resolve mongo namespace: verifies legacy mode returns defaults when namespace env vars are unset.
+
+        Scenario:
+            Given no settings.json and MONGODB_DB_NAME / MONGODB_COLLECTION_NAME both deleted
+            When resolve_mongo_namespace(tmp_path / "nope.json") is called
+            Then (DEFAULT_DB_NAME, DEFAULT_COLLECTION_NAME) is returned
+
+        Boundaries:
+            - Legacy mode: absent env vars mean fall back to compile-time defaults
+            - No ConfigError; silent defaults are correct here (no settings.json to contradict them)
+
+        On failure, first check:
+            - Missing namespace env vars crash instead of defaulting
         """
         monkeypatch.delenv("MONGODB_DB_NAME", raising=False)
         monkeypatch.delenv("MONGODB_COLLECTION_NAME", raising=False)
@@ -976,12 +1095,23 @@ class TestResolveMongoNamespace:
 
 
 class TestExampleSettingsFile:
+    """Tests that docs/examples/settings.example.json parses and resolves through the real resolver."""
+
     def test_example_settings_file_is_valid_for_resolver(self, isolated_config, monkeypatch) -> None:
         """
-        Scenario: the shipped docs/examples/settings.example.json resolves cleanly once its
-        referenced env var is set, so users can copy it verbatim.
-        Boundaries: MONGODB_URI set; the example's cert is a literal filename under CONFIG_DIR.
-        On failure: the example drifts from the resolver's accepted shape.
+        [Local] example settings file: verifies docs/examples/settings.example.json resolves cleanly when MONGODB_URI is set.
+
+        Scenario:
+            Given MONGODB_URI set and isolated_config patching CONFIG_DIR to tmp_path
+            When resolve_mongo_connection and resolve_mongo_namespace are called on the example file
+            Then URI matches, cert ends with "X509-cert-example.pem", and namespace is ("bookscraper_db", "books")
+
+        Boundaries:
+            - Real example file on disk; isolated_config prevents ~/.bookscrapper leaking in
+            - Exercises the full x509 + database block shape
+
+        On failure, first check:
+            - The example file has drifted from the resolver's accepted key/value shape
         """
         example = Path(__file__).resolve().parents[4] / "docs" / "examples" / "settings.example.json"
         monkeypatch.setenv("MONGODB_URI", URI)

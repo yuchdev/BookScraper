@@ -10,88 +10,76 @@ from bookscraper.scraping import parameters
 
 def test_headless_browser_is_false() -> None:
     """
-    [Unit] parameters: verifies headless browser is false.
+    [Unit] parameters: verifies HEADLESS_BROWSER is False (headed mode).
 
     Scenario:
-        Given test inputs and fixtures for headless browser is false
-        When test_headless_browser_is_false executes the target flow
-        Then the expected outcome for headless browser is false is confirmed.
+        Given the parameters module is imported
+        When HEADLESS_BROWSER is read
+        Then its value is exactly False (Playwright runs headed by default)
 
     Boundaries:
-        - Focus: headless browser is false
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Single boolean constant; no scraper or browser logic exercised
+        - Does not assert anything about Playwright launch behaviour
 
     On failure, first check:
-        - Assertion details tied to headless browser is false
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by parameters
+        - parameters.HEADLESS_BROWSER was accidentally changed to True
     """
     assert parameters.HEADLESS_BROWSER is False
 
 
 def test_sites_to_scrape_is_leanpub_only() -> None:
     """
-    [Unit] parameters: verifies sites to scrape is leanpub only.
+    [Unit] parameters: verifies SITES_TO_SCRAPE is exactly ["leanpub"].
 
     Scenario:
-        Given test inputs and fixtures for sites to scrape is leanpub only
-        When test_sites_to_scrape_is_leanpub_only executes the target flow
-        Then the expected outcome for sites to scrape is leanpub only is confirmed.
+        Given the parameters module is imported
+        When SITES_TO_SCRAPE is read
+        Then it equals ["leanpub"] with no other site
 
     Boundaries:
-        - Focus: sites to scrape is leanpub only
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Single list constant; no search workflow logic exercised
+        - Tripwire: a new site entry would need test and workflow updates
 
     On failure, first check:
-        - Assertion details tied to sites to scrape is leanpub only
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by parameters
+        - parameters.SITES_TO_SCRAPE was extended or changed unexpectedly
     """
     assert parameters.SITES_TO_SCRAPE == ["leanpub"]
 
 
 def test_site_constants_has_all_four_sites() -> None:
     """
-    [Unit] parameters: verifies site constants has all four sites.
+    [Unit] parameters: verifies site_constants contains exactly the four supported sites.
 
     Scenario:
-        Given test inputs and fixtures for site constants has all four sites
-        When test_site_constants_has_all_four_sites executes the target flow
-        Then the expected outcome for site constants has all four sites is confirmed.
+        Given the parameters module is imported
+        When the key set of site_constants is compared to the expected set
+        Then it equals {amazon, leanpub, packtpub, oreilly} with no additions or omissions
 
     Boundaries:
-        - Focus: site constants has all four sites
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Key-set equality only; per-site selector values are not inspected
+        - Does not assert that each site's selectors are non-empty or valid CSS
 
     On failure, first check:
-        - Assertion details tied to site constants has all four sites
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by parameters
+        - A site was added to or removed from site_constants without updating this tripwire
     """
     assert set(parameters.site_constants) == {"amazon", "leanpub", "packtpub", "oreilly"}
 
 
 def test_user_agents_non_empty_strings() -> None:
     """
-    [Unit] parameters: verifies user agents non empty strings.
+    [Unit] parameters: verifies USER_AGENTS is a non-empty list of non-empty strings.
 
     Scenario:
-        Given test inputs and fixtures for user agents non empty strings
-        When test_user_agents_non_empty_strings executes the target flow
-        Then the expected outcome for user agents non empty strings is confirmed.
+        Given the parameters module is imported
+        When USER_AGENTS is inspected
+        Then the list is non-empty and every element is a non-empty str
 
     Boundaries:
-        - Focus: user agents non empty strings
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Shape check only; does not validate that strings are valid HTTP User-Agent headers
+        - No network or browser call
 
     On failure, first check:
-        - Assertion details tied to user agents non empty strings
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by parameters
+        - USER_AGENTS was emptied or a blank/non-string value was appended
     """
     assert len(parameters.USER_AGENTS) > 0
     assert all(isinstance(ua, str) and ua for ua in parameters.USER_AGENTS)
@@ -99,21 +87,18 @@ def test_user_agents_non_empty_strings() -> None:
 
 def test_min_rating_is_float() -> None:
     """
-    [Unit] parameters: verifies min rating is float.
+    [Unit] parameters: verifies SCRAPE_FILTERS["min_rating"] is a float.
 
     Scenario:
-        Given test inputs and fixtures for min rating is float
-        When test_min_rating_is_float executes the target flow
-        Then the expected outcome for min rating is float is confirmed.
+        Given the parameters module is imported
+        When SCRAPE_FILTERS["min_rating"] is inspected
+        Then it is an instance of float
 
     Boundaries:
-        - Focus: min rating is float
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Type check only; the numeric value is not asserted
+        - Does not test that the threshold is within a sensible range
 
     On failure, first check:
-        - Assertion details tied to min rating is float
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by parameters
+        - SCRAPE_FILTERS["min_rating"] was changed to an int or string literal
     """
     assert isinstance(parameters.SCRAPE_FILTERS["min_rating"], float)

@@ -83,22 +83,19 @@ def _amazon_page(title="Great Python Book - Amazon"):
 
 async def test_route_handler_allows_document_requests():
     """
-    [Local] scrape details: verifies route handler allows document requests.
+    [Local] scrape details: verifies that a document request is forwarded, not aborted.
 
     Scenario:
-        Given test inputs and fixtures for route handler allows document requests
-        When test_route_handler_allows_document_requests executes the target flow
-        Then the expected outcome for route handler allows document requests is confirmed.
+        Given a mock route whose resource_type is "document"
+        When route_handler is called
+        Then route.continue_() is awaited once and route.abort() is never called.
 
     Boundaries:
-        - Focus: route handler allows document requests
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the "document" branch is covered; all other resource types are in the
+          parametrized abort test.
 
     On failure, first check:
-        - Assertion details tied to route handler allows document requests
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The condition in route_handler that dispatches on resource_type.
     """
     route = MagicMock()
     route.request.resource_type = "document"
@@ -114,22 +111,19 @@ async def test_route_handler_allows_document_requests():
 @pytest.mark.parametrize("resource_type", ["image", "font", "stylesheet", "script"])
 async def test_route_handler_aborts_non_document_requests(resource_type):
     """
-    [Local] scrape details: verifies route handler aborts non document requests.
+    [Local] scrape details: verifies that non-document requests are aborted.
 
     Scenario:
-        Given test inputs and fixtures for route handler aborts non document requests
-        When test_route_handler_aborts_non_document_requests executes the target flow
-        Then the expected outcome for route handler aborts non document requests is confirmed.
+        Given a mock route whose resource_type is one of image/font/stylesheet/script
+        When route_handler is called
+        Then route.abort() is awaited once and route.continue_() is never called.
 
     Boundaries:
-        - Focus: route handler aborts non document requests
-        - Fixtures/params: resource_type (parametrized, 4 cases)
-        - Scope: assertions and setup in this test case only
+        - Parametrized over the four non-document resource types used in production;
+          "document" itself is covered by the separate allow test.
 
     On failure, first check:
-        - Assertion details tied to route handler aborts non document requests
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The condition in route_handler that dispatches on resource_type.
     """
     route = MagicMock()
     route.request.resource_type = resource_type
@@ -152,19 +146,17 @@ async def test_get_leanpub_book_details_happy_path():
     [Local] scrape details: verifies get leanpub book details happy path.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details happy path
-        When test_get_leanpub_book_details_happy_path executes the target flow
-        Then the expected outcome for get leanpub book details happy path is confirmed.
+        Given a well-formed Leanpub JSON payload served by the mock httpx client
+        When get_leanpub_book_details is called
+        Then the result has status SUCCESS and all book fields (title, book_id, slug,
+        authors, categories, last_published_at, site, hash) are correctly populated.
 
     Boundaries:
-        - Focus: get leanpub book details happy path
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - httpx is mocked; no network. Error branches are covered by separate tests.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details happy path
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - Field extraction logic in get_leanpub_book_details (JSON path, date parsing,
+          hash_book call).
     """
     response = FakeResponse(json_data=_leanpub_payload())
     with _patch_httpx(responses=[response]):
@@ -184,22 +176,20 @@ async def test_get_leanpub_book_details_happy_path():
 
 async def test_get_leanpub_book_details_cleans_html_description():
     """
-    [Local] scrape details: verifies get leanpub book details cleans html description.
+    [Local] scrape details: verifies that HTML markup is stripped from about_the_book.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details cleans html description
-        When test_get_leanpub_book_details_cleans_html_description executes the target flow
-        Then the expected outcome for get leanpub book details cleans html description is confirmed.
+        Given a Leanpub payload whose about_the_book contains <p> and <ul>/<li> tags
+        When get_leanpub_book_details is called
+        Then all angle-bracket tags are removed, three-or-more consecutive newlines do
+        not appear, and the plain text content is preserved.
 
     Boundaries:
-        - Focus: get leanpub book details cleans html description
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the description-cleaning pipeline is tested; other fields are covered
+          by the happy-path test.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details cleans html description
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The HTML-to-text conversion step and newline-collapse logic.
     """
     response = FakeResponse(json_data=_leanpub_payload())
     with _patch_httpx(responses=[response]):
@@ -218,22 +208,18 @@ async def test_get_leanpub_book_details_cleans_html_description():
 
 async def test_get_leanpub_book_details_missing_data_key_returns_failed():
     """
-    [Local] scrape details: verifies get leanpub book details missing data key returns failed.
+    [Local] scrape details: verifies that a response without a "data" key returns FAILED.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details missing data key returns failed
-        When test_get_leanpub_book_details_missing_data_key_returns_failed executes the target flow
-        Then the expected outcome for get leanpub book details missing data key returns failed is confirmed.
+        Given a mock HTTP response whose JSON body has no top-level "data" key
+        When get_leanpub_book_details is called
+        Then the result has status FAILED, book is None, and url equals the request URL.
 
     Boundaries:
-        - Focus: get leanpub book details missing data key returns failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the KeyError/missing-data branch only; other error types are separate.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details missing data key returns failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The guard that checks for "data" in the response JSON.
     """
     response = FakeResponse(json_data={"meta": "no data here"})
     with _patch_httpx(responses=[response]):
@@ -246,22 +232,19 @@ async def test_get_leanpub_book_details_missing_data_key_returns_failed():
 
 async def test_get_leanpub_book_details_malformed_date_yields_none_date():
     """
-    [Local] scrape details: verifies get leanpub book details malformed date yields none date.
+    [Local] scrape details: verifies that an unparseable date string yields None without failing.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details malformed date yields none date
-        When test_get_leanpub_book_details_malformed_date_yields_none_date executes the target flow
-        Then the expected outcome for get leanpub book details malformed date yields none date is confirmed.
+        Given a Leanpub payload with last_published_at set to "not-a-real-date"
+        When get_leanpub_book_details is called
+        Then the result status is SUCCESS, last_published_at is None, and hash is still
+        computed (a bad date must not abort hashing).
 
     Boundaries:
-        - Focus: get leanpub book details malformed date yields none date
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers only the date-parse failure branch; other error paths are separate.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details malformed date yields none date
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The date-parsing and hash_book calls in get_leanpub_book_details.
     """
     payload = _leanpub_payload(last_published_at="not-a-real-date")
     response = FakeResponse(json_data=payload)
@@ -277,13 +260,13 @@ async def test_get_leanpub_book_details_malformed_date_yields_none_date():
 async def test_leanpub_failure_returns_failed_result_not_none():
     """
     [Local] scrape details: verifies leanpub failure returns failed result not none.
-    
+
     Scenario:
         a Leanpub HTTP error that used to return a bare ``None``.
-    
+
     Boundaries:
         - the httpx client raises an ``HTTPStatusError``; the helper must now surface a typed ``ScrapeResult`` (FAILED, with the real url and a secret-free error) rather than ``None``, which ``scrape_urls`` once filed as ``UNKNOWN_ERROR`` (defect (d)).
-    
+
     On failure, first check:
         - a Leanpub failure again returns ``None`` and the opaque-error regression returns.
     """
@@ -305,22 +288,18 @@ async def test_leanpub_failure_returns_failed_result_not_none():
 
 async def test_get_leanpub_book_details_request_error_returns_failed():
     """
-    [Local] scrape details: verifies get leanpub book details request error returns failed.
+    [Local] scrape details: verifies that an httpx.RequestError yields a FAILED result.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details request error returns failed
-        When test_get_leanpub_book_details_request_error_returns_failed executes the target flow
-        Then the expected outcome for get leanpub book details request error returns failed is confirmed.
+        Given the mock httpx client raises RequestError on .get()
+        When get_leanpub_book_details is called
+        Then the result has status FAILED and book is None.
 
     Boundaries:
-        - Focus: get leanpub book details request error returns failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Network-level error only; HTTP status errors and JSON errors are separate.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details request error returns failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The except httpx.RequestError branch in get_leanpub_book_details.
     """
     request = httpx.Request("GET", LEANPUB_URL)
     exc = httpx.RequestError("network down", request=request)
@@ -333,22 +312,18 @@ async def test_get_leanpub_book_details_request_error_returns_failed():
 
 async def test_get_leanpub_book_details_json_decode_error_returns_failed():
     """
-    [Local] scrape details: verifies get leanpub book details json decode error returns failed.
+    [Local] scrape details: verifies that a JSONDecodeError from the response yields FAILED.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details json decode error returns failed
-        When test_get_leanpub_book_details_json_decode_error_returns_failed executes the target flow
-        Then the expected outcome for get leanpub book details json decode error returns failed is confirmed.
+        Given the mock response's .json() raises json.JSONDecodeError
+        When get_leanpub_book_details is called
+        Then the result has status FAILED and book is None.
 
     Boundaries:
-        - Focus: get leanpub book details json decode error returns failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the JSON-parse failure branch; network and missing-key errors are separate.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details json decode error returns failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The except json.JSONDecodeError branch in get_leanpub_book_details.
     """
     decode_exc = json.JSONDecodeError("Expecting value", "", 0)
     response = FakeResponse(json_exc=decode_exc, text="<html>not json</html>")
@@ -361,22 +336,18 @@ async def test_get_leanpub_book_details_json_decode_error_returns_failed():
 
 async def test_get_leanpub_book_details_generic_exception_returns_failed():
     """
-    [Local] scrape details: verifies get leanpub book details generic exception returns failed.
+    [Local] scrape details: verifies that an unexpected RuntimeError yields FAILED without crashing.
 
     Scenario:
-        Given test inputs and fixtures for get leanpub book details generic exception returns failed
-        When test_get_leanpub_book_details_generic_exception_returns_failed executes the target flow
-        Then the expected outcome for get leanpub book details generic exception returns failed is confirmed.
+        Given the mock httpx client's .get() raises RuntimeError("unexpected")
+        When get_leanpub_book_details is called
+        Then the result has status FAILED and book is None.
 
     Boundaries:
-        - Focus: get leanpub book details generic exception returns failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the broad except Exception fallback; typed errors are in separate tests.
 
     On failure, first check:
-        - Assertion details tied to get leanpub book details generic exception returns failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The bare except / outer exception handler in get_leanpub_book_details.
     """
     with _patch_httpx(get_side_effect=[RuntimeError("unexpected")]):
         result = await get_leanpub_book_details(LEANPUB_URL)
@@ -392,22 +363,20 @@ async def test_get_leanpub_book_details_generic_exception_returns_failed():
 
 async def test_scrape_book_leanpub_short_circuits_to_api_helper():
     """
-    [Local] scrape details: verifies scrape book leanpub short circuits to api helper.
+    [Local] scrape details: verifies that a Leanpub URL skips Playwright and calls the API helper.
 
     Scenario:
-        Given test inputs and fixtures for scrape book leanpub short circuits to api helper
-        When test_scrape_book_leanpub_short_circuits_to_api_helper executes the target flow
-        Then the expected outcome for scrape book leanpub short circuits to api helper is confirmed.
+        Given a Leanpub URL and get_leanpub_book_details patched to return a sentinel
+        When scrape_book is called
+        Then the API helper is awaited once with the URL, and browser.new_page is never
+        opened (the Playwright loop is bypassed entirely).
 
     Boundaries:
-        - Focus: scrape book leanpub short circuits to api helper
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - API helper return value is a raw dict sentinel; typed ScrapeResult behavior is
+          covered by test_leanpub_dispatch_opens_no_playwright_page.
 
     On failure, first check:
-        - Assertion details tied to scrape book leanpub short circuits to api helper
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The Leanpub short-circuit guard at the top of scrape_book.
     """
     sentinel = {"title": "From API", "hash": "abc"}
     page = FakePage()
@@ -429,22 +398,19 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
 async def test_scrape_book_site_without_base_url_returns_failed():
     # packtpub has no BASE_URL key at all -> KeyError -> caught -> retried -> FAILED.
     """
-    [Local] scrape details: verifies scrape book site without base url returns failed.
+    [Local] scrape details: verifies that a missing BASE_URL for a site yields FAILED after retries.
 
     Scenario:
-        Given test inputs and fixtures for scrape book site without base url returns failed
-        When test_scrape_book_site_without_base_url_returns_failed executes the target flow
-        Then the expected outcome for scrape book site without base url returns failed is confirmed.
+        Given the "packtpub" site config has no BASE_URL key (KeyError on access)
+        When scrape_book is called
+        Then the result is FAILED with book=None and site="packtpub" after exhausting
+        the retry loop.
 
     Boundaries:
-        - Focus: scrape book site without base url returns failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the KeyError/missing-config path; other failure modes are separate.
 
     On failure, first check:
-        - Assertion details tied to scrape book site without base url returns failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The BASE_URL lookup in scrape_book's inner loop and how KeyError is caught.
     """
     page = FakePage(title="Some Packt Book")
     browser = FakeBrowser(page=page)
@@ -460,13 +426,13 @@ async def test_scrape_book_site_without_base_url_returns_failed():
 async def test_scrape_book_404_returns_not_found():
     """
     [Local] scrape details: verifies scrape book 404 returns not found.
-    
+
     Scenario:
         amazon serves a page whose title matches ``404_PAGE_TITLE``.
-    
+
     Boundaries:
         - the 404 short-circuit fires on the first attempt; the result must be a typed NOT_FOUND (not the old opaque ``(None, "FAILED")``) so ``failed_books.csv`` can tell a dead URL from a broken selector. The page is closed exactly once.
-    
+
     On failure, first check:
         - a 404 again collapses into FAILED, erasing the distinction subtask 02 adds.
     """
@@ -483,22 +449,19 @@ async def test_scrape_book_404_returns_not_found():
 
 async def test_scrape_book_amazon_happy_path_returns_full_book():
     """
-    [Local] scrape details: verifies scrape book amazon happy path returns full book.
+    [Local] scrape details: verifies that a fully populated amazon page yields a complete book.
 
     Scenario:
-        Given test inputs and fixtures for scrape book amazon happy path returns full book
-        When test_scrape_book_amazon_happy_path_returns_full_book executes the target flow
-        Then the expected outcome for scrape book amazon happy path returns full book is confirmed.
+        Given a FakePage whose locators cover all amazon selectors
+        When scrape_book is called
+        Then the result has status SUCCESS and the book dict contains title, authors,
+        isbn10, isbn13, description, asin, site, url, and hash.
 
     Boundaries:
-        - Focus: scrape book amazon happy path returns full book
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - No storage backend; duplicate-check behavior is covered by separate tests.
 
     On failure, first check:
-        - Assertion details tied to scrape book amazon happy path returns full book
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The field-extraction selectors for amazon in scrape_book and site_constants.
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/ref=sr_1_1"
     page = _amazon_page()
@@ -521,22 +484,18 @@ async def test_scrape_book_amazon_happy_path_returns_full_book():
 
 async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
     """
-    [Local] scrape details: verifies scrape book amazon missing isbn defaults to na.
+    [Local] scrape details: verifies that absent ISBN selectors produce "N/A" defaults.
 
     Scenario:
-        Given test inputs and fixtures for scrape book amazon missing isbn defaults to na
-        When test_scrape_book_amazon_missing_isbn_defaults_to_na executes the target flow
-        Then the expected outcome for scrape book amazon missing isbn defaults to na is confirmed.
+        Given a FakePage whose locators include no ISBN selectors
+        When scrape_book is called for amazon
+        Then the result is SUCCESS with isbn10 == "N/A" and isbn13 == "N/A".
 
     Boundaries:
-        - Focus: scrape book amazon missing isbn defaults to na
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the ISBN-fallback branch only; other field defaults are not asserted.
 
     On failure, first check:
-        - Assertion details tied to scrape book amazon missing isbn defaults to na
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The isbn10/isbn13 default value logic in scrape_book.
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     # No ISBN selectors configured -> empty locators -> "N/A" default.
@@ -559,22 +518,18 @@ async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
 
 async def test_scrape_book_duplicate_hash_returns_duplicate():
     """
-    [Local] scrape details: verifies scrape book duplicate hash returns duplicate.
+    [Local] scrape details: verifies that a book already in the backend yields DUPLICATE.
 
     Scenario:
-        Given test inputs and fixtures for scrape book duplicate hash returns duplicate
-        When test_scrape_book_duplicate_hash_returns_duplicate executes the target flow
-        Then the expected outcome for scrape book duplicate hash returns duplicate is confirmed.
+        Given a storage backend whose book_exists_by_hash returns True
+        When scrape_book is called for an amazon URL
+        Then the result has status DUPLICATE, book is None, and the page is closed.
 
     Boundaries:
-        - Focus: scrape book duplicate hash returns duplicate
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - book_exists_by_hash is the only dedup check exercised here.
 
     On failure, first check:
-        - Assertion details tied to scrape book duplicate hash returns duplicate
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The duplicate-check branch in scrape_book and the call to storage.book_exists_by_hash.
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     page = _amazon_page()
@@ -593,22 +548,19 @@ async def test_scrape_book_duplicate_hash_returns_duplicate():
 
 async def test_scrape_book_non_duplicate_returns_book():
     """
-    [Local] scrape details: verifies scrape book non duplicate returns book.
+    [Local] scrape details: verifies that a new book passes the hash check and is returned.
 
     Scenario:
-        Given test inputs and fixtures for scrape book non duplicate returns book
-        When test_scrape_book_non_duplicate_returns_book executes the target flow
-        Then the expected outcome for scrape book non duplicate returns book is confirmed.
+        Given a storage backend whose book_exists_by_hash returns False
+        When scrape_book is called for an amazon URL
+        Then the result is SUCCESS and book_exists_by_hash is called with the book's
+        actual computed hash (not an empty string).
 
     Boundaries:
-        - Focus: scrape book non duplicate returns book
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the non-duplicate SUCCESS path; the DUPLICATE path is a separate test.
 
     On failure, first check:
-        - Assertion details tied to scrape book non duplicate returns book
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The hash computation in scrape_book and the argument passed to book_exists_by_hash.
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     page = _amazon_page()
@@ -629,13 +581,13 @@ async def test_scrape_book_non_duplicate_returns_book():
 async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count():
     """
     [Local] scrape details: verifies scrape book exhausted timeouts return timeout with attempt count.
-    
+
     Scenario:
         every navigation times out, exhausting all three attempts.
-    
+
     Boundaries:
         - the final-timeout path must return a typed TIMEOUT (not the old ``(None, "FAILED")``) and record ``attempts == 3`` so the summary and CSV reflect the retry budget that was spent.
-    
+
     On failure, first check:
         - an all-timeouts run again reads as a generic FAILED with no attempt count.
     """
@@ -657,22 +609,20 @@ async def test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count(
 
 async def test_scrape_book_retries_three_times_on_generic_exception_then_failed():
     """
-    [Local] scrape details: verifies scrape book retries three times on generic exception then failed.
+    [Local] scrape details: verifies that three consecutive generic exceptions yield FAILED after 2 sleeps.
 
     Scenario:
-        Given test inputs and fixtures for scrape book retries three times on generic exception then failed
-        When test_scrape_book_retries_three_times_on_generic_exception_then_failed executes the target flow
-        Then the expected outcome for scrape book retries three times on generic exception then failed is confirmed.
+        Given a FakePage whose goto raises ValueError on every attempt
+        When scrape_book is called for an amazon URL
+        Then the result is FAILED, goto is awaited exactly 3 times, and asyncio.sleep
+        is awaited exactly 2 times (between attempts, not after the last).
 
     Boundaries:
-        - Focus: scrape book retries three times on generic exception then failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the generic-exception retry path; the TimeoutError path (TIMEOUT status)
+          is covered by test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count.
 
     On failure, first check:
-        - Assertion details tied to scrape book retries three times on generic exception then failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape details
+        - The retry loop in scrape_book and the sleep placement between attempts.
     """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=ValueError("boom"))
@@ -695,13 +645,13 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
 async def test_leanpub_dispatch_opens_no_playwright_page():
     """
     [Local] scrape details: verifies leanpub dispatch opens no playwright page.
-    
+
     Scenario:
         ``scrape_book`` is called for a Leanpub URL.
-    
+
     Boundaries:
         - exercises only the pre-loop Leanpub dispatch; the httpx detail helper is stubbed, so no network and no Playwright page are involved.
-    
+
     On failure, first check:
         - the Leanpub branch would again open (and leak) a browser page before short-circuiting to the API helper - defect (a) from the parent task.
     """
@@ -725,13 +675,13 @@ async def test_leanpub_dispatch_opens_no_playwright_page():
 async def test_page_closed_exactly_once_on_success():
     """
     [Local] scrape details: verifies page closed exactly once on success.
-    
+
     Scenario:
         a happy-path Amazon scrape returns a full book dict.
-    
+
     Boundaries:
         - single attempt, no duplicate check; asserts the page-open and page-close counts match exactly.
-    
+
     On failure, first check:
         - a page was opened without a matching close (a leak) or closed more than once (spurious ``Target closed`` errors).
     """
@@ -749,13 +699,13 @@ async def test_page_closed_exactly_once_on_success():
 async def test_page_closed_exactly_once_on_duplicate():
     """
     [Local] scrape details: verifies page closed exactly once on duplicate.
-    
+
     Scenario:
         a scraped book is already present in the storage backend.
-    
+
     Boundaries:
         - single attempt that returns ``(None, "DUPLICATE")`` from inside the page context.
-    
+
     On failure, first check:
         - the duplicate short-circuit leaked its page or double-closed it.
     """
@@ -774,13 +724,13 @@ async def test_page_closed_exactly_once_on_duplicate():
 async def test_page_closed_exactly_once_on_404():
     """
     [Local] scrape details: verifies page closed exactly once on 404.
-    
+
     Scenario:
         the target serves a 404 page (title matches ``404_PAGE_TITLE``).
-    
+
     Boundaries:
         - single attempt that returns ``(None, "FAILED")`` from the 404 short-circuit inside the page context.
-    
+
     On failure, first check:
         - the 404 branch leaked its page or double-closed it.
     """
@@ -797,13 +747,13 @@ async def test_page_closed_exactly_once_on_404():
 async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
     """
     [Local] scrape details: verifies page closed exactly once per attempt on repeated timeout.
-    
+
     Scenario:
         every navigation times out, so all three attempts fail.
-    
+
     Boundaries:
         - three attempts hand out the same fake page; asserts exactly one open and one close per attempt (3 == 3), never a fourth close from a stale post-loop cleanup.
-    
+
     On failure, first check:
         - the removed post-loop ``if page: await page.close()`` block (or a double-close on the final attempt) would push the close count to 4+.
     """
@@ -823,13 +773,13 @@ async def test_page_closed_exactly_once_per_attempt_on_repeated_timeout():
 async def test_close_failure_does_not_mask_original_error():
     """
     [Local] scrape details: verifies close failure does not mask original error.
-    
+
     Scenario:
         ``page.close()`` itself raises (e.g. the browser already crashed).
-    
+
     Boundaries:
         - a happy-path scrape whose page close raises; the close failure must be swallowed so the successful result still propagates.
-    
+
     On failure, first check:
         - the close exception masks the real return value, turning a good scrape into a crash.
     """

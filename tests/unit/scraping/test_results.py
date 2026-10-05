@@ -12,12 +12,20 @@ from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 
 def test_scrape_result_success_requires_book() -> None:
-    """Scenario: a SUCCESS result is constructed with a book document.
+    """
+    [Unit] scrape results: verifies a SUCCESS ScrapeResult with a book document is accepted.
 
-    Boundaries: the happy path of ``__post_init__`` - SUCCESS carrying a dict is accepted and
-    the fields round-trip unchanged.
-    On failure: the ``book is not None`` ⇔ SUCCESS invariant rejected a legitimate success,
-    which would make every successful scrape raise.
+    Scenario:
+        Given a SUCCESS status and a non-None book dict
+        When ScrapeResult is constructed
+        Then status, book, error, and attempts all round-trip as expected
+
+    Boundaries:
+        - Happy path of __post_init__ only; no invalid-input branch exercised
+        - In-memory dataclass; no I/O or external calls
+
+    On failure, first check:
+        - The book-is-not-None <=> SUCCESS invariant in ScrapeResult.__post_init__ was changed
     """
     book = {"title": "A Book", "hash": "abc"}
     result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://x/dp/1", site="amazon", book=book)
@@ -29,11 +37,21 @@ def test_scrape_result_success_requires_book() -> None:
 
 
 def test_scrape_result_success_without_book_is_rejected() -> None:
-    """Scenario: a SUCCESS result is constructed with no book document.
+    """
+    [Unit] scrape results: verifies constructing a SUCCESS ScrapeResult without a book raises.
 
-    Boundaries: the invalid-input half of the invariant - SUCCESS must carry a book.
-    On failure: a success result with no payload would slip through and be appended to the
-    save batch as ``None``, corrupting the store.
+    Scenario:
+        Given a SUCCESS status and no book argument
+        When ScrapeResult is constructed
+        Then ValueError is raised with "SUCCESS must carry a book"
+
+    Boundaries:
+        - Invalid-input branch of __post_init__ only; the valid path is a separate test
+        - Does not test any non-SUCCESS status
+
+    On failure, first check:
+        - The invariant guard in ScrapeResult.__post_init__ was removed or weakened
+        - A None book could slip into the save batch and corrupt the store
     """
     with pytest.raises(ValueError, match="SUCCESS must carry a book"):
         ScrapeResult(ScrapeStatus.SUCCESS, url="https://x", site="amazon")
@@ -51,24 +69,42 @@ def test_scrape_result_success_without_book_is_rejected() -> None:
     ],
 )
 def test_scrape_result_non_success_forbids_book(status: ScrapeStatus) -> None:
-    """Scenario: every non-success status is constructed while carrying a book document.
+    """
+    [Unit] scrape results: verifies every non-success status rejects a book document.
 
-    Boundaries: the invalid-input half of the invariant across all non-success statuses; each
-    must raise because a non-success result may never carry a book.
-    On failure: a failed/duplicate result could smuggle a book document into the diagnostics,
-    reintroducing the ambiguity the typed result was meant to remove.
+    Scenario:
+        Given a non-success status (parametrized over all six) and a non-None book dict
+        When ScrapeResult is constructed
+        Then ValueError is raised with "must not carry a book"
+
+    Boundaries:
+        - Covers all non-SUCCESS statuses via parametrize; the valid non-success path is separate
+        - Does not test SUCCESS (tested by test_scrape_result_success_requires_book)
+
+    On failure, first check:
+        - A non-success status was added without adding an invariant guard for the book field
+        - The invariant guard in ScrapeResult.__post_init__ was weakened for a specific status
     """
     with pytest.raises(ValueError, match="must not carry a book"):
         ScrapeResult(status, url="https://x", site="amazon", book={"title": "Nope"})
 
 
 def test_scrape_result_non_success_allows_error_and_attempts() -> None:
-    """Scenario: a non-success result records its error reason and attempt count.
+    """
+    [Unit] scrape results: verifies a non-success result accepts error and attempts metadata.
 
-    Boundaries: a FAILED result with no book but an ``error`` and ``attempts`` is accepted and
-    the values round-trip.
-    On failure: the diagnostic metadata (reason, retry count) that ``failed_books.csv`` reports
-    would be dropped or rejected.
+    Scenario:
+        Given a TIMEOUT status, an error string, and an attempts count of 3
+        When ScrapeResult is constructed with no book
+        Then book is None and error/attempts round-trip unchanged
+
+    Boundaries:
+        - Uses TIMEOUT as a representative non-success status; others share the same path
+        - Does not test that the fields are consumed by any downstream code
+
+    On failure, first check:
+        - ScrapeResult dropped or rejected the error or attempts field in __post_init__
+        - failed_books.csv diagnostics would lose the reason and retry count
     """
     result = ScrapeResult(
         ScrapeStatus.TIMEOUT, url="https://x", site="amazon", error="timed out after 3 attempts", attempts=3
@@ -80,12 +116,21 @@ def test_scrape_result_non_success_allows_error_and_attempts() -> None:
 
 
 def test_scrape_status_values_serialize_to_their_names() -> None:
-    """Scenario: a ScrapeStatus is used where its string value is expected (CSV/summary).
+    """
+    [Unit] scrape results: verifies ScrapeStatus.value equals the member name for CSV serialization.
 
-    Boundaries: the ``str``-Enum contract - ``.value`` equals the member name - which the CSV
-    writer and the status-breakdown summary rely on.
-    On failure: a status would serialize as ``ScrapeStatus.FAILED`` instead of ``FAILED``,
-    breaking the diagnostic CSV and any downstream drift job.
+    Scenario:
+        Given the ScrapeStatus str-Enum definition
+        When .value is read for SUCCESS, NOT_FOUND, and FAILED
+        Then each value equals its member name as a plain string
+
+    Boundaries:
+        - Three representative members checked; the contract applies to all via the str-Enum base
+        - Does not test the CSV writer itself, only the string contract it relies on
+
+    On failure, first check:
+        - ScrapeStatus base class was changed away from str (or StrEnum)
+        - The diagnostic CSV and status-breakdown summary would emit "ScrapeStatus.X" instead of "X"
     """
     assert ScrapeStatus.SUCCESS.value == "SUCCESS"
     assert ScrapeStatus.NOT_FOUND.value == "NOT_FOUND"

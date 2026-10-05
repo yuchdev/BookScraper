@@ -51,68 +51,58 @@ def _patch_ping(side_effect=None):
 
 class TestCheckMongodbConnection:
     """Tests for book_utils.check_mongodb_connection."""
+
     def test_config_error_returns_false(self) -> None:
         """
-        [Local] check mongodb connection: verifies config error returns false.
+        [Local] check mongodb connection: verifies that a ConfigError from the resolver returns False.
 
         Scenario:
-            Given test inputs and fixtures for config error returns false
-            When test_config_error_returns_false executes the target flow
-            Then the expected outcome for config error returns false is confirmed.
+            Given config.resolve_mongo_connection raising ConfigError("bad settings.json")
+            When check_mongodb_connection() is called
+            Then False is returned without attempting to build a client.
 
         Boundaries:
-            - Focus: config error returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Covers the resolver-ConfigError path only; missing URI is a separate test.
 
         On failure, first check:
-            - Assertion details tied to config error returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The except ConfigError branch at the top of check_mongodb_connection.
         """
         with _patch_resolve(side_effect=ConfigError("bad settings.json")):
             assert book_utils.check_mongodb_connection() is False
 
     def test_no_uri_returns_false(self) -> None:
         """
-        [Local] check mongodb connection: verifies no uri returns false.
+        [Local] check mongodb connection: verifies that a None URI from the resolver returns False.
 
         Scenario:
-            Given test inputs and fixtures for no uri returns false
-            When test_no_uri_returns_false executes the target flow
-            Then the expected outcome for no uri returns false is confirmed.
+            Given config.resolve_mongo_connection returning (None, None)
+            When check_mongodb_connection() is called
+            Then False is returned without attempting to build a client.
 
         Boundaries:
-            - Focus: no uri returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Covers the no-URI guard; a valid URI with a missing cert is a separate test.
 
         On failure, first check:
-            - Assertion details tied to no uri returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The URI-is-None guard in check_mongodb_connection.
         """
         with _patch_resolve(return_value=(None, None)):
             assert book_utils.check_mongodb_connection() is False
 
     def test_success_without_tls_cert(self) -> None:
         """
-        [Local] check mongodb connection: verifies success without tls cert.
+        [Local] check mongodb connection: verifies that password auth without a TLS cert returns True.
 
         Scenario:
-            Given test inputs and fixtures for success without tls cert
-            When test_success_without_tls_cert executes the target flow
-            Then the expected outcome for success without tls cert is confirmed.
+            Given a SCRAM URI and cert=None from the resolver, with build and ping stubbed
+            When check_mongodb_connection() is called
+            Then True is returned, build_mongo_client is called with cert_file=None, and
+            the client is closed.
 
         Boundaries:
-            - Focus: success without tls cert
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - No TLS cert; the cert-path forwarding is covered by the TLS cert test.
 
         On failure, first check:
-            - Assertion details tied to success without tls cert
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The cert_file argument passed to build_mongo_client and the client.close() call.
         """
         mock_client = MagicMock()
         with (
@@ -128,22 +118,19 @@ class TestCheckMongodbConnection:
 
     def test_success_with_existing_tls_cert(self, tmp_path) -> None:
         """
-        [Local] check mongodb connection: verifies success with existing tls cert.
+        [Local] check mongodb connection: verifies that an existing TLS cert path is forwarded to the factory.
 
         Scenario:
-            Given test inputs and fixtures for success with existing tls cert
-            When test_success_with_existing_tls_cert executes the target flow
-            Then the expected outcome for success with existing tls cert is confirmed.
+            Given a URI and a cert path pointing to a real file, with build and ping stubbed
+            When check_mongodb_connection() is called
+            Then True is returned and build_mongo_client is called with the cert path as
+            its second positional argument.
 
         Boundaries:
-            - Focus: success with existing tls cert
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Existing file only; a missing cert path is a separate test.
 
         On failure, first check:
-            - Assertion details tied to success with existing tls cert
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The cert_file argument forwarding to build_mongo_client.
         """
         cert_path = tmp_path / "cert.pem"
         cert_path.write_text("fake cert")
@@ -162,13 +149,13 @@ class TestCheckMongodbConnection:
     def test_check_mongodb_connection_honors_tls_ca_file(self, monkeypatch) -> None:
         """
         [Local] book utils: verifies check mongodb connection honors tls ca file.
-        
+
         Scenario:
             TLS_CA_FILE is forwarded to the factory on the pre-flight path, identically to the real connection - it is no longer ignored.
-        
+
         Boundaries:
             - TLS_CA_FILE set in the environment; build + ping stubbed.
-        
+
         On failure, first check:
             - the pre-flight check drops the CA bundle and loses server-CA pinning.
         """
@@ -187,13 +174,13 @@ class TestCheckMongodbConnection:
     def test_missing_cert_file_raises_and_returns_false(self, tmp_path) -> None:
         """
         [Local] book utils: verifies missing cert file raises and returns false.
-        
+
         Scenario:
             a configured client cert that does not exist fails the check via the factory's MongoConnectionError rather than silently connecting certless (the old bug).
-        
+
         Boundaries:
             - resolve returns a nonexistent cert path; the real factory runs; MongoClient must never be constructed.
-        
+
         On failure, first check:
             - the missing cert is dropped and the check reports a false-positive success.
         """
@@ -207,22 +194,19 @@ class TestCheckMongodbConnection:
 
     def test_connection_failure_returns_false_and_closes(self) -> None:
         """
-        [Local] check mongodb connection: verifies connection failure returns false and closes.
+        [Local] check mongodb connection: verifies that a MongoConnectionError returns False and closes the client.
 
         Scenario:
-            Given test inputs and fixtures for connection failure returns false and closes
-            When test_connection_failure_returns_false_and_closes executes the target flow
-            Then the expected outcome for connection failure returns false and closes is confirmed.
+            Given ping raising MongoConnectionError("ServerSelectionTimeoutError")
+            When check_mongodb_connection() is called
+            Then False is returned and client.close() is called once.
 
         Boundaries:
-            - Focus: connection failure returns false and closes
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - MongoConnectionError only; a raw RuntimeError from the factory is a separate test.
 
         On failure, first check:
-            - Assertion details tied to connection failure returns false and closes
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The except MongoConnectionError handler and the finally: client.close() in
+              check_mongodb_connection.
         """
         mock_client = MagicMock()
         with (
@@ -238,22 +222,18 @@ class TestCheckMongodbConnection:
         # branch returns False without leaking or crashing; client stays None so the finally
         # guard must not blow up.
         """
-        [Local] check mongodb connection: verifies generic exception returns false without crashing.
+        [Local] check mongodb connection: verifies that a RuntimeError from the factory returns False without crashing.
 
         Scenario:
-            Given test inputs and fixtures for generic exception returns false without crashing
-            When test_generic_exception_returns_false_without_crashing executes the target flow
-            Then the expected outcome for generic exception returns false without crashing is confirmed.
+            Given build_mongo_client raising RuntimeError("boom") so client is never assigned
+            When check_mongodb_connection() is called
+            Then False is returned and the finally block does not raise (client is None).
 
         Boundaries:
-            - Focus: generic exception returns false without crashing
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Covers the broad except Exception fallback and the client-is-None finally guard.
 
         On failure, first check:
-            - Assertion details tied to generic exception returns false without crashing
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check mongodb connection
+            - The generic except handler and the "if client:" guard in the finally block.
         """
         with (
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", None)),
@@ -264,13 +244,13 @@ class TestCheckMongodbConnection:
     def test_failure_does_not_leak_uri_or_host(self, caplog) -> None:
         """
         [Local] book utils: verifies failure does not leak uri or host.
-        
+
         Scenario:
             regression - a redacted MongoConnectionError on the pre-flight path leaves no URI/host in the logs or print_log output (CWE-532).
-        
+
         Boundaries:
             - ping raises a redacted error; a fake secret URI is resolved.
-        
+
         On failure, first check:
             - the connection URI/host reaches the persistent log or console.
         """

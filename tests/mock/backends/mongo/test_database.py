@@ -367,22 +367,18 @@ class TestGetMongoCollection:
 
     def test_returns_cached_collection_without_reinitializing(self, monkeypatch) -> None:
         """
-        [Local] get mongo collection: verifies returns cached collection without reinitializing.
+        [Local] get mongo collection: verifies that a cached collection is returned without calling _initialize_mongodb_connection.
 
         Scenario:
-            Given test inputs and fixtures for returns cached collection without reinitializing
-            When test_returns_cached_collection_without_reinitializing executes the target flow
-            Then the expected outcome for returns cached collection without reinitializing is confirmed.
+            Given _mongo_collection is already set to a Mock and _initialize_mongodb_connection is patched as a spy
+            When database.get_mongo_collection() is called
+            Then the cached collection is returned and _initialize_mongodb_connection is never called.
 
         Boundaries:
-            - Focus: returns cached collection without reinitializing
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The cache-hit branch; no real MongoDB connection
 
         On failure, first check:
-            - Assertion details tied to returns cached collection without reinitializing
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get mongo collection
+            - The _mongo_collection null check in get_mongo_collection
         """
         cached = Mock(name="cached-collection")
         monkeypatch.setattr(database, "_mongo_collection", cached)
@@ -396,22 +392,18 @@ class TestGetMongoCollection:
 
     def test_initializes_when_unset(self, monkeypatch) -> None:
         """
-        [Local] get mongo collection: verifies initializes when unset.
+        [Local] get mongo collection: verifies that _initialize_mongodb_connection is called and the resulting collection is returned when the cache is empty.
 
         Scenario:
-            Given test inputs and fixtures for initializes when unset
-            When test_initializes_when_unset executes the target flow
-            Then the expected outcome for initializes when unset is confirmed.
+            Given _mongo_collection is None and _initialize_mongodb_connection is patched to return (client, collection)
+            When database.get_mongo_collection() is called
+            Then _initialize_mongodb_connection is called once and the returned collection is the one from init.
 
         Boundaries:
-            - Focus: initializes when unset
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The cache-miss / initialization path; no real MongoDB connection
 
         On failure, first check:
-            - Assertion details tied to initializes when unset
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get mongo collection
+            - The initialization trigger in get_mongo_collection
         """
         client = Mock(name="client")
         collection = Mock(name="collection")
@@ -425,22 +417,18 @@ class TestGetMongoCollection:
 
     def test_initialize_raises_is_caught_and_returns_none(self, monkeypatch) -> None:
         """
-        [Local] get mongo collection: verifies initialize raises is caught and returns none.
+        [Local] get mongo collection: verifies that a RuntimeError from _initialize_mongodb_connection is caught, returns None, and prints a FAILED message.
 
         Scenario:
-            Given test inputs and fixtures for initialize raises is caught and returns none
-            When test_initialize_raises_is_caught_and_returns_none executes the target flow
-            Then the expected outcome for initialize raises is caught and returns none is confirmed.
+            Given _initialize_mongodb_connection is patched to raise RuntimeError("boom")
+            When database.get_mongo_collection() is called with print_log patched
+            Then None is returned and print_log is called with a message containing "FAILED".
 
         Boundaries:
-            - Focus: initialize raises is caught and returns none
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The error-recovery branch; the exception must not propagate
 
         On failure, first check:
-            - Assertion details tied to initialize raises is caught and returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get mongo collection
+            - The try/except in get_mongo_collection and the FAILED message
         """
         monkeypatch.setattr(
             database,
@@ -571,22 +559,18 @@ class TestCloseMongoConnection:
 
     def test_closes_client_and_resets_globals(self, monkeypatch) -> None:
         """
-        [Local] close mongo connection: verifies closes client and resets globals.
+        [Local] close mongo connection: verifies that close_mongo_connection calls client.close() and resets all three globals to None.
 
         Scenario:
-            Given test inputs and fixtures for closes client and resets globals
-            When test_closes_client_and_resets_globals executes the target flow
-            Then the expected outcome for closes client and resets globals is confirmed.
+            Given _mongo_client, _mongo_db, _mongo_collection are all set to Mock objects
+            When database.close_mongo_connection() is called
+            Then client.close() is called once and all three globals are reset to None.
 
         Boundaries:
-            - Focus: closes client and resets globals
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The happy-path teardown; all three module-level globals must be cleared
 
         On failure, first check:
-            - Assertion details tied to closes client and resets globals
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by close mongo connection
+            - The close call and global-reset logic in close_mongo_connection
         """
         client = Mock(name="client")
         monkeypatch.setattr(database, "_mongo_client", client)
@@ -603,22 +587,18 @@ class TestCloseMongoConnection:
     def test_no_client_is_noop(self) -> None:
         # Globals already None via reset_globals; must not raise.
         """
-        [Local] close mongo connection: verifies no client is noop.
+        [Local] close mongo connection: verifies that close_mongo_connection is a no-op when no client is set.
 
         Scenario:
-            Given test inputs and fixtures for no client is noop
-            When test_no_client_is_noop executes the target flow
-            Then the expected outcome for no client is noop is confirmed.
+            Given _mongo_client is None (reset by reset_globals autouse fixture)
+            When database.close_mongo_connection() is called
+            Then no exception is raised and _mongo_client remains None.
 
         Boundaries:
-            - Focus: no client is noop
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The already-closed / never-connected case
 
         On failure, first check:
-            - Assertion details tied to no client is noop
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by close mongo connection
+            - The None-client guard in close_mongo_connection
         """
         database.close_mongo_connection()
         assert database._mongo_client is None
@@ -837,22 +817,18 @@ class TestCheckAmazonAsinExists:
 
     def test_found(self) -> None:
         """
-        [Local] check amazon asin exists: verifies found.
+        [Local] check amazon asin exists: verifies that a matching find_one result returns True and uses the correct query.
 
         Scenario:
-            Given test inputs and fixtures for found
-            When test_found executes the target flow
-            Then the expected outcome for found is confirmed.
+            Given a Mock collection whose find_one returns a document
+            When database.check_amazon_asin_exists_in_db("B00X", collection) is called
+            Then True is returned and find_one is called with {"asin": "B00X"}.
 
         Boundaries:
-            - Focus: found
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "found" path; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to found
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check amazon asin exists
+            - The find_one query shape and return-value in check_amazon_asin_exists_in_db
         """
         collection = Mock()
         collection.find_one.return_value = {"asin": "B00X"}
@@ -861,22 +837,18 @@ class TestCheckAmazonAsinExists:
 
     def test_not_found(self) -> None:
         """
-        [Local] check amazon asin exists: verifies not found.
+        [Local] check amazon asin exists: verifies that a None find_one result returns False.
 
         Scenario:
-            Given test inputs and fixtures for not found
-            When test_not_found executes the target flow
-            Then the expected outcome for not found is confirmed.
+            Given a Mock collection whose find_one returns None
+            When database.check_amazon_asin_exists_in_db("B00X", collection) is called
+            Then False is returned.
 
         Boundaries:
-            - Focus: not found
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "not found" path; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to not found
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check amazon asin exists
+            - The None-result path in check_amazon_asin_exists_in_db
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -884,44 +856,36 @@ class TestCheckAmazonAsinExists:
 
     def test_none_collection_returns_false(self, monkeypatch) -> None:
         """
-        [Local] check amazon asin exists: verifies none collection returns false.
+        [Local] check amazon asin exists: verifies that a None collection returns False without querying.
 
         Scenario:
-            Given test inputs and fixtures for none collection returns false
-            When test_none_collection_returns_false executes the target flow
-            Then the expected outcome for none collection returns false is confirmed.
+            Given get_mongo_collection is patched to return None and collection argument is also None
+            When database.check_amazon_asin_exists_in_db("B00X", None) is called
+            Then False is returned.
 
         Boundaries:
-            - Focus: none collection returns false
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The None-collection short-circuit; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to none collection returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check amazon asin exists
+            - The None-collection guard in check_amazon_asin_exists_in_db
         """
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
         assert database.check_amazon_asin_exists_in_db("B00X", None) is False
 
     def test_find_one_exception_returns_false(self) -> None:
         """
-        [Local] check amazon asin exists: verifies find one exception returns false.
+        [Local] check amazon asin exists: verifies that a PyMongoError from find_one is caught and returns False.
 
         Scenario:
-            Given test inputs and fixtures for find one exception returns false
-            When test_find_one_exception_returns_false executes the target flow
-            Then the expected outcome for find one exception returns false is confirmed.
+            Given a Mock collection whose find_one raises PyMongoError("boom")
+            When database.check_amazon_asin_exists_in_db("B00X", collection) is called
+            Then the exception is swallowed and False is returned.
 
         Boundaries:
-            - Focus: find one exception returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The exception-handling path; only PyMongoError exercised
 
         On failure, first check:
-            - Assertion details tied to find one exception returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check amazon asin exists
+            - The try/except around find_one in check_amazon_asin_exists_in_db
         """
         collection = Mock()
         collection.find_one.side_effect = PyMongoError("boom")
@@ -933,22 +897,18 @@ class TestCheckBookExists:
 
     def test_found(self) -> None:
         """
-        [Local] check book exists: verifies found.
+        [Local] check book exists: verifies that a matching find_one result returns True and uses the correct query.
 
         Scenario:
-            Given test inputs and fixtures for found
-            When test_found executes the target flow
-            Then the expected outcome for found is confirmed.
+            Given a Mock collection whose find_one returns a document
+            When database.check_book_exists_in_db("abc", collection) is called
+            Then True is returned and find_one is called with {"hash": "abc"}.
 
         Boundaries:
-            - Focus: found
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "found" path; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to found
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check book exists
+            - The find_one query shape and return-value in check_book_exists_in_db
         """
         collection = Mock()
         collection.find_one.return_value = {"hash": "abc"}
@@ -957,22 +917,18 @@ class TestCheckBookExists:
 
     def test_not_found(self) -> None:
         """
-        [Local] check book exists: verifies not found.
+        [Local] check book exists: verifies that a None find_one result returns False.
 
         Scenario:
-            Given test inputs and fixtures for not found
-            When test_not_found executes the target flow
-            Then the expected outcome for not found is confirmed.
+            Given a Mock collection whose find_one returns None
+            When database.check_book_exists_in_db("abc", collection) is called
+            Then False is returned.
 
         Boundaries:
-            - Focus: not found
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "not found" path; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to not found
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check book exists
+            - The None-result path in check_book_exists_in_db
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -980,44 +936,36 @@ class TestCheckBookExists:
 
     def test_none_collection_returns_false(self, monkeypatch) -> None:
         """
-        [Local] check book exists: verifies none collection returns false.
+        [Local] check book exists: verifies that a None collection returns False without querying.
 
         Scenario:
-            Given test inputs and fixtures for none collection returns false
-            When test_none_collection_returns_false executes the target flow
-            Then the expected outcome for none collection returns false is confirmed.
+            Given get_mongo_collection is patched to return None and collection argument is also None
+            When database.check_book_exists_in_db("abc", None) is called
+            Then False is returned.
 
         Boundaries:
-            - Focus: none collection returns false
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - The None-collection short-circuit; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to none collection returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check book exists
+            - The None-collection guard in check_book_exists_in_db
         """
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
         assert database.check_book_exists_in_db("abc", None) is False
 
     def test_find_one_exception_returns_false(self) -> None:
         """
-        [Local] check book exists: verifies find one exception returns false.
+        [Local] check book exists: verifies that a PyMongoError from find_one is caught and returns False.
 
         Scenario:
-            Given test inputs and fixtures for find one exception returns false
-            When test_find_one_exception_returns_false executes the target flow
-            Then the expected outcome for find one exception returns false is confirmed.
+            Given a Mock collection whose find_one raises PyMongoError("boom")
+            When database.check_book_exists_in_db("abc", collection) is called
+            Then the exception is swallowed and False is returned.
 
         Boundaries:
-            - Focus: find one exception returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The exception-handling path; only PyMongoError exercised
 
         On failure, first check:
-            - Assertion details tied to find one exception returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check book exists
+            - The try/except around find_one in check_book_exists_in_db
         """
         collection = Mock()
         collection.find_one.side_effect = PyMongoError("boom")
@@ -1032,22 +980,18 @@ class TestUpdateBookIsbn:
 
     def test_both_isbns_set_and_modified(self) -> None:
         """
-        [Local] update book isbn: verifies both isbns set and modified.
+        [Local] update book isbn: verifies that both isbn10 and isbn13 are included in the $set when both are valid.
 
         Scenario:
-            Given test inputs and fixtures for both isbns set and modified
-            When test_both_isbns_set_and_modified executes the target flow
-            Then the expected outcome for both isbns set and modified is confirmed.
+            Given a Mock collection with update_one returning modified_count=1 and both isbn10="111" and isbn13="222"
+            When database.update_book_isbn(collection, "abc", new_isbn10="111", new_isbn13="222") is called
+            Then True is returned and update_one is called with {"$set": {"isbn10": "111", "isbn13": "222"}}.
 
         Boundaries:
-            - Focus: both isbns set and modified
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Both ISBNs valid; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to both isbns set and modified
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The $set construction and return-value in update_book_isbn
         """
         collection = Mock()
         collection.update_one.return_value = Mock(modified_count=1)
@@ -1057,22 +1001,18 @@ class TestUpdateBookIsbn:
 
     def test_only_isbn10_when_isbn13_is_na(self) -> None:
         """
-        [Local] update book isbn: verifies only isbn10 when isbn13 is na.
+        [Local] update book isbn: verifies that isbn13 is omitted from $set when it is "N/A".
 
         Scenario:
-            Given test inputs and fixtures for only isbn10 when isbn13 is na
-            When test_only_isbn10_when_isbn13_is_na executes the target flow
-            Then the expected outcome for only isbn10 when isbn13 is na is confirmed.
+            Given isbn10="111" and isbn13="N/A" and update_one returning modified_count=1
+            When database.update_book_isbn(collection, "abc", new_isbn10="111", new_isbn13="N/A") is called
+            Then True is returned and update_one is called with only {"isbn10": "111"} in $set.
 
         Boundaries:
-            - Focus: only isbn10 when isbn13 is na
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "N/A" filtering for isbn13; isbn10 is still valid
 
         On failure, first check:
-            - Assertion details tied to only isbn10 when isbn13 is na
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The isbn13 "N/A" filter in update_book_isbn
         """
         collection = Mock()
         collection.update_one.return_value = Mock(modified_count=1)
@@ -1082,22 +1022,18 @@ class TestUpdateBookIsbn:
 
     def test_neither_valid_returns_false_without_update(self) -> None:
         """
-        [Local] update book isbn: verifies neither valid returns false without update.
+        [Local] update book isbn: verifies that False is returned and update_one is not called when both ISBNs are invalid.
 
         Scenario:
-            Given test inputs and fixtures for neither valid returns false without update
-            When test_neither_valid_returns_false_without_update executes the target flow
-            Then the expected outcome for neither valid returns false without update is confirmed.
+            Given isbn10="N/A" and isbn13=None (both invalid)
+            When database.update_book_isbn(collection, "abc", new_isbn10="N/A", new_isbn13=None) is called
+            Then False is returned and update_one is never called.
 
         Boundaries:
-            - Focus: neither valid returns false without update
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The no-valid-isbn short-circuit path
 
         On failure, first check:
-            - Assertion details tied to neither valid returns false without update
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The invalid-ISBN filtering in update_book_isbn
         """
         collection = Mock()
         result = database.update_book_isbn(collection, "abc", new_isbn10="N/A", new_isbn13=None)
@@ -1106,22 +1042,18 @@ class TestUpdateBookIsbn:
 
     def test_modified_count_zero_returns_false(self) -> None:
         """
-        [Local] update book isbn: verifies modified count zero returns false.
+        [Local] update book isbn: verifies that False is returned when update_one reports modified_count=0.
 
         Scenario:
-            Given test inputs and fixtures for modified count zero returns false
-            When test_modified_count_zero_returns_false executes the target flow
-            Then the expected outcome for modified count zero returns false is confirmed.
+            Given update_one returning modified_count=0 and isbn10="111"
+            When database.update_book_isbn(collection, "abc", new_isbn10="111") is called
+            Then False is returned.
 
         Boundaries:
-            - Focus: modified count zero returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The no-document-matched case (update found nothing to update)
 
         On failure, first check:
-            - Assertion details tied to modified count zero returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The modified_count check in update_book_isbn
         """
         collection = Mock()
         collection.update_one.return_value = Mock(modified_count=0)
@@ -1130,44 +1062,36 @@ class TestUpdateBookIsbn:
 
     def test_none_collection_returns_false_without_calls(self) -> None:
         """
-        [Local] update book isbn: verifies none collection returns false without calls.
+        [Local] update book isbn: verifies that a None collection returns False without calling update_one.
 
         Scenario:
-            Given test inputs and fixtures for none collection returns false without calls
-            When test_none_collection_returns_false_without_calls executes the target flow
-            Then the expected outcome for none collection returns false without calls is confirmed.
+            Given collection=None and both isbn10="111" and isbn13="222"
+            When database.update_book_isbn(None, "abc", new_isbn10="111", new_isbn13="222") is called
+            Then False is returned without any DB call.
 
         Boundaries:
-            - Focus: none collection returns false without calls
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The None-collection short-circuit; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to none collection returns false without calls
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The None-collection guard in update_book_isbn
         """
         result = database.update_book_isbn(None, "abc", new_isbn10="111", new_isbn13="222")
         assert result is False
 
     def test_update_one_exception_returns_false(self) -> None:
         """
-        [Local] update book isbn: verifies update one exception returns false.
+        [Local] update book isbn: verifies that a PyMongoError from update_one is caught and returns False.
 
         Scenario:
-            Given test inputs and fixtures for update one exception returns false
-            When test_update_one_exception_returns_false executes the target flow
-            Then the expected outcome for update one exception returns false is confirmed.
+            Given a Mock collection whose update_one raises PyMongoError("boom")
+            When database.update_book_isbn(collection, "abc", new_isbn10="111") is called
+            Then the exception is swallowed and False is returned.
 
         Boundaries:
-            - Focus: update one exception returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The exception-handling path; only PyMongoError exercised
 
         On failure, first check:
-            - Assertion details tied to update one exception returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by update book isbn
+            - The try/except around update_one in update_book_isbn
         """
         collection = Mock()
         collection.update_one.side_effect = PyMongoError("boom")
@@ -1186,22 +1110,18 @@ class TestEnsureUniqueIndexOnHash:
 
     def test_creates_index_when_absent(self) -> None:
         """
-        [Local] ensure unique index on hash: verifies creates index when absent.
+        [Local] ensure unique index on hash: verifies that hash_unique_index is created when it is not present.
 
         Scenario:
-            Given test inputs and fixtures for creates index when absent
-            When test_creates_index_when_absent executes the target flow
-            Then the expected outcome for creates index when absent is confirmed.
+            Given a collection with only _id_ and secondary indexes (no hash_unique_index)
+            When database.ensure_unique_index_on_hash(collection) is called
+            Then create_index is called exactly once with ("hash", unique=True, name="hash_unique_index").
 
         Boundaries:
-            - Focus: creates index when absent
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The index-absent creation path; secondary indexes are pre-populated so they do not trigger creation
 
         On failure, first check:
-            - Assertion details tied to creates index when absent
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by ensure unique index on hash
+            - The existence check for "hash_unique_index" in ensure_unique_index_on_hash
         """
         collection = Mock()
         # Secondary indexes already present so only the hash index is created, keeping
@@ -1212,22 +1132,18 @@ class TestEnsureUniqueIndexOnHash:
 
     def test_skips_create_when_present(self) -> None:
         """
-        [Local] ensure unique index on hash: verifies skips create when present.
+        [Local] ensure unique index on hash: verifies that create_index is not called when hash_unique_index already exists.
 
         Scenario:
-            Given test inputs and fixtures for skips create when present
-            When test_skips_create_when_present executes the target flow
-            Then the expected outcome for skips create when present is confirmed.
+            Given a collection whose index_information includes "hash_unique_index"
+            When database.ensure_unique_index_on_hash(collection) is called
+            Then create_index is never called.
 
         Boundaries:
-            - Focus: skips create when present
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The idempotent / already-present path
 
         On failure, first check:
-            - Assertion details tied to skips create when present
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by ensure unique index on hash
+            - The existence check for "hash_unique_index" in ensure_unique_index_on_hash
         """
         collection = Mock()
         collection.index_information.return_value = {
@@ -1240,43 +1156,35 @@ class TestEnsureUniqueIndexOnHash:
     def test_none_collection_is_noop(self) -> None:
         # Must not raise.
         """
-        [Local] ensure unique index on hash: verifies none collection is noop.
+        [Local] ensure unique index on hash: verifies that a None collection is a no-op.
 
         Scenario:
-            Given test inputs and fixtures for none collection is noop
-            When test_none_collection_is_noop executes the target flow
-            Then the expected outcome for none collection is noop is confirmed.
+            Given collection=None
+            When database.ensure_unique_index_on_hash(None) is called
+            Then no exception is raised.
 
         Boundaries:
-            - Focus: none collection is noop
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The None-collection short-circuit
 
         On failure, first check:
-            - Assertion details tied to none collection is noop
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by ensure unique index on hash
+            - The None-collection guard in ensure_unique_index_on_hash
         """
         database.ensure_unique_index_on_hash(None)
 
     def test_exception_is_caught(self) -> None:
         """
-        [Local] ensure unique index on hash: verifies exception is caught.
+        [Local] ensure unique index on hash: verifies that a PyMongoError from index_information is caught and does not propagate.
 
         Scenario:
-            Given test inputs and fixtures for exception is caught
-            When test_exception_is_caught executes the target flow
-            Then the expected outcome for exception is caught is confirmed.
+            Given a Mock collection whose index_information raises PyMongoError("boom")
+            When database.ensure_unique_index_on_hash(collection) is called
+            Then no exception propagates.
 
         Boundaries:
-            - Focus: exception is caught
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The exception-handling path; only PyMongoError exercised
 
         On failure, first check:
-            - Assertion details tied to exception is caught
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by ensure unique index on hash
+            - The try/except in ensure_unique_index_on_hash
         """
         collection = Mock()
         collection.index_information.side_effect = PyMongoError("boom")
@@ -1388,22 +1296,18 @@ class TestEnsureIndexes:
     def test_none_collection_is_noop(self) -> None:
         # Must not raise.
         """
-        [Local] ensure indexes: verifies none collection is noop.
+        [Local] ensure indexes: verifies that a None collection is a no-op.
 
         Scenario:
-            Given test inputs and fixtures for none collection is noop
-            When test_none_collection_is_noop executes the target flow
-            Then the expected outcome for none collection is noop is confirmed.
+            Given collection=None
+            When database.ensure_indexes(None) is called
+            Then no exception is raised.
 
         Boundaries:
-            - Focus: none collection is noop
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The None-collection short-circuit in ensure_indexes
 
         On failure, first check:
-            - Assertion details tied to none collection is noop
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by ensure indexes
+            - The None-collection guard in ensure_indexes
         """
         database.ensure_indexes(None)
 

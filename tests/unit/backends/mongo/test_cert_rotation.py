@@ -61,22 +61,20 @@ def _write_settings(config_dir, settings: dict) -> None:
 # --------------------------------------------------------------------------- #
 def test_resolve_months_defaults_to_six(monkeypatch) -> None:
     """
-    [Local] cert rotation: verifies resolve months defaults to six.
+    [Local] cert rotation: verifies resolve_months returns 6 when ATLAS_CERT_MONTHS is unset.
 
     Scenario:
-        Given test inputs and fixtures for resolve months defaults to six
-        When test_resolve_months_defaults_to_six executes the target flow
-        Then the expected outcome for resolve months defaults to six is confirmed.
+        Given ATLAS_CERT_MONTHS deleted from the environment
+        When resolve_months() is called with no argument
+        Then 6 is returned
 
     Boundaries:
-        - Focus: resolve months defaults to six
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - No CLI argument; env var absent; DEFAULT_MONTHS is 6
+        - ATLAS_CERT_MONTHS must be explicitly deleted in case a prior test set it
 
     On failure, first check:
-        - Assertion details tied to resolve months defaults to six
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether DEFAULT_MONTHS constant is still 6 in cert_rotation
+        - Recent changes to the env-unset branch in resolve_months
     """
     monkeypatch.delenv("ATLAS_CERT_MONTHS", raising=False)
     assert cert_rotation.resolve_months() == 6
@@ -84,22 +82,20 @@ def test_resolve_months_defaults_to_six(monkeypatch) -> None:
 
 def test_resolve_months_reads_env(monkeypatch) -> None:
     """
-    [Local] cert rotation: verifies resolve months reads env.
+    [Local] cert rotation: verifies ATLAS_CERT_MONTHS env var is used when set and no argument is given.
 
     Scenario:
-        Given test inputs and fixtures for resolve months reads env
-        When test_resolve_months_reads_env executes the target flow
-        Then the expected outcome for resolve months reads env is confirmed.
+        Given ATLAS_CERT_MONTHS set to "12"
+        When resolve_months() is called with no argument
+        Then 12 is returned
 
     Boundaries:
-        - Focus: resolve months reads env
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - Valid integer string in env; no CLI argument
+        - env var takes effect only when no explicit argument overrides it
 
     On failure, first check:
-        - Assertion details tied to resolve months reads env
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the env-var lookup key is exactly "ATLAS_CERT_MONTHS"
+        - Recent changes to the env-read branch in resolve_months
     """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     assert cert_rotation.resolve_months() == 12
@@ -107,22 +103,20 @@ def test_resolve_months_reads_env(monkeypatch) -> None:
 
 def test_resolve_months_argument_beats_env(monkeypatch) -> None:
     """
-    [Local] cert rotation: verifies resolve months argument beats env.
+    [Local] cert rotation: verifies an explicit argument takes precedence over ATLAS_CERT_MONTHS.
 
     Scenario:
-        Given test inputs and fixtures for resolve months argument beats env
-        When test_resolve_months_argument_beats_env executes the target flow
-        Then the expected outcome for resolve months argument beats env is confirmed.
+        Given ATLAS_CERT_MONTHS set to "12"
+        When resolve_months(3) is called with an explicit argument
+        Then 3 is returned, not 12
 
     Boundaries:
-        - Focus: resolve months argument beats env
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - Precedence rule: CLI flag > env var > default
+        - ATLAS_CERT_MONTHS is set so the env-var path is exercised but overridden
 
     On failure, first check:
-        - Assertion details tied to resolve months argument beats env
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether resolve_months checks the argument before reading the env var
+        - Recent changes to the precedence logic in resolve_months
     """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     assert cert_rotation.resolve_months(3) == 3
@@ -130,22 +124,20 @@ def test_resolve_months_argument_beats_env(monkeypatch) -> None:
 
 def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
     """
-    [Local] cert rotation: verifies resolve months rejects non integer env.
+    [Local] cert rotation: verifies a non-integer ATLAS_CERT_MONTHS raises RotationError naming the var.
 
     Scenario:
-        Given test inputs and fixtures for resolve months rejects non integer env
-        When test_resolve_months_rejects_non_integer_env executes the target flow
-        Then the expected outcome for resolve months rejects non integer env is confirmed.
+        Given ATLAS_CERT_MONTHS set to "soon" (not an integer)
+        When resolve_months() is called
+        Then RotationError is raised and the message contains "ATLAS_CERT_MONTHS"
 
     Boundaries:
-        - Focus: resolve months rejects non integer env
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - Only the non-integer case; out-of-range integers are tested separately
+        - The var name must appear in the error, not just a bare ValueError
 
     On failure, first check:
-        - Assertion details tied to resolve months rejects non integer env
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether int() parse failure is wrapped in RotationError or propagates as ValueError
+        - Whether the error message names "ATLAS_CERT_MONTHS"
     """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "soon")
     with pytest.raises(cert_rotation.RotationError, match="ATLAS_CERT_MONTHS"):
@@ -155,22 +147,20 @@ def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
 @pytest.mark.parametrize("months", [0, -1, 25])
 def test_resolve_months_rejects_out_of_range(months) -> None:
     """
-    [Unit] cert rotation: verifies resolve months rejects out of range.
+    [Unit] cert rotation: verifies months outside the 1-24 range raise RotationError.
 
     Scenario:
-        Given test inputs and fixtures for resolve months rejects out of range
-        When test_resolve_months_rejects_out_of_range executes the target flow
-        Then the expected outcome for resolve months rejects out of range is confirmed.
+        Given an out-of-range months value (0, -1, or 25) passed directly
+        When resolve_months(months) is called
+        Then RotationError is raised with "1-24" in the message
 
     Boundaries:
-        - Focus: resolve months rejects out of range
-        - Fixtures/params: months (parametrized, 3 cases)
-        - Scope: assertions and setup in this test case only
+        - Parametrized over 0, -1, 25; boundary values 1 and 24 are tested separately
+        - Error message must contain "1-24" so the user knows the valid range
 
     On failure, first check:
-        - Assertion details tied to resolve months rejects out of range
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the range check is inclusive on both ends (1 <= months <= 24)
+        - Whether the error message contains the range hint "1-24"
     """
     with pytest.raises(cert_rotation.RotationError, match="1-24"):
         cert_rotation.resolve_months(months)
@@ -179,22 +169,20 @@ def test_resolve_months_rejects_out_of_range(months) -> None:
 @pytest.mark.parametrize("months", [1, 24])
 def test_resolve_months_accepts_range_boundaries(months) -> None:
     """
-    [Unit] cert rotation: verifies resolve months accepts range boundaries.
+    [Unit] cert rotation: verifies the boundary months 1 and 24 are accepted without error.
 
     Scenario:
-        Given test inputs and fixtures for resolve months accepts range boundaries
-        When test_resolve_months_accepts_range_boundaries executes the target flow
-        Then the expected outcome for resolve months accepts range boundaries is confirmed.
+        Given months 1 or 24 (fence-post values) passed directly
+        When resolve_months(months) is called
+        Then the same value is returned without error
 
     Boundaries:
-        - Focus: resolve months accepts range boundaries
-        - Fixtures/params: months (parametrized, 2 cases)
-        - Scope: assertions and setup in this test case only
+        - Exact boundary values; 0 and 25 (first out-of-range) are tested separately
+        - No env var involved; pure range-validation logic
 
     On failure, first check:
-        - Assertion details tied to resolve months accepts range boundaries
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the range check uses strict inequality (< 1 or > 24) vs. <= / >=
+        - Recent changes to the validation logic in resolve_months
     """
     assert cert_rotation.resolve_months(months) == months
 
@@ -204,22 +192,20 @@ def test_resolve_months_accepts_range_boundaries(months) -> None:
 # --------------------------------------------------------------------------- #
 def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
     """
-    [Unit] cert rotation: verifies atomic write creates parents and owner only file.
+    [Unit] cert rotation: verifies atomic_write creates parent directories and sets mode 0o600.
 
     Scenario:
-        Given test inputs and fixtures for atomic write creates parents and owner only file
-        When test_atomic_write_creates_parents_and_owner_only_file executes the target flow
-        Then the expected outcome for atomic write creates parents and owner only file is confirmed.
+        Given a target path under a non-existent subdirectory
+        When atomic_write(target, b"PEM DATA") is called
+        Then the file exists with the written bytes and mode 0o600
 
     Boundaries:
-        - Focus: atomic write creates parents and owner only file
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Parent directory created via mkdir(parents=True)
+        - Mode 0o600 means owner-read-write only; no group or other permissions
 
     On failure, first check:
-        - Assertion details tied to atomic write creates parents and owner only file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether parent creation is missing and raises FileNotFoundError
+        - Whether the file is created with a permissive mode (e.g. 0o644)
     """
     target = tmp_path / "nested" / "cert.pem"
     cert_rotation.atomic_write(target, b"PEM DATA")
@@ -230,22 +216,20 @@ def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
 
 def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) -> None:
     """
-    [Unit] cert rotation: verifies atomic write replaces existing file and leaves no temp files.
+    [Unit] cert rotation: verifies atomic_write overwrites an existing file and leaves no temp files behind.
 
     Scenario:
-        Given test inputs and fixtures for atomic write replaces existing file and leaves no temp files
-        When test_atomic_write_replaces_existing_file_and_leaves_no_temp_files executes the target flow
-        Then the expected outcome for atomic write replaces existing file and leaves no temp files is confirmed.
+        Given a pre-existing cert.pem with b"old"
+        When atomic_write(target, b"new") is called
+        Then target contains b"new" and only cert.pem remains in the directory
 
     Boundaries:
-        - Focus: atomic write replaces existing file and leaves no temp files
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Atomicity via temp-file + os.replace; temp is cleaned up on success
+        - Directory scan after write confirms no leftover temp file
 
     On failure, first check:
-        - Assertion details tied to atomic write replaces existing file and leaves no temp files
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the temp file is unlinked after os.replace completes
+        - Whether the write is a direct overwrite (non-atomic) rather than rename
     """
     target = tmp_path / "cert.pem"
     target.write_bytes(b"old")
@@ -258,22 +242,20 @@ def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) 
 
 def test_default_output_path_is_timestamped_under_config_dir(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies default output path is timestamped under config dir.
+    [Unit] cert rotation: verifies default_output_path returns a timestamped .pem path under CONFIG_DIR.
 
     Scenario:
-        Given test inputs and fixtures for default output path is timestamped under config dir
-        When test_default_output_path_is_timestamped_under_config_dir executes the target flow
-        Then the expected outcome for default output path is timestamped under config dir is confirmed.
+        Given isolated_config patched as CONFIG_DIR
+        When default_output_path() is called
+        Then the path's parent equals isolated_config and the name matches "X509-cert-YYYYMMDD_HHMMSS.pem"
 
     Boundaries:
-        - Focus: default output path is timestamped under config dir
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - Timestamp comes from current UTC time; not pinned
+        - isolated_config fixture prevents any write to ~/.bookscrapper
 
     On failure, first check:
-        - Assertion details tied to default output path is timestamped under config dir
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether CONFIG_DIR is used as the parent directory
+        - Whether the name format regex "X509-cert-\\d{8}_\\d{6}\\.pem" still matches the output
     """
     path = cert_rotation.default_output_path()
 
@@ -286,22 +268,20 @@ def test_default_output_path_is_timestamped_under_config_dir(isolated_config) ->
 # --------------------------------------------------------------------------- #
 def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings no file reports legacy fallback.
+    [Unit] cert rotation: verifies update_settings_after_rotation reports "nothing to update" when settings.json is absent.
 
     Scenario:
-        Given test inputs and fixtures for update settings no file reports legacy fallback
-        When test_update_settings_no_file_reports_legacy_fallback executes the target flow
-        Then the expected outcome for update settings no file reports legacy fallback is confirmed.
+        Given no settings.json in isolated_config
+        When update_settings_after_rotation is called with a new cert path
+        Then exactly one note containing "nothing to update" is returned and no file is created
 
     Boundaries:
-        - Focus: update settings no file reports legacy fallback
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - Absent settings.json means legacy mode; rotation must never create the file
+        - Returned list has exactly one element; no file side effect
 
     On failure, first check:
-        - Assertion details tied to update settings no file reports legacy fallback
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the function creates an empty settings.json on missing-file path
+        - Whether the note text matches "nothing to update"
     """
     notes = cert_rotation.update_settings_after_rotation(isolated_config / "X509-cert-new.pem")
 
@@ -312,22 +292,20 @@ def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> Non
 
 def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings malformed file warns and is untouched.
+    [Unit] cert rotation: verifies update_settings_after_rotation warns and leaves a malformed settings.json unchanged.
 
     Scenario:
-        Given test inputs and fixtures for update settings malformed file warns and is untouched
-        When test_update_settings_malformed_file_warns_and_is_untouched executes the target flow
-        Then the expected outcome for update settings malformed file warns and is untouched is confirmed.
+        Given settings.json containing invalid JSON ("{not json")
+        When update_settings_after_rotation is called
+        Then note[0] starts with "WARNING" and the file content is byte-for-byte unchanged
 
     Boundaries:
-        - Focus: update settings malformed file warns and is untouched
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - File exists but is not parseable; parse error must never trigger an overwrite
+        - Byte-for-byte comparison after the call confirms no write occurred
 
     On failure, first check:
-        - Assertion details tied to update settings malformed file warns and is untouched
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the parse error is caught and converted to a WARNING note
+        - Whether the malformed file is overwritten when it should not be
     """
     settings_file = isolated_config / "settings.json"
     settings_file.write_text("{not json")
@@ -340,22 +318,20 @@ def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) 
 
 def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings pass auth is untouched.
+    [Unit] cert rotation: verifies update_settings_after_rotation is a no-op for password auth.
 
     Scenario:
-        Given test inputs and fixtures for update settings pass auth is untouched
-        When test_update_settings_pass_auth_is_untouched executes the target flow
-        Then the expected outcome for update settings pass auth is untouched is confirmed.
+        Given settings.json with auth_type "pass"
+        When update_settings_after_rotation is called
+        Then a note says "not configured for x509" and the file content is unchanged
 
     Boundaries:
-        - Focus: update settings pass auth is untouched
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - Password auth has no cert to repoint; the file must not be modified
+        - Exact dict equality check ensures no field is added or mutated
 
     On failure, first check:
-        - Assertion details tied to update settings pass auth is untouched
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the auth_type check correctly skips non-x509 settings
+        - Whether the note message contains "not configured for x509"
     """
     settings = {"auth_type": "pass", "pass": {"uri": {"source": "literal", "value": "mongodb+srv://x"}}}
     _write_settings(isolated_config, settings)
@@ -368,22 +344,20 @@ def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
 
 def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings literal cert is repointed.
+    [Unit] cert rotation: verifies update_settings_after_rotation rewrites the cert filename for a literal source.
 
     Scenario:
-        Given test inputs and fixtures for update settings literal cert is repointed
-        When test_update_settings_literal_cert_is_repointed executes the target flow
-        Then the expected outcome for update settings literal cert is repointed is confirmed.
+        Given x509 settings with cert source "literal" pointing to "X509-cert-old.pem"
+        When update_settings_after_rotation(new_cert_path) is called
+        Then settings.json has the new cert filename, URI is unchanged, file is mode 0o600, and note names the new cert
 
     Boundaries:
-        - Focus: update settings literal cert is repointed
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - Only the cert value changes; URI and auth_type must be preserved intact
+        - Written file is owner-only (0o600) after the atomic rewrite
 
     On failure, first check:
-        - Assertion details tied to update settings literal cert is repointed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the URI or other fields are clobbered during the rewrite
+        - Whether the file mode after writing is 0o600
     """
     _write_settings(
         isolated_config,
@@ -408,22 +382,20 @@ def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
 
 def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings env cert only reminds.
+    [Unit] cert rotation: verifies update_settings_after_rotation prints a reminder for an env-sourced cert.
 
     Scenario:
-        Given test inputs and fixtures for update settings env cert only reminds
-        When test_update_settings_env_cert_only_reminds executes the target flow
-        Then the expected outcome for update settings env cert only reminds is confirmed.
+        Given x509 settings with cert source "env" pointing to "MY_CERT_VAR"
+        When update_settings_after_rotation(new_cert) is called
+        Then the note names "MY_CERT_VAR" and the new cert path, and settings.json is unchanged
 
     Boundaries:
-        - Focus: update settings env cert only reminds
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - env-sourced cert cannot be automatically repointed; only a human can update the variable
+        - Exact dict equality check confirms the file was not modified
 
     On failure, first check:
-        - Assertion details tied to update settings env cert only reminds
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the note contains both the env var name and the new cert path
+        - Whether the function incorrectly modifies an env-sourced cert entry
     """
     settings = {
         "auth_type": "x509",
@@ -444,22 +416,20 @@ def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
 
 def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config) -> None:
     """
-    [Unit] cert rotation: verifies update settings unrecognized cert shape is untouched.
+    [Unit] cert rotation: verifies update_settings_after_rotation reports "unrecognized shape" for an unknown cert source.
 
     Scenario:
-        Given test inputs and fixtures for update settings unrecognized cert shape is untouched
-        When test_update_settings_unrecognized_cert_shape_is_untouched executes the target flow
-        Then the expected outcome for update settings unrecognized cert shape is untouched is confirmed.
+        Given x509 settings with cert source "vault" (not "literal" or "env")
+        When update_settings_after_rotation is called
+        Then "unrecognized shape" appears in the note and settings.json is unchanged
 
     Boundaries:
-        - Focus: update settings unrecognized cert shape is untouched
-        - Fixtures/params: isolated_config
-        - Scope: assertions and setup in this test case only
+        - Only "literal" and "env" are acted on; any other source is reported and left alone
+        - Exact dict equality check confirms no modification occurred
 
     On failure, first check:
-        - Assertion details tied to update settings unrecognized cert shape is untouched
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - Whether the source check has a default branch that silently modifies the file
+        - Whether the note text contains "unrecognized shape"
     """
     settings = {"auth_type": "x509", "x509": {"cert": {"source": "vault", "value": "x"}}}
     _write_settings(isolated_config, settings)

@@ -39,22 +39,19 @@ MODULE = "bookscraper.commands.scrape_urls"
 )
 def test_identify_website_all_branches(url: str, expected: str) -> None:
     """
-    [Local] scrape urls: verifies identify website all branches.
+    [Local] scrape urls: verifies that each supported URL pattern maps to the correct site tag.
 
     Scenario:
-        Given test inputs and fixtures for identify website all branches
-        When test_identify_website_all_branches executes the target flow
-        Then the expected outcome for identify website all branches is confirmed.
+        Given one of amazon/packtpub/leanpub/oreilly/unknown URLs
+        When identify_website is called
+        Then the expected site string ("amazon", "packtpub", "leanpub", "oreilly", "other")
+        is returned.
 
     Boundaries:
-        - Focus: identify website all branches
-        - Fixtures/params: url, expected (parametrized, 5 cases)
-        - Scope: assertions and setup in this test case only
+        - Parametrized over 5 URL/site pairs; no mocking needed (pure string matching).
 
     On failure, first check:
-        - Assertion details tied to identify website all branches
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The URL pattern regexes or string conditions in identify_website.
     """
     assert identify_website(url) == expected
 
@@ -64,22 +61,18 @@ def test_identify_website_all_branches(url: str, expected: str) -> None:
 # --------------------------------------------------------------------------- #
 def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies save failed urls empty creates no file.
+    [Local] scrape urls: verifies that an empty failed-URL list creates no CSV file.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls empty creates no file
-        When test_save_failed_urls_empty_creates_no_file executes the target flow
-        Then the expected outcome for save failed urls empty creates no file is confirmed.
+        Given an empty list passed to save_failed_urls_to_csv
+        When the function is called
+        Then no file is created at the target path.
 
     Boundaries:
-        - Focus: save failed urls empty creates no file
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Only the "nothing to write" early-exit is tested; actual CSV content is separate.
 
     On failure, first check:
-        - Assertion details tied to save failed urls empty creates no file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The empty-list guard in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_books.csv"
     save_failed_urls_to_csv([], filename=str(target))
@@ -88,22 +81,19 @@ def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
 
 def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies scrape urls failed csv has status and error columns.
+    [Local] scrape urls: verifies that the failed-URLs CSV has the correct header and rows.
 
     Scenario:
-        Given test inputs and fixtures for scrape urls failed csv has status and error columns
-        When test_scrape_urls_failed_csv_has_status_and_error_columns executes the target flow
-        Then the expected outcome for scrape urls failed csv has status and error columns is confirmed.
+        Given three (url, status, error) tuples covering DUPLICATE/NOT_FOUND/TIMEOUT
+        When save_failed_urls_to_csv writes the file
+        Then the CSV has header ["url", "status", "error"] and the body rows match the input.
 
     Boundaries:
-        - Focus: scrape urls failed csv has status and error columns
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Tests the scrape_urls variant (csv.writer with tuples); the search variant
+          (DictWriter) is in test_search.py.
 
     On failure, first check:
-        - Assertion details tied to scrape urls failed csv has status and error columns
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The header list and row-writing loop in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_books.csv"
     rows = [
@@ -122,22 +112,18 @@ def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path) -> None:
 
 def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies save failed urls open failure is swallowed.
+    [Local] scrape urls: verifies that an OSError on file open is swallowed, not propagated.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls open failure is swallowed
-        When test_save_failed_urls_open_failure_is_swallowed executes the target flow
-        Then the expected outcome for save failed urls open failure is swallowed is confirmed.
+        Given builtins.open patched to raise OSError("disk full")
+        When save_failed_urls_to_csv is called with a non-empty list
+        Then no exception propagates to the caller and no file is created.
 
     Boundaries:
-        - Focus: save failed urls open failure is swallowed
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Best-effort write contract: the caller must not crash when the diagnostic CSV fails.
 
     On failure, first check:
-        - Assertion details tied to save failed urls open failure is swallowed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The try/except around the open() call in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_books.csv"
     with patch("builtins.open", side_effect=OSError("disk full")):
@@ -151,22 +137,18 @@ def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 def test_save_other_links_empty_creates_no_file(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies save other links empty creates no file.
+    [Local] scrape urls: verifies that an empty other-links list creates no CSV file.
 
     Scenario:
-        Given test inputs and fixtures for save other links empty creates no file
-        When test_save_other_links_empty_creates_no_file executes the target flow
-        Then the expected outcome for save other links empty creates no file is confirmed.
+        Given an empty list passed to save_other_links_to_csv
+        When the function is called
+        Then no file is created at the target path.
 
     Boundaries:
-        - Focus: save other links empty creates no file
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Only the empty-guard is tested; the write path is the separate "writes header" test.
 
     On failure, first check:
-        - Assertion details tied to save other links empty creates no file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The empty-list guard in save_other_links_to_csv.
     """
     target = tmp_path / "other_links.csv"
     save_other_links_to_csv([], filename=str(target))
@@ -175,22 +157,18 @@ def test_save_other_links_empty_creates_no_file(tmp_path) -> None:
 
 def test_save_other_links_writes_header_and_rows(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies save other links writes header and rows.
+    [Local] scrape urls: verifies that save_other_links_to_csv writes a single-column CSV.
 
     Scenario:
-        Given test inputs and fixtures for save other links writes header and rows
-        When test_save_other_links_writes_header_and_rows executes the target flow
-        Then the expected outcome for save other links writes header and rows is confirmed.
+        Given two URL strings passed to save_other_links_to_csv
+        When the function writes the file
+        Then the CSV has header ["url"] and one row per URL.
 
     Boundaries:
-        - Focus: save other links writes header and rows
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the normal write path; the empty-list and failure paths are separate tests.
 
     On failure, first check:
-        - Assertion details tied to save other links writes header and rows
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The header and row-writing loop in save_other_links_to_csv.
     """
     target = tmp_path / "other_links.csv"
     links = ["https://example.com/a", "https://example.org/b"]
@@ -205,22 +183,18 @@ def test_save_other_links_writes_header_and_rows(tmp_path) -> None:
 
 def test_save_other_links_open_failure_is_swallowed(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies save other links open failure is swallowed.
+    [Local] scrape urls: verifies that an OSError on file open is swallowed in save_other_links_to_csv.
 
     Scenario:
-        Given test inputs and fixtures for save other links open failure is swallowed
-        When test_save_other_links_open_failure_is_swallowed executes the target flow
-        Then the expected outcome for save other links open failure is swallowed is confirmed.
+        Given builtins.open patched to raise OSError("read-only fs")
+        When save_other_links_to_csv is called with a non-empty list
+        Then no exception propagates and no file is created.
 
     Boundaries:
-        - Focus: save other links open failure is swallowed
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Best-effort write contract; mirrors the equivalent test for save_failed_urls_to_csv.
 
     On failure, first check:
-        - Assertion details tied to save other links open failure is swallowed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The try/except around the open() call in save_other_links_to_csv.
     """
     target = tmp_path / "other_links.csv"
     with patch("builtins.open", side_effect=OSError("read-only fs")):
@@ -265,22 +239,19 @@ def _make_playwright_factory():
 # --------------------------------------------------------------------------- #
 async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies run no valid urls saves other links and exits zero.
+    [Local] scrape urls: verifies that a CSV with only "other" URLs exits 0 without scraping.
 
     Scenario:
-        Given test inputs and fixtures for run no valid urls saves other links and exits zero
-        When test_run_no_valid_urls_saves_other_links_and_exits_zero executes the target flow
-        Then the expected outcome for run no valid urls saves other links and exits zero is confirmed.
+        Given a CSV containing only an example.com URL (tagged "other" by identify_website)
+        When run() is called
+        Then sys.exit(0) is raised, the URL is passed to save_other_links_to_csv,
+        and the browser is never opened.
 
     Boundaries:
-        - Focus: run no valid urls saves other links and exits zero
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - No book URLs in the input; the scraping loop is never entered.
 
     On failure, first check:
-        - Assertion details tied to run no valid urls saves other links and exits zero
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The "no valid URLs" early-exit branch in run() and the other-links routing.
     """
     csv_path = _write_csv(tmp_path, ["https://example.com/book"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
@@ -309,22 +280,18 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> N
 
 async def test_run_missing_input_file_exits_one(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies run missing input file exits one.
+    [Local] scrape urls: verifies that a nonexistent input CSV exits 1 without saving.
 
     Scenario:
-        Given test inputs and fixtures for run missing input file exits one
-        When test_run_missing_input_file_exits_one executes the target flow
-        Then the expected outcome for run missing input file exits one is confirmed.
+        Given an input_file path that does not exist
+        When run() is called
+        Then sys.exit(1) is raised and save_books is never called.
 
     Boundaries:
-        - Focus: run missing input file exits one
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Only the file-not-found guard is exercised; bad CSV structure is a separate test.
 
     On failure, first check:
-        - Assertion details tied to run missing input file exits one
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The file-existence check at the start of run().
     """
     missing = tmp_path / "does_not_exist.csv"
     args = SimpleNamespace(input_file=str(missing), store_backend="json")
@@ -342,22 +309,18 @@ async def test_run_missing_input_file_exits_one(tmp_path) -> None:
 
 async def test_run_missing_url_column_exits_one(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies run missing url column exits one.
+    [Local] scrape urls: verifies that a CSV without a "url" column header exits 1.
 
     Scenario:
-        Given test inputs and fixtures for run missing url column exits one
-        When test_run_missing_url_column_exits_one executes the target flow
-        Then the expected outcome for run missing url column exits one is confirmed.
+        Given a CSV whose only column is named "link" instead of "url"
+        When run() is called
+        Then sys.exit(1) is raised and save_books is never called.
 
     Boundaries:
-        - Focus: run missing url column exits one
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the missing-column KeyError guard; a completely unparseable CSV is separate.
 
     On failure, first check:
-        - Assertion details tied to run missing url column exits one
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The column-name check after pd.read_csv in run().
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"], header="link")
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
@@ -375,22 +338,18 @@ async def test_run_missing_url_column_exits_one(tmp_path) -> None:
 
 async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies run unparseable csv exits one.
+    [Local] scrape urls: verifies that a pd.errors.ParserError on CSV load exits 1.
 
     Scenario:
-        Given test inputs and fixtures for run unparseable csv exits one
-        When test_run_unparseable_csv_exits_one executes the target flow
-        Then the expected outcome for run unparseable csv exits one is confirmed.
+        Given pd.read_csv patched to raise ParserError("bad csv")
+        When run() is called
+        Then sys.exit(1) is raised and save_books is never called.
 
     Boundaries:
-        - Focus: run unparseable csv exits one
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the CSV-parse exception path; missing column and missing file are separate.
 
     On failure, first check:
-        - Assertion details tied to run unparseable csv exits one
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The try/except around pd.read_csv in run().
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
@@ -412,22 +371,19 @@ async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None:
     """
-    [Local] scrape urls: verifies run successful book is saved and backend closed.
+    [Local] scrape urls: verifies that a SUCCESS result saves the book and closes browser/backend.
 
     Scenario:
-        Given test inputs and fixtures for run successful book is saved and backend closed
-        When test_run_successful_book_is_saved_and_backend_closed executes the target flow
-        Then the expected outcome for run successful book is saved and backend closed is confirmed.
+        Given a CSV with one leanpub URL and scrape_book returning a SUCCESS ScrapeResult
+        When run() is called
+        Then save_books is called with the book dict, the browser and backend are both
+        closed, and the failed-URLs CSV receives an empty list.
 
     Boundaries:
-        - Focus: run successful book is saved and backend closed
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Single URL, single batch; multi-batch behavior is the separate pause test.
 
     On failure, first check:
-        - Assertion details tied to run successful book is saved and backend closed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The save_books call, browser.close, and backend.close in run()'s finally block.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/good"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
@@ -484,22 +440,21 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
 )
 async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_result, expected_row) -> None:
     """
-    [Local] scrape urls: verifies run non success results recorded not saved.
+    [Local] scrape urls: verifies that non-SUCCESS results are recorded in the CSV but not saved.
 
     Scenario:
-        Given test inputs and fixtures for run non success results recorded not saved
-        When test_run_non_success_results_recorded_not_saved executes the target flow
-        Then the expected outcome for run non success results recorded not saved is confirmed.
+        Given a CSV with one URL and scrape_book returning DUPLICATE/FAILED/NOT_FOUND/TIMEOUT
+        When run() is called
+        Then save_books is never called, the backend and browser are closed, and
+        save_failed_urls_to_csv receives exactly one (url, status, error) row whose
+        values match the typed result.
 
     Boundaries:
-        - Focus: run non success results recorded not saved
-        - Fixtures/params: tmp_path, scrape_result, expected_row (parametrized, 4 cases)
-        - Scope: assertions and setup in this test case only
+        - Parametrized over all four non-success statuses; the SUCCESS path is a separate test.
+        - The UNKNOWN_ERROR status no longer exists; every non-success carries a typed ScrapeStatus.
 
     On failure, first check:
-        - Assertion details tied to run non success results recorded not saved
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The match/case result-type dispatch in run() and the (url, status, error) row assembly.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/x"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
@@ -532,13 +487,13 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
 async def test_run_summary_counts_each_status(tmp_path) -> None:
     """
     [Local] scrape urls: verifies run summary counts each status.
-    
+
     Scenario:
         a run yields one SUCCESS, one NOT_FOUND, and one TIMEOUT result.
-    
+
     Boundaries:
         - the end-of-run summary must emit a per-ScrapeStatus breakdown tallying each status exactly once, in enum order, via ``print_log``.
-    
+
     On failure, first check:
         - the summary drops or miscounts a status, so an operator can't see at a glance how a batch broke down (how many dead URLs vs. timeouts vs. real books).
     """

@@ -84,13 +84,13 @@ def _fake_client(message: object, input_tokens: int = 100) -> MagicMock:
 def test_call_anthropic_returns_reply_text_and_usage() -> None:
     """
     [Local] schema detection: verifies call anthropic returns reply text and usage.
-    
+
     Scenario:
         a well-formed reply is returned with its usage object.
-    
+
     Boundaries:
         - the anthropic client (count_tokens + create) is fully mocked; no real call.
-    
+
     On failure, first check:
         - the model kwarg is not threaded through, or usage is dropped.
     """
@@ -110,13 +110,13 @@ def test_call_anthropic_returns_reply_text_and_usage() -> None:
 def test_call_anthropic_sets_bounded_retries() -> None:
     """
     [Local] schema detection: verifies call anthropic sets bounded retries.
-    
+
     Scenario:
         the client is built with a single retry, matching the module's own bound.
-    
+
     Boundaries:
         - only the client constructor kwargs are asserted; no network.
-    
+
     On failure, first check:
         - stacked/unbounded retries would multiply spend on a transient error.
     """
@@ -132,13 +132,13 @@ def test_call_anthropic_sets_bounded_retries() -> None:
 def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
     """
     [Local] schema detection: verifies instruction block marked cacheable and snapshot not.
-    
+
     Scenario:
         cache_control sits on the static instruction block, never the per-page snapshot.
-    
+
     Boundaries:
         - asserts only the create() kwargs shape; no network.
-    
+
     On failure, first check:
         - caching the volatile snapshot would write a fresh entry every request.
     """
@@ -160,18 +160,20 @@ def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
 def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
     """
     [Local] schema detection: verifies call anthropic wraps sdk error without body or key.
-    
+
     Scenario:
         an SDK error surfaces only the exception class + status, never its body/key.
-    
+
     Boundaries:
         - the client constructor raises; the fake key must appear nowhere in the error.
-    
+
     On failure, first check:
         - a leaked body/key is a credential/PII disclosure (AIS-8/AIS-16).
     """
 
     class _FakeStatusError(Exception):
+        """Minimal Anthropic-style status error with a status_code attribute for mocking HTTP 429."""
+
         status_code = 429
 
     secret_body = "rate limited for key sk-ant-test-XXXX; request body: <pruned html>"
@@ -191,13 +193,13 @@ def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
 def test_call_anthropic_raises_on_truncated_response() -> None:
     """
     [Local] schema detection: verifies call anthropic raises on truncated response.
-    
+
     Scenario:
         a max_tokens stop reason is treated as truncation and never parsed.
-    
+
     Boundaries:
         - client mocked; create returns stop_reason=max_tokens.
-    
+
     On failure, first check:
         - a half-written JSON answer would be parsed as if complete.
     """
@@ -211,13 +213,13 @@ def test_call_anthropic_raises_on_truncated_response() -> None:
 def test_call_anthropic_raises_on_context_window_exceeded() -> None:
     """
     [Local] schema detection: verifies call anthropic raises on context window exceeded.
-    
+
     Scenario:
         a model_context_window_exceeded stop reason is reported as truncation, not bad JSON.
-    
+
     Boundaries:
         - client mocked; create returns stop_reason=model_context_window_exceeded.
-    
+
     On failure, first check:
         - the partial answer is parsed, or the operator sees a misleading "not valid JSON".
     """
@@ -231,13 +233,13 @@ def test_call_anthropic_raises_on_context_window_exceeded() -> None:
 def test_call_anthropic_raises_on_refusal_naming_category() -> None:
     """
     [Local] schema detection: verifies call anthropic raises on refusal naming category.
-    
+
     Scenario:
         a refusal stop reason raises and names stop_details.category when present.
-    
+
     Boundaries:
         - client mocked; create returns stop_reason=refusal + a category.
-    
+
     On failure, first check:
         - a refusal would be parsed as content, or the category would be dropped.
     """
@@ -252,13 +254,13 @@ def test_call_anthropic_raises_on_refusal_naming_category() -> None:
 def test_call_anthropic_skips_thinking_blocks() -> None:
     """
     [Local] schema detection: verifies call anthropic skips thinking blocks.
-    
+
     Scenario:
         _extract_text concatenates only text blocks, skipping thinking blocks.
-    
+
     Boundaries:
         - client mocked; content carries a thinking block before the text block.
-    
+
     On failure, first check:
         - a thinking summary would leak into the JSON parse.
     """
@@ -278,13 +280,13 @@ def test_call_anthropic_skips_thinking_blocks() -> None:
 def test_call_anthropic_raises_on_empty_content() -> None:
     """
     [Local] schema detection: verifies call anthropic raises on empty content.
-    
+
     Scenario:
         a response with no text blocks fails loudly.
-    
+
     Boundaries:
         - client mocked; content is empty.
-    
+
     On failure, first check:
         - an empty reply would be treated as a valid (empty) proposal set.
     """
@@ -301,13 +303,13 @@ def test_call_anthropic_raises_on_empty_content() -> None:
 def test_over_budget_prompt_is_repruned_then_sent() -> None:
     """
     [Local] schema detection: verifies over budget prompt is repruned then sent.
-    
+
     Scenario:
         an over-budget prompt is re-pruned until it fits, then sent once.
-    
+
     Boundaries:
         - count_tokens returns over-budget first, then under-budget; create mocked.
-    
+
     On failure, first check:
         - the oversized prompt would be sent, or the snapshot never shrunk.
     """
@@ -333,13 +335,13 @@ def test_over_budget_prompt_is_repruned_then_sent() -> None:
 def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
     """
     [Local] schema detection: verifies still over budget after min prune raises without sending.
-    
+
     Scenario:
         a prompt still over budget at the 10k-char floor raises without any send.
-    
+
     Boundaries:
         - count_tokens always returns over-budget; create must never be called.
-    
+
     On failure, first check:
         - unbounded spend on a prompt that can never fit.
     """
@@ -358,13 +360,13 @@ def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
 def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
     """
     [Local] schema detection: verifies count tokens sdk error is wrapped body free.
-    
+
     Scenario:
         an SDK error during the token-count pre-flight is wrapped without its body.
-    
+
     Boundaries:
         - count_tokens raises; create must never run.
-    
+
     On failure, first check:
         - a raw SDK body (possibly echoing the prompt) would leak.
     """
@@ -385,13 +387,13 @@ def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
 def test_create_sdk_error_is_wrapped_body_free() -> None:
     """
     [Local] schema detection: verifies create sdk error is wrapped body free.
-    
+
     Scenario:
         an SDK error from messages.create is wrapped without its body.
-    
+
     Boundaries:
         - count_tokens is fine; create raises.
-    
+
     On failure, first check:
         - a raw SDK body would leak into the error surface.
     """
@@ -414,22 +416,18 @@ def test_create_sdk_error_is_wrapped_body_free() -> None:
 # --------------------------------------------------------------------------- #
 async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
     """
-    [Local] schema detection: verifies fetch pruned html returns pruned snapshot.
+    [Local] schema detection: verifies that fetch_pruned_html strips scripts and returns a pruned snapshot containing visible text.
 
     Scenario:
-        Given test inputs and fixtures for fetch pruned html returns pruned snapshot
-        When test_fetch_pruned_html_returns_pruned_snapshot executes the target flow
-        Then the expected outcome for fetch pruned html returns pruned snapshot is confirmed.
+        Given a FakePage whose content has a <script> block and an <h1>Title</h1>
+        When sd.fetch_pruned_html("https://x/book", page) is called
+        Then "Title" is in the result, "x()" (the script body) is not, and page.goto/page.route are each called once.
 
     Boundaries:
-        - Focus: fetch pruned html returns pruned snapshot
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The pruning path and Playwright navigation/route calls; no real browser
 
     On failure, first check:
-        - Assertion details tied to fetch pruned html returns pruned snapshot
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The prune_html logic and route_handler setup in fetch_pruned_html
     """
     page = FakePage(content="<html><script>x()</script><h1>Title</h1></html>")
     result = await sd.fetch_pruned_html("https://x/book", page)
@@ -441,22 +439,18 @@ async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
 
 async def test_fetch_pruned_html_raises_on_timeout() -> None:
     """
-    [Local] schema detection: verifies fetch pruned html raises on timeout.
+    [Local] schema detection: verifies that a PlaywrightTimeoutError from page.goto raises SchemaDetectionError("Timed out loading").
 
     Scenario:
-        Given test inputs and fixtures for fetch pruned html raises on timeout
-        When test_fetch_pruned_html_raises_on_timeout executes the target flow
-        Then the expected outcome for fetch pruned html raises on timeout is confirmed.
+        Given a FakePage whose goto raises PlaywrightTimeoutError
+        When sd.fetch_pruned_html("https://x/book", page) is called
+        Then SchemaDetectionError matching "Timed out loading" is raised.
 
     Boundaries:
-        - Focus: fetch pruned html raises on timeout
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The navigation-timeout error path; no real browser
 
     On failure, first check:
-        - Assertion details tied to fetch pruned html raises on timeout
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The PlaywrightTimeoutError -> SchemaDetectionError conversion in fetch_pruned_html
     """
     page = FakePage()
     page.goto = AsyncMock(side_effect=PlaywrightTimeoutError("nav timeout"))
@@ -466,22 +460,18 @@ async def test_fetch_pruned_html_raises_on_timeout() -> None:
 
 async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
     """
-    [Local] schema detection: verifies fetch pruned html raises on generic load error.
+    [Local] schema detection: verifies that a generic PlaywrightError from page.goto raises SchemaDetectionError("Failed to load").
 
     Scenario:
-        Given test inputs and fixtures for fetch pruned html raises on generic load error
-        When test_fetch_pruned_html_raises_on_generic_load_error executes the target flow
-        Then the expected outcome for fetch pruned html raises on generic load error is confirmed.
+        Given a FakePage whose goto raises PlaywrightError("connection refused")
+        When sd.fetch_pruned_html("https://x/book", page) is called
+        Then SchemaDetectionError matching "Failed to load" is raised.
 
     Boundaries:
-        - Focus: fetch pruned html raises on generic load error
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The generic navigation-error path; no real browser
 
     On failure, first check:
-        - Assertion details tied to fetch pruned html raises on generic load error
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The PlaywrightError -> SchemaDetectionError conversion in fetch_pruned_html
     """
     page = FakePage()
     page.goto = AsyncMock(side_effect=PlaywrightError("connection refused"))
@@ -494,22 +484,18 @@ async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
 # --------------------------------------------------------------------------- #
 async def test_validate_across_samples_consistent_match() -> None:
     """
-    [Local] schema detection: verifies validate across samples consistent match.
+    [Local] schema detection: verifies that a selector matching on every sample is marked consistent with per-URL snippets.
 
     Scenario:
-        Given test inputs and fixtures for validate across samples consistent match
-        When test_validate_across_samples_consistent_match executes the target flow
-        Then the expected outcome for validate across samples consistent match is confirmed.
+        Given two FakePages both matching "#t" and a BOOK_TITLE proposal with selector "#t"
+        When sd.validate_across_samples(proposals, samples) is called
+        Then BOOK_TITLE is consistent=True, all per_url entries are matched, and the first snippet is "Book One".
 
     Boundaries:
-        - Focus: validate across samples consistent match
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The "consistent match" path; FakeLocator/FakePage, no real browser
 
     On failure, first check:
-        - Assertion details tied to validate across samples consistent match
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The consistency logic and snippet extraction in validate_across_samples
     """
     page1 = FakePage(locators={"#t": FakeLocator("Book One")})
     page2 = FakePage(locators={"#t": FakeLocator("Book Two")})
@@ -527,22 +513,18 @@ async def test_validate_across_samples_consistent_match() -> None:
 async def test_validate_across_samples_flags_inconsistency() -> None:
     # ".tag" matches on page1 only -> inconsistent, must be flagged.
     """
-    [Local] schema detection: verifies validate across samples flags inconsistency.
+    [Local] schema detection: verifies that a selector matching on some but not all samples is marked inconsistent.
 
     Scenario:
-        Given test inputs and fixtures for validate across samples flags inconsistency
-        When test_validate_across_samples_flags_inconsistency executes the target flow
-        Then the expected outcome for validate across samples flags inconsistency is confirmed.
+        Given page1 matches ".tag" but page2 does not, and a TAGS proposal with selector ".tag"
+        When sd.validate_across_samples(proposals, samples) is called
+        Then TAGS is consistent=False and per_url matched entries are [True, False].
 
     Boundaries:
-        - Focus: validate across samples flags inconsistency
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The "inconsistent" detection path; FakeLocator/FakePage, no real browser
 
     On failure, first check:
-        - Assertion details tied to validate across samples flags inconsistency
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The cross-sample consistency check in validate_across_samples
     """
     page1 = FakePage(locators={".tag": FakeLocator(["a", "b"])})
     page2 = FakePage(locators={})
@@ -558,22 +540,18 @@ async def test_validate_across_samples_flags_inconsistency() -> None:
 
 async def test_validate_across_samples_null_selector_is_miss() -> None:
     """
-    [Local] schema detection: verifies validate across samples null selector is miss.
+    [Local] schema detection: verifies that a null/None selector is recorded as a miss with snippet "null selector".
 
     Scenario:
-        Given test inputs and fixtures for validate across samples null selector is miss
-        When test_validate_across_samples_null_selector_is_miss executes the target flow
-        Then the expected outcome for validate across samples null selector is miss is confirmed.
+        Given a proposal with selector=None for ISBN10
+        When sd.validate_across_samples(proposals, samples) is called
+        Then the per_url entry has matched=False and snippet="null selector".
 
     Boundaries:
-        - Focus: validate across samples null selector is miss
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The null-selector handling path; no real browser
 
     On failure, first check:
-        - Assertion details tied to validate across samples null selector is miss
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The None-selector branch in validate_across_samples
     """
     page = FakePage(locators={})
     samples = [{"url": "u1", "page": page}]
@@ -588,22 +566,18 @@ async def test_validate_across_samples_null_selector_is_miss() -> None:
 
 async def test_validate_across_samples_bad_selector_does_not_abort() -> None:
     """
-    [Local] schema detection: verifies validate across samples bad selector does not abort.
+    [Local] schema detection: verifies that a PlaywrightError from a bad selector is caught and recorded as "query error" without aborting.
 
     Scenario:
-        Given test inputs and fixtures for validate across samples bad selector does not abort
-        When test_validate_across_samples_bad_selector_does_not_abort executes the target flow
-        Then the expected outcome for validate across samples bad selector does not abort is confirmed.
+        Given a FakePage whose locator for "::bad::" raises PlaywrightError
+        When sd.validate_across_samples(proposals, samples) is called
+        Then the per_url entry has matched=False and snippet="query error", and no exception propagates.
 
     Boundaries:
-        - Focus: validate across samples bad selector does not abort
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The selector-evaluation error path; FakePage raises on the bad selector
 
     On failure, first check:
-        - Assertion details tied to validate across samples bad selector does not abort
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The PlaywrightError catch in validate_across_samples
     """
     page = FakePage(locators={"::bad::": FakeLocator([], raises=PlaywrightError("bad selector"))})
     samples = [{"url": "u1", "page": page}]
@@ -629,13 +603,13 @@ class _HangingLocator(FakeLocator):
 async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch) -> None:
     """
     [Local] schema detection: verifies pathological selector is bounded by timeout not hung.
-    
+
     Scenario:
         a selector whose count() never resolves is bounded by the AIS-7 timeout, recorded as a non-match, and the run completes instead of hanging.
-    
+
     Boundaries:
         - SELECTOR_EVAL_TIMEOUT_S is shrunk to 50 ms; a hanging fake locator is queried.
-    
+
     On failure, first check:
         - a crafted selector/page could block the tool (and a CI drift job) indefinitely.
     """
@@ -653,13 +627,13 @@ async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch)
 async def test_check_current_only_still_evaluates_has_text_current_selector(monkeypatch) -> None:
     """
     [Local] schema detection: verifies check current only still evaluates has text current selector.
-    
+
     Scenario:
         --check-current-only still evaluates a current :has-text selector - the AIS-6 rejection applies to AI PROPOSALS only, never to the current selectors the drift check queries.
-    
+
     Boundaries:
         - a one-field site whose ISBN13 is a :has-text selector the FakePage matches; no AI.
-    
+
     On failure, first check:
         - the drift check would wrongly reject/skip the project's real :has-text selectors.
     """
@@ -699,22 +673,18 @@ def _amazon_pages():
 
 async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema happy path flags inconsistency.
+    [Local] schema detection: verifies the full detect_schema pipeline: consistent proposals show [MATCH], inconsistent ones show INCONSISTENT, and call_anthropic is invoked once per URL.
 
     Scenario:
-        Given test inputs and fixtures for detect schema happy path flags inconsistency
-        When test_detect_schema_happy_path_flags_inconsistency executes the target flow
-        Then the expected outcome for detect schema happy path flags inconsistency is confirmed.
+        Given two FakePages where BOOK_TITLE matches both and TAGS matches only page1, and call_anthropic returning proposals for those two fields
+        When sd.detect_schema("amazon", ["https://x/1", "https://x/2"]) is called
+        Then "#productTitle" and "[MATCH]" are in the report, "INCONSISTENT" is in the report, call_anthropic was called twice, and the browser is closed.
 
     Boundaries:
-        - Focus: detect schema happy path flags inconsistency
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - Full pipeline with Playwright and Anthropic both mocked; 2 URLs
 
     On failure, first check:
-        - Assertion details tied to detect schema happy path flags inconsistency
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The validation loop, inconsistency detection, and per-URL call_anthropic invocation in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -749,13 +719,13 @@ async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None
 async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) -> None:
     """
     [Local] schema detection: verifies detect schema sums usage across one request per url.
-    
+
     Scenario:
         a 3-URL run makes 3 requests and sums each response's usage into one line.
-    
+
     Boundaries:
         - call_anthropic is mocked per URL; cache-read is non-zero on requests 2-3.
-    
+
     On failure, first check:
         - the usage line would reflect one request, or drop cached-token totals.
     """
@@ -794,13 +764,13 @@ async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) 
 async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
     """
     [Local] schema detection: verifies detect schema rejects too many urls.
-    
+
     Scenario:
         more than MAX_SAMPLE_URLS sample URLs is rejected before any work.
-    
+
     Boundaries:
         - no API key set, no browser/anthropic patched - the cap must trip first.
-    
+
     On failure, first check:
         - an unbounded sample set runs up unbounded Anthropic spend.
     """
@@ -813,13 +783,13 @@ async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
 async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
     """
     [Local] schema detection: verifies detect schema no detail fields fails loudly.
-    
+
     Scenario:
         a site whose entry defines no detail-page selectors fails loudly.
-    
+
     Boundaries:
         - site_constants is monkeypatched to an endpoint-only entry; no browser launches.
-    
+
     On failure, first check:
         - a run with nothing to propose would proceed to a pointless API call.
     """
@@ -831,22 +801,18 @@ async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
 
 async def test_detect_schema_missing_api_key(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema missing api key.
+    [Local] schema detection: verifies that a missing ANTHROPIC_API_KEY raises SchemaDetectionError before any browser or API call.
 
     Scenario:
-        Given test inputs and fixtures for detect schema missing api key
-        When test_detect_schema_missing_api_key executes the target flow
-        Then the expected outcome for detect schema missing api key is confirmed.
+        Given ANTHROPIC_API_KEY is deleted from the environment
+        When sd.detect_schema("amazon", ["https://x/1"]) is called
+        Then SchemaDetectionError matching "ANTHROPIC_API_KEY is not set" is raised.
 
     Boundaries:
-        - Focus: detect schema missing api key
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The missing-API-key pre-flight; no browser or Anthropic call should be made
 
     On failure, first check:
-        - Assertion details tied to detect schema missing api key
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The ANTHROPIC_API_KEY presence check in detect_schema
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(sd.SchemaDetectionError, match="ANTHROPIC_API_KEY is not set"):
@@ -855,22 +821,18 @@ async def test_detect_schema_missing_api_key(monkeypatch) -> None:
 
 async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema malformed ai json fails loudly.
+    [Local] schema detection: verifies that a non-JSON AI response raises SchemaDetectionError and the browser is still closed.
 
     Scenario:
-        Given test inputs and fixtures for detect schema malformed ai json fails loudly
-        When test_detect_schema_malformed_ai_json_fails_loudly executes the target flow
-        Then the expected outcome for detect schema malformed ai json fails loudly is confirmed.
+        Given call_anthropic returning "not json at all" and a loadable FakePage
+        When sd.detect_schema("amazon", ["https://x/1"]) is called
+        Then SchemaDetectionError matching "not valid JSON" is raised and browser.close is called.
 
     Boundaries:
-        - Focus: detect schema malformed ai json fails loudly
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The malformed-AI-response path; browser must be closed even on failure
 
     On failure, first check:
-        - Assertion details tied to detect schema malformed ai json fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The JSON parse and browser cleanup in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     page1, _ = _amazon_pages()
@@ -889,22 +851,18 @@ async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None
 
 async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema page load failure fails loudly.
+    [Local] schema detection: verifies that a page-load failure raises SchemaDetectionError, skips the AI call, and still closes the browser.
 
     Scenario:
-        Given test inputs and fixtures for detect schema page load failure fails loudly
-        When test_detect_schema_page_load_failure_fails_loudly executes the target flow
-        Then the expected outcome for detect schema page load failure fails loudly is confirmed.
+        Given a FakePage whose goto raises PlaywrightError("connection refused")
+        When sd.detect_schema("amazon", ["https://x/1"]) is called
+        Then SchemaDetectionError matching "Failed to load" is raised, call_anthropic is never called, and browser.close is called.
 
     Boundaries:
-        - Focus: detect schema page load failure fails loudly
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The page-load failure path; AI must not be consulted and browser must be closed
 
     On failure, first check:
-        - Assertion details tied to detect schema page load failure fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The page-load error propagation and browser cleanup in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     bad_page = FakePage()
@@ -925,22 +883,18 @@ async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None
 
 async def test_detect_schema_unknown_site() -> None:
     """
-    [Local] schema detection: verifies detect schema unknown site.
+    [Local] schema detection: verifies that an unrecognized site name raises SchemaDetectionError("Unknown site").
 
     Scenario:
-        Given test inputs and fixtures for detect schema unknown site
-        When test_detect_schema_unknown_site executes the target flow
-        Then the expected outcome for detect schema unknown site is confirmed.
+        Given no API key or browser setup
+        When sd.detect_schema("bogus", ["https://x/1"]) is called
+        Then SchemaDetectionError matching "Unknown site" is raised.
 
     Boundaries:
-        - Focus: detect schema unknown site
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The site-validation pre-flight; nothing else runs
 
     On failure, first check:
-        - Assertion details tied to detect schema unknown site
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The site-name check in detect_schema
     """
     with pytest.raises(sd.SchemaDetectionError, match="Unknown site"):
         await sd.detect_schema("bogus", ["https://x/1"])
@@ -948,22 +902,18 @@ async def test_detect_schema_unknown_site() -> None:
 
 async def test_detect_schema_no_urls() -> None:
     """
-    [Local] schema detection: verifies detect schema no urls.
+    [Local] schema detection: verifies that an empty URL list raises SchemaDetectionError("At least one sample").
 
     Scenario:
-        Given test inputs and fixtures for detect schema no urls
-        When test_detect_schema_no_urls executes the target flow
-        Then the expected outcome for detect schema no urls is confirmed.
+        Given an empty urls list
+        When sd.detect_schema("amazon", []) is called
+        Then SchemaDetectionError matching "At least one sample" is raised.
 
     Boundaries:
-        - Focus: detect schema no urls
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The empty-url pre-flight; nothing else runs
 
     On failure, first check:
-        - Assertion details tied to detect schema no urls
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The url-count check in detect_schema
     """
     with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
         await sd.detect_schema("amazon", [])
@@ -995,13 +945,13 @@ def _search_proposals():
 async def test_search_validation_reports_card_count_and_match_fraction() -> None:
     """
     [Local] schema detection: verifies search validation reports card count and match fraction.
-    
+
     Scenario:
         each card-relative selector reports the card count and per-sample match fraction.
-    
+
     Boundaries:
         - FakePage enumerates 8 cards; the title selector matches all of them.
-    
+
     On failure, first check:
         - a fully-matching per-card selector would not report its 8/8 fraction.
     """
@@ -1026,13 +976,13 @@ async def test_search_validation_reports_card_count_and_match_fraction() -> None
 async def test_search_validation_caps_cards_per_sample() -> None:
     """
     [Local] schema detection: verifies search validation caps cards per sample.
-    
+
     Scenario:
         card-relative validation evaluates at most MAX_CARDS_PER_SAMPLE cards per sample, and the reported fraction is computed over the evaluated cards (auditor card-cap caveat).
-    
+
     Boundaries:
         - a page with 60 matching cards; the card-relative work must stop at the cap.
-    
+
     On failure, first check:
         - a page-controlled card count could multiply the per-card locator work without bound.
     """
@@ -1049,13 +999,13 @@ async def test_search_validation_caps_cards_per_sample() -> None:
 async def test_card_relative_selector_below_80_percent_flagged_partial() -> None:
     """
     [Local] schema detection: verifies card relative selector below 80 percent flagged partial.
-    
+
     Scenario:
         a card-relative selector matching under 80% of cards is flagged partial.
-    
+
     Boundaries:
         - 8 cards, only 5 carry the title element -> fraction 0.625.
-    
+
     On failure, first check:
         - a per-card selector that silently misses a third of the cards looks valid.
     """
@@ -1073,13 +1023,13 @@ async def test_card_relative_selector_below_80_percent_flagged_partial() -> None
 async def test_search_validation_card_relative_query_error_counts_as_miss() -> None:
     """
     [Local] schema detection: verifies search validation card relative query error counts as miss.
-    
+
     Scenario:
         a card-relative selector Playwright rejects on a card counts as a miss, never aborts.
-    
+
     Boundaries:
         - one card's title locator raises; the run must continue and flag partial.
-    
+
     On failure, first check:
         - a hostile/garbage selector would abort the whole validation.
     """
@@ -1096,13 +1046,13 @@ async def test_search_validation_card_relative_query_error_counts_as_miss() -> N
 async def test_search_validation_null_card_relative_selector_is_partial() -> None:
     """
     [Local] schema detection: verifies search validation null card relative selector is partial.
-    
+
     Scenario:
         a null card-relative proposal matches no card and is flagged partial.
-    
+
     Boundaries:
         - cards exist, but the title proposal's selector is None.
-    
+
     On failure, first check:
         - a null per-card selector would silently appear to validate.
     """
@@ -1120,13 +1070,13 @@ async def test_search_validation_null_card_relative_selector_is_partial() -> Non
 async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
     """
     [Local] schema detection: verifies search validation null card selector yields zero cards.
-    
+
     Scenario:
         a null card-container proposal yields zero cards, so card-relative fields are partial.
-    
+
     Boundaries:
         - the SEARCH_BOOK_CARD proposal's selector is None.
-    
+
     On failure, first check:
         - card-relative validation would crash instead of reporting zero cards.
     """
@@ -1144,19 +1094,22 @@ async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
 async def test_search_validation_bad_card_selector_does_not_abort() -> None:
     """
     [Local] schema detection: verifies search validation bad card selector does not abort.
-    
+
     Scenario:
         a card-container selector whose enumeration raises yields zero cards, not a crash.
-    
+
     Boundaries:
         - page.locator(card).all() raises; card-relative fields must still report.
-    
+
     On failure, first check:
         - a bad card selector would abort the whole search validation.
     """
 
     class _RaisingAllPage:
+        """Fake Playwright page whose locator.all() always raises PlaywrightError, simulating a broken card selector."""
+
         def locator(self, selector):
+            """Return a MagicMock locator whose .all() raises and .count() returns 0."""
             loc = MagicMock()
             loc.all = AsyncMock(side_effect=PlaywrightError("all boom"))
             loc.count = AsyncMock(return_value=0)
@@ -1175,13 +1128,13 @@ async def test_search_validation_bad_card_selector_does_not_abort() -> None:
 async def test_search_validation_no_card_field_in_proposals() -> None:
     """
     [Local] schema detection: verifies search validation no card field in proposals.
-    
+
     Scenario:
         proposals with no card-container key still validate card-relative fields (zero cards).
-    
+
     Boundaries:
         - only a card-relative field is proposed; next((card key)) is None.
-    
+
     On failure, first check:
         - the missing-card-field branch would raise a KeyError.
     """
@@ -1199,13 +1152,13 @@ async def test_search_validation_no_card_field_in_proposals() -> None:
 async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
     """
     [Local] schema detection: verifies detect schema search page type end to end.
-    
+
     Scenario:
         page_type='search' proposes SEARCH_* selectors and validates per-card fractions.
-    
+
     Boundaries:
         - Playwright faked, anthropic mocked; two sample search pages.
-    
+
     On failure, first check:
         - a search run would use detail-page selectors or skip card-fraction validation.
     """
@@ -1244,13 +1197,13 @@ async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
 def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
     """
     [Local] schema detection: verifies prompt hash is deterministic and joins blocks.
-    
+
     Scenario:
         prompt_hash is a stable sha256 of instruction + blank line + snapshot.
-    
+
     Boundaries:
         - pure hashing; the same inputs always yield the same 64-char hex key.
-    
+
     On failure, first check:
         - a drifting key would strand every committed replay recording.
     """
@@ -1263,13 +1216,13 @@ def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
 def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> None:
     """
     [Local] schema detection: verifies format replay usage line reports zero tokens and replayed count.
-    
+
     Scenario:
         the replay usage line reports zero tokens and the replayed count, no key.
-    
+
     Boundaries:
         - pure formatting.
-    
+
     On failure, first check:
         - a replay run would imply live token spend it never incurred.
     """
@@ -1284,13 +1237,13 @@ def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> No
 def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
     """
     [Local] schema detection: verifies load replay file ignores underscore keys.
-    
+
     Scenario:
         load_replay_file drops _-prefixed keys (e.g. a _provenance note).
-    
+
     Boundaries:
         - real file I/O via tmp_path.
-    
+
     On failure, first check:
         - a provenance note would be treated as a prompt hash and never match.
     """
@@ -1302,22 +1255,18 @@ def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
 
 def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies load replay file missing path fails loudly.
+    [Local] schema detection: verifies that a nonexistent replay file path raises SchemaDetectionError("Cannot read --replay file").
 
     Scenario:
-        Given test inputs and fixtures for load replay file missing path fails loudly
-        When test_load_replay_file_missing_path_fails_loudly executes the target flow
-        Then the expected outcome for load replay file missing path fails loudly is confirmed.
+        Given a path to a file that does not exist
+        When sd.load_replay_file(path) is called
+        Then SchemaDetectionError matching "Cannot read --replay file" is raised.
 
     Boundaries:
-        - Focus: load replay file missing path fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The missing-file path for the replay loader
 
     On failure, first check:
-        - Assertion details tied to load replay file missing path fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The file-open error handling in load_replay_file
     """
     with pytest.raises(sd.SchemaDetectionError, match="Cannot read --replay file"):
         sd.load_replay_file(str(tmp_path / "nope.json"))
@@ -1325,22 +1274,18 @@ def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
 
 def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies load replay file invalid json fails loudly.
+    [Local] schema detection: verifies that a replay file with invalid JSON raises SchemaDetectionError("not valid JSON").
 
     Scenario:
-        Given test inputs and fixtures for load replay file invalid json fails loudly
-        When test_load_replay_file_invalid_json_fails_loudly executes the target flow
-        Then the expected outcome for load replay file invalid json fails loudly is confirmed.
+        Given a file containing "not json" (not parseable as JSON)
+        When sd.load_replay_file(path) is called
+        Then SchemaDetectionError matching "not valid JSON" is raised.
 
     Boundaries:
-        - Focus: load replay file invalid json fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The JSON parse error path in load_replay_file
 
     On failure, first check:
-        - Assertion details tied to load replay file invalid json fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The JSON decode error handling in load_replay_file
     """
     path = tmp_path / "bad.json"
     path.write_text("not json", encoding="utf-8")
@@ -1350,22 +1295,18 @@ def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
 
 def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies load replay file non object fails loudly.
+    [Local] schema detection: verifies that a replay file whose top-level value is not a JSON object raises SchemaDetectionError("must be a JSON object").
 
     Scenario:
-        Given test inputs and fixtures for load replay file non object fails loudly
-        When test_load_replay_file_non_object_fails_loudly executes the target flow
-        Then the expected outcome for load replay file non object fails loudly is confirmed.
+        Given a file containing "[1, 2, 3]" (a JSON array, not an object)
+        When sd.load_replay_file(path) is called
+        Then SchemaDetectionError matching "must be a JSON object" is raised.
 
     Boundaries:
-        - Focus: load replay file non object fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The non-object top-level JSON path in load_replay_file
 
     On failure, first check:
-        - Assertion details tied to load replay file non object fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The isinstance(data, dict) check in load_replay_file
     """
     path = tmp_path / "arr.json"
     path.write_text("[1, 2, 3]", encoding="utf-8")
@@ -1375,22 +1316,18 @@ def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
 
 def test_replay_lookup_returns_recorded_response() -> None:
     """
-    [Local] schema detection: verifies replay lookup returns recorded response.
+    [Local] schema detection: verifies that replay_lookup returns the recorded response for a matching prompt hash.
 
     Scenario:
-        Given test inputs and fixtures for replay lookup returns recorded response
-        When test_replay_lookup_returns_recorded_response executes the target flow
-        Then the expected outcome for replay lookup returns recorded response is confirmed.
+        Given a replay dict keyed by sha256(instructions+snapshot) and the same instructions/snapshot
+        When sd.replay_lookup(replay, "I", "S") is called
+        Then the stored JSON string is returned.
 
     Boundaries:
-        - Focus: replay lookup returns recorded response
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The "found" path; pure dict lookup, no file I/O
 
     On failure, first check:
-        - Assertion details tied to replay lookup returns recorded response
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The prompt_hash computation or dict lookup in replay_lookup
     """
     replay = {sd.prompt_hash("I", "S"): '{"BOOK_TITLE": {"selector": "#t"}}'}
     assert sd.replay_lookup(replay, "I", "S") == '{"BOOK_TITLE": {"selector": "#t"}}'
@@ -1399,13 +1336,13 @@ def test_replay_lookup_returns_recorded_response() -> None:
 def test_replay_lookup_missing_prompt_fails_loudly() -> None:
     """
     [Local] schema detection: verifies replay lookup missing prompt fails loudly.
-    
+
     Scenario:
         a prompt absent from the replay map is a hard error, never a live fallthrough.
-    
+
     Boundaries:
         - pure dict lookup.
-    
+
     On failure, first check:
         - a drifted offline run would silently reach for the live API (AIS-9 violation).
     """
@@ -1416,13 +1353,13 @@ def test_replay_lookup_missing_prompt_fails_loudly() -> None:
 def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) -> None:
     """
     [Local] schema detection: verifies write record file writes hash keyed responses and provenance.
-    
+
     Scenario:
         write_record_file persists hash->response plus a provenance note, no key.
-    
+
     Boundaries:
         - real file I/O via tmp_path; the fake key must appear nowhere.
-    
+
     On failure, first check:
         - a leaked key in a committed recording is a credential disclosure (AIS-8).
     """
@@ -1436,22 +1373,18 @@ def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) 
 
 def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies write record file oserror fails loudly.
+    [Local] schema detection: verifies that an OSError from Path.write_text raises SchemaDetectionError("Cannot write --record file").
 
     Scenario:
-        Given test inputs and fixtures for write record file oserror fails loudly
-        When test_write_record_file_oserror_fails_loudly executes the target flow
-        Then the expected outcome for write record file oserror fails loudly is confirmed.
+        Given Path.write_text is patched to raise OSError("read-only")
+        When sd.write_record_file(path, {}) is called
+        Then SchemaDetectionError matching "Cannot write --record file" is raised.
 
     Boundaries:
-        - Focus: write record file oserror fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The write-failure path in write_record_file; no real filesystem dependency
 
     On failure, first check:
-        - Assertion details tied to write record file oserror fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The OSError -> SchemaDetectionError conversion in write_record_file
     """
     with patch.object(sd.Path, "write_text", side_effect=OSError("read-only")):
         with pytest.raises(sd.SchemaDetectionError, match="Cannot write --record file"):
@@ -1461,13 +1394,13 @@ def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
 async def test_block_all_requests_aborts() -> None:
     """
     [Local] schema detection: verifies block all requests aborts.
-    
+
     Scenario:
         the html-file route handler aborts every request (default-deny, AIS-9).
-    
+
     Boundaries:
         - a fake Route; assert abort() is awaited and continue_() never is.
-    
+
     On failure, first check:
         - a set_content page could fetch a subresource and leave the offline boundary.
     """
@@ -1481,22 +1414,18 @@ async def test_block_all_requests_aborts() -> None:
 
 def test_read_html_file_reads_utf8(tmp_path) -> None:
     """
-    [Local] schema detection: verifies read html file reads utf8.
+    [Local] schema detection: verifies that _read_html_file reads a UTF-8 HTML file and returns its content as a string.
 
     Scenario:
-        Given test inputs and fixtures for read html file reads utf8
-        When test_read_html_file_reads_utf8 executes the target flow
-        Then the expected outcome for read html file reads utf8 is confirmed.
+        Given a UTF-8 file containing "<h1>Tïtle</h1>"
+        When sd._read_html_file(path) is called
+        Then the string "<h1>Tïtle</h1>" is returned.
 
     Boundaries:
-        - Focus: read html file reads utf8
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The happy path; real file I/O via tmp_path
 
     On failure, first check:
-        - Assertion details tied to read html file reads utf8
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The UTF-8 read in _read_html_file
     """
     path = tmp_path / "p.html"
     path.write_text("<h1>Tïtle</h1>", encoding="utf-8")
@@ -1505,22 +1434,18 @@ def test_read_html_file_reads_utf8(tmp_path) -> None:
 
 def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies read html file missing path fails loudly.
+    [Local] schema detection: verifies that a nonexistent HTML file raises SchemaDetectionError("Cannot access --html-file").
 
     Scenario:
-        Given test inputs and fixtures for read html file missing path fails loudly
-        When test_read_html_file_missing_path_fails_loudly executes the target flow
-        Then the expected outcome for read html file missing path fails loudly is confirmed.
+        Given a path to a file that does not exist
+        When sd._read_html_file(path) is called
+        Then SchemaDetectionError matching "Cannot access --html-file" is raised.
 
     Boundaries:
-        - Focus: read html file missing path fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The missing-file path in _read_html_file
 
     On failure, first check:
-        - Assertion details tied to read html file missing path fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The file-access error handling in _read_html_file
     """
     with pytest.raises(sd.SchemaDetectionError, match="Cannot access --html-file"):
         sd._read_html_file(str(tmp_path / "nope.html"))
@@ -1529,13 +1454,13 @@ def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
 def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
     """
     [Local] schema detection: verifies read html file oversized fails loudly.
-    
+
     Scenario:
         a file over the AIS-11 size cap fails loudly before being read into memory.
-    
+
     Boundaries:
         - the cap is monkeypatched tiny so a small file trips it (no huge fixture needed).
-    
+
     On failure, first check:
         - an oversized/binary file read + set_content is a memory/parse DoS.
     """
@@ -1548,22 +1473,18 @@ def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
 
 def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
     """
-    [Local] schema detection: verifies read html file non utf8 fails loudly.
+    [Local] schema detection: verifies that a non-UTF-8 binary file raises SchemaDetectionError("as UTF-8 text").
 
     Scenario:
-        Given test inputs and fixtures for read html file non utf8 fails loudly
-        When test_read_html_file_non_utf8_fails_loudly executes the target flow
-        Then the expected outcome for read html file non utf8 fails loudly is confirmed.
+        Given a file containing non-UTF-8 bytes (b"\\xff\\xfe\\x00\\x01not utf8")
+        When sd._read_html_file(path) is called
+        Then SchemaDetectionError matching "as UTF-8 text" is raised.
 
     Boundaries:
-        - Focus: read html file non utf8 fails loudly
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - The encoding-error path in _read_html_file
 
     On failure, first check:
-        - Assertion details tied to read html file non utf8 fails loudly
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The UnicodeDecodeError handling in _read_html_file
     """
     path = tmp_path / "bin.html"
     path.write_bytes(b"\xff\xfe\x00\x01not utf8")
@@ -1576,22 +1497,18 @@ def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema rejects both url and html file.
+    [Local] schema detection: verifies that passing both --url and --html-file raises SchemaDetectionError("either --url or --html-file").
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects both url and html file
-        When test_detect_schema_rejects_both_url_and_html_file executes the target flow
-        Then the expected outcome for detect schema rejects both url and html file is confirmed.
+        Given ANTHROPIC_API_KEY is set and both urls and html_files are non-empty
+        When sd.detect_schema("amazon", urls=["https://x/1"], html_files=["/tmp/a.html"]) is called
+        Then SchemaDetectionError matching "either --url or --html-file" is raised.
 
     Boundaries:
-        - Focus: detect schema rejects both url and html file
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The mutually-exclusive source validation pre-flight
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects both url and html file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The mutual-exclusion check for urls and html_files in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     with pytest.raises(sd.SchemaDetectionError, match="either --url or --html-file"):
@@ -1600,22 +1517,18 @@ async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None
 
 async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema rejects no source.
+    [Local] schema detection: verifies that calling detect_schema with neither urls nor html_files raises SchemaDetectionError("At least one sample").
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects no source
-        When test_detect_schema_rejects_no_source executes the target flow
-        Then the expected outcome for detect schema rejects no source is confirmed.
+        Given ANTHROPIC_API_KEY is set and neither urls nor html_files are provided
+        When sd.detect_schema("amazon") is called with no source arguments
+        Then SchemaDetectionError matching "At least one sample" is raised.
 
     Boundaries:
-        - Focus: detect schema rejects no source
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The no-source validation pre-flight
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects no source
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The empty-source check in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     with pytest.raises(sd.SchemaDetectionError, match="At least one sample"):
@@ -1624,22 +1537,18 @@ async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
 
 async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
     """
-    [Local] schema detection: verifies detect schema rejects too many html files.
+    [Local] schema detection: verifies that more than MAX_SAMPLE_URLS html_files raises SchemaDetectionError("--html-file paths").
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects too many html files
-        When test_detect_schema_rejects_too_many_html_files executes the target flow
-        Then the expected outcome for detect schema rejects too many html files is confirmed.
+        Given ANTHROPIC_API_KEY is set and MAX_SAMPLE_URLS+1 html file paths are provided
+        When sd.detect_schema("amazon", html_files=too_many) is called
+        Then SchemaDetectionError matching "--html-file paths" is raised.
 
     Boundaries:
-        - Focus: detect schema rejects too many html files
-        - Fixtures/params: monkeypatch
-        - Scope: assertions and setup in this test case only
+        - The html_files cap enforcement; mirrors the urls cap test
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects too many html files
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by schema detection
+        - The html_files count cap in detect_schema
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     too_many = [f"/tmp/{i}.html" for i in range(sd.MAX_SAMPLE_URLS + 1)]
@@ -1653,13 +1562,13 @@ async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
 async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies replay mode requires no api key.
-    
+
     Scenario:
         a replay run with NO ANTHROPIC_API_KEY succeeds and constructs no client.
-    
+
     Boundaries:
         - the key is deleted and sd.anthropic.Anthropic is wired to raise if ever constructed; call_anthropic is left real so any live attempt would blow up.
-    
+
     On failure, first check:
         - a silent fall-through to a live API call (cost + key requirement) - the Boundary-4 / AIS-9 violation this gate exists to prevent.
     """
@@ -1692,13 +1601,13 @@ async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
 async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies replay missing prompt fails loudly.
-    
+
     Scenario:
         a replay file that lacks the run's prompt hash fails loudly, no live call.
-    
+
     Boundaries:
         - the replay file is a valid-but-unrelated recording; no key is set.
-    
+
     On failure, first check:
         - a stale recording would silently trigger live spend (AIS-9).
     """
@@ -1719,13 +1628,13 @@ async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None
 async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies detect schema html file offline replay end to end.
-    
+
     Scenario:
         html_files + replay drives the pipeline fully offline through load_html_file_page.
-    
+
     Boundaries:
         - FakePage (with set_content) stands in for Chromium; no key, no client.
-    
+
     On failure, first check:
         - the from-files branch or the set_content load path would not be exercised offline.
     """
@@ -1759,13 +1668,13 @@ async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tm
 async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies record mode writes prompt hash keyed responses.
-    
+
     Scenario:
         a live run with --record writes {sha256(prompt): response}, no key in the file.
-    
+
     Boundaries:
         - call_anthropic is mocked (no real network); the record file is read back.
-    
+
     On failure, first check:
         - a broken record path would strand maintainers unable to refresh replays, or leak the key into a committed artifact (AIS-8).
     """
@@ -1801,13 +1710,13 @@ def _tiny_site(selector="#t"):
 async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies check current only makes no api call.
-    
+
     Scenario:
         --check-current-only constructs no client, needs no key, makes no AI call (AIS-9).
-    
+
     Boundaries:
         - the key is deleted; sd.anthropic.Anthropic and call_anthropic both raise if ever reached; an --html-file sample drives the fully offline path.
-    
+
     On failure, first check:
         - a keyless drift check would silently require the key or spend on a live call.
     """
@@ -1842,13 +1751,13 @@ async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> No
 async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> None:
     """
     [Local] schema detection: verifies exit code zero when all current selectors match.
-    
+
     Scenario:
         a run where every current selector matches a sample returns exit 0.
-    
+
     Boundaries:
         - a one-field site whose selector the FakePage carries; check-current-only (no AI).
-    
+
     On failure, first check:
         - a healthy schema would wrongly trip the drift exit code.
     """
@@ -1868,13 +1777,13 @@ async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> N
 async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
     """
     [Local] schema detection: verifies exit code four on broken current selector.
-    
+
     Scenario:
         a current selector matching on no sample yields exit 4 (drift).
-    
+
     Boundaries:
         - a one-field site whose selector the FakePage does NOT carry; check-current-only.
-    
+
     On failure, first check:
         - drift would go unnoticed and a scheduled CI job could not gate on it.
     """
@@ -1893,13 +1802,13 @@ async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
 async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path) -> None:
     """
     [Local] schema detection: verifies detect schema json format offline replay.
-    
+
     Scenario:
         --format json on an offline replay run emits the documented JSON schema + exit code.
-    
+
     Boundaries:
         - FakePage + hand-built replay; no key, no client.
-    
+
     On failure, first check:
         - a CI drift artifact would be malformed, or the exit code would be dropped.
     """

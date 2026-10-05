@@ -48,16 +48,17 @@ def _write_combined_cert(path, expiry: datetime):
 
 class TestSaveSummary:
     """Tests for the SaveSummary dataclass."""
+
     def test_total_sums_the_three_fields(self) -> None:
         """
         [Local] save summary: verifies total sums the three fields.
-        
+
         Scenario:
             total is the aggregate of inserted + duplicates + errors.
-        
+
         Boundaries:
             - mixed non-zero counts.
-        
+
         On failure, first check:
             - a caller cannot trust total to equal the batch size.
         """
@@ -67,13 +68,13 @@ class TestSaveSummary:
     def test_is_frozen(self) -> None:
         """
         [Local] save summary: verifies is frozen.
-        
+
         Scenario:
             SaveSummary is an immutable value object.
-        
+
         Boundaries:
             - attribute assignment after construction.
-        
+
         On failure, first check:
             - a summary could be mutated after the fact, hiding the real outcome.
         """
@@ -84,24 +85,21 @@ class TestSaveSummary:
 
 class TestMongoBackend:
     """Tests for storage.MongoBackend."""
+
     def test_save_books_delegates_to_database(self) -> None:
         """
-        [Local] mongo backend: verifies save books delegates to database.
+        [Local] mongo backend: verifies that MongoBackend.save_books delegates to database.save_books_to_mongodb and returns its SaveSummary.
 
         Scenario:
-            Given test inputs and fixtures for save books delegates to database
-            When test_save_books_delegates_to_database executes the target flow
-            Then the expected outcome for save books delegates to database is confirmed.
+            Given a MongoBackend with a Mock collection and a list of two books
+            When backend.save_books(books) is called with database.save_books_to_mongodb patched
+            Then it is called once with (books, collection) and the returned SaveSummary is propagated.
 
         Boundaries:
-            - Focus: save books delegates to database
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation and return-value propagation only; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to save books delegates to database
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by mongo backend
+            - The delegation call in MongoBackend.save_books or the SaveSummary return path
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
@@ -118,22 +116,18 @@ class TestMongoBackend:
 
     def test_book_exists_by_hash_returns_delegated_value(self) -> None:
         """
-        [Local] mongo backend: verifies book exists by hash returns delegated value.
+        [Local] mongo backend: verifies that MongoBackend.book_exists_by_hash delegates to database.check_book_exists_in_db.
 
         Scenario:
-            Given test inputs and fixtures for book exists by hash returns delegated value
-            When test_book_exists_by_hash_returns_delegated_value executes the target flow
-            Then the expected outcome for book exists by hash returns delegated value is confirmed.
+            Given a MongoBackend with a Mock collection and database.check_book_exists_in_db returning True
+            When backend.book_exists_by_hash("deadbeef") is called
+            Then check_book_exists_in_db is called with ("deadbeef", collection) and True is returned.
 
         Boundaries:
-            - Focus: book exists by hash returns delegated value
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation and return-value passthrough; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to book exists by hash returns delegated value
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by mongo backend
+            - The delegation call in MongoBackend.book_exists_by_hash
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
@@ -147,22 +141,18 @@ class TestMongoBackend:
 
     def test_book_exists_by_asin_returns_delegated_value(self) -> None:
         """
-        [Local] mongo backend: verifies book exists by asin returns delegated value.
+        [Local] mongo backend: verifies that MongoBackend.book_exists_by_asin delegates to database.check_amazon_asin_exists_in_db.
 
         Scenario:
-            Given test inputs and fixtures for book exists by asin returns delegated value
-            When test_book_exists_by_asin_returns_delegated_value executes the target flow
-            Then the expected outcome for book exists by asin returns delegated value is confirmed.
+            Given a MongoBackend with a Mock collection and database.check_amazon_asin_exists_in_db returning False
+            When backend.book_exists_by_asin("B00XYZ") is called
+            Then check_amazon_asin_exists_in_db is called with ("B00XYZ", collection) and False is returned.
 
         Boundaries:
-            - Focus: book exists by asin returns delegated value
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation and return-value passthrough; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to book exists by asin returns delegated value
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by mongo backend
+            - The delegation call in MongoBackend.book_exists_by_asin
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
@@ -176,22 +166,18 @@ class TestMongoBackend:
 
     def test_leanpub_book_exists_delegates_to_deduplicate(self) -> None:
         """
-        [Local] mongo backend: verifies leanpub book exists delegates to deduplicate.
+        [Local] mongo backend: verifies that MongoBackend.leanpub_book_exists delegates to deduplicate.leanpub_prescrape_deduplicate.
 
         Scenario:
-            Given test inputs and fixtures for leanpub book exists delegates to deduplicate
-            When test_leanpub_book_exists_delegates_to_deduplicate executes the target flow
-            Then the expected outcome for leanpub book exists delegates to deduplicate is confirmed.
+            Given a MongoBackend with a Mock collection and deduplicate.leanpub_prescrape_deduplicate returning True
+            When backend.leanpub_book_exists("id-1", "slug-1") is called
+            Then leanpub_prescrape_deduplicate is called with ("id-1", "slug-1", collection) and True is returned.
 
         Boundaries:
-            - Focus: leanpub book exists delegates to deduplicate
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation and return-value passthrough; no real MongoDB
 
         On failure, first check:
-            - Assertion details tied to leanpub book exists delegates to deduplicate
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by mongo backend
+            - The delegation call in MongoBackend.leanpub_book_exists
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
@@ -205,22 +191,18 @@ class TestMongoBackend:
 
     def test_close_delegates_to_database(self) -> None:
         """
-        [Local] mongo backend: verifies close delegates to database.
+        [Local] mongo backend: verifies that MongoBackend.close delegates to database.close_mongo_connection.
 
         Scenario:
-            Given test inputs and fixtures for close delegates to database
-            When test_close_delegates_to_database executes the target flow
-            Then the expected outcome for close delegates to database is confirmed.
+            Given a MongoBackend with a Mock collection
+            When backend.close() is called with database patched
+            Then database.close_mongo_connection is called exactly once with no arguments.
 
         Boundaries:
-            - Focus: close delegates to database
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation only; no real MongoDB connection
 
         On failure, first check:
-            - Assertion details tied to close delegates to database
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by mongo backend
+            - The delegation call in MongoBackend.close
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
@@ -233,24 +215,21 @@ class TestMongoBackend:
 
 class TestJsonBackend:
     """Tests for storage.JsonBackend."""
+
     def test_save_books_delegates_to_store(self) -> None:
         """
-        [Local] json backend: verifies save books delegates to store.
+        [Local] json backend: verifies that JsonBackend.save_books delegates to store.save_books with the configured store path.
 
         Scenario:
-            Given test inputs and fixtures for save books delegates to store
-            When test_save_books_delegates_to_store executes the target flow
-            Then the expected outcome for save books delegates to store is confirmed.
+            Given a JsonBackend and a list of one book, with store.save_books patched to return a SaveSummary
+            When backend.save_books(books) is called
+            Then store.save_books is called with (books, store.LOCAL_STORE_FILE) and the SaveSummary is returned.
 
         Boundaries:
-            - Focus: save books delegates to store
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Delegation including the explicit store path argument; no real filesystem write
 
         On failure, first check:
-            - Assertion details tied to save books delegates to store
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by json backend
+            - The delegation call and store-path forwarding in JsonBackend.save_books
         """
         backend = JsonBackend()
         books = [{"title": "A"}]
@@ -268,13 +247,13 @@ class TestJsonBackend:
     def test_lookups_read_from_the_cached_index(self, isolated_local_store) -> None:
         """
         [Local] json backend: verifies lookups read from the cached index.
-        
+
         Scenario:
             hash/asin/book_id/slug lookups resolve against the in-memory index built from the file, returning the same answers the old per-call file reads did.
-        
+
         Boundaries:
             - one stored book queried by each identifier, plus a miss and an empty key.
-        
+
         On failure, first check:
             - a lookup reads a field the index never captured, so genuine duplicates slip through or new books are wrongly rejected.
         """
@@ -298,13 +277,13 @@ class TestJsonBackend:
     def test_json_backend_reads_file_once_for_many_lookups(self, isolated_local_store) -> None:
         """
         [Local] json backend: verifies json backend reads file once for many lookups.
-        
+
         Scenario:
             the index is built once and reused, so N dedup lookups parse the file once (the success criterion: 1,000 lookups against a 5,000-book store parse once).
-        
+
         Boundaries:
             - many mixed lookups after a single populated store, spying on _load_books.
-        
+
         On failure, first check:
             - each lookup re-reads and re-parses the whole file - O(candidates x size), the exact cost this cache exists to remove.
         """
@@ -322,13 +301,13 @@ class TestJsonBackend:
     def test_json_backend_cache_sees_books_saved_in_same_process(self, isolated_local_store) -> None:
         """
         [Local] json backend: verifies json backend cache sees books saved in same process.
-        
+
         Scenario:
             save_books keeps the in-memory index current, so a book saved after the index was built is immediately visible to lookups without re-reading the file.
-        
+
         Boundaries:
             - build the index (a lookup) before saving, then save and re-query.
-        
+
         On failure, first check:
             - the cache goes stale within a run and a just-saved book is re-scraped or re-inserted as if new.
         """
@@ -348,13 +327,13 @@ class TestJsonBackend:
     def test_close_is_noop_default(self) -> None:
         """
         [Local] json backend: verifies close is noop default.
-        
+
         Scenario:
             JsonBackend inherits the ABC's no-op close(); it must not raise.
-        
+
         Boundaries:
             - see test body
-        
+
         On failure, first check:
             - see test body
         """
@@ -365,13 +344,13 @@ class TestJsonBackend:
 def test_mongo_and_json_backends_return_save_summary() -> None:
     """
     [Local] storage: verifies mongo and json backends return save summary.
-    
+
     Scenario:
         both adapters propagate a SaveSummary from their collaborator, so a caller can treat the two backends interchangeably on the write path.
-    
+
     Boundaries:
         - distinct summaries per backend; the adapters must not coerce or drop them.
-    
+
     On failure, first check:
         - one backend returns None (or a different type) and the exit-code contract that reads summary.errors breaks for that backend only.
     """
@@ -394,24 +373,21 @@ def test_mongo_and_json_backends_return_save_summary() -> None:
 
 class TestResolveStoreBackend:
     """Tests for storage.resolve_store_backend."""
+
     def test_mongo_with_live_collection_returns_mongo_backend(self) -> None:
         """
-        [Local] resolve store backend: verifies mongo with live collection returns mongo backend.
+        [Local] resolve store backend: verifies that resolve_store_backend("mongo") returns a MongoBackend wrapping the live collection.
 
         Scenario:
-            Given test inputs and fixtures for mongo with live collection returns mongo backend
-            When test_mongo_with_live_collection_returns_mongo_backend executes the target flow
-            Then the expected outcome for mongo with live collection returns mongo backend is confirmed.
+            Given database.get_mongo_collection returns a Mock collection and _warn_if_cert_expiring is patched
+            When resolve_store_backend("mongo") is called
+            Then a MongoBackend whose _collection is the returned collection is produced and get_mongo_collection is called once.
 
         Boundaries:
-            - Focus: mongo with live collection returns mongo backend
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Happy path only; no real MongoDB connection
 
         On failure, first check:
-            - Assertion details tied to mongo with live collection returns mongo backend
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve store backend
+            - The MongoBackend construction in resolve_store_backend and the collection plumbing
         """
         fake_collection = Mock(name="collection")
 
@@ -428,22 +404,18 @@ class TestResolveStoreBackend:
 
     def test_mongo_with_no_collection_exits(self) -> None:
         """
-        [Local] resolve store backend: verifies mongo with no collection exits.
+        [Local] resolve store backend: verifies that resolve_store_backend("mongo") exits with code 1 when the collection is unavailable.
 
         Scenario:
-            Given test inputs and fixtures for mongo with no collection exits
-            When test_mongo_with_no_collection_exits executes the target flow
-            Then the expected outcome for mongo with no collection exits is confirmed.
+            Given database.get_mongo_collection returns None (connection failed)
+            When resolve_store_backend("mongo") is called
+            Then SystemExit(1) is raised before a backend is constructed.
 
         Boundaries:
-            - Focus: mongo with no collection exits
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - MongoDB unavailable pre-flight path; no real connection
 
         On failure, first check:
-            - Assertion details tied to mongo with no collection exits
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve store backend
+            - The None-collection guard in resolve_store_backend
         """
         with (
             patch.object(storage, "_warn_if_cert_expiring"),
@@ -457,22 +429,18 @@ class TestResolveStoreBackend:
 
     def test_json_with_write_permission_returns_json_backend(self, isolated_local_store) -> None:
         """
-        [Local] resolve store backend: verifies json with write permission returns json backend.
+        [Local] resolve store backend: verifies that resolve_store_backend("json") returns a JsonBackend when write permission is granted.
 
         Scenario:
-            Given test inputs and fixtures for json with write permission returns json backend
-            When test_json_with_write_permission_returns_json_backend executes the target flow
-            Then the expected outcome for json with write permission returns json backend is confirmed.
+            Given check_local_write_permission is patched to return True
+            When resolve_store_backend("json") is called
+            Then a JsonBackend instance is returned and check_local_write_permission was called once.
 
         Boundaries:
-            - Focus: json with write permission returns json backend
-            - Fixtures/params: isolated_local_store
-            - Scope: assertions and setup in this test case only
+            - Happy path; no real filesystem access (isolated_local_store)
 
         On failure, first check:
-            - Assertion details tied to json with write permission returns json backend
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve store backend
+            - The write-permission gate in resolve_store_backend
         """
         with patch.object(storage, "check_local_write_permission", return_value=True) as mock_check:
             backend = resolve_store_backend("json")
@@ -483,13 +451,13 @@ class TestResolveStoreBackend:
     def test_preflight_exits_on_corrupt_store(self, isolated_local_store) -> None:
         """
         [Local] resolve store backend: verifies preflight exits on corrupt store.
-        
+
         Scenario:
             a corrupt store is caught at pre-flight, before any scraping starts, so a run aborts loudly instead of failing at the first save (or clobbering the store).
-        
+
         Boundaries:
             - write permission granted, but the existing store file is invalid JSON.
-        
+
         On failure, first check:
             - the process proceeds to scrape and only trips at save time, or worse, overwrites the corrupt store.
         """
@@ -503,22 +471,18 @@ class TestResolveStoreBackend:
 
     def test_json_without_write_permission_exits(self) -> None:
         """
-        [Local] resolve store backend: verifies json without write permission exits.
+        [Local] resolve store backend: verifies that resolve_store_backend("json") exits with code 1 when write permission is denied.
 
         Scenario:
-            Given test inputs and fixtures for json without write permission exits
-            When test_json_without_write_permission_exits executes the target flow
-            Then the expected outcome for json without write permission exits is confirmed.
+            Given check_local_write_permission is patched to return False
+            When resolve_store_backend("json") is called
+            Then SystemExit(1) is raised before a backend is constructed.
 
         Boundaries:
-            - Focus: json without write permission exits
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - No-permission pre-flight path; no real filesystem access
 
         On failure, first check:
-            - Assertion details tied to json without write permission exits
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve store backend
+            - The write-permission guard in resolve_store_backend
         """
         with patch.object(storage, "check_local_write_permission", return_value=False):
             with pytest.raises(SystemExit) as exc_info:
@@ -528,22 +492,18 @@ class TestResolveStoreBackend:
 
     def test_unknown_backend_exits_without_running_checks(self) -> None:
         """
-        [Local] resolve store backend: verifies unknown backend exits without running checks.
+        [Local] resolve store backend: verifies that resolve_store_backend with an unknown name exits with code 1 without running any pre-flight checks.
 
         Scenario:
-            Given test inputs and fixtures for unknown backend exits without running checks
-            When test_unknown_backend_exits_without_running_checks executes the target flow
-            Then the expected outcome for unknown backend exits without running checks is confirmed.
+            Given database and check_local_write_permission are both patched
+            When resolve_store_backend("csv") is called with an unrecognized backend name
+            Then SystemExit(1) is raised and neither database.get_mongo_collection nor check_local_write_permission was called.
 
         Boundaries:
-            - Focus: unknown backend exits without running checks
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Unknown backend name; neither mongo nor json pre-flight paths are taken
 
         On failure, first check:
-            - Assertion details tied to unknown backend exits without running checks
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve store backend
+            - The unknown-backend guard in resolve_store_backend
         """
         with (
             patch.object(storage, "database") as mock_db,
@@ -559,16 +519,17 @@ class TestResolveStoreBackend:
 
 class TestCertExpiryPreflight:
     """Tests for the cert-expiry pre-flight check in resolve_store_backend."""
+
     def test_preflight_prints_warning_for_soon_expiring_cert(self, tmp_path) -> None:
         """
         [Local] cert expiry preflight: verifies preflight prints warning for soon expiring cert.
-        
+
         Scenario:
             the mongo pre-flight prints a renewal warning when the active cert is close to expiry, before it connects, and still returns a working backend.
-        
+
         Boundaries:
             - cert ~10 days out; resolver and collection are mocked so no real I/O.
-        
+
         On failure, first check:
             - an about-to-expire identity is discovered only when a scrape run fails.
         """
@@ -589,13 +550,13 @@ class TestCertExpiryPreflight:
     def test_preflight_parse_failure_is_warning_not_crash(self, tmp_path) -> None:
         """
         [Local] cert expiry preflight: verifies preflight parse failure is warning not crash.
-        
+
         Scenario:
             an unparseable/key-only cert on the pre-flight path yields a warning, not a crash, and the connection still proceeds (ROT-17).
-        
+
         Boundaries:
             - a key-only PEM (no CERTIFICATE block) as the resolved cert.
-        
+
         On failure, first check:
             - a bad cert aborts the whole run at pre-flight instead of warning.
         """
@@ -619,13 +580,13 @@ class TestCertExpiryPreflight:
     def test_preflight_no_warning_when_cert_far_from_expiry(self, tmp_path) -> None:
         """
         [Local] cert expiry preflight: verifies preflight no warning when cert far from expiry.
-        
+
         Scenario:
             a healthy, far-from-expiry cert produces no pre-flight warning.
-        
+
         Boundaries:
             - cert ~200 days out.
-        
+
         On failure, first check:
             - healthy certs generate a warning on every run, training users to ignore it.
         """
@@ -644,13 +605,13 @@ class TestCertExpiryPreflight:
     def test_preflight_no_cert_configured_is_silent(self) -> None:
         """
         [Local] cert expiry preflight: verifies preflight no cert configured is silent.
-        
+
         Scenario:
             with no x509 cert configured the pre-flight is silent (nothing to warn about).
-        
+
         Boundaries:
             - resolver returns cert=None.
-        
+
         On failure, first check:
             - a password-auth setup gets a spurious cert warning.
         """
@@ -667,13 +628,13 @@ class TestCertExpiryPreflight:
     def test_preflight_never_leaks_key_material_to_log_or_console(self, tmp_path, caplog, capsys) -> None:
         """
         [Local] cert expiry preflight: verifies preflight never leaks key material to log or console.
-        
+
         Scenario:
             with print_log running for real, a key-only cert on the pre-flight path leaks no private-key bytes to the captured log records or to stdout (ROT-3, CWE-532/CWE-312).
-        
+
         Boundaries:
             - a key-only PEM; print_log NOT mocked so both sinks are exercised.
-        
+
         On failure, first check:
             - the private-key PEM body reaches ~/.bookscrapper/logs or the console.
         """
@@ -700,13 +661,13 @@ class TestCertExpiryPreflight:
     def test_preflight_config_error_is_swallowed(self) -> None:
         """
         [Local] cert expiry preflight: verifies preflight config error is swallowed.
-        
+
         Scenario:
             a resolver ConfigError in the advisory pre-flight is swallowed, leaving the real connection attempt to surface it properly.
-        
+
         Boundaries:
             - resolve_mongo_connection raises ConfigError.
-        
+
         On failure, first check:
             - an advisory warning path crashes the run before the real error is reported.
         """

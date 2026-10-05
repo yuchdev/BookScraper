@@ -13,22 +13,20 @@ from bookscraper.cli import build_parser
 
 def test_scrape_urls_parses_full_valid_arg_set() -> None:
     """
-    [Unit] cli: verifies scrape urls parses full valid arg set.
+    [Unit] cli scrape-urls: parses -f, --store-backend, and --log-severity into the expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for scrape urls parses full valid arg set
-        When test_scrape_urls_parses_full_valid_arg_set executes the target flow
-        Then the expected outcome for scrape urls parses full valid arg set is confirmed.
+        Given a scrape-urls invocation with --input-file, --store-backend mongo, and --log-severity debug
+        When build_parser().parse_args() processes the argument list
+        Then args.command, args.input_file, args.store_backend, and args.log_severity all hold the expected values.
 
     Boundaries:
-        - Focus: scrape urls parses full valid arg set
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; no filesystem, no network
+        - Covers the short -f form of --input-file alongside the named flags
 
     On failure, first check:
-        - Assertion details tied to scrape urls parses full valid arg set
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= names on the scrape-urls subparser flags still match the asserted attribute names
+        - Recent changes to the scrape-urls subparser definition in cli.py
     """
     args = build_parser().parse_args(
         [
@@ -49,22 +47,20 @@ def test_scrape_urls_parses_full_valid_arg_set() -> None:
 
 def test_scrape_urls_long_input_file_flag() -> None:
     """
-    [Unit] cli: verifies scrape urls long input file flag.
+    [Unit] cli scrape-urls: --input-file (long form) binds to args.input_file correctly.
 
     Scenario:
-        Given test inputs and fixtures for scrape urls long input file flag
-        When test_scrape_urls_long_input_file_flag executes the target flow
-        Then the expected outcome for scrape urls long input file flag is confirmed.
+        Given a scrape-urls invocation using --input-file instead of -f
+        When build_parser().parse_args() processes the argument list
+        Then args.input_file holds the given path and args.store_backend holds the given backend.
 
     Boundaries:
-        - Focus: scrape urls long input file flag
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies only the long-flag alias, not the short form
+        - No file is opened
 
     On failure, first check:
-        - Assertion details tied to scrape urls long input file flag
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the dest= for --input-file in the scrape-urls subparser is still "input_file"
+        - Recent renames of the long flag in cli.py
     """
     args = build_parser().parse_args(["scrape-urls", "--input-file", "x.csv", "--store-backend", "json"])
     assert args.input_file == "x.csv"
@@ -73,22 +69,20 @@ def test_scrape_urls_long_input_file_flag() -> None:
 
 def test_search_parses_full_valid_arg_set() -> None:
     """
-    [Unit] cli: verifies search parses full valid arg set.
+    [Unit] cli search: parses --store-backend, --max-search-pages, and --log-severity into the expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for search parses full valid arg set
-        When test_search_parses_full_valid_arg_set executes the target flow
-        Then the expected outcome for search parses full valid arg set is confirmed.
+        Given a search invocation with --store-backend json, --max-search-pages 5, and --log-severity warning
+        When build_parser().parse_args() processes the argument list
+        Then args.command, args.store_backend, args.max_search_pages, and args.log_severity hold the expected values.
 
     Boundaries:
-        - Focus: search parses full valid arg set
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; no filesystem, no network
+        - max_search_pages=5 is an integer, not a string
 
     On failure, first check:
-        - Assertion details tied to search parses full valid arg set
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= names on the search subparser flags still match the asserted attribute names
+        - Recent changes to the search subparser definition in cli.py
     """
     args = build_parser().parse_args(
         [
@@ -109,22 +103,19 @@ def test_search_parses_full_valid_arg_set() -> None:
 
 def test_scrape_urls_requires_store_backend() -> None:
     """
-    [Unit] cli: verifies scrape urls requires store backend.
+    [Unit] cli scrape-urls: omitting --store-backend causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for scrape urls requires store backend
-        When test_scrape_urls_requires_store_backend executes the target flow
-        Then the expected outcome for scrape urls requires store backend is confirmed.
+        Given a scrape-urls invocation with only -f but no --store-backend
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports the missing required argument).
 
     Boundaries:
-        - Focus: scrape urls requires store backend
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms the flag is required, not optional with a default
 
     On failure, first check:
-        - Assertion details tied to scrape urls requires store backend
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on --store-backend in the scrape-urls subparser
+        - Whether a default value was accidentally added to the flag in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["scrape-urls", "-f", "content/urls.csv"])
@@ -132,22 +123,19 @@ def test_scrape_urls_requires_store_backend() -> None:
 
 def test_search_requires_store_backend() -> None:
     """
-    [Unit] cli: verifies search requires store backend.
+    [Unit] cli search: omitting --store-backend causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for search requires store backend
-        When test_search_requires_store_backend executes the target flow
-        Then the expected outcome for search requires store backend is confirmed.
+        Given a search invocation with no arguments
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports the missing required argument).
 
     Boundaries:
-        - Focus: search requires store backend
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms the flag is required, not optional with a default
 
     On failure, first check:
-        - Assertion details tied to search requires store backend
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on --store-backend in the search subparser
+        - Whether a default value was accidentally added to the flag in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["search"])
@@ -155,22 +143,19 @@ def test_search_requires_store_backend() -> None:
 
 def test_scrape_urls_requires_input_file() -> None:
     """
-    [Unit] cli: verifies scrape urls requires input file.
+    [Unit] cli scrape-urls: omitting -f / --input-file causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for scrape urls requires input file
-        When test_scrape_urls_requires_input_file executes the target flow
-        Then the expected outcome for scrape urls requires input file is confirmed.
+        Given a scrape-urls invocation with --store-backend but no input file flag
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports the missing required argument).
 
     Boundaries:
-        - Focus: scrape urls requires input file
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms the flag is required, not optional with a default
 
     On failure, first check:
-        - Assertion details tied to scrape urls requires input file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on --input-file in the scrape-urls subparser
+        - Whether a default value was accidentally added to the flag in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["scrape-urls", "--store-backend", "mongo"])
@@ -178,22 +163,20 @@ def test_scrape_urls_requires_input_file() -> None:
 
 def test_invalid_store_backend_choice_rejected() -> None:
     """
-    [Unit] cli: verifies invalid store backend choice rejected.
+    [Unit] cli: an unrecognized --store-backend value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for invalid store backend choice rejected
-        When test_invalid_store_backend_choice_rejected executes the target flow
-        Then the expected outcome for invalid store backend choice rejected is confirmed.
+        Given a scrape-urls invocation with --store-backend sqlite (not in the choices list)
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports an invalid choice).
 
     Boundaries:
-        - Focus: invalid store backend choice rejected
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; tests rejection of a value outside {mongo, json}
+        - Does not test acceptance of valid choices
 
     On failure, first check:
-        - Assertion details tied to invalid store backend choice rejected
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the choices list on --store-backend still excludes "sqlite"
+        - Whether the choices list was accidentally removed or widened in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "sqlite"])
@@ -201,22 +184,20 @@ def test_invalid_store_backend_choice_rejected() -> None:
 
 def test_invalid_log_severity_choice_rejected() -> None:
     """
-    [Unit] cli: verifies invalid log severity choice rejected.
+    [Unit] cli: an unrecognized --log-severity value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for invalid log severity choice rejected
-        When test_invalid_log_severity_choice_rejected executes the target flow
-        Then the expected outcome for invalid log severity choice rejected is confirmed.
+        Given a search invocation with --log-severity trace (not in the choices list)
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports an invalid choice).
 
     Boundaries:
-        - Focus: invalid log severity choice rejected
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; tests rejection of a value outside {debug, info, warning, error}
+        - Does not test acceptance of valid choices
 
     On failure, first check:
-        - Assertion details tied to invalid log severity choice rejected
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the choices list on --log-severity excludes "trace"
+        - Whether the choices list was accidentally removed or widened in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["search", "--store-backend", "json", "--log-severity", "trace"])
@@ -224,22 +205,18 @@ def test_invalid_log_severity_choice_rejected() -> None:
 
 def test_search_max_search_pages_defaults_to_three() -> None:
     """
-    [Unit] cli: verifies search max search pages defaults to three.
+    [Unit] cli search: --max-search-pages defaults to 3 when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for search max search pages defaults to three
-        When test_search_max_search_pages_defaults_to_three executes the target flow
-        Then the expected outcome for search max search pages defaults to three is confirmed.
+        Given a search invocation with only --store-backend and no --max-search-pages
+        When build_parser().parse_args() processes the argument list
+        Then args.max_search_pages equals 3.
 
     Boundaries:
-        - Focus: search max search pages defaults to three
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default value, not the type
 
     On failure, first check:
-        - Assertion details tied to search max search pages defaults to three
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the default= for --max-search-pages in the search subparser was changed in cli.py
     """
     args = build_parser().parse_args(["search", "--store-backend", "json"])
     assert args.max_search_pages == 3
@@ -247,22 +224,18 @@ def test_search_max_search_pages_defaults_to_three() -> None:
 
 def test_search_max_search_pages_type_is_int() -> None:
     """
-    [Unit] cli: verifies search max search pages type is int.
+    [Unit] cli search: --max-search-pages is coerced to int by argparse.
 
     Scenario:
-        Given test inputs and fixtures for search max search pages type is int
-        When test_search_max_search_pages_type_is_int executes the target flow
-        Then the expected outcome for search max search pages type is int is confirmed.
+        Given a search invocation with --max-search-pages 7 (a string on the command line)
+        When build_parser().parse_args() processes the argument list
+        Then args.max_search_pages is an int, not a string.
 
     Boundaries:
-        - Focus: search max search pages type is int
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the type= conversion, not the default
 
     On failure, first check:
-        - Assertion details tied to search max search pages type is int
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether type=int is still set on --max-search-pages in the search subparser in cli.py
     """
     args = build_parser().parse_args(["search", "--store-backend", "json", "--max-search-pages", "7"])
     assert isinstance(args.max_search_pages, int)
@@ -270,22 +243,19 @@ def test_search_max_search_pages_type_is_int() -> None:
 
 def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
     """
-    [Unit] cli: verifies log severity defaults to info on both subcommands.
+    [Unit] cli: --log-severity defaults to "info" on both scrape-urls and search.
 
     Scenario:
-        Given test inputs and fixtures for log severity defaults to info on both subcommands
-        When test_log_severity_defaults_to_info_on_both_subcommands executes the target flow
-        Then the expected outcome for log severity defaults to info on both subcommands is confirmed.
+        Given scrape-urls and search invocations with no --log-severity flag
+        When build_parser().parse_args() processes each argument list
+        Then both args.log_severity values equal "info".
 
     Boundaries:
-        - Focus: log severity defaults to info on both subcommands
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; tests the default on two subparsers independently
+        - Does not test rotate-cert or detect-schema subparsers
 
     On failure, first check:
-        - Assertion details tied to log severity defaults to info on both subcommands
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default="info" is still set on --log-severity in both subparsers in cli.py
     """
     scrape_args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "mongo"])
     search_args = build_parser().parse_args(["search", "--store-backend", "mongo"])
@@ -295,22 +265,19 @@ def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
 
 def test_missing_subcommand_rejected() -> None:
     """
-    [Unit] cli: verifies missing subcommand rejected.
+    [Unit] cli: an empty argument list causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for missing subcommand rejected
-        When test_missing_subcommand_rejected executes the target flow
-        Then the expected outcome for missing subcommand rejected is confirmed.
+        Given an invocation with no arguments at all
+        When build_parser().parse_args() processes the empty list
+        Then SystemExit is raised (argparse requires a subcommand).
 
     Boundaries:
-        - Focus: missing subcommand rejected
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the top-level parser requires a subcommand
 
     On failure, first check:
-        - Assertion details tied to missing subcommand rejected
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on the subparsers group in cli.py
+        - Whether a default subcommand was accidentally added
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args([])
@@ -318,22 +285,20 @@ def test_missing_subcommand_rejected() -> None:
 
 def test_rotate_cert_parses_full_valid_arg_set() -> None:
     """
-    [Unit] cli: verifies rotate cert parses full valid arg set.
+    [Unit] cli rotate-cert: parses --months, --output, and --log-severity into the expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert parses full valid arg set
-        When test_rotate_cert_parses_full_valid_arg_set executes the target flow
-        Then the expected outcome for rotate cert parses full valid arg set is confirmed.
+        Given a rotate-cert invocation with --months 12, --output /tmp/cert.pem, and --log-severity error
+        When build_parser().parse_args() processes the argument list
+        Then args.command, args.months, args.output, and args.log_severity hold the expected values and args.months is an int.
 
     Boundaries:
-        - Focus: rotate cert parses full valid arg set
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; no filesystem, no network, no Atlas API
+        - Verifies both value and type for --months
 
     On failure, first check:
-        - Assertion details tied to rotate cert parses full valid arg set
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= names on the rotate-cert subparser flags still match the asserted attribute names
+        - Whether type=int is still set on --months in cli.py
     """
     args = build_parser().parse_args(
         ["rotate-cert", "--months", "12", "--output", "/tmp/cert.pem", "--log-severity", "error"]
@@ -347,22 +312,20 @@ def test_rotate_cert_parses_full_valid_arg_set() -> None:
 
 def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env() -> None:
     """
-    [Unit] cli: verifies rotate cert needs no arguments and defaults defer to env.
+    [Unit] cli rotate-cert: all optional flags default to None or "info" when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert needs no arguments and defaults defer to env
-        When test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env executes the target flow
-        Then the expected outcome for rotate cert needs no arguments and defaults defer to env is confirmed.
+        Given a rotate-cert invocation with no flags
+        When build_parser().parse_args() processes the argument list
+        Then args.months and args.output are None, and args.log_severity is "info".
 
     Boundaries:
-        - Focus: rotate cert needs no arguments and defaults defer to env
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms defaults so the command knows to read ATLAS_CERT_MONTHS/ATLAS_CERT_FILE from env
+        - Does not test environment-variable resolution (that belongs to rotate_cert.py)
 
     On failure, first check:
-        - Assertion details tied to rotate cert needs no arguments and defaults defer to env
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=None is still set on --months and --output in cli.py
+        - Whether default="info" is still set on --log-severity in cli.py
     """
     args = build_parser().parse_args(["rotate-cert"])
     assert args.months is None
@@ -372,22 +335,18 @@ def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env() -> None:
 
 def test_rotate_cert_rejects_non_integer_months() -> None:
     """
-    [Unit] cli: verifies rotate cert rejects non integer months.
+    [Unit] cli rotate-cert: a non-integer --months value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert rejects non integer months
-        When test_rotate_cert_rejects_non_integer_months executes the target flow
-        Then the expected outcome for rotate cert rejects non integer months is confirmed.
+        Given a rotate-cert invocation with --months soon
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse type conversion fails).
 
     Boundaries:
-        - Focus: rotate cert rejects non integer months
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the type=int conversion on --months rejects non-numeric input
 
     On failure, first check:
-        - Assertion details tied to rotate cert rejects non integer months
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether type=int is still set on --months in the rotate-cert subparser in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--months", "soon"])
@@ -395,22 +354,20 @@ def test_rotate_cert_rejects_non_integer_months() -> None:
 
 def test_rotate_cert_check_flags() -> None:
     """
-    [Unit] cli: verifies rotate cert check flags.
+    [Unit] cli rotate-cert: --check and --warn-days parse into their expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert check flags
-        When test_rotate_cert_check_flags executes the target flow
-        Then the expected outcome for rotate cert check flags is confirmed.
+        Given a rotate-cert invocation with --check and --warn-days 14
+        When build_parser().parse_args() processes the argument list
+        Then args.check is True, args.warn_days is 14, and args.warn_days is an int.
 
     Boundaries:
-        - Focus: rotate cert check flags
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies both the flag and its integer companion
+        - Does not test expiry-inspection logic
 
     On failure, first check:
-        - Assertion details tied to rotate cert check flags
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= for --check and --warn-days still match the asserted attribute names in cli.py
+        - Whether type=int is still set on --warn-days
     """
     args = build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "14"])
     assert args.check is True
@@ -420,22 +377,19 @@ def test_rotate_cert_check_flags() -> None:
 
 def test_rotate_cert_check_defaults() -> None:
     """
-    [Unit] cli: verifies rotate cert check defaults.
+    [Unit] cli rotate-cert: --check defaults to False and --warn-days defaults to 30.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert check defaults
-        When test_rotate_cert_check_defaults executes the target flow
-        Then the expected outcome for rotate cert check defaults is confirmed.
+        Given a rotate-cert invocation with no flags
+        When build_parser().parse_args() processes the argument list
+        Then args.check is False and args.warn_days is 30.
 
     Boundaries:
-        - Focus: rotate cert check defaults
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies default values for the expiry-check pair
 
     On failure, first check:
-        - Assertion details tied to rotate cert check defaults
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether store_true action and default=False are still set on --check in cli.py
+        - Whether default=30 is still set on --warn-days in cli.py
     """
     args = build_parser().parse_args(["rotate-cert"])
     assert args.check is False
@@ -444,22 +398,18 @@ def test_rotate_cert_check_defaults() -> None:
 
 def test_rotate_cert_warn_days_rejects_non_integer() -> None:
     """
-    [Unit] cli: verifies rotate cert warn days rejects non integer.
+    [Unit] cli rotate-cert: a non-integer --warn-days value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert warn days rejects non integer
-        When test_rotate_cert_warn_days_rejects_non_integer executes the target flow
-        Then the expected outcome for rotate cert warn days rejects non integer is confirmed.
+        Given a rotate-cert invocation with --check --warn-days soon
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse type conversion fails).
 
     Boundaries:
-        - Focus: rotate cert warn days rejects non integer
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the type=int conversion on --warn-days rejects non-numeric input
 
     On failure, first check:
-        - Assertion details tied to rotate cert warn days rejects non integer
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether type=int is still set on --warn-days in the rotate-cert subparser in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "soon"])
@@ -467,22 +417,20 @@ def test_rotate_cert_warn_days_rejects_non_integer() -> None:
 
 def test_rotate_cert_verify_flags() -> None:
     """
-    [Unit] cli: verifies rotate cert verify flags.
+    [Unit] cli rotate-cert: --no-verify and --verify-attempts parse into their expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert verify flags
-        When test_rotate_cert_verify_flags executes the target flow
-        Then the expected outcome for rotate cert verify flags is confirmed.
+        Given a rotate-cert invocation with --no-verify and --verify-attempts 8
+        When build_parser().parse_args() processes the argument list
+        Then args.no_verify is True, args.verify_attempts is 8, and args.verify_attempts is an int.
 
     Boundaries:
-        - Focus: rotate cert verify flags
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies both the boolean flag and its integer companion
+        - Does not test actual certificate verification
 
     On failure, first check:
-        - Assertion details tied to rotate cert verify flags
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= for --no-verify and --verify-attempts still match the asserted attribute names in cli.py
+        - Whether type=int is still set on --verify-attempts
     """
     args = build_parser().parse_args(["rotate-cert", "--no-verify", "--verify-attempts", "8"])
     assert args.no_verify is True
@@ -492,22 +440,19 @@ def test_rotate_cert_verify_flags() -> None:
 
 def test_rotate_cert_verify_defaults() -> None:
     """
-    [Unit] cli: verifies rotate cert verify defaults.
+    [Unit] cli rotate-cert: --no-verify defaults to False and --verify-attempts defaults to 5.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert verify defaults
-        When test_rotate_cert_verify_defaults executes the target flow
-        Then the expected outcome for rotate cert verify defaults is confirmed.
+        Given a rotate-cert invocation with no flags
+        When build_parser().parse_args() processes the argument list
+        Then args.no_verify is False and args.verify_attempts is 5.
 
     Boundaries:
-        - Focus: rotate cert verify defaults
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies default values for the verification-control pair
 
     On failure, first check:
-        - Assertion details tied to rotate cert verify defaults
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether store_true action and default=False are still set on --no-verify in cli.py
+        - Whether default=5 is still set on --verify-attempts in cli.py
     """
     args = build_parser().parse_args(["rotate-cert"])
     assert args.no_verify is False
@@ -516,22 +461,18 @@ def test_rotate_cert_verify_defaults() -> None:
 
 def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
     """
-    [Unit] cli: verifies rotate cert verify attempts rejects non integer.
+    [Unit] cli rotate-cert: a non-integer --verify-attempts value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert verify attempts rejects non integer
-        When test_rotate_cert_verify_attempts_rejects_non_integer executes the target flow
-        Then the expected outcome for rotate cert verify attempts rejects non integer is confirmed.
+        Given a rotate-cert invocation with --verify-attempts many
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse type conversion fails).
 
     Boundaries:
-        - Focus: rotate cert verify attempts rejects non integer
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the type=int conversion on --verify-attempts rejects non-numeric input
 
     On failure, first check:
-        - Assertion details tied to rotate cert verify attempts rejects non integer
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether type=int is still set on --verify-attempts in the rotate-cert subparser in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--verify-attempts", "many"])
@@ -539,22 +480,19 @@ def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
 
 def test_rotate_cert_prune_defaults() -> None:
     """
-    [Unit] cli: verifies rotate cert prune defaults.
+    [Unit] cli rotate-cert: --keep defaults to 2 and --no-prune defaults to False.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert prune defaults
-        When test_rotate_cert_prune_defaults executes the target flow
-        Then the expected outcome for rotate cert prune defaults is confirmed.
+        Given a rotate-cert invocation with no flags
+        When build_parser().parse_args() processes the argument list
+        Then args.keep is 2, args.keep is an int, and args.no_prune is False.
 
     Boundaries:
-        - Focus: rotate cert prune defaults
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies default values for the pruning-control pair
 
     On failure, first check:
-        - Assertion details tied to rotate cert prune defaults
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=2 and type=int are still set on --keep in cli.py
+        - Whether store_true and default=False are still set on --no-prune in cli.py
     """
     args = build_parser().parse_args(["rotate-cert"])
     assert args.keep == 2
@@ -564,22 +502,18 @@ def test_rotate_cert_prune_defaults() -> None:
 
 def test_rotate_cert_keep_and_no_prune_flags() -> None:
     """
-    [Unit] cli: verifies rotate cert keep and no prune flags.
+    [Unit] cli rotate-cert: --keep and --no-prune parse into their expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for rotate cert keep and no prune flags
-        When test_rotate_cert_keep_and_no_prune_flags executes the target flow
-        Then the expected outcome for rotate cert keep and no prune flags is confirmed.
+        Given a rotate-cert invocation with --keep 5 --no-prune
+        When build_parser().parse_args() processes the argument list
+        Then args.keep is 5 and args.no_prune is True.
 
     Boundaries:
-        - Focus: rotate cert keep and no prune flags
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies both the integer argument and the boolean flag
 
     On failure, first check:
-        - Assertion details tied to rotate cert keep and no prune flags
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= for --keep and --no-prune still match the asserted attribute names in cli.py
     """
     args = build_parser().parse_args(["rotate-cert", "--keep", "5", "--no-prune"])
     assert args.keep == 5
@@ -588,22 +522,18 @@ def test_rotate_cert_keep_and_no_prune_flags() -> None:
 
 def test_keep_zero_rejected_by_cli() -> None:
     """
-    [Unit] cli: verifies keep zero rejected by cli.
+    [Unit] cli rotate-cert: --keep 0 causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for keep zero rejected by cli
-        When test_keep_zero_rejected_by_cli executes the target flow
-        Then the expected outcome for keep zero rejected by cli is confirmed.
+        Given a rotate-cert invocation with --keep 0
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (the custom type rejects 0 to prevent pruning all certs).
 
     Boundaries:
-        - Focus: keep zero rejected by cli
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; exercises the positive-integer custom type= on --keep
 
     On failure, first check:
-        - Assertion details tied to keep zero rejected by cli
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the custom argparse type for --keep still rejects 0 in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--keep", "0"])
@@ -611,22 +541,18 @@ def test_keep_zero_rejected_by_cli() -> None:
 
 def test_keep_negative_rejected_by_cli() -> None:
     """
-    [Unit] cli: verifies keep negative rejected by cli.
+    [Unit] cli rotate-cert: negative --keep value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for keep negative rejected by cli
-        When test_keep_negative_rejected_by_cli executes the target flow
-        Then the expected outcome for keep negative rejected by cli is confirmed.
+        Given a rotate-cert invocation with --keep -3
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (the custom type rejects negative values).
 
     Boundaries:
-        - Focus: keep negative rejected by cli
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; exercises the positive-integer custom type= on --keep
 
     On failure, first check:
-        - Assertion details tied to keep negative rejected by cli
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the custom argparse type for --keep still rejects negative values in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--keep", "-3"])
@@ -634,22 +560,18 @@ def test_keep_negative_rejected_by_cli() -> None:
 
 def test_keep_non_integer_rejected_by_cli() -> None:
     """
-    [Unit] cli: verifies keep non integer rejected by cli.
+    [Unit] cli rotate-cert: non-integer --keep value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for keep non integer rejected by cli
-        When test_keep_non_integer_rejected_by_cli executes the target flow
-        Then the expected outcome for keep non integer rejected by cli is confirmed.
+        Given a rotate-cert invocation with --keep lots
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (the custom type rejects non-numeric input).
 
     Boundaries:
-        - Focus: keep non integer rejected by cli
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; exercises the integer-conversion step of the custom type= on --keep
 
     On failure, first check:
-        - Assertion details tied to keep non integer rejected by cli
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the custom argparse type for --keep still validates integers in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["rotate-cert", "--keep", "lots"])
@@ -660,22 +582,21 @@ def test_keep_non_integer_rejected_by_cli() -> None:
 # --------------------------------------------------------------------------- #
 def test_detect_schema_parses_full_valid_arg_set() -> None:
     """
-    [Unit] cli: verifies detect schema parses full valid arg set.
+    [Unit] cli detect-schema: parses all flags into their expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for detect schema parses full valid arg set
-        When test_detect_schema_parses_full_valid_arg_set executes the target flow
-        Then the expected outcome for detect schema parses full valid arg set is confirmed.
+        Given a detect-schema invocation with --site amazon, two --url values, --model,
+              --max-input-tokens, --page-type search, --output, and --log-severity debug
+        When build_parser().parse_args() processes the argument list
+        Then all asserted dest= attributes hold the supplied values, and args.url is a list.
 
     Boundaries:
-        - Focus: detect schema parses full valid arg set
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; no filesystem, no network, no Anthropic API
+        - Covers --page-type search (non-default) and multiple --url repetitions
 
     On failure, first check:
-        - Assertion details tied to detect schema parses full valid arg set
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= names on the detect-schema subparser flags still match the asserted attribute names
+        - Recent changes to the detect-schema subparser definition in cli.py
     """
     args = build_parser().parse_args(
         [
@@ -710,22 +631,18 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
 
 def test_cli_page_type_defaults_to_detail() -> None:
     """
-    [Unit] cli: verifies cli page type defaults to detail.
+    [Unit] cli detect-schema: --page-type defaults to "detail" when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for cli page type defaults to detail
-        When test_cli_page_type_defaults_to_detail executes the target flow
-        Then the expected outcome for cli page type defaults to detail is confirmed.
+        Given a detect-schema invocation with only the required --site and --url flags
+        When build_parser().parse_args() processes the argument list
+        Then args.page_type equals "detail".
 
     Boundaries:
-        - Focus: cli page type defaults to detail
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default value, not the set of valid choices
 
     On failure, first check:
-        - Assertion details tied to cli page type defaults to detail
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default="detail" is still set on --page-type in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
     assert args.page_type == "detail"
@@ -733,22 +650,18 @@ def test_cli_page_type_defaults_to_detail() -> None:
 
 def test_detect_schema_rejects_unknown_page_type() -> None:
     """
-    [Unit] cli: verifies detect schema rejects unknown page type.
+    [Unit] cli detect-schema: an unrecognized --page-type value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects unknown page type
-        When test_detect_schema_rejects_unknown_page_type executes the target flow
-        Then the expected outcome for detect schema rejects unknown page type is confirmed.
+        Given a detect-schema invocation with --page-type api (not in the choices list)
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports an invalid choice).
 
     Boundaries:
-        - Focus: detect schema rejects unknown page type
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies rejection of a value outside {detail, search}
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects unknown page type
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the choices list on --page-type still excludes "api" in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--page-type", "api"])
@@ -756,22 +669,18 @@ def test_detect_schema_rejects_unknown_page_type() -> None:
 
 def test_detect_schema_model_defaults_to_none() -> None:
     """
-    [Unit] cli: verifies detect schema model defaults to none.
+    [Unit] cli detect-schema: --model defaults to None when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for detect schema model defaults to none
-        When test_detect_schema_model_defaults_to_none executes the target flow
-        Then the expected outcome for detect schema model defaults to none is confirmed.
+        Given a detect-schema invocation with no --model flag
+        When build_parser().parse_args() processes the argument list
+        Then args.model is None, signalling that schema_detection.py should use its own default.
 
     Boundaries:
-        - Focus: detect schema model defaults to none
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default, not model-name validation (done at runtime)
 
     On failure, first check:
-        - Assertion details tied to detect schema model defaults to none
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=None is still set on --model in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
     assert args.model is None
@@ -779,22 +688,18 @@ def test_detect_schema_model_defaults_to_none() -> None:
 
 def test_detect_schema_max_input_tokens_defaults_to_40000() -> None:
     """
-    [Unit] cli: verifies detect schema max input tokens defaults to 40000.
+    [Unit] cli detect-schema: --max-input-tokens defaults to 40000 when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for detect schema max input tokens defaults to 40000
-        When test_detect_schema_max_input_tokens_defaults_to_40000 executes the target flow
-        Then the expected outcome for detect schema max input tokens defaults to 40000 is confirmed.
+        Given a detect-schema invocation with no --max-input-tokens flag
+        When build_parser().parse_args() processes the argument list
+        Then args.max_input_tokens equals 40000.
 
     Boundaries:
-        - Focus: detect schema max input tokens defaults to 40000
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default value only
 
     On failure, first check:
-        - Assertion details tied to detect schema max input tokens defaults to 40000
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=40000 is still set on --max-input-tokens in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
     assert args.max_input_tokens == 40000
@@ -802,22 +707,18 @@ def test_detect_schema_max_input_tokens_defaults_to_40000() -> None:
 
 def test_detect_schema_url_is_repeatable_into_a_list() -> None:
     """
-    [Unit] cli: verifies detect schema url is repeatable into a list.
+    [Unit] cli detect-schema: a single --url argument is stored as a one-element list.
 
     Scenario:
-        Given test inputs and fixtures for detect schema url is repeatable into a list
-        When test_detect_schema_url_is_repeatable_into_a_list executes the target flow
-        Then the expected outcome for detect schema url is repeatable into a list is confirmed.
+        Given a detect-schema invocation with exactly one --url
+        When build_parser().parse_args() processes the argument list
+        Then args.url is a list containing that one URL.
 
     Boundaries:
-        - Focus: detect schema url is repeatable into a list
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies action="append" behavior with a single repetition
 
     On failure, first check:
-        - Assertion details tied to detect schema url is repeatable into a list
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether action="append" is still set on --url in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "leanpub", "--url", "https://leanpub.com/a"])
     assert args.url == ["https://leanpub.com/a"]
@@ -825,22 +726,18 @@ def test_detect_schema_url_is_repeatable_into_a_list() -> None:
 
 def test_detect_schema_requires_site() -> None:
     """
-    [Unit] cli: verifies detect schema requires site.
+    [Unit] cli detect-schema: omitting --site causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for detect schema requires site
-        When test_detect_schema_requires_site executes the target flow
-        Then the expected outcome for detect schema requires site is confirmed.
+        Given a detect-schema invocation with --url but no --site
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports the missing required argument).
 
     Boundaries:
-        - Focus: detect schema requires site
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms the flag is required
 
     On failure, first check:
-        - Assertion details tied to detect schema requires site
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on --site in the detect-schema subparser in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["detect-schema", "--url", "https://x/1"])
@@ -848,22 +745,18 @@ def test_detect_schema_requires_site() -> None:
 
 def test_detect_schema_requires_url() -> None:
     """
-    [Unit] cli: verifies detect schema requires url.
+    [Unit] cli detect-schema: omitting --url (and --html-file) causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for detect schema requires url
-        When test_detect_schema_requires_url executes the target flow
-        Then the expected outcome for detect schema requires url is confirmed.
+        Given a detect-schema invocation with --site but no --url or --html-file
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (the mutually-exclusive required group is missing both options).
 
     Boundaries:
-        - Focus: detect schema requires url
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; confirms the input-source group is required
 
     On failure, first check:
-        - Assertion details tied to detect schema requires url
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether required=True is still set on the mutually_exclusive_group in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["detect-schema", "--site", "amazon"])
@@ -871,22 +764,18 @@ def test_detect_schema_requires_url() -> None:
 
 def test_detect_schema_rejects_unknown_site() -> None:
     """
-    [Unit] cli: verifies detect schema rejects unknown site.
+    [Unit] cli detect-schema: an unrecognized --site value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects unknown site
-        When test_detect_schema_rejects_unknown_site executes the target flow
-        Then the expected outcome for detect schema rejects unknown site is confirmed.
+        Given a detect-schema invocation with --site goodreads (not in the choices list)
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports an invalid choice).
 
     Boundaries:
-        - Focus: detect schema rejects unknown site
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies rejection of a site outside {amazon, packtpub, leanpub, oreilly}
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects unknown site
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the choices list on --site still excludes "goodreads" in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["detect-schema", "--site", "goodreads", "--url", "https://x/1"])
@@ -894,22 +783,18 @@ def test_detect_schema_rejects_unknown_site() -> None:
 
 def test_detect_schema_output_defaults_to_none() -> None:
     """
-    [Unit] cli: verifies detect schema output defaults to none.
+    [Unit] cli detect-schema: --output defaults to None when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for detect schema output defaults to none
-        When test_detect_schema_output_defaults_to_none executes the target flow
-        Then the expected outcome for detect schema output defaults to none is confirmed.
+        Given a detect-schema invocation with no --output flag
+        When build_parser().parse_args() processes the argument list
+        Then args.output is None (no file will be written).
 
     Boundaries:
-        - Focus: detect schema output defaults to none
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default value only
 
     On failure, first check:
-        - Assertion details tied to detect schema output defaults to none
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=None is still set on --output in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "oreilly", "--url", "https://x/1"])
     assert args.output is None
@@ -917,22 +802,18 @@ def test_detect_schema_output_defaults_to_none() -> None:
 
 def test_detect_schema_log_severity_defaults_to_info() -> None:
     """
-    [Unit] cli: verifies detect schema log severity defaults to info.
+    [Unit] cli detect-schema: --log-severity defaults to "info" when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for detect schema log severity defaults to info
-        When test_detect_schema_log_severity_defaults_to_info executes the target flow
-        Then the expected outcome for detect schema log severity defaults to info is confirmed.
+        Given a detect-schema invocation with no --log-severity flag
+        When build_parser().parse_args() processes the argument list
+        Then args.log_severity equals "info".
 
     Boundaries:
-        - Focus: detect schema log severity defaults to info
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the default value
 
     On failure, first check:
-        - Assertion details tied to detect schema log severity defaults to info
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default="info" is still set on --log-severity in the detect-schema subparser in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "packtpub", "--url", "https://x/1"])
     assert args.log_severity == "info"
@@ -966,22 +847,18 @@ def test_html_file_and_url_are_mutually_exclusive() -> None:
 
 def test_detect_schema_html_file_is_repeatable_into_a_list() -> None:
     """
-    [Unit] cli: verifies detect schema html file is repeatable into a list.
+    [Unit] cli detect-schema: multiple --html-file arguments accumulate into a list and args.url is None.
 
     Scenario:
-        Given test inputs and fixtures for detect schema html file is repeatable into a list
-        When test_detect_schema_html_file_is_repeatable_into_a_list executes the target flow
-        Then the expected outcome for detect schema html file is repeatable into a list is confirmed.
+        Given a detect-schema invocation with two --html-file flags
+        When build_parser().parse_args() processes the argument list
+        Then args.html_file is a list of both paths and args.url is None (the mutually-exclusive other side).
 
     Boundaries:
-        - Focus: detect schema html file is repeatable into a list
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies both action="append" behavior and the mutual-exclusion side effect
 
     On failure, first check:
-        - Assertion details tied to detect schema html file is repeatable into a list
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether action="append" is still set on --html-file and whether it is in the mutually-exclusive group in cli.py
     """
     args = build_parser().parse_args(
         ["detect-schema", "--site", "amazon", "--html-file", "a.html", "--html-file", "b.html"]
@@ -992,22 +869,18 @@ def test_detect_schema_html_file_is_repeatable_into_a_list() -> None:
 
 def test_detect_schema_replay_and_record_default_to_none() -> None:
     """
-    [Unit] cli: verifies detect schema replay and record default to none.
+    [Unit] cli detect-schema: --replay and --record default to None when not supplied.
 
     Scenario:
-        Given test inputs and fixtures for detect schema replay and record default to none
-        When test_detect_schema_replay_and_record_default_to_none executes the target flow
-        Then the expected outcome for detect schema replay and record default to none is confirmed.
+        Given a detect-schema invocation with no --replay or --record flags
+        When build_parser().parse_args() processes the argument list
+        Then args.replay and args.record are both None.
 
     Boundaries:
-        - Focus: detect schema replay and record default to none
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies defaults for offline-mode flags
 
     On failure, first check:
-        - Assertion details tied to detect schema replay and record default to none
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default=None is still set on --replay and --record in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
     assert args.replay is None
@@ -1016,22 +889,19 @@ def test_detect_schema_replay_and_record_default_to_none() -> None:
 
 def test_detect_schema_replay_and_record_parse() -> None:
     """
-    [Unit] cli: verifies detect schema replay and record parse.
+    [Unit] cli detect-schema: --replay and --record parse into their expected dest= attributes.
 
     Scenario:
-        Given test inputs and fixtures for detect schema replay and record parse
-        When test_detect_schema_replay_and_record_parse executes the target flow
-        Then the expected outcome for detect schema replay and record parse is confirmed.
+        Given a detect-schema invocation with --html-file a.html, --replay r.json, and --record rec.json
+        When build_parser().parse_args() processes the argument list
+        Then args.replay equals "r.json" and args.record equals "rec.json".
 
     Boundaries:
-        - Focus: detect schema replay and record parse
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; no filesystem access
+        - Uses --html-file (not --url) to satisfy the required input-source group
 
     On failure, first check:
-        - Assertion details tied to detect schema replay and record parse
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether dest= for --replay and --record still match the asserted attribute names in cli.py
     """
     args = build_parser().parse_args(
         [
@@ -1052,22 +922,18 @@ def test_detect_schema_replay_and_record_parse() -> None:
 
 def test_detect_schema_format_defaults_to_text() -> None:
     """
-    [Unit] cli: verifies detect schema format defaults to text.
+    [Unit] cli detect-schema: --format defaults to "text" and --check-current-only defaults to False.
 
     Scenario:
-        Given test inputs and fixtures for detect schema format defaults to text
-        When test_detect_schema_format_defaults_to_text executes the target flow
-        Then the expected outcome for detect schema format defaults to text is confirmed.
+        Given a detect-schema invocation with no --format or --check-current-only flags
+        When build_parser().parse_args() processes the argument list
+        Then args.format equals "text" and args.check_current_only is False.
 
     Boundaries:
-        - Focus: detect schema format defaults to text
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies defaults for two flags together
 
     On failure, first check:
-        - Assertion details tied to detect schema format defaults to text
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether default="text" is still set on --format and default=False on --check-current-only in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
     assert args.format == "text"
@@ -1076,22 +942,18 @@ def test_detect_schema_format_defaults_to_text() -> None:
 
 def test_detect_schema_format_json_parses() -> None:
     """
-    [Unit] cli: verifies detect schema format json parses.
+    [Unit] cli detect-schema: --format json parses to "json".
 
     Scenario:
-        Given test inputs and fixtures for detect schema format json parses
-        When test_detect_schema_format_json_parses executes the target flow
-        Then the expected outcome for detect schema format json parses is confirmed.
+        Given a detect-schema invocation with --format json
+        When build_parser().parse_args() processes the argument list
+        Then args.format equals "json".
 
     Boundaries:
-        - Focus: detect schema format json parses
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies acceptance of the non-default choice
 
     On failure, first check:
-        - Assertion details tied to detect schema format json parses
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether "json" is still in the choices list for --format in cli.py
     """
     args = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "json"])
     assert args.format == "json"
@@ -1099,22 +961,18 @@ def test_detect_schema_format_json_parses() -> None:
 
 def test_detect_schema_rejects_unknown_format() -> None:
     """
-    [Unit] cli: verifies detect schema rejects unknown format.
+    [Unit] cli detect-schema: an unrecognized --format value causes argparse to exit.
 
     Scenario:
-        Given test inputs and fixtures for detect schema rejects unknown format
-        When test_detect_schema_rejects_unknown_format executes the target flow
-        Then the expected outcome for detect schema rejects unknown format is confirmed.
+        Given a detect-schema invocation with --format yaml (not in the choices list)
+        When build_parser().parse_args() processes the argument list
+        Then SystemExit is raised (argparse reports an invalid choice).
 
     Boundaries:
-        - Focus: detect schema rejects unknown format
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies rejection of a value outside {text, json}
 
     On failure, first check:
-        - Assertion details tied to detect schema rejects unknown format
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether the choices list on --format still excludes "yaml" in cli.py
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "yaml"])
@@ -1122,22 +980,19 @@ def test_detect_schema_rejects_unknown_format() -> None:
 
 def test_detect_schema_check_current_only_flag_sets_true() -> None:
     """
-    [Unit] cli: verifies detect schema check current only flag sets true.
+    [Unit] cli detect-schema: --check-current-only sets args.check_current_only to True.
 
     Scenario:
-        Given test inputs and fixtures for detect schema check current only flag sets true
-        When test_detect_schema_check_current_only_flag_sets_true executes the target flow
-        Then the expected outcome for detect schema check current only flag sets true is confirmed.
+        Given a detect-schema invocation with --html-file a.html and --check-current-only
+        When build_parser().parse_args() processes the argument list
+        Then args.check_current_only is True.
 
     Boundaries:
-        - Focus: detect schema check current only flag sets true
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pure argparse; verifies the store_true action for --check-current-only
 
     On failure, first check:
-        - Assertion details tied to detect schema check current only flag sets true
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cli
+        - Whether action="store_true" is still set on --check-current-only in cli.py
+        - Whether dest= still maps to "check_current_only"
     """
     args = build_parser().parse_args(
         ["detect-schema", "--site", "amazon", "--html-file", "a.html", "--check-current-only"]

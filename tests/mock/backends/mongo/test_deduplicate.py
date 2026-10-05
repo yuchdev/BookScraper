@@ -15,24 +15,22 @@ from bookscraper.backends.mongo import deduplicate
 
 class TestLeanpubPrescrapeDeduplicate:
     """Tests for deduplicate.leanpub_prescrape_deduplicate."""
+
     def test_book_id_only_builds_id_only_query(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies book id only builds id only query.
+        [Local] leanpub prescrape deduplicate: verifies that a book_id-only call builds a single-clause $or query.
 
         Scenario:
-            Given test inputs and fixtures for book id only builds id only query
-            When test_book_id_only_builds_id_only_query executes the target flow
-            Then the expected outcome for book id only builds id only query is confirmed.
+            Given a Mock collection whose find_one returns None and a book_id "id-1" with no slug
+            When leanpub_prescrape_deduplicate("id-1", None, collection) is called
+            Then find_one is called with {"$or": [{"book_id": "id-1"}]} and the function returns False.
 
         Boundaries:
-            - Focus: book id only builds id only query
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Only book_id is passed; slug is None so no slug clause should appear
+            - find_one returning None means "not found" -> False
 
         On failure, first check:
-            - Assertion details tied to book id only builds id only query
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The $or-clause construction logic in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -42,22 +40,19 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_book_slug_only_builds_slug_only_query(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies book slug only builds slug only query.
+        [Local] leanpub prescrape deduplicate: verifies that a slug-only call builds a single-clause $or query.
 
         Scenario:
-            Given test inputs and fixtures for book slug only builds slug only query
-            When test_book_slug_only_builds_slug_only_query executes the target flow
-            Then the expected outcome for book slug only builds slug only query is confirmed.
+            Given a Mock collection whose find_one returns None and a slug "slug-1" with no book_id
+            When leanpub_prescrape_deduplicate(None, "slug-1", collection) is called
+            Then find_one is called with {"$or": [{"slug": "slug-1"}]} and the function returns False.
 
         Boundaries:
-            - Focus: book slug only builds slug only query
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Only slug is passed; book_id is None so no book_id clause should appear
+            - find_one returning None means "not found" -> False
 
         On failure, first check:
-            - Assertion details tied to book slug only builds slug only query
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The $or-clause construction logic in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -67,22 +62,19 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_both_identifiers_build_combined_query(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies both identifiers build combined query.
+        [Local] leanpub prescrape deduplicate: verifies that providing both identifiers builds a two-clause $or query.
 
         Scenario:
-            Given test inputs and fixtures for both identifiers build combined query
-            When test_both_identifiers_build_combined_query executes the target flow
-            Then the expected outcome for both identifiers build combined query is confirmed.
+            Given a Mock collection and both book_id "id-1" and slug "slug-1"
+            When leanpub_prescrape_deduplicate("id-1", "slug-1", collection) is called
+            Then find_one is called with {"$or": [{"book_id": "id-1"}, {"slug": "slug-1"}]}.
 
         Boundaries:
-            - Focus: both identifiers build combined query
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Both identifiers present; neither is omitted from the query
+            - Order of clauses: book_id before slug
 
         On failure, first check:
-            - Assertion details tied to both identifiers build combined query
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The $or-clause construction logic in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -91,22 +83,19 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_no_identifiers_returns_false_without_query(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies no identifiers returns false without query.
+        [Local] leanpub prescrape deduplicate: verifies that passing neither identifier short-circuits without querying.
 
         Scenario:
-            Given test inputs and fixtures for no identifiers returns false without query
-            When test_no_identifiers_returns_false_without_query executes the target flow
-            Then the expected outcome for no identifiers returns false without query is confirmed.
+            Given a Mock collection and both book_id and slug set to None
+            When leanpub_prescrape_deduplicate(None, None, collection) is called
+            Then the function returns False and find_one is never called.
 
         Boundaries:
-            - Focus: no identifiers returns false without query
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The short-circuit path when no identifiers are provided
+            - No MongoDB query is issued
 
         On failure, first check:
-            - Assertion details tied to no identifiers returns false without query
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The early-return guard in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         result = deduplicate.leanpub_prescrape_deduplicate(None, None, collection)
@@ -115,22 +104,19 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_found_returns_true(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies found returns true.
+        [Local] leanpub prescrape deduplicate: verifies that a truthy find_one result causes the function to return True.
 
         Scenario:
-            Given test inputs and fixtures for found returns true
-            When test_found_returns_true executes the target flow
-            Then the expected outcome for found returns true is confirmed.
+            Given a Mock collection whose find_one returns an existing document
+            When leanpub_prescrape_deduplicate("id-1", "slug-1", collection) is called
+            Then the function returns True (duplicate found).
 
         Boundaries:
-            - Focus: found returns true
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "duplicate detected" branch: any truthy find_one return value
+            - Does not verify query structure (covered by other tests)
 
         On failure, first check:
-            - Assertion details tied to found returns true
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The bool-conversion of the find_one return value in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.return_value = {"book_id": "id-1", "slug": "slug-1"}
@@ -139,22 +125,18 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_not_found_returns_false(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies not found returns false.
+        [Local] leanpub prescrape deduplicate: verifies that a None find_one result causes the function to return False.
 
         Scenario:
-            Given test inputs and fixtures for not found returns false
-            When test_not_found_returns_false executes the target flow
-            Then the expected outcome for not found returns false is confirmed.
+            Given a Mock collection whose find_one returns None
+            When leanpub_prescrape_deduplicate("id-1", "slug-1", collection) is called
+            Then the function returns False (no duplicate).
 
         Boundaries:
-            - Focus: not found returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - The "not found" branch: find_one returning None
 
         On failure, first check:
-            - Assertion details tied to not found returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The bool-conversion of the find_one return value in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.return_value = None
@@ -163,22 +145,18 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_none_collection_returns_false(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies none collection returns false.
+        [Local] leanpub prescrape deduplicate: verifies that a None collection short-circuits to False.
 
         Scenario:
-            Given test inputs and fixtures for none collection returns false
-            When test_none_collection_returns_false executes the target flow
-            Then the expected outcome for none collection returns false is confirmed.
+            Given get_mongo_collection is patched to return None and collection argument is also None
+            When leanpub_prescrape_deduplicate("id-1", "slug-1", None) is called
+            Then the function returns False without attempting any query.
 
         Boundaries:
-            - Focus: none collection returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - No collection available (unavailable MongoDB); tests the None-collection guard
 
         On failure, first check:
-            - Assertion details tied to none collection returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The collection-availability guard in leanpub_prescrape_deduplicate
         """
         with patch.object(deduplicate, "get_mongo_collection", Mock(return_value=None)):
             result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", None)
@@ -186,22 +164,19 @@ class TestLeanpubPrescrapeDeduplicate:
 
     def test_find_one_exception_returns_false(self) -> None:
         """
-        [Local] leanpub prescrape deduplicate: verifies find one exception returns false.
+        [Local] leanpub prescrape deduplicate: verifies that a PyMongoError from find_one is caught and returns False.
 
         Scenario:
-            Given test inputs and fixtures for find one exception returns false
-            When test_find_one_exception_returns_false executes the target flow
-            Then the expected outcome for find one exception returns false is confirmed.
+            Given a Mock collection whose find_one raises PyMongoError("boom")
+            When leanpub_prescrape_deduplicate("id-1", "slug-1", collection) is called
+            Then the exception is swallowed and the function returns False.
 
         Boundaries:
-            - Focus: find one exception returns false
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Exception handling path: only PyMongoError is exercised here
+            - Does not verify logging or error message content
 
         On failure, first check:
-            - Assertion details tied to find one exception returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by leanpub prescrape deduplicate
+            - The try/except around find_one in leanpub_prescrape_deduplicate
         """
         collection = Mock()
         collection.find_one.side_effect = PyMongoError("boom")

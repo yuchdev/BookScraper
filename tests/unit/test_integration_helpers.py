@@ -33,22 +33,20 @@ def _make_cert(directory, name: str, mtime: float):
 
 def test_no_certificates_returns_none(cert_dir) -> None:
     """
-    [Unit] integration helpers: verifies no certificates returns none.
+    [Unit] integration helpers: verifies an empty cert directory returns None from both resolution functions.
 
     Scenario:
-        Given test inputs and fixtures for no certificates returns none
-        When test_no_certificates_returns_none executes the target flow
-        Then the expected outcome for no certificates returns none is confirmed.
+        Given cert_dir with no cert files and TLS_CERT_FILE cleared by the fixture
+        When get_default_tls_cert_file and get_tls_cert_file are called
+        Then both return None
 
     Boundaries:
-        - Focus: no certificates returns none
-        - Fixtures/params: cert_dir
-        - Scope: assertions and setup in this test case only
+        - Both API variants checked in one test; no env override path
+        - cert_dir fixture clears TLS_CERT_FILE before each test
 
     On failure, first check:
-        - Assertion details tied to no certificates returns none
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by integration helpers
+        - Whether the glob pattern matches unexpected files in the temp directory
+        - Recent changes to the None-return path in mongo_test_helpers
     """
     assert mongo_test_helpers.get_default_tls_cert_file(cert_dir) is None
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) is None
@@ -56,22 +54,20 @@ def test_no_certificates_returns_none(cert_dir) -> None:
 
 def test_picks_newest_certificate_by_mtime(cert_dir) -> None:
     """
-    [Unit] integration helpers: verifies picks newest certificate by mtime.
+    [Unit] integration helpers: verifies the cert with the highest mtime is returned by both resolution functions.
 
     Scenario:
-        Given test inputs and fixtures for picks newest certificate by mtime
-        When test_picks_newest_certificate_by_mtime executes the target flow
-        Then the expected outcome for picks newest certificate by mtime is confirmed.
+        Given three cert files with mtimes 1000, 5000, and 9000 in cert_dir
+        When get_default_tls_cert_file and get_tls_cert_file are called
+        Then both return the file with mtime 9000
 
     Boundaries:
-        - Focus: picks newest certificate by mtime
-        - Fixtures/params: cert_dir
-        - Scope: assertions and setup in this test case only
+        - Three files; mtime order differs from lexical name order
+        - Both get_default (returns Path) and get_tls (returns str) variants checked in one test
 
     On failure, first check:
-        - Assertion details tied to picks newest certificate by mtime
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by integration helpers
+        - Whether the sort is ascending rather than descending by mtime
+        - Recent changes to the glob/sort logic in mongo_test_helpers
     """
     _make_cert(cert_dir, "X509-cert-20250101_000000.pem", 1_000)
     newest = _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
@@ -129,22 +125,20 @@ def test_a_freshly_rotated_cert_is_picked_up(cert_dir) -> None:
 
 def test_unrelated_files_are_ignored(cert_dir) -> None:
     """
-    [Unit] integration helpers: verifies unrelated files are ignored.
+    [Unit] integration helpers: verifies non-matching files are excluded from cert discovery.
 
     Scenario:
-        Given test inputs and fixtures for unrelated files are ignored
-        When test_unrelated_files_are_ignored executes the target flow
-        Then the expected outcome for unrelated files are ignored is confirmed.
+        Given cert_dir contains settings.json, notes.txt, and a .pem.bak file but no X509-cert-*.pem
+        When get_default_tls_cert_file is called
+        Then None is returned
 
     Boundaries:
-        - Focus: unrelated files are ignored
-        - Fixtures/params: cert_dir
-        - Scope: assertions and setup in this test case only
+        - Glob is "X509-cert-*.pem"; a .pem.bak does not match
+        - Three different non-cert filenames tested together
 
     On failure, first check:
-        - Assertion details tied to unrelated files are ignored
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by integration helpers
+        - Whether the glob pattern is too broad and matches non-cert files
+        - Recent changes to the TLS_CERT_GLOB constant in mongo_test_helpers
     """
     (cert_dir / "settings.json").write_text("{}")
     (cert_dir / "notes.txt").write_text("x")
@@ -155,22 +149,20 @@ def test_unrelated_files_are_ignored(cert_dir) -> None:
 
 def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> None:
     """
-    [Local] integration helpers: verifies env var overrides the directory.
+    [Local] integration helpers: verifies TLS_CERT_FILE env var takes precedence over the directory glob.
 
     Scenario:
-        Given test inputs and fixtures for env var overrides the directory
-        When test_env_var_overrides_the_directory executes the target flow
-        Then the expected outcome for env var overrides the directory is confirmed.
+        Given a cert file in cert_dir and TLS_CERT_FILE set to an existing file elsewhere
+        When get_tls_cert_file is called with cert_dir
+        Then the TLS_CERT_FILE path is returned, not the glob result
 
     Boundaries:
-        - Focus: env var overrides the directory
-        - Fixtures/params: cert_dir, tmp_path, monkeypatch
-        - Scope: assertions and setup in this test case only
+        - File at the env-var path must exist; non-existent override falls back to glob (separate test)
+        - cert_dir fixture cleared TLS_CERT_FILE first; this test then re-sets it
 
     On failure, first check:
-        - Assertion details tied to env var overrides the directory
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by integration helpers
+        - Whether get_tls_cert_file checks env var existence before returning it
+        - Recent changes to the env-override branch in mongo_test_helpers
     """
     _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
     override = tmp_path / "elsewhere.pem"
@@ -182,22 +174,20 @@ def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> Non
 
 def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch) -> None:
     """
-    [Local] integration helpers: verifies nonexistent env var path falls back to directory.
+    [Local] integration helpers: verifies a nonexistent TLS_CERT_FILE path falls back to the directory glob.
 
     Scenario:
-        Given test inputs and fixtures for nonexistent env var path falls back to directory
-        When test_nonexistent_env_var_path_falls_back_to_directory executes the target flow
-        Then the expected outcome for nonexistent env var path falls back to directory is confirmed.
+        Given TLS_CERT_FILE set to a path that does not exist and a cert file in cert_dir
+        When get_tls_cert_file is called
+        Then the glob-found cert path is returned, not None or an error
 
     Boundaries:
-        - Focus: nonexistent env var path falls back to directory
-        - Fixtures/params: cert_dir, monkeypatch
-        - Scope: assertions and setup in this test case only
+        - Fallback applies only when the env-var path is missing on disk
+        - Contrast with test_env_var_overrides_the_directory where the path exists
 
     On failure, first check:
-        - Assertion details tied to nonexistent env var path falls back to directory
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by integration helpers
+        - Whether get_tls_cert_file raises FileNotFoundError instead of falling back
+        - Recent changes to the existence check in the env-override branch
     """
     newest = _make_cert(cert_dir, "X509-cert-20260101_000000.pem", 9_000)
     monkeypatch.setenv("TLS_CERT_FILE", str(cert_dir / "does-not-exist.pem"))

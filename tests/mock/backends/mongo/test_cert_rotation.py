@@ -52,22 +52,18 @@ def _response(*, json_body=None, content=b"", status=200, url="https://cloud.mon
 # --------------------------------------------------------------------------- #
 def test_get_access_token_posts_client_credentials() -> None:
     """
-    [Local] cert rotation: verifies get access token posts client credentials.
+    [Local] cert rotation: verifies that get_access_token POSTs client_credentials to the Atlas OAuth URL and returns the token.
 
     Scenario:
-        Given test inputs and fixtures for get access token posts client credentials
-        When test_get_access_token_posts_client_credentials executes the target flow
-        Then the expected outcome for get access token posts client credentials is confirmed.
+        Given httpx.post is patched to return {"access_token": "tok"} with status 200
+        When cert_rotation.get_access_token("id", "secret") is called
+        Then it POSTs to ATLAS_OAUTH_URL with auth=("id", "secret"), grant_type="client_credentials", and returns "tok".
 
     Boundaries:
-        - Focus: get access token posts client credentials
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - HTTP call shape and return value only; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to get access token posts client credentials
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The POST URL, auth tuple, and grant_type data in get_access_token
     """
     with patch(f"{MODULE}.httpx.post", return_value=_response(json_body={"access_token": "tok"})) as post:
         assert cert_rotation.get_access_token("id", "secret") == "tok"
@@ -79,22 +75,18 @@ def test_get_access_token_posts_client_credentials() -> None:
 
 def test_get_access_token_propagates_http_errors() -> None:
     """
-    [Local] cert rotation: verifies get access token propagates http errors.
+    [Local] cert rotation: verifies that get_access_token raises HTTPStatusError on a 401 response.
 
     Scenario:
-        Given test inputs and fixtures for get access token propagates http errors
-        When test_get_access_token_propagates_http_errors executes the target flow
-        Then the expected outcome for get access token propagates http errors is confirmed.
+        Given httpx.post is patched to return a 401 response
+        When cert_rotation.get_access_token("id", "bad") is called
+        Then httpx.HTTPStatusError is raised.
 
     Boundaries:
-        - Focus: get access token propagates http errors
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The raise_for_status() path; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to get access token propagates http errors
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The raise_for_status call in get_access_token
     """
     with (
         patch(f"{MODULE}.httpx.post", return_value=_response(status=401, json_body={})),
@@ -105,22 +97,18 @@ def test_get_access_token_propagates_http_errors() -> None:
 
 def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
     """
-    [Local] cert rotation: verifies issue certificate sends months in json body not query.
+    [Local] cert rotation: verifies that issue_certificate sends monthsUntilExpiration in the JSON body, not query params.
 
     Scenario:
-        Given test inputs and fixtures for issue certificate sends months in json body not query
-        When test_issue_certificate_sends_months_in_json_body_not_query executes the target flow
-        Then the expected outcome for issue certificate sends months in json body not query is confirmed.
+        Given httpx.post is patched to return b"PEM" content
+        When cert_rotation.issue_certificate("tok", "proj123", "svc-user", 9) is called
+        Then the POST URL ends with the correct user path, json={"monthsUntilExpiration": 9} is set, "params" is absent, and the Bearer token is in the Authorization header.
 
     Boundaries:
-        - Focus: issue certificate sends months in json body not query
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Request shape only; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to issue certificate sends months in json body not query
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The JSON body vs query-params placement and the Bearer token header in issue_certificate
     """
     with patch(f"{MODULE}.httpx.post", return_value=_response(content=b"PEM")) as post:
         cert = cert_rotation.issue_certificate("tok", "proj123", "svc-user", 9)
@@ -138,22 +126,18 @@ def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
 @pytest.mark.parametrize("missing", ["ATLAS_CLIENT_ID", "ATLAS_CLIENT_SECRET", "ATLAS_PROJECT_ID", "ATLAS_DB_USER"])
 def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, missing) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate requires each credential.
+    [Local] cert rotation: verifies that each missing ATLAS_* env var causes a RotationError before any HTTP request.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate requires each credential
-        When test_rotate_certificate_requires_each_credential executes the target flow
-        Then the expected outcome for rotate certificate requires each credential is confirmed.
+        Given all four ATLAS_* env vars are set (atlas_env) and one of them is deleted
+        When cert_rotation.rotate_certificate() is called
+        Then RotationError matching the missing variable name is raised and httpx.post is never called.
 
     Boundaries:
-        - Focus: rotate certificate requires each credential
-        - Fixtures/params: atlas_env, monkeypatch, missing (parametrized, 4 cases)
-        - Scope: assertions and setup in this test case only
+        - 4 parametrized cases (one per ATLAS_* variable); no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to rotate certificate requires each credential
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The per-credential presence check in rotate_certificate
     """
     monkeypatch.delenv(missing)
 
@@ -168,22 +152,18 @@ def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, mis
 
 def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate invalid months fails before any request.
+    [Local] cert rotation: verifies that months=99 raises RotationError mentioning "1-24" before any HTTP request.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate invalid months fails before any request
-        When test_rotate_certificate_invalid_months_fails_before_any_request executes the target flow
-        Then the expected outcome for rotate certificate invalid months fails before any request is confirmed.
+        Given all ATLAS_* env vars are set and months=99 (out of range)
+        When cert_rotation.rotate_certificate(months=99) is called
+        Then RotationError matching "1-24" is raised and httpx.post is never called.
 
     Boundaries:
-        - Focus: rotate certificate invalid months fails before any request
-        - Fixtures/params: atlas_env
-        - Scope: assertions and setup in this test case only
+        - Months range validation only; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to rotate certificate invalid months fails before any request
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The months range guard in rotate_certificate
     """
     with (
         patch(f"{MODULE}.httpx.post") as post,
@@ -196,22 +176,18 @@ def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -
 
 def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_env, isolated_config) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate happy path writes cert and updates settings.
+    [Local] cert rotation: verifies that a successful rotation writes the PEM, defaults to 6 months, and repoints settings.json.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate happy path writes cert and updates settings
-        When test_rotate_certificate_happy_path_writes_cert_and_updates_settings executes the target flow
-        Then the expected outcome for rotate certificate happy path writes cert and updates settings is confirmed.
+        Given an x509 settings.json, httpx.post returning a token then a PEM, and verify=False
+        When cert_rotation.rotate_certificate(verify=False) is called
+        Then the PEM is written to isolated_config, monthsUntilExpiration=6 is sent, settings.json cert.value is updated, and notes mention the new path.
 
     Boundaries:
-        - Focus: rotate certificate happy path writes cert and updates settings
-        - Fixtures/params: atlas_env, isolated_config
-        - Scope: assertions and setup in this test case only
+        - Happy path with verify skipped; no real Atlas network or MongoDB
 
     On failure, first check:
-        - Assertion details tied to rotate certificate happy path writes cert and updates settings
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The cert write, default months value, settings.json repoint, and notes in rotate_certificate
     """
     (isolated_config / "settings.json").write_text(
         json.dumps(
@@ -241,22 +217,18 @@ def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_en
 
 def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, tmp_path, isolated_config) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate explicit arguments beat env.
+    [Local] cert rotation: verifies that explicit months/output arguments override ATLAS_CERT_MONTHS/ATLAS_CERT_FILE env vars.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate explicit arguments beat env
-        When test_rotate_certificate_explicit_arguments_beat_env executes the target flow
-        Then the expected outcome for rotate certificate explicit arguments beat env is confirmed.
+        Given ATLAS_CERT_MONTHS=12 and ATLAS_CERT_FILE pointing to from-env.pem, but months=3 and output=explicit.pem passed explicitly
+        When cert_rotation.rotate_certificate(months=3, output=explicit, verify=False) is called
+        Then the cert is written to explicit.pem with monthsUntilExpiration=3, and from-env.pem is never created.
 
     Boundaries:
-        - Focus: rotate certificate explicit arguments beat env
-        - Fixtures/params: atlas_env, monkeypatch, tmp_path, isolated_config
-        - Scope: assertions and setup in this test case only
+        - Flag-beats-env precedence for both months and output path
 
     On failure, first check:
-        - Assertion details tied to rotate certificate explicit arguments beat env
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The months and output-path precedence logic in rotate_certificate
     """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     monkeypatch.setenv("ATLAS_CERT_FILE", str(tmp_path / "from-env.pem"))
@@ -276,22 +248,18 @@ def test_rotate_certificate_env_overrides_apply_when_no_arguments(
     atlas_env, monkeypatch, tmp_path, isolated_config
 ) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate env overrides apply when no arguments.
+    [Local] cert rotation: verifies that ATLAS_CERT_MONTHS and ATLAS_CERT_FILE env vars apply when no explicit arguments are passed.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate env overrides apply when no arguments
-        When test_rotate_certificate_env_overrides_apply_when_no_arguments executes the target flow
-        Then the expected outcome for rotate certificate env overrides apply when no arguments is confirmed.
+        Given ATLAS_CERT_MONTHS=12 and ATLAS_CERT_FILE pointing to from-env.pem, and no months/output arguments
+        When cert_rotation.rotate_certificate(verify=False) is called
+        Then the cert is written to from-env.pem with monthsUntilExpiration=12.
 
     Boundaries:
-        - Focus: rotate certificate env overrides apply when no arguments
-        - Fixtures/params: atlas_env, monkeypatch, tmp_path, isolated_config
-        - Scope: assertions and setup in this test case only
+        - Env-override path for months and output path when no flags override them
 
     On failure, first check:
-        - Assertion details tied to rotate certificate env overrides apply when no arguments
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The env-var fallback for months and output path in rotate_certificate
     """
     monkeypatch.setenv("ATLAS_CERT_MONTHS", "12")
     monkeypatch.setenv("ATLAS_CERT_FILE", str(tmp_path / "from-env.pem"))
@@ -308,22 +276,18 @@ def test_rotate_certificate_http_status_error_becomes_rotation_error_without_lea
     atlas_env, isolated_config
 ) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate http status error becomes rotation error without leaking body.
+    [Local] cert rotation: verifies that an Atlas 403 becomes RotationError with the status code but no response body content.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate http status error becomes rotation error without leaking body
-        When test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body executes the target flow
-        Then the expected outcome for rotate certificate http status error becomes rotation error without leaking body is confirmed.
+        Given httpx.post returns a 403 response whose body contains "client-secret was rejected"
+        When cert_rotation.rotate_certificate() is called
+        Then RotationError is raised containing "403" but not "client-secret", and no PEM is written.
 
     Boundaries:
-        - Focus: rotate certificate http status error becomes rotation error without leaking body
-        - Fixtures/params: atlas_env, isolated_config
-        - Scope: assertions and setup in this test case only
+        - HTTP error -> RotationError conversion and response-body redaction; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to rotate certificate http status error becomes rotation error without leaking body
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The HTTPStatusError -> RotationError conversion and body-stripping in rotate_certificate
     """
     denied = _response(status=403, json_body={"detail": "client-secret was rejected"})
 
@@ -340,22 +304,18 @@ def test_rotate_certificate_http_status_error_becomes_rotation_error_without_lea
 
 def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isolated_config) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate network error becomes rotation error.
+    [Local] cert rotation: verifies that an httpx.ConnectError during the Atlas API call becomes a RotationError("ConnectError").
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate network error becomes rotation error
-        When test_rotate_certificate_network_error_becomes_rotation_error executes the target flow
-        Then the expected outcome for rotate certificate network error becomes rotation error is confirmed.
+        Given httpx.post raises httpx.ConnectError("no route")
+        When cert_rotation.rotate_certificate() is called
+        Then RotationError matching "ConnectError" is raised.
 
     Boundaries:
-        - Focus: rotate certificate network error becomes rotation error
-        - Fixtures/params: atlas_env, isolated_config
-        - Scope: assertions and setup in this test case only
+        - Network-failure -> RotationError conversion; no real Atlas network
 
     On failure, first check:
-        - Assertion details tied to rotate certificate network error becomes rotation error
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The ConnectError -> RotationError conversion in rotate_certificate
     """
     with (
         patch(f"{MODULE}.httpx.post", side_effect=httpx.ConnectError("no route")),
@@ -366,22 +326,18 @@ def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isol
 
 def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, isolated_config) -> None:
     """
-    [Local] cert rotation: verifies rotate certificate does not touch settings when atlas fails.
+    [Local] cert rotation: verifies that an Atlas 500 error leaves settings.json untouched.
 
     Scenario:
-        Given test inputs and fixtures for rotate certificate does not touch settings when atlas fails
-        When test_rotate_certificate_does_not_touch_settings_when_atlas_fails executes the target flow
-        Then the expected outcome for rotate certificate does not touch settings when atlas fails is confirmed.
+        Given an existing x509 settings.json and httpx.post returning a 500 response
+        When cert_rotation.rotate_certificate() is called and RotationError is raised
+        Then settings.json content is identical to its pre-rotation state.
 
     Boundaries:
-        - Focus: rotate certificate does not touch settings when atlas fails
-        - Fixtures/params: atlas_env, isolated_config
-        - Scope: assertions and setup in this test case only
+        - Atomicity guard: settings.json must never be partially modified on failure
 
     On failure, first check:
-        - Assertion details tied to rotate certificate does not touch settings when atlas fails
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by cert rotation
+        - The settings.json write guard / rollback in rotate_certificate on Atlas errors
     """
     settings = {
         "auth_type": "x509",
@@ -407,13 +363,13 @@ def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, 
 def test_verify_retries_then_succeeds() -> None:
     """
     [Local] cert rotation: verifies verify retries then succeeds.
-    
+
     Scenario:
         Atlas rejects the freshly issued cert twice while it propagates, then accepts it.
-    
+
     Boundaries:
         - build_mongo_client/ping faked; injected sleep so no real wait; client per attempt.
-    
+
     On failure, first check:
         - verification gives up before Atlas propagates, or never retries.
     """
@@ -436,13 +392,13 @@ def test_verify_retries_then_succeeds() -> None:
 def test_verify_failure_message_has_code_but_no_host() -> None:
     """
     [Local] cert rotation: verifies verify failure message has code but no host.
-    
+
     Scenario:
         every attempt fails; the raised error keeps the redacted code but no host/URI.
-    
+
     Boundaries:
         - ping always raises a redacted MongoConnectionError; injected sleep.
-    
+
     On failure, first check:
         - verification masks the error code, or a host/credential leaks into the message.
     """
@@ -467,13 +423,13 @@ def test_verify_failure_message_has_code_but_no_host() -> None:
 def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
     """
     [Local] cert rotation: verifies verify certificate runs once when attempts below one.
-    
+
     Scenario:
         attempts <= 0 still runs exactly one ping (clamped to 1), never zero.
-    
+
     Boundaries:
         - build_mongo_client/ping faked; ping succeeds so no sleep is needed.
-    
+
     On failure, first check:
         - a mistyped --verify-attempts 0 silently skips verification.
     """
@@ -494,13 +450,13 @@ def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
 def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> None:
     """
     [Local] cert rotation: verifies verify success then repoints settings.
-    
+
     Scenario:
         the new cert verifies, so settings.json is repointed at it and verified is True.
-    
+
     Boundaries:
         - Atlas HTTP + build_mongo_client/ping faked (ping succeeds).
-    
+
     On failure, first check:
         - a verified cert is not committed, or verification is skipped.
     """
@@ -524,13 +480,13 @@ def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> No
 def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> None:
     """
     [Local] cert rotation: verifies verify skipped when no uri configured.
-    
+
     Scenario:
         no URI is configured, so verification is skipped (no ping) but repointing proceeds.
-    
+
     Boundaries:
         - resolver returns (None, None); build_mongo_client asserted never called.
-    
+
     On failure, first check:
         - verification pings with no URI, or a skip blocks the repoint.
     """
@@ -556,13 +512,13 @@ def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> No
 def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, isolated_config) -> None:
     """
     [Local] cert rotation: verifies rotate certificate verify failure leaves settings untouched.
-    
+
     Scenario:
         verification fails for good; settings.json is NOT repointed, the PEM stays on disk, and verified is False (ROT-12).
-    
+
     Boundaries:
         - ping always raises a redacted MongoConnectionError; verify_attempts=1 (no sleep).
-    
+
     On failure, first check:
         - a broken identity is committed to settings.json.
     """
@@ -586,13 +542,13 @@ def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, 
 def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolated_config) -> None:
     """
     [Local] cert rotation: verifies rotate certificate no verify skips ping and repoints.
-    
+
     Scenario:
         verify=False repoints settings.json without ever building a client / pinging.
-    
+
     Boundaries:
         - build_mongo_client asserted never called.
-    
+
     On failure, first check:
         - the offline path still contacts Atlas.
     """
@@ -615,13 +571,13 @@ def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolate
 def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(atlas_env, isolated_config) -> None:
     """
     [Local] cert rotation: verifies rotate certificate config error during verify becomes rotation error.
-    
+
     Scenario:
         the resolver cannot supply a URI (ConfigError), so rotation fails loudly without repointing rather than pinging or guessing.
-    
+
     Boundaries:
         - resolve_mongo_connection raises ConfigError after the PEM is written.
-    
+
     On failure, first check:
         - an unhandled ConfigError crashes, or settings.json is repointed blindly.
     """
@@ -658,13 +614,13 @@ def prune_guard(isolated_config):
 def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies verify success prunes superseded keeping active.
-    
+
     Scenario:
         after a verified rotation the active cert and the new cert are kept, older certs pruned.
-    
+
     Boundaries:
         - keep=1; the resolver reports an older 'active' cert that must survive despite being beyond keep (protected), while a still-older stale cert is pruned (ROT-6/7).
-    
+
     On failure, first check:
         - the active identity is deleted, or stale keys linger past keep.
     """
@@ -695,13 +651,13 @@ def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard)
 def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -> None:
     """
     [Local] cert rotation: verifies prune protects tls cert file env.
-    
+
     Scenario:
         a cert named by TLS_CERT_FILE is protected from pruning however old (ROT-6).
-    
+
     Boundaries:
         - keep=1 with a TLS_CERT_FILE cert older than the newest, so only the TLS_CERT_FILE clause of the protected set keeps it.
-    
+
     On failure, first check:
         - an in-use cert referenced only via TLS_CERT_FILE is deleted.
     """
@@ -727,13 +683,13 @@ def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -
 def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies prune skipped when active cert unresolvable.
-    
+
     Scenario:
         the URI resolves for verification but the post-repoint resolve raises ConfigError, so pruning is skipped entirely - never prune on uncertainty (ROT-8).
-    
+
     Boundaries:
         - resolve_mongo_connection succeeds once (URI) then raises ConfigError (prune).
-    
+
     On failure, first check:
         - a resolver hiccup deletes certs blindly, risking loss of the active identity.
     """
@@ -762,13 +718,13 @@ def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> 
 def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies prune not run when verification fails.
-    
+
     Scenario:
         verification fails, so pruning never runs (ROT-13) - no superseded cert is removed.
-    
+
     Boundaries:
         - ping always raises; prune_old_certificates patched to detect any call.
-    
+
     On failure, first check:
         - certs are pruned around an unverified/broken new identity.
     """
@@ -791,13 +747,13 @@ def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
 def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies prune not run when rotation fails.
-    
+
     Scenario:
         an Atlas API failure aborts rotation before any pruning is attempted.
-    
+
     Boundaries:
         - httpx.post returns 500; prune_old_certificates patched to detect any call.
-    
+
     On failure, first check:
         - certs are pruned even though no new cert was successfully issued.
     """
@@ -814,13 +770,13 @@ def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
 def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies no prune argument keeps all certs.
-    
+
     Scenario:
         prune=False leaves every superseded cert on disk after a verified rotation.
-    
+
     Boundaries:
         - a stale cert well beyond keep=1 survives; no 'Pruned' note is emitted.
-    
+
     On failure, first check:
         - --no-prune still deletes certs.
     """
@@ -846,13 +802,13 @@ def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
 def test_no_verify_does_not_prune(atlas_env, prune_guard) -> None:
     """
     [Local] cert rotation: verifies no verify does not prune.
-    
+
     Scenario:
         --no-verify (verify=False) repoints but never prunes, keeping old certs against a possible lockout (the chosen conservative interaction of --no-verify with pruning).
-    
+
     Boundaries:
         - a stale cert beyond keep=1 survives; a skip note is emitted.
-    
+
     On failure, first check:
         - an unverified rotation deletes the previously working identity.
     """

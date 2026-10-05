@@ -35,22 +35,19 @@ BARE_URI = "mongodb+srv://cluster.example.net/db?retryWrites=true"
 )
 def test_uri_selects_x509_auth(uri, expected) -> None:
     """
-    [Local] client: verifies uri selects x509 auth.
+    [Local] client: verifies that uri_selects_x509_auth detects the MONGODB-X509 authMechanism (case-insensitive).
 
     Scenario:
-        Given test inputs and fixtures for uri selects x509 auth
-        When test_uri_selects_x509_auth executes the target flow
-        Then the expected outcome for uri selects x509 auth is confirmed.
+        Given a URI from the parametrized set (X509, lowercase x509, SCRAM, bare, SCRAM-SHA-256)
+        When client.uri_selects_x509_auth(uri) is called
+        Then it returns True only for URIs that include authMechanism=MONGODB-X509 (case-insensitive).
 
     Boundaries:
-        - Focus: uri selects x509 auth
-        - Fixtures/params: uri, expected (parametrized, 5 cases)
-        - Scope: assertions and setup in this test case only
+        - 5 parametrized cases covering X509 present/absent and case variation
+        - Pure string parsing; no network or mock
 
     On failure, first check:
-        - Assertion details tied to uri selects x509 auth
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by client
+        - The authMechanism detection regex/string comparison in uri_selects_x509_auth
     """
     assert client.uri_selects_x509_auth(uri) is expected
 
@@ -61,22 +58,18 @@ def test_uri_selects_x509_auth(uri, expected) -> None:
 )
 def test_uri_has_embedded_credentials(uri, expected) -> None:
     """
-    [Local] client: verifies uri has embedded credentials.
+    [Local] client: verifies that uri_has_embedded_credentials detects user:password in the URI.
 
     Scenario:
-        Given test inputs and fixtures for uri has embedded credentials
-        When test_uri_has_embedded_credentials executes the target flow
-        Then the expected outcome for uri has embedded credentials is confirmed.
+        Given a URI from the parametrized set (SCRAM with user:pw, X509 without, bare without)
+        When client.uri_has_embedded_credentials(uri) is called
+        Then it returns True only for the SCRAM URI that embeds user:pw in the netloc.
 
     Boundaries:
-        - Focus: uri has embedded credentials
-        - Fixtures/params: uri, expected (parametrized, 3 cases)
-        - Scope: assertions and setup in this test case only
+        - 3 parametrized cases; pure string parsing, no network or mock
 
     On failure, first check:
-        - Assertion details tied to uri has embedded credentials
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by client
+        - The credential detection logic in uri_has_embedded_credentials
     """
     assert client.uri_has_embedded_credentials(uri) is expected
 
@@ -86,22 +79,18 @@ def test_uri_has_embedded_credentials(uri, expected) -> None:
 # --------------------------------------------------------------------------- #
 def test_x509_mechanism_present_warns_nothing() -> None:
     """
-    [Local] client: verifies x509 mechanism present warns nothing.
+    [Local] client: verifies that a properly configured X.509 URI with a cert emits no warning or critical log.
 
     Scenario:
-        Given test inputs and fixtures for x509 mechanism present warns nothing
-        When test_x509_mechanism_present_warns_nothing executes the target flow
-        Then the expected outcome for x509 mechanism present warns nothing is confirmed.
+        Given an X509_URI that includes authMechanism=MONGODB-X509 and a cert path
+        When _warn_if_x509_mechanism_missing(X509_URI, "/certs/x.pem") is called
+        Then neither warning nor critical is logged, and print_log is not called.
 
     Boundaries:
-        - Focus: x509 mechanism present warns nothing
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - The "correctly configured" no-op path; warning and critical loggers both patched
 
     On failure, first check:
-        - Assertion details tied to x509 mechanism present warns nothing
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by client
+        - The early-return condition in _warn_if_x509_mechanism_missing
     """
     with (
         patch.object(client.module_logger, "warning") as warn,

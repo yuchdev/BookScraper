@@ -20,22 +20,19 @@ class TestHashBook:
 
     def test_same_inputs_produce_same_hash(self) -> None:
         """
-        [Unit] hash book: verifies same inputs produce same hash.
+        [Unit] hash_book: identical title, authors, and year produce the same 64-character SHA-256 hexdigest.
 
         Scenario:
-            Given test inputs and fixtures for same inputs produce same hash
-            When test_same_inputs_produce_same_hash executes the target flow
-            Then the expected outcome for same inputs produce same hash is confirmed.
+            Given hash_book called twice with "Fluent Python", ["Luciano Ramalho"], 2022
+            When both results are compared
+            Then h1 == h2 and len(h1) == 64.
 
         Boundaries:
-            - Focus: same inputs produce same hash
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; no I/O, no mocking
+            - Verifies determinism and output length but not the specific hash value
 
         On failure, first check:
-            - Assertion details tied to same inputs produce same hash
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether hash_book's normalization or hashing logic was changed in book_utils.py
         """
         h1 = hash_book("Fluent Python", ["Luciano Ramalho"], 2022)
         h2 = hash_book("Fluent Python", ["Luciano Ramalho"], 2022)
@@ -44,22 +41,18 @@ class TestHashBook:
 
     def test_author_order_does_not_matter(self) -> None:
         """
-        [Unit] hash book: verifies author order does not matter.
+        [Unit] hash_book: authors are sorted before hashing so order does not affect the result.
 
         Scenario:
-            Given test inputs and fixtures for author order does not matter
-            When test_author_order_does_not_matter executes the target flow
-            Then the expected outcome for author order does not matter is confirmed.
+            Given hash_book called with ["Alice", "Bob"] and then with ["Bob", "Alice"] for the same title and year
+            When both results are compared
+            Then h1 == h2.
 
         Boundaries:
-            - Focus: author order does not matter
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; tests a single normalization step (sort)
 
         On failure, first check:
-            - Assertion details tied to author order does not matter
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the author-sorting step was removed or changed in hash_book in book_utils.py
         """
         h1 = hash_book("T", ["Alice", "Bob"], 2020)
         h2 = hash_book("T", ["Bob", "Alice"], 2020)
@@ -67,22 +60,18 @@ class TestHashBook:
 
     def test_author_whitespace_and_case_normalized(self) -> None:
         """
-        [Unit] hash book: verifies author whitespace and case normalized.
+        [Unit] hash_book: author names are stripped and lowercased before hashing.
 
         Scenario:
-            Given test inputs and fixtures for author whitespace and case normalized
-            When test_author_whitespace_and_case_normalized executes the target flow
-            Then the expected outcome for author whitespace and case normalized is confirmed.
+            Given hash_book called with "Bob" and then with " bob " for the same title and year
+            When both results are compared
+            Then h1 == h2.
 
         Boundaries:
-            - Focus: author whitespace and case normalized
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; tests strip() + lower() on a single author name
 
         On failure, first check:
-            - Assertion details tied to author whitespace and case normalized
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether author normalization (strip/lower) was changed or removed in book_utils.py
         """
         h1 = hash_book("T", ["Bob"], 2020)
         h2 = hash_book("T", [" bob "], 2020)
@@ -90,22 +79,18 @@ class TestHashBook:
 
     def test_title_whitespace_and_case_normalized(self) -> None:
         """
-        [Unit] hash book: verifies title whitespace and case normalized.
+        [Unit] hash_book: titles are stripped and lowercased before hashing.
 
         Scenario:
-            Given test inputs and fixtures for title whitespace and case normalized
-            When test_title_whitespace_and_case_normalized executes the target flow
-            Then the expected outcome for title whitespace and case normalized is confirmed.
+            Given hash_book called with "Fluent Python" and then with "  fluent python  " for the same author and year
+            When both results are compared
+            Then h1 == h2.
 
         Boundaries:
-            - Focus: title whitespace and case normalized
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; tests strip() + lower() on the title
 
         On failure, first check:
-            - Assertion details tied to title whitespace and case normalized
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether title normalization (strip/lower) was changed or removed in book_utils.py
         """
         h1 = hash_book("Fluent Python", ["A"], 2020)
         h2 = hash_book("  fluent python  ", ["A"], 2020)
@@ -113,22 +98,18 @@ class TestHashBook:
 
     def test_different_title_produces_different_hash(self) -> None:
         """
-        [Unit] hash book: verifies different title produces different hash.
+        [Unit] hash_book: different titles produce different hashes.
 
         Scenario:
-            Given test inputs and fixtures for different title produces different hash
-            When test_different_title_produces_different_hash executes the target flow
-            Then the expected outcome for different title produces different hash is confirmed.
+            Given hash_book called with "Fluent Python" and then with "Effective Python" for the same author and year
+            When both results are compared
+            Then h1 != h2.
 
         Boundaries:
-            - Focus: different title produces different hash
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; tests that title is included in the hash input (not just authors and year)
 
         On failure, first check:
-            - Assertion details tied to different title produces different hash
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the title is still included as a hash input in book_utils.py
         """
         h1 = hash_book("Fluent Python", ["A"], 2020)
         h2 = hash_book("Effective Python", ["A"], 2020)
@@ -136,22 +117,18 @@ class TestHashBook:
 
     def test_different_year_produces_different_hash(self) -> None:
         """
-        [Unit] hash book: verifies different year produces different hash.
+        [Unit] hash_book: different publication years produce different hashes.
 
         Scenario:
-            Given test inputs and fixtures for different year produces different hash
-            When test_different_year_produces_different_hash executes the target flow
-            Then the expected outcome for different year produces different hash is confirmed.
+            Given hash_book called with year=2020 and then with year=2021 for the same title and author
+            When both results are compared
+            Then h1 != h2.
 
         Boundaries:
-            - Focus: different year produces different hash
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; tests that year is included in the hash input
 
         On failure, first check:
-            - Assertion details tied to different year produces different hash
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the year is still included as a hash input in book_utils.py
         """
         h1 = hash_book("T", ["A"], 2020)
         h2 = hash_book("T", ["A"], 2021)
@@ -159,22 +136,19 @@ class TestHashBook:
 
     def test_empty_title_still_returns_hash(self) -> None:
         """
-        [Unit] hash book: verifies empty title still returns hash.
+        [Unit] hash_book: an empty string title produces a valid 64-character hash, not an error sentinel.
 
         Scenario:
-            Given test inputs and fixtures for empty title still returns hash
-            When test_empty_title_still_returns_hash executes the target flow
-            Then the expected outcome for empty title still returns hash is confirmed.
+            Given hash_book called with title=""
+            When the result is examined
+            Then it is a string of length 64 (a real SHA-256 digest, not the "" error sentinel).
 
         Boundaries:
-            - Focus: empty title still returns hash
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Distinguishes empty string from None: an empty title hashes fine; None does not
+            - Pure Python; no I/O
 
         On failure, first check:
-            - Assertion details tied to empty title still returns hash
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the title normalization branch now treats "" the same as None in book_utils.py
         """
         h = hash_book("", ["A"], 2020)
         assert isinstance(h, str)
@@ -190,44 +164,38 @@ class TestHashBook:
         # safety property asked for (must not raise) holds; the "returns a real
         # hash" part does not. Asserting actual behavior; flagged for python-expert.
         """
-        [Unit] hash book: verifies none title does not raise but returns error sentinel.
+        [Unit] hash_book: a None title swallows AttributeError and returns "" rather than raising.
 
         Scenario:
-            Given test inputs and fixtures for none title does not raise but returns error sentinel
-            When test_none_title_does_not_raise_but_returns_error_sentinel executes the target flow
-            Then the expected outcome for none title does not raise but returns error sentinel is confirmed.
+            Given hash_book called with title=None
+            When the result is examined
+            Then it equals "" (the bare-except error sentinel), with no exception raised.
 
         Boundaries:
-            - Focus: none title does not raise but returns error sentinel
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Known quirk: every None-titled book collapses to hash="" and collides with every other errored book
+            - Asserting actual behavior; the safety property (must not raise) holds but "returns a real hash" does not
 
         On failure, first check:
-            - Assertion details tied to none title does not raise but returns error sentinel
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the bare except in hash_book was narrowed (e.g. to AttributeError) or removed in book_utils.py
+            - If the return value changed from "" to something else, the dedup behavior changed too
         """
         h = hash_book(None, ["A"], 2020)
         assert h == ""
 
     def test_authors_none_treated_as_empty_list(self) -> None:
         """
-        [Unit] hash book: verifies authors none treated as empty list.
+        [Unit] hash_book: None for authors produces the same hash as an empty list.
 
         Scenario:
-            Given test inputs and fixtures for authors none treated as empty list
-            When test_authors_none_treated_as_empty_list executes the target flow
-            Then the expected outcome for authors none treated as empty list is confirmed.
+            Given hash_book called with authors=None and then with authors=[]
+            When both results are compared
+            Then h1 == h2.
 
         Boundaries:
-            - Focus: authors none treated as empty list
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies the None-coercion path before sorting
 
         On failure, first check:
-            - Assertion details tied to authors none treated as empty list
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the None-guard for the authors argument was removed in book_utils.py
         """
         h1 = hash_book("T", None, 2020)
         h2 = hash_book("T", [], 2020)
@@ -236,43 +204,35 @@ class TestHashBook:
     def test_none_year_differs_from_zero_year(self) -> None:
         # year=None -> "" ; year=0 -> "0" : must be distinct identities.
         """
-        [Unit] hash book: verifies none year differs from zero year.
+        [Unit] hash_book: None year and year=0 produce different hashes.
 
         Scenario:
-            Given test inputs and fixtures for none year differs from zero year
-            When test_none_year_differs_from_zero_year executes the target flow
-            Then the expected outcome for none year differs from zero year is confirmed.
+            Given hash_book called with year=None and then with year=0 for the same title and author
+            When both results are compared
+            Then the hashes differ (None serialises to "" and 0 serialises to "0").
 
         Boundaries:
-            - Focus: none year differs from zero year
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; guards against silent identity collision between "no year" and "year zero"
 
         On failure, first check:
-            - Assertion details tied to none year differs from zero year
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the year-to-string conversion in hash_book was changed in book_utils.py
         """
         assert hash_book("T", ["A"], None) != hash_book("T", ["A"], 0)
 
     def test_none_authors_entries_are_dropped(self) -> None:
         """
-        [Unit] hash book: verifies none authors entries are dropped.
+        [Unit] hash_book: None entries inside the authors list are silently dropped before hashing.
 
         Scenario:
-            Given test inputs and fixtures for none authors entries are dropped
-            When test_none_authors_entries_are_dropped executes the target flow
-            Then the expected outcome for none authors entries are dropped is confirmed.
+            Given hash_book called with ["A", None] and then with ["A"] for the same title and year
+            When both results are compared
+            Then the hashes are equal.
 
         Boundaries:
-            - Focus: none authors entries are dropped
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies per-entry None filtering within the authors list
 
         On failure, first check:
-            - Assertion details tied to none authors entries are dropped
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by hash book
+            - Whether the per-entry None filter was removed from the author normalization loop in book_utils.py
         """
         assert hash_book("T", ["A", None], 2020) == hash_book("T", ["A"], 2020)
 
@@ -282,232 +242,189 @@ class TestExtractYearFromDate:
 
     def test_iso_date(self) -> None:
         """
-        [Unit] extract year from date: verifies iso date.
+        [Unit] extract_year_from_date: ISO "YYYY-MM-DD" format extracts the year correctly.
 
         Scenario:
-            Given test inputs and fixtures for iso date
-            When test_iso_date executes the target flow
-            Then the expected outcome for iso date is confirmed.
+            Given extract_year_from_date("2023-12-19")
+            When the function parses the input
+            Then it returns 2023.
 
         Boundaries:
-            - Focus: iso date
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; no I/O
+            - Covers the direct-format strptime path for "%Y-%m-%d"
 
         On failure, first check:
-            - Assertion details tied to iso date
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "%Y-%m-%d" is still in the format list or the regex path now handles it first in book_utils.py
         """
         assert extract_year_from_date("2023-12-19") == 2023
 
     def test_long_month_name(self) -> None:
         """
-        [Unit] extract year from date: verifies long month name.
+        [Unit] extract_year_from_date: "Month DD, YYYY" format extracts the year correctly.
 
         Scenario:
-            Given test inputs and fixtures for long month name
-            When test_long_month_name executes the target flow
-            Then the expected outcome for long month name is confirmed.
+            Given extract_year_from_date("December 17, 2019")
+            When the function parses the input
+            Then it returns 2019.
 
         Boundaries:
-            - Focus: long month name
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; covers the "%B %d, %Y" strptime path (full month name)
 
         On failure, first check:
-            - Assertion details tied to long month name
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "%B %d, %Y" is still in the format list in book_utils.py
         """
         assert extract_year_from_date("December 17, 2019") == 2019
 
     def test_bare_year(self) -> None:
         """
-        [Unit] extract year from date: verifies bare year.
+        [Unit] extract_year_from_date: a four-digit year string returns that year as an int.
 
         Scenario:
-            Given test inputs and fixtures for bare year
-            When test_bare_year executes the target flow
-            Then the expected outcome for bare year is confirmed.
+            Given extract_year_from_date("1995")
+            When the function parses the input
+            Then it returns 1995.
 
         Boundaries:
-            - Focus: bare year
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; covers the bare-year "%Y" strptime path
 
         On failure, first check:
-            - Assertion details tied to bare year
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "%Y" is still in the format list in book_utils.py
         """
         assert extract_year_from_date("1995") == 1995
 
     def test_short_month_name(self) -> None:
         """
-        [Unit] extract year from date: verifies short month name.
+        [Unit] extract_year_from_date: abbreviated-month "Mon DD, YYYY" format extracts the year correctly.
 
         Scenario:
-            Given test inputs and fixtures for short month name
-            When test_short_month_name executes the target flow
-            Then the expected outcome for short month name is confirmed.
+            Given extract_year_from_date("Apr 23, 2021")
+            When the function parses the input
+            Then it returns 2021.
 
         Boundaries:
-            - Focus: short month name
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; covers the "%b %d, %Y" strptime path (abbreviated month name)
 
         On failure, first check:
-            - Assertion details tied to short month name
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "%b %d, %Y" is still in the format list in book_utils.py
         """
         assert extract_year_from_date("Apr 23, 2021") == 2021
 
     def test_month_and_year_only(self) -> None:
         """
-        [Unit] extract year from date: verifies month and year only.
+        [Unit] extract_year_from_date: "Month YYYY" (no day) format extracts the year correctly.
 
         Scenario:
-            Given test inputs and fixtures for month and year only
-            When test_month_and_year_only executes the target flow
-            Then the expected outcome for month and year only is confirmed.
+            Given extract_year_from_date("September 2016")
+            When the function parses the input
+            Then it returns 2016.
 
         Boundaries:
-            - Focus: month and year only
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; covers the "%B %Y" strptime path
 
         On failure, first check:
-            - Assertion details tied to month and year only
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "%B %Y" is still in the format list in book_utils.py
         """
         assert extract_year_from_date("September 2016") == 2016
 
     def test_embedded_iso_date_regex_path(self) -> None:
         """
-        [Unit] extract year from date: verifies embedded iso date regex path.
+        [Unit] extract_year_from_date: an ISO date embedded in surrounding text is extracted via the regex path.
 
         Scenario:
-            Given test inputs and fixtures for embedded iso date regex path
-            When test_embedded_iso_date_regex_path executes the target flow
-            Then the expected outcome for embedded iso date regex path is confirmed.
+            Given extract_year_from_date("Last updated on 2016-11-29")
+            When the function scans the string with the embedded-date regex
+            Then it returns 2016.
 
         Boundaries:
-            - Focus: embedded iso date regex path
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; exercises the regex branch, not the direct-format strptime loop
 
         On failure, first check:
-            - Assertion details tied to embedded iso date regex path
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether the embedded ISO-date regex or its handler was changed in book_utils.py
         """
         assert extract_year_from_date("Last updated on 2016-11-29") == 2016
 
     def test_na_returns_none(self) -> None:
         """
-        [Unit] extract year from date: verifies na returns none.
+        [Unit] extract_year_from_date: "N/A" returns None.
 
         Scenario:
-            Given test inputs and fixtures for na returns none
-            When test_na_returns_none executes the target flow
-            Then the expected outcome for na returns none is confirmed.
+            Given extract_year_from_date("N/A")
+            When the function attempts to parse the string
+            Then it returns None (no year can be extracted).
 
         Boundaries:
-            - Focus: na returns none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies graceful handling of a common sentinel value
 
         On failure, first check:
-            - Assertion details tied to na returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether "N/A" now matches a new format or is handled specially in book_utils.py
         """
         assert extract_year_from_date("N/A") is None
 
     def test_none_returns_none(self) -> None:
         """
-        [Unit] extract year from date: verifies none returns none.
+        [Unit] extract_year_from_date: None input returns None without raising.
 
         Scenario:
-            Given test inputs and fixtures for none returns none
-            When test_none_returns_none executes the target flow
-            Then the expected outcome for none returns none is confirmed.
+            Given extract_year_from_date(None)
+            When the function checks the input type
+            Then it returns None.
 
         Boundaries:
-            - Focus: none returns none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies the isinstance/type-guard at the start of the function
 
         On failure, first check:
-            - Assertion details tied to none returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether the None guard was removed or moved in book_utils.py
         """
         assert extract_year_from_date(None) is None
 
     def test_non_string_returns_none(self) -> None:
         """
-        [Unit] extract year from date: verifies non string returns none.
+        [Unit] extract_year_from_date: non-string input (e.g. int) returns None without raising.
 
         Scenario:
-            Given test inputs and fixtures for non string returns none
-            When test_non_string_returns_none executes the target flow
-            Then the expected outcome for non string returns none is confirmed.
+            Given extract_year_from_date(123)
+            When the function checks the input type
+            Then it returns None.
 
         Boundaries:
-            - Focus: non string returns none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies the type-guard catches non-string inputs
 
         On failure, first check:
-            - Assertion details tied to non string returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether the isinstance/type guard was removed or changed in book_utils.py
         """
         assert extract_year_from_date(123) is None
 
     def test_unparsable_string_returns_none(self) -> None:
         """
-        [Unit] extract year from date: verifies unparsable string returns none.
+        [Unit] extract_year_from_date: an unrecognized date string returns None.
 
         Scenario:
-            Given test inputs and fixtures for unparsable string returns none
-            When test_unparsable_string_returns_none executes the target flow
-            Then the expected outcome for unparsable string returns none is confirmed.
+            Given extract_year_from_date("not a date at all")
+            When all parsing attempts fail
+            Then the function returns None.
 
         Boundaries:
-            - Focus: unparsable string returns none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies the fall-through path when neither regex nor any strptime format matches
 
         On failure, first check:
-            - Assertion details tied to unparsable string returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether a new format was added that accidentally matches this string in book_utils.py
         """
         assert extract_year_from_date("not a date at all") is None
 
     def test_empty_string_returns_none(self) -> None:
         """
-        [Unit] extract year from date: verifies empty string returns none.
+        [Unit] extract_year_from_date: an empty string returns None.
 
         Scenario:
-            Given test inputs and fixtures for empty string returns none
-            When test_empty_string_returns_none executes the target flow
-            Then the expected outcome for empty string returns none is confirmed.
+            Given extract_year_from_date("")
+            When all parsing attempts fail
+            Then the function returns None.
 
         Boundaries:
-            - Focus: empty string returns none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; verifies the empty-string edge case in the fall-through path
 
         On failure, first check:
-            - Assertion details tied to empty string returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether an early-exit or special-case for empty strings was added or removed in book_utils.py
         """
         assert extract_year_from_date("") is None
 
@@ -517,22 +434,18 @@ class TestExtractYearFromDate:
         # ValueError branch, then falls through to the direct-format loop, which
         # also fails against this string, and returns None.
         """
-        [Unit] extract year from date: verifies regex matched but invalid date falls through to none.
+        [Unit] extract_year_from_date: a string matching the ISO-date regex shape but with invalid month/day falls through to None.
 
         Scenario:
-            Given test inputs and fixtures for regex matched but invalid date falls through to none
-            When test_regex_matched_but_invalid_date_falls_through_to_none executes the target flow
-            Then the expected outcome for regex matched but invalid date falls through to none is confirmed.
+            Given extract_year_from_date("Report 9999-99-99 filed") whose substring matches \\d{4}-\\d{2}-\\d{2}
+            When the embedded-date regex block raises ValueError (invalid month/day out of range), then the format loop also fails
+            Then the function returns None.
 
         Boundaries:
-            - Focus: regex matched but invalid date falls through to none
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure Python; exercises the ValueError branch inside the regex block and the final fall-through
 
         On failure, first check:
-            - Assertion details tied to regex matched but invalid date falls through to none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether the ValueError handler in the regex block now returns a value instead of falling through in book_utils.py
         """
         assert extract_year_from_date("Report 9999-99-99 filed") is None
 
@@ -545,22 +458,21 @@ class TestExtractYearFromDate:
         # module-level `datetime` name itself for a stand-in exposing only strptime,
         # which is all this code path calls it for.
         """
-        [Local] extract year from date: verifies non valueerror from strptime is caught by outer handler.
+        [Local] extract_year_from_date: a non-ValueError exception from strptime is caught by the outer handler and returns None.
 
         Scenario:
-            Given test inputs and fixtures for non valueerror from strptime is caught by outer handler
-            When test_non_valueerror_from_strptime_is_caught_by_outer_handler executes the target flow
-            Then the expected outcome for non valueerror from strptime is caught by outer handler is confirmed.
+            Given the module-level datetime name replaced with a stub whose strptime raises RuntimeError
+            And extract_year_from_date("1995") called (no embedded date, goes straight to the format loop)
+            When the stub raises RuntimeError on the first strptime call
+            Then the outer except-Exception handler catches it and the function returns None.
 
         Boundaries:
-            - Focus: non valueerror from strptime is caught by outer handler
-            - Fixtures/params: monkeypatch
-            - Scope: assertions and setup in this test case only
+            - Monkeypatches bookscraper.book_utils.datetime (an immutable C type that cannot be patched in-place)
+            - Covers only the outer handler, not the ValueError path
 
         On failure, first check:
-            - Assertion details tied to non valueerror from strptime is caught by outer handler
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by extract year from date
+            - Whether the outer except-Exception handler was narrowed to except-ValueError in book_utils.py
+            - Whether "1995" now hits the regex path before the format loop, bypassing the patched datetime
         """
         import bookscraper.book_utils as book_utils_module
 
@@ -581,22 +493,19 @@ class TestCheckLocalWritePermission:
 
     def test_success_cleans_up_test_file(self, tmp_path) -> None:
         """
-        [Unit] check local write permission: verifies success cleans up test file.
+        [Unit] check_local_write_permission: returns True for a writable directory and removes the temp probe file.
 
         Scenario:
-            Given test inputs and fixtures for success cleans up test file
-            When test_success_cleans_up_test_file executes the target flow
-            Then the expected outcome for success cleans up test file is confirmed.
+            Given a writable tmp_path directory
+            When check_local_write_permission is called with that path
+            Then it returns True and the "test_write_permission.tmp" probe file no longer exists.
 
         Boundaries:
-            - Focus: success cleans up test file
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Real file I/O via tmp_path; no mocking
+            - Verifies both the return value and the cleanup behavior
 
         On failure, first check:
-            - Assertion details tied to success cleans up test file
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check local write permission
+            - Whether the probe filename or the cleanup logic was changed in book_utils.py
         """
         result = check_local_write_permission(str(tmp_path))
         assert result is True
@@ -604,22 +513,18 @@ class TestCheckLocalWritePermission:
 
     def test_oserror_returns_false(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] check local write permission: verifies oserror returns false.
+        [Local] check_local_write_permission: an OSError from open() causes the function to return False.
 
         Scenario:
-            Given test inputs and fixtures for oserror returns false
-            When test_oserror_returns_false executes the target flow
-            Then the expected outcome for oserror returns false is confirmed.
+            Given builtins.open patched to raise OSError("disk full")
+            When check_local_write_permission is called
+            Then it returns False (the OSError is caught).
 
         Boundaries:
-            - Focus: oserror returns false
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - Monkeypatches builtins.open; tests only the OSError branch
 
         On failure, first check:
-            - Assertion details tied to oserror returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check local write permission
+            - Whether the OSError handler was removed or narrowed in check_local_write_permission in book_utils.py
         """
 
         def raise_oserror(*args, **kwargs):
@@ -631,22 +536,18 @@ class TestCheckLocalWritePermission:
 
     def test_generic_exception_returns_false(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] check local write permission: verifies generic exception returns false.
+        [Local] check_local_write_permission: a non-OSError exception from open() also causes the function to return False.
 
         Scenario:
-            Given test inputs and fixtures for generic exception returns false
-            When test_generic_exception_returns_false executes the target flow
-            Then the expected outcome for generic exception returns false is confirmed.
+            Given builtins.open patched to raise RuntimeError("unexpected")
+            When check_local_write_permission is called
+            Then it returns False (the generic except catches it).
 
         Boundaries:
-            - Focus: generic exception returns false
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - Monkeypatches builtins.open; tests the broad except-Exception fallback path
 
         On failure, first check:
-            - Assertion details tied to generic exception returns false
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by check local write permission
+            - Whether the broad exception handler was narrowed to OSError-only in check_local_write_permission in book_utils.py
         """
 
         def raise_runtime_error(*args, **kwargs):
