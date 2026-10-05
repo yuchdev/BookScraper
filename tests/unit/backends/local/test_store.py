@@ -10,6 +10,7 @@ the real repo-root books.json.
 
 import json
 import os
+from typing import Any
 
 import pytest
 
@@ -18,12 +19,12 @@ from bookscraper.backends.local.store import LocalStoreCorruptError
 from bookscraper.backends.storage import SaveSummary
 
 
-def _read(path):
+def _read(path) -> Any:
     """Read and JSON-parse the store file at ``path``."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _temp_leftovers(store_path):
+def _temp_leftovers(store_path) -> list[str]:
     """In-flight atomic-write temp files (``.books.json.<random>``) left in the dir."""
     prefix = f".{store_path.name}."
     return [p.name for p in store_path.parent.iterdir() if p.name.startswith(prefix)]

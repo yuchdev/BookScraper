@@ -9,6 +9,7 @@ each adapter returns exactly what its collaborator returned.
 
 import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -30,7 +31,7 @@ _TEST_KEY_PEM = _TEST_KEY.private_bytes(
 )
 
 
-def _write_combined_cert(path, expiry: datetime):
+def _write_combined_cert(path, expiry: datetime) -> Path:
     """Write a throwaway combined key+cert PEM expiring at ``expiry``; return the path."""
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "bookscraper-test")])
     cert = (

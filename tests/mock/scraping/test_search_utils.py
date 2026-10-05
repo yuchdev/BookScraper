@@ -8,6 +8,8 @@ near those tests for exactly which deep DOM branches are and are not exercised.
 
 import copy
 import json
+from contextlib import AbstractContextManager
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -33,7 +35,7 @@ from .playwright_fakes import (
 # ---------------------------------------------------------------------------
 
 
-def _search_book(book_id, title="A Book", slug="a-book", author_id="a1"):
+def _search_book(book_id, title="A Book", slug="a-book", author_id="a1") -> dict[str, Any]:
     """Build a minimal Leanpub search-result book dict."""
     return {
         "id": book_id,
@@ -42,7 +44,7 @@ def _search_book(book_id, title="A Book", slug="a-book", author_id="a1"):
     }
 
 
-def _search_payload(books, author_name="Jane"):
+def _search_payload(books, author_name="Jane") -> dict[str, Any]:
     """Build a Leanpub search API response payload containing the given books."""
     return {
         "data": books,
@@ -52,13 +54,13 @@ def _search_payload(books, author_name="Jane"):
     }
 
 
-def _patch_httpx(responses=None, get_side_effect=None):
+def _patch_httpx(responses=None, get_side_effect=None) -> AbstractContextManager[Any]:
     """Context manager: patch httpx.AsyncClient with a FakeResponse sequence."""
     factory, _client = build_async_client_factory(responses=responses, get_side_effect=get_side_effect)
     return patch.object(search_utils.httpx, "AsyncClient", factory)
 
 
-def _no_sleep():
+def _no_sleep() -> AbstractContextManager[Any]:
     """Context manager: patch asyncio.sleep to a no-op for speed."""
     return patch.object(search_utils.asyncio, "sleep", new=AsyncMock())
 

@@ -10,6 +10,7 @@ import inspect
 import json as _json
 import re as _re
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -1190,7 +1191,7 @@ def test_format_check_only_usage_line_names_no_ai_no_key() -> None:
 # --------------------------------------------------------------------------- #
 # format_json_report (subtask 08) - schema, current_matches, AIS-12, AIS-13
 # --------------------------------------------------------------------------- #
-def _json_inputs():
+def _json_inputs() -> tuple[Any, ...]:
     """Shared normal-mode inputs: ISBN13 changed+inconsistent+current-broken, BOOK_TITLE unchanged."""
     site = "amazon"
     labels = ["u0", "u1"]

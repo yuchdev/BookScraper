@@ -523,7 +523,7 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
 
     captured = []
 
-    def fake_ctor(uri, **kwargs):
+    def fake_ctor(uri, **kwargs) -> MagicMock:
         """Capture (uri, kwargs) and return a fresh MagicMock as the client."""
         captured.append((uri, kwargs))
         return MagicMock(name="client")

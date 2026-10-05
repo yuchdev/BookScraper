@@ -7,6 +7,7 @@ isolated_config so the real ~/.bookscrapper is never read or written.
 import json
 import os
 import pathlib
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import httpx
@@ -604,7 +605,7 @@ def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(at
 # rotate_certificate pruning integration (subtask 07)
 # --------------------------------------------------------------------------- #
 @pytest.fixture
-def prune_guard(isolated_config):
+def prune_guard(isolated_config) -> Path:
     """isolated_config plus a hard guard: a prune-through-rotation test must never run against the
     real ~/.bookscrapper, whose X509-cert-*.pem files hold live private keys."""
     assert cert_rotation.config.CONFIG_DIR != pathlib.Path.home() / ".bookscrapper"

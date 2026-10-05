@@ -39,6 +39,7 @@ machine" is a distinct environment issue from the Atlas xfail and skips the x509
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -67,7 +68,7 @@ def _write_settings(tmp_path: Path, data: dict) -> Path:
     return settings_path
 
 
-def _build_scenario(scenario_name: str):
+def _build_scenario(scenario_name: str) -> tuple[Any, ...]:
     """Returns (settings_data, env_overrides, expected_uri, expected_cert) for the given
     shape, pulling live credentials via require_env (skips if absent) and the production
     X.509 cert via config.get_default_tls_cert_file (skips the x509 cases if absent)."""

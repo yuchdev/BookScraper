@@ -5,6 +5,8 @@ asyncio.sleep. No network, no browser, no disk.
 """
 
 import json
+from contextlib import AbstractContextManager
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -38,7 +40,7 @@ def _leanpub_payload(
     about="<p>Hello</p><ul><li>Item one</li><li>Item two</li></ul>",
     last_published_at="2023-05-01T00:00:00Z",
     slug="example-book",
-):
+) -> dict[str, Any]:
     """Build a minimal Leanpub JSON detail payload for scrape-details tests."""
     return {
         "data": {
@@ -58,13 +60,13 @@ def _leanpub_payload(
     }
 
 
-def _patch_httpx(responses=None, get_side_effect=None):
+def _patch_httpx(responses=None, get_side_effect=None) -> AbstractContextManager[Any]:
     """Patch scrape_details.httpx.AsyncClient; returns the patch context manager."""
     factory, _client = build_async_client_factory(responses=responses, get_side_effect=get_side_effect)
     return patch.object(scrape_details.httpx, "AsyncClient", factory)
 
 
-def _amazon_page(title="Great Python Book - Amazon"):
+def _amazon_page(title="Great Python Book - Amazon") -> FakePage:
     """A FakePage configured for a successful amazon detail scrape."""
     locators = {
         "#productTitle": FakeLocator("  Great Python Book  "),

@@ -45,12 +45,12 @@ def get_default_tls_cert_file(config_dir: Path = PRODUCTION_CONFIG_DIR) -> Optio
 _URI_PATTERN = re.compile(r"^mongodb(\+srv)?:\/\/(([^:]+):([^@]+)@)?([^\/\?]+)(\/([^\?]*))?(\?.*)?$")
 
 
-def validate_mongodb_uri(uri):
+def validate_mongodb_uri(uri) -> bool:
     """Validates the basic shape of a MongoDB URI (SCRAM or X.509)."""
     return bool(uri) and bool(_URI_PATTERN.match(uri))
 
 
-def mask_uri(uri):
+def mask_uri(uri) -> str:
     """Masks embedded username:password so secrets never hit stdout/logs."""
     if "@" not in uri:
         return uri
@@ -64,7 +64,7 @@ def print_separator():
     print("-" * 80)
 
 
-def get_mongodb_uri(env_var_name):
+def get_mongodb_uri(env_var_name) -> Optional[str]:
     """Resolves a MongoDB URI from the given environment variable (set via .env or the
     environment directly) - no fallback file, so a missing/misspelled var fails loudly
     rather than silently reading something else."""
@@ -75,7 +75,7 @@ def get_mongodb_uri(env_var_name):
     return None
 
 
-def get_tls_cert_file(env_var_name="TLS_CERT_FILE", config_dir: Path = PRODUCTION_CONFIG_DIR):
+def get_tls_cert_file(env_var_name="TLS_CERT_FILE", config_dir: Path = PRODUCTION_CONFIG_DIR) -> Optional[str]:
     """
     Resolves the TLS client certificate path: env var first, then the newest
     X509-cert-*.pem under the production config dir. Shared with production on purpose -
@@ -99,7 +99,7 @@ def get_tls_cert_file(env_var_name="TLS_CERT_FILE", config_dir: Path = PRODUCTIO
     return None
 
 
-def run_connection_test(mongodb_uri, tls_cert_file=None):
+def run_connection_test(mongodb_uri, tls_cert_file=None) -> bool:
     """Attempts a MongoDB connection and pings the server. Returns True/False."""
     masked_uri = mask_uri(mongodb_uri)
     print(f"MongoDB URI: {masked_uri}")

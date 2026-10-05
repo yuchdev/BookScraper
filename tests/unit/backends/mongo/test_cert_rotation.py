@@ -10,6 +10,7 @@ import pathlib
 import re
 import stat
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from cryptography import x509
@@ -723,7 +724,7 @@ def test_cert_expiry_warning_parse_failure_is_warning_not_raise(tmp_path) -> Non
 # prune_old_certificates
 # --------------------------------------------------------------------------- #
 @pytest.fixture
-def prune_config(isolated_config):
+def prune_config(isolated_config) -> Path:
     """isolated_config plus a hard safety guard: refuse to run a prune test whose CONFIG_DIR was
     not redirected away from the real ~/.bookscrapper. A real prune would delete live private
     keys, so an unpatched CONFIG_DIR must fail the test, never fall through to the real directory.

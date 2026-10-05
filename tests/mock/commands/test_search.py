@@ -7,6 +7,7 @@ CSV helper here is the DictWriter-based one (distinct from scrape_urls.py's).
 
 import csv
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from bookscraper.backends.storage import SaveSummary
@@ -168,12 +169,12 @@ def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(t
 
     real_writer_factory = csv.DictWriter
 
-    def _make_writer(csvfile, **kwargs):
+    def _make_writer(csvfile, **kwargs) -> Any:
         """Build a DictWriter whose writerow raises csv.Error for the 'bad' URL."""
         writer = real_writer_factory(csvfile, **kwargs)
         original_writerow = writer.writerow
 
-        def _writerow(row):
+        def _writerow(row) -> Any:
             """Raise csv.Error for the bad URL, else delegate to the real writerow."""
             if row.get("url") == "https://leanpub.com/bad":
                 # A non-ValueError csv.Error hits the inner per-row guard; the loop

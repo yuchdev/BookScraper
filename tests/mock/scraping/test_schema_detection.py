@@ -657,7 +657,7 @@ async def test_check_current_only_still_evaluates_has_text_current_selector(monk
 # --------------------------------------------------------------------------- #
 # detect_schema (full pipeline)
 # --------------------------------------------------------------------------- #
-def _amazon_pages():
+def _amazon_pages() -> tuple[FakePage, FakePage]:
     """Two sample pages: BOOK_TITLE matches on both (consistent); TAGS matches only the
     first (inconsistent, must be flagged)."""
     page1 = FakePage(
@@ -922,7 +922,7 @@ async def test_detect_schema_no_urls() -> None:
 # --------------------------------------------------------------------------- #
 # validate_search_across_samples (card-relative fractions)
 # --------------------------------------------------------------------------- #
-def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_sel="NEXT", content="<html></html>"):
+def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_sel="NEXT", content="<html></html>") -> FakePage:
     """A FakePage for a search-results page: ``n_cards`` cards, ``n_title`` of which carry a
     card-relative title element, plus a page-level next-page selector."""
     cards = []
@@ -933,7 +933,7 @@ def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_
     return FakePage(locators=locators, content=content)
 
 
-def _search_proposals():
+def _search_proposals() -> dict[str, dict[str, str]]:
     """Build a minimal search-proposal dict for search-validation tests."""
     return {
         "SEARCH_BOOK_CARD": {"selector": "CARD", "rationale": "card container"},
@@ -1108,7 +1108,7 @@ async def test_search_validation_bad_card_selector_does_not_abort() -> None:
     class _RaisingAllPage:
         """Fake Playwright page whose locator.all() always raises PlaywrightError, simulating a broken card selector."""
 
-        def locator(self, selector):
+        def locator(self, selector) -> MagicMock:
             """Return a MagicMock locator whose .all() raises and .count() returns 0."""
             loc = MagicMock()
             loc.all = AsyncMock(side_effect=PlaywrightError("all boom"))
@@ -1702,7 +1702,7 @@ async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_p
 # --------------------------------------------------------------------------- #
 # detect_schema - JSON format + check-current-only + drift exit codes (subtask 08)
 # --------------------------------------------------------------------------- #
-def _tiny_site(selector="#t"):
+def _tiny_site(selector="#t") -> dict[str, dict[str, str]]:
     """A one-field site_constants entry so a FakePage can make every current selector match/miss."""
     return {"tiny": {"BASE_URL": "https://x", "BOOK_TITLE": selector}}
 

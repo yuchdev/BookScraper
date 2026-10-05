@@ -9,6 +9,8 @@ or bookscraper.backends.local.store's real paths directly.
 """
 
 import os
+from collections.abc import MutableMapping
+from pathlib import Path
 
 import pytest
 
@@ -46,7 +48,7 @@ def update_goldens(request: pytest.FixtureRequest) -> bool:
 
 
 @pytest.fixture
-def isolated_config(monkeypatch, tmp_path):
+def isolated_config(monkeypatch, tmp_path) -> Path:
     """Points bookscraper.backends.mongo.config's CONFIG_DIR/SETTINGS_FILE at a tmp_path
     instead of the real ~/.bookscrapper, so get_default_tls_cert_file()'s glob and any
     relative cert-path resolution never touch real files."""
@@ -59,7 +61,7 @@ def isolated_config(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def isolated_local_store(monkeypatch, tmp_path):
+def isolated_local_store(monkeypatch, tmp_path) -> Path:
     """Points bookscraper.backends.local.store's LOCAL_STORE_FILE at a tmp_path instead
     of the repo-root books.json."""
 
@@ -69,7 +71,7 @@ def isolated_local_store(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def no_real_env(monkeypatch):
+def no_real_env(monkeypatch) -> MutableMapping[str, str]:
     """Strips real MongoDB credential env vars for the test's duration, so a prior
     load_dotenv() call (e.g. from importing book_utils) can't leak real values into a
     test that expects a clean environment."""

@@ -6,6 +6,7 @@ books.json is ever touched because resolve_store_backend is always patched.
 """
 
 import csv
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -205,7 +206,7 @@ def test_save_other_links_open_failure_is_swallowed(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # helpers for run()
 # --------------------------------------------------------------------------- #
-def _write_csv(tmp_path, urls, header: str = "url"):
+def _write_csv(tmp_path, urls, header: str = "url") -> Path:
     """Write a CSV fixture file under tmp_path for scrape-urls tests."""
     target = tmp_path / "urls.csv"
     lines = [header, *urls]
@@ -213,7 +214,7 @@ def _write_csv(tmp_path, urls, header: str = "url"):
     return target
 
 
-def _make_playwright_factory():
+def _make_playwright_factory() -> tuple[MagicMock, MagicMock]:
     """Builds an async_playwright() stand-in.
 
     Returns (factory, browser). `async with factory() as p` yields a page-factory

@@ -10,6 +10,7 @@ that cannot come back. No network, no real ~/.bookscrapper - tmp_path only.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -17,13 +18,13 @@ from tests.integration import mongo_test_helpers
 
 
 @pytest.fixture
-def cert_dir(tmp_path, monkeypatch):
+def cert_dir(tmp_path, monkeypatch) -> Path:
     """An empty stand-in for ~/.bookscrapper, with TLS_CERT_FILE cleared."""
     monkeypatch.delenv("TLS_CERT_FILE", raising=False)
     return tmp_path
 
 
-def _make_cert(directory, name: str, mtime: float):
+def _make_cert(directory, name: str, mtime: float) -> Path:
     """Create a stub PEM file in ``directory`` with the given name and mtime."""
     path = directory / name
     path.write_text("-----BEGIN CERTIFICATE-----\n")

@@ -8,6 +8,8 @@ its client through the single factory re-exported by ``database``, so tests patc
 """
 
 import logging
+from contextlib import AbstractContextManager
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,7 +26,7 @@ def _neutralize_dotenv(monkeypatch):
     yield
 
 
-def _patch_resolve(return_value=None, side_effect=None):
+def _patch_resolve(return_value=None, side_effect=None) -> AbstractContextManager[Any]:
     """Patch config.resolve_mongo_connection for check_mongodb_connection tests."""
     return patch(
         "bookscraper.backends.mongo.config.resolve_mongo_connection",
@@ -33,7 +35,7 @@ def _patch_resolve(return_value=None, side_effect=None):
     )
 
 
-def _patch_build(return_value=None, side_effect=None):
+def _patch_build(return_value=None, side_effect=None) -> AbstractContextManager[Any]:
     """Patch database.build_mongo_client for check_mongodb_connection tests."""
     return patch(
         "bookscraper.backends.mongo.database.build_mongo_client",
@@ -42,7 +44,7 @@ def _patch_build(return_value=None, side_effect=None):
     )
 
 
-def _patch_ping(side_effect=None):
+def _patch_ping(side_effect=None) -> AbstractContextManager[Any]:
     """Patch database.ping for check_mongodb_connection tests."""
     return patch("bookscraper.backends.mongo.database.ping", side_effect=side_effect)
 
