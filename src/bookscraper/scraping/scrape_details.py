@@ -109,7 +109,7 @@ async def _text(page: Page, selector: str, *, timeout_ms: int, first: bool = Tru
     try:
         text = await locator.text_content(timeout=timeout_ms)
     except PlaywrightError as exc:
-        module_logger.debug(f"No text for selector {selector!r}: {exc}")
+        module_logger.debug(f"No text for selector {selector!r} on {page.url}: {exc}")
         return None
     return text.strip() if text else None
 
@@ -133,7 +133,7 @@ async def _attr(page: Page, selector: str, name: str, *, timeout_ms: int, first:
     try:
         value = await locator.get_attribute(name, timeout=timeout_ms)
     except PlaywrightError as exc:
-        module_logger.debug(f"No attribute {name!r} for selector {selector!r}: {exc}")
+        module_logger.debug(f"No attribute {name!r} for selector {selector!r} on {page.url}: {exc}")
         return None
     return value.strip() if value else None
 
@@ -154,13 +154,13 @@ async def _collect_texts(page: Page, selector: str, *, timeout_ms: int) -> list[
     try:
         elements = await page.locator(selector).all()
     except PlaywrightError as exc:
-        module_logger.debug(f"No matches for selector {selector!r}: {exc}")
+        module_logger.debug(f"No matches for selector {selector!r} on {page.url}: {exc}")
         return texts
     for element in elements:
         try:
             text = await element.text_content(timeout=timeout_ms)
         except PlaywrightError as exc:
-            module_logger.debug(f"Skipping unreadable element for selector {selector!r}: {exc}")
+            module_logger.debug(f"Skipping unreadable element for selector {selector!r} on {page.url}: {exc}")
             continue
         if text and text.strip():
             texts.append(text.strip())
@@ -399,7 +399,7 @@ async def scrape_book(
     # Leanpub is a pure httpx/JSON path - dispatch it before any Playwright page is created,
     # so it never opens (and therefore never leaks) a browser page.
     if site == "leanpub":
-        print("Leanpub book")
+        module_logger.debug(f"Leanpub book; using the JSON API for {url}.")
         return await get_leanpub_book_details(url)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -536,7 +536,7 @@ async def scrape_book(
                     asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
                     if asin_match:
                         book_details["asin"] = asin_match.group(1)
-                        module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
+                        module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']} ({url}).")
 
                 # Description (optionally behind a "Read more" expander, else a fallback selector).
                 description_selector = _selector(selectors, "DESCRIPTION")
@@ -581,7 +581,7 @@ async def scrape_book(
                         return ScrapeResult(ScrapeStatus.DUPLICATE, url=full_url, site=site, attempts=attempt)
 
                 # If all successful and not a duplicate:
-                module_logger.info(f"Successfully scraped details for {book_details['title']}")
+                module_logger.info(f"Successfully scraped details for {book_details['title']} ({url}).")
                 return ScrapeResult(ScrapeStatus.SUCCESS, url=full_url, site=site, book=book_details, attempts=attempt)
 
         except Exception as exc:  # noqa: X002 - single retry/fail boundary - every per-attempt exception is classified by _is_transient_error and then either retried or converted to a FAILED/TIMEOUT ScrapeResult so one URL can never raise out of scrape_book and abort the asyncio.gather batch

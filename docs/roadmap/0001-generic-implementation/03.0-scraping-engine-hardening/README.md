@@ -32,7 +32,7 @@ stay attributable.
 | 03 | [Missing-field resilience & retry policy](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/03-missing-field-resilience.md) | ✅ Complete    | 04     |
 | 04 | [Wire unused selectors (tags, fallbacks, expanders)](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/04-wire-unused-selectors.md) | ✅ Complete    | - |
 | 05 | [Leanpub API detail hardening](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/05-leanpub-api-detail-hardening.md)     | ✅ Complete    | -          |
-| 06 | [Replace bare print() with print_log / logger](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/06-replace-bare-print.md) | ⬜ Not started | -       |
+| 06 | [Replace bare print() with print_log / logger](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/06-replace-bare-print.md) | ✅ Complete    | -       |
 
 ## Key constraints
 
