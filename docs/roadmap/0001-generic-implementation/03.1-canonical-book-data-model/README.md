@@ -1,7 +1,7 @@
 # Task 03.1 - Canonical Book Data Model
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress
 **Category:** feature | **Priority:** P1
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
 
@@ -26,7 +26,7 @@ normalizes ISBNs and dates, versions the schema, validates at the save boundary,
 
 | #  | Document                                                                  | Status         | Blocks     |
 |----|---------------------------------------------------------------------------|----------------|------------|
-| 01 | [BookRecord schema](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/01-book-record-schema.md)                       | ⬜ Not started | 02, 03, 04 |
+| 01 | [BookRecord schema](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/01-book-record-schema.md)                       | ✅ Complete    | 02, 03, 04 |
 | 02 | [ISBN normalization & validation](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/02-isbn-normalization.md)         | ⬜ Not started | 04         |
 | 03 | [Date normalization](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/03-date-normalization.md)                      | ⬜ Not started | 04         |
 | 04 | [Per-site normalizers](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/04-per-site-normalizers.md)                  | ⬜ Not started | 05, 06     |

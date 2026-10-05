@@ -225,6 +225,13 @@ requested backend (MongoDB ping, or local write-permission test) and exits the p
 above). `backends/__init__.py` re-exports `StorageBackend`, `MongoBackend`, `JsonBackend`, and
 `resolve_store_backend` for `from ..backends import ...` elsewhere in the package.
 
+Both backends store one canonical document shape — `src/bookscraper/models.py`'s schema-2 `BookRecord`
+(`@dataclass(frozen=True, slots=True)`, `SCHEMA_VERSION = 2`, stdlib only, no pydantic), whose `to_document()` is the
+exact dict stored and `from_document()` its strict inverse. Its field table, a worked example per site, and the v1→v2
+mapping live in [`docs/scraping/book-record-schema.md`](/docs/scraping/book-record-schema.md). As of task 03.1
+subtask 01 the model and docs exist but scrapers and backends still read/write the v1 shapes; subtasks 04/05 wire
+`BookRecord` into the scrape and save paths.
+
 `save_books()` returns a frozen `SaveSummary` dataclass (defined in the leaf module `backends/save_summary.py`, so
 both backends can import it at module level without a cycle, and re-exported by `storage.py`) — the
 identical shape from both backends — with `inserted` / `duplicates` / `errors` counts and a `total` property. This
