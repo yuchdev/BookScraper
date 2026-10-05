@@ -1,7 +1,7 @@
 # 02 - ISBN normalization & validation
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-book-record-schema.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/01-book-record-schema.md)
 **Role:** Python Expert
 
