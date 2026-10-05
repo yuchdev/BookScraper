@@ -586,3 +586,30 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path):
     backend.save_books.assert_called_once_with(books)
     backend.close.assert_called_once_with()
     browser.close.assert_awaited_once()
+
+
+def test_failed_and_other_link_csvs_neutralize_formula_cells(tmp_path):
+    """
+    [Local] scrape urls: verifies both diagnostic CSV writers quote formula-leading cells.
+
+    Scenario:
+        Given a failed row whose error and an other-link whose URL start with spreadsheet formula triggers
+        When save_failed_urls_to_csv and save_other_links_to_csv write their files
+        Then those cells are written with a leading single quote and ordinary cells are unchanged.
+
+    Boundaries:
+        - Covers failed_books.csv and other_links.csv; the search variant has its own test
+
+    On failure, first check:
+        - csv_safe_cell is applied to every cell in both writers in commands/scrape_urls.py
+    """
+    failed = tmp_path / "failed_books.csv"
+    save_failed_urls_to_csv([("https://x/1", "FAILED", "=cmd|' /C calc'!A0")], filename=str(failed))
+    other = tmp_path / "other_links.csv"
+    save_other_links_to_csv(["@SUM(1)", "https://example.com/ok"], filename=str(other))
+
+    with open(failed, encoding="utf-8", newline="") as fh:
+        assert list(csv.reader(fh))[1] == ["https://x/1", "FAILED", "'=cmd|' /C calc'!A0"]
+    with open(other, encoding="utf-8", newline="") as fh:
+        assert [row[0] for row in csv.reader(fh)][1:] == ["'@SUM(1)", "https://example.com/ok"]
+

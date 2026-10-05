@@ -7,10 +7,13 @@ same effect. The MongoDB connection pre-flight now lives in backends/mongo/datab
 (see tests/mock/backends/mongo/test_connection_check.py).
 """
 
+import pytest
+
 import bookscraper.book_utils as book_utils_module
 from bookscraper.book_utils import (
     atomic_write_bytes,
     check_local_write_permission,
+    csv_safe_cell,
     extract_year_from_date,
     hash_book,
 )
@@ -590,3 +593,39 @@ class TestAtomicWriteBytesPermissions:
 
         atomic_write_bytes(target, b"[2]", mode=0o600)
         assert target.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("=HYPERLINK(1)", "'=HYPERLINK(1)"),
+        ("+1", "'+1"),
+        ("-1", "'-1"),
+        ("@SUM(A1)", "'@SUM(A1)"),
+        ("\tx", "'\tx"),
+        ("\rx", "'\rx"),
+        ("https://leanpub.com/a", "https://leanpub.com/a"),
+        ("TIMEOUT", "TIMEOUT"),
+        ("", ""),
+        (None, ""),
+    ],
+)
+def test_csv_safe_cell_neutralizes_formula_prefixes(value, expected):
+    """
+    [Unit] csv safe cell: verifies spreadsheet formula triggers are quoted and plain text passes through.
+
+    Scenario:
+        Given a cell value that starts with =, +, -, @, a tab or a carriage return, or an ordinary value
+        When csv_safe_cell converts it
+        Then trigger-leading values gain a leading single quote and everything else is unchanged (None is empty).
+
+    Boundaries:
+        - Only the first character is inspected (CWE-1236 formula injection)
+        - Pure function; no file is written
+
+    On failure, first check:
+        - _CSV_FORMULA_PREFIXES in book_utils.py
+        - Whether a new caller needs a non-string value rendered differently
+    """
+    assert csv_safe_cell(value) == expected
+

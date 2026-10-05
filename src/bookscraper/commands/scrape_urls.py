@@ -12,7 +12,7 @@ import pandas as pd
 from playwright.async_api import async_playwright
 
 from ..backends import resolve_store_backend
-from ..book_utils import logger, print_log
+from ..book_utils import csv_safe_cell, logger, print_log
 from ..scraping.parameters import HEADLESS_BROWSER
 from ..scraping.results import ScrapeStatus
 from ..scraping.scrape_details import scrape_book
@@ -37,7 +37,7 @@ def save_failed_urls_to_csv(
             writer = csv.writer(csvfile)
             writer.writerow(["url", "status", "error"])  # Add status + error header
             for url, status, error in failed_urls_with_status:
-                writer.writerow([url, status, error])
+                writer.writerow([csv_safe_cell(url), csv_safe_cell(status), csv_safe_cell(error)])
         print_log(
             f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}",
             "success",
@@ -66,7 +66,7 @@ def save_other_links_to_csv(other_links: list[str], filename: str = "other_links
             writer = csv.writer(csvfile)
             writer.writerow(["url"])
             for url in other_links:
-                writer.writerow([url])
+                writer.writerow([csv_safe_cell(url)])
         print_log(
             f"Successfully saved {len(other_links)} 'other' links to {filename}",
             "success",

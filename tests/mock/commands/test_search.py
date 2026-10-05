@@ -6,6 +6,7 @@ CSV helper here is the DictWriter-based one (distinct from scrape_urls.py's).
 """
 
 import csv
+import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -609,3 +610,124 @@ def test_search_module_uses_real_leanpub_only_sites():
         - scraping/parameters.py's SITES_TO_SCRAPE and any test that patches SEARCH_QUERIES.
     """
     assert search.SITES_TO_SCRAPE == ["leanpub"]
+
+
+def test_save_failed_urls_keeps_rows_that_carry_a_title(tmp_path):
+    """
+    [Local] search: verifies real failure records (which carry a title) are written and formula cells neutralized.
+
+    Scenario:
+        Given failure records shaped like run() builds them (url/site/title/error) with one '=' leading title
+        When save_failed_urls_to_csv writes the file
+        Then every row is present with its title column and the formula-leading cell is prefixed with a quote.
+
+    Boundaries:
+        - Regression for the DictWriter fieldnames bug that silently dropped every row carrying a title key
+
+    On failure, first check:
+        - The fieldnames list in save_failed_urls_to_csv covers every key run() puts in a failure record
+        - csv_safe_cell is applied to each value before writerow
+    """
+    target = tmp_path / "failed_urls.csv"
+    items = [
+        {"url": "https://leanpub.com/a", "site": "leanpub", "title": "=HYPERLINK(1)", "error": "HTTP 500"},
+        {"url": "https://leanpub.com/b", "site": "leanpub", "title": "Book B", "error": "invalid JSON"},
+    ]
+    save_failed_urls_to_csv(items, filename=str(target))
+
+    with open(target, encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+
+    assert [r["url"] for r in rows] == ["https://leanpub.com/a", "https://leanpub.com/b"]
+    assert [r["title"] for r in rows] == ["'=HYPERLINK(1)", "Book B"]
+    assert [r["error"] for r in rows] == ["HTTP 500", "invalid JSON"]
+
+
+async def test_run_saves_books_off_the_event_loop_thread():
+    """
+    [Local] search: verifies save_books runs in a worker thread rather than on the event loop.
+
+    Scenario:
+        Given one fresh Leanpub book whose detail scrape succeeds and a backend whose save_books records its thread
+        When run() is called
+        Then save_books is called once on a thread other than the one running the event loop.
+
+    Boundaries:
+        - save_books is blocking (MongoDB insert_many or the JSON store's fsync) so it must use asyncio.to_thread
+
+    On failure, first check:
+        - The asyncio.to_thread(storage_backend.save_books, ...) call near the end of run() in commands/search.py
+    """
+    args = SimpleNamespace(store_backend="json")
+    loop_thread = threading.get_ident()
+    save_threads = []
+
+    def _save_books(books) -> SaveSummary:
+        """Record the calling thread and report one insert."""
+        save_threads.append(threading.get_ident())
+        return SaveSummary(inserted=len(books), duplicates=0, errors=0)
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.save_books = MagicMock(side_effect=_save_books)
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS, url="https://leanpub.com/x", site="leanpub", book={"title": "X", "hash": "h"}
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[_leanpub_book("x", "X")])),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    assert len(save_threads) == 1
+    assert save_threads[0] != loop_thread
+
+
+async def test_run_skips_search_result_without_slug():
+    """
+    [Local] search: verifies a Leanpub search result with no slug is skipped instead of crashing the run.
+
+    Scenario:
+        Given search results where one book has slug None and the other a real slug
+        When run() is called
+        Then only the book with a slug is checked for duplicates and detail-scraped.
+
+    Boundaries:
+        - Pre-scrape loop only; the API path for a real slug is covered by the dedup test
+
+    On failure, first check:
+        - The empty-slug guard before the SINGLE_BOOK_API URL is built in commands/search.py
+    """
+    args = SimpleNamespace(store_backend="json")
+    no_slug = _leanpub_book("ignored", "No Slug")
+    no_slug["slug"] = None
+    good = _leanpub_book("good-book", "Good Book")
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS, url="https://leanpub.com/g", site="leanpub", book={"title": "Good", "hash": "g"}
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[no_slug, good])),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    backend.leanpub_book_exists.assert_called_once_with("id-good-book", "good-book")
+    detail.assert_awaited_once()
+    assert detail.call_args.kwargs["url"].endswith("/good-book.json")
+

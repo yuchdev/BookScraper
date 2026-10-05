@@ -10,7 +10,7 @@ from collections import Counter
 import httpx
 
 from ..backends import resolve_store_backend
-from ..book_utils import print_log
+from ..book_utils import csv_safe_cell, print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import get_leanpub_book_details
@@ -21,24 +21,20 @@ module_logger = logging.getLogger(__name__)
 
 def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv"):
     """
-    Saves a list of dictionaries with failed URLs and their errors to a CSV file.
-    Each dictionary should contain 'url', 'site', and 'error'.
+    Save the failed scrape records to a CSV file.
 
-    Args:
-                    failed_urls (list[dict]): A list of dictionaries, each containing the following keys:
-                                    - 'url': The URL that failed to scrape.
-                                    - 'site': The site from which the URL was scraped.
-                                    - 'error': The error message associated with the failure.
+    Every cell goes through :func:`~bookscraper.book_utils.csv_safe_cell` so page-derived text can't
+    be evaluated as a spreadsheet formula.
 
-    Returns:
-                    None
+    :param failed_urls: Failure records with the keys ``url``, ``site``, ``title`` and ``error``.
+    :param filename: The CSV file to write.
     """
     if not failed_urls:
         module_logger.info(f"No failed URLs to save to {filename}.")
         return
 
     try:
-        fieldnames = ["url", "site", "error"]  # Explicit fieldnames
+        fieldnames = ["url", "site", "title", "error"]  # Must cover every key a failure record carries
         module_logger.info(f"Saving failed URLs to CSV: {filename}")
         print_log(f"Saving {len(failed_urls)} failed URLs to {filename}...", "info")
 
@@ -47,7 +43,7 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
             writer.writeheader()
             for item in failed_urls:
                 try:
-                    writer.writerow(item)
+                    writer.writerow({key: csv_safe_cell(value) for key, value in item.items()})
                 except ValueError as ve:
                     module_logger.error(f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}")
                 except csv.Error as e:
@@ -111,6 +107,9 @@ async def run(args: argparse.Namespace):
                         book_title = book.get("title")
                         book_id = book.get("book_id")
                         book_slug = book.get("slug")
+                        if not book_slug:
+                            module_logger.warning(f"Skipping Leanpub search result without a slug (id {book_id}).")
+                            continue
                         book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
                         book["book_url"] = book_url
                         exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
@@ -233,7 +232,9 @@ async def run(args: argparse.Namespace):
 
     if scraped_books_data:
         print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
-        summary = storage_backend.save_books(scraped_books_data)
+        # save_books blocks (a MongoDB insert_many or the JSON store's fsync + replace), so it runs
+        # in a worker thread like the other storage calls instead of stalling the event loop.
+        summary = await asyncio.to_thread(storage_backend.save_books, scraped_books_data)
         # summary.errors > 0 is the partial-failure signal the exit-code contract
         # (task 05.0, subtask 05) consumes.
         print_log(

@@ -174,6 +174,27 @@ def check_local_write_permission(directory: str = ".") -> bool:
         return False
 
 
+# Leading characters a spreadsheet treats as the start of a formula (CWE-1236).
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe_cell(value: object) -> str:
+    """
+    Return *value* as a CSV cell that a spreadsheet will not evaluate as a formula.
+
+    Diagnostic CSVs (``failed_books.csv``, ``failed_urls.csv``, ``other_links.csv``) can carry
+    page-derived text, so any cell starting with ``=``, ``+``, ``-``, ``@``, a tab or a carriage
+    return is prefixed with a single quote. ``None`` becomes an empty cell.
+
+    :param value: The cell value to write.
+    :returns: The neutralized cell text.
+    """
+    text = "" if value is None else str(value)
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
+
+
 def extract_year_from_date(date_string: str) -> Optional[int]:
     """
     Extracts the year from a date string.
