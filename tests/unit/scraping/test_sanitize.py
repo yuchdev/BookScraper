@@ -419,9 +419,9 @@ def test_assert_clean_r1_exempts_only_exact_placeholder_values():
     angle_wrapped = "<" + "aKq9zLp2rX7vN4bC8dF1gH" + ">"  # dummy opaque value
     assert_clean('token = "[REDACTED]"')
     with pytest.raises(SanitizationError):
-        assert_clean('token = "%s"' % redacted_prefixed)
+        assert_clean(f'token = "{redacted_prefixed}"')
     with pytest.raises(SanitizationError):
-        assert_clean('password = "%s"' % angle_wrapped)
+        assert_clean(f'password = "{angle_wrapped}"')
 
 
 def test_assert_clean_v4_catches_secret_split_across_sibling_nodes():
@@ -1877,10 +1877,10 @@ def test_r2_json_data_attr_with_non_sensitive_name_is_dropped():
     """
     tok = "aQ3mZ9kLp2rX7vN4bC8dF1gH"
     cases = [
-        '<div data-hydration=\'{"inner":"{\\"apikey\\":\\"%s\\"}"}\' data-title="Fluent">x</div>' % tok,
-        '<div data-hydration=\'["%s","%s"]\' data-title="Fluent">x</div>' % (tok, tok[::-1]),
-        '<div data-hydration=\'{"id":"%s","value":"%s"}\' data-title="Fluent">x</div>' % (tok, tok),
-        '<div data-hydration="{&quot;apikey&quot;:&quot;%s&quot;}" data-title="Fluent">x</div>' % tok,
+        f'<div data-hydration=\'{{"inner":"{{\\"apikey\\":\\"{tok}\\"}}"}}\' data-title="Fluent">x</div>',
+        f'<div data-hydration=\'["{tok}","{tok[::-1]}"]\' data-title="Fluent">x</div>',
+        f'<div data-hydration=\'{{"id":"{tok}","value":"{tok}"}}\' data-title="Fluent">x</div>',
+        f'<div data-hydration="{{&quot;apikey&quot;:&quot;{tok}&quot;}}" data-title="Fluent">x</div>',
     ]
     for html in cases:
         out = strip_secrets(html)
