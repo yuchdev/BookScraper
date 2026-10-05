@@ -195,57 +195,173 @@ def csv_safe_cell(value: object) -> str:
     return text
 
 
-def extract_year_from_date(date_string: str) -> Optional[int]:
+# English month names/abbreviations -> month number. Parsing is driven by this explicit
+# table rather than strptime's %B/%b, which resolve against the process locale and would
+# silently stop recognising English month names under e.g. a de_DE locale. Trailing periods
+# ("Dec.", "Sep.") are stripped by the caller before lookup, and both "sep" and "sept" map
+# to September.
+_ENGLISH_MONTHS = {
+    "january": 1,
+    "jan": 1,
+    "february": 2,
+    "feb": 2,
+    "march": 3,
+    "mar": 3,
+    "april": 4,
+    "apr": 4,
+    "may": 5,
+    "june": 6,
+    "jun": 6,
+    "july": 7,
+    "jul": 7,
+    "august": 8,
+    "aug": 8,
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+    "october": 10,
+    "oct": 10,
+    "november": 11,
+    "nov": 11,
+    "december": 12,
+    "dec": 12,
+}
+
+# "December 17, 2019" / "Apr 23, 2021" / "Dec. 17 2019" - month name, day, 4-digit year.
+_MONTH_DAY_YEAR_RE = re.compile(r"([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})")
+# "17 December 2019" / "17 Dec. 2019" - day, month name, 4-digit year (Packt/O'Reilly style).
+_DAY_MONTH_YEAR_RE = re.compile(r"(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})")
+# "September 2016" - month name, 4-digit year (day-level precision unknown).
+_MONTH_YEAR_RE = re.compile(r"([A-Za-z]+)\.?\s+(\d{4})")
+
+
+def _build_full_date(year: int, month: int, day: int) -> Optional[tuple[str, int]]:
     """
-    Extracts the year from a date string.
+    Validate a (year, month, day) triple and render it as ``(YYYY-MM-DD, year)``.
 
-    Args:
-        date_string: The date string in any supported format (e.g., "2023-12-19", "December 17, 2019", "1995", "Apr 23, 2021", "September 2016", "Last updated on 2016-11-29").
-
-    Returns:
-        int: The extracted year, or None if the year cannot be extracted.
+    :param year: Four-digit year.
+    :param month: Month number 1-12.
+    :param day: Day of month.
+    :returns: ``(iso_date, year)`` for a real calendar date, or ``None`` if the triple
+        is not a valid date (e.g. February 30), so the caller can fall through.
     """
-    if date_string == "N/A" or date_string is None:
+    try:
+        datetime(year, month, day)
+    except ValueError:
+        logger.debug(f"Rejected invalid calendar date {year:04d}-{month:02d}-{day:02d}; falling through.")
         return None
+    return (f"{year:04d}-{month:02d}-{day:02d}", year)
 
-    if not isinstance(date_string, str):
-        logger.warning(f"Invalid input type for date_string: {type(date_string)}. Expected string.")
-        return None
 
-    # 1. Try to extract YYYY-MM-DD using regex if it's embedded in a larger string
-    # This handles "Last updated on YYYY-MM-DD" from leanpub.com or similar
-    date_pattern_in_text = r"\d{4}-\d{2}-\d{2}"
-    match = re.search(date_pattern_in_text, date_string)
+def _parse_english_month_date(text: str) -> Optional[tuple[str, int]]:
+    """
+    Parse an English month-name date into ``(iso_date, year)`` with preserved precision.
+
+    Recognises "Month DD, YYYY", "DD Month YYYY", and "Month YYYY" (the last keeping only
+    month precision, i.e. ``YYYY-MM``). Month lookup is locale-independent via
+    ``_ENGLISH_MONTHS``.
+
+    :param text: The already-stripped date string.
+    :returns: ``(iso_date, year)`` on a recognised month-name date, else ``None``.
+    """
+    match = _MONTH_DAY_YEAR_RE.fullmatch(text)
     if match:
-        extracted_date_part = match.group(0)
-        try:
-            date_object = datetime.strptime(extracted_date_part, "%Y-%m-%d")
-            return date_object.year
-        except ValueError:
-            logger.debug(f"Regex extracted '{extracted_date_part}' but it failed to parse as %Y-%m-%d.")
-            pass
+        month = _ENGLISH_MONTHS.get(match.group(1).lower())
+        if month is not None:
+            return _build_full_date(int(match.group(3)), month, int(match.group(2)))
 
-    # 2. Attempt to parse the date string using different direct formats
-    supported_formats = ["%Y-%m-%d", "%B %d, %Y", "%Y", "%b %d, %Y", "%B %Y"]
+    match = _DAY_MONTH_YEAR_RE.fullmatch(text)
+    if match:
+        month = _ENGLISH_MONTHS.get(match.group(2).lower())
+        if month is not None:
+            return _build_full_date(int(match.group(3)), month, int(match.group(1)))
+
+    match = _MONTH_YEAR_RE.fullmatch(text)
+    if match:
+        month = _ENGLISH_MONTHS.get(match.group(1).lower())
+        if month is not None:
+            year = int(match.group(2))
+            return (f"{year:04d}-{month:02d}", year)
+
+    return None
+
+
+def normalize_date(raw: Optional[str]) -> tuple[Optional[str], Optional[int]]:
+    """
+    Normalize a raw site date string into ``(iso_date_with_preserved_precision, year)``.
+
+    The ISO form preserves precision: a full date becomes ``YYYY-MM-DD``, a month-only date
+    becomes ``YYYY-MM``, and a bare year stays ``YYYY``. An embedded ISO date (e.g.
+    "Last updated on 2016-11-29" or "2023-12-19T08:00:00Z") is recognised anywhere in the
+    text. Month-name parsing is locale-independent (explicit English month table, never
+    ``strptime``'s ``%B``/``%b``). Unparseable, ``"N/A"``, empty, ``None`` or non-string
+    input yields ``(None, None)``.
+
+    This is the single source of truth behind :func:`extract_year_from_date`, so the year
+    it returns must stay identical to that function's historical output (it feeds
+    :func:`hash_book`, the book identity key).
+
+    :param raw: The raw date string from a site, or ``None``.
+    :returns: A ``(iso_date, year)`` tuple; either element is ``None`` when it cannot be
+        determined (and both are ``None`` when nothing parses).
+    """
+    if raw is None or raw == "N/A":
+        return (None, None)
+
+    if not isinstance(raw, str):
+        logger.warning(f"Invalid input type for date_string: {type(raw)}. Expected string.")
+        return (None, None)
+
+    text = raw.strip()
+    if not text:
+        return (None, None)
 
     try:
-        for date_format in supported_formats:
+        # 1. An ISO YYYY-MM-DD anywhere in the text ("Last updated on 2016-11-29",
+        #    "2023-12-19T08:00:00Z"). This is the Leanpub/ISO path and must win first so a
+        #    trailing time component or surrounding words never defeat it.
+        match = re.search(r"\d{4}-\d{2}-\d{2}", text)
+        if match:
+            iso_part = match.group(0)
             try:
-                date_object = datetime.strptime(date_string, date_format)
-                return date_object.year
+                date_object = datetime.strptime(iso_part, "%Y-%m-%d")
+                return (f"{date_object.year:04d}-{date_object.month:02d}-{date_object.day:02d}", date_object.year)
             except ValueError:
-                logger.debug(f"Date string did not match format {date_format!r}; trying the next one.")
-                continue
+                logger.debug(f"Regex extracted '{iso_part}' but it failed to parse as %Y-%m-%d.")
 
-        # If none of the formats worked
-        logger.warning(
-            f"Could not extract year from date string: '{date_string}' using known formats or regex pattern."
-        )
-        return None
+        # 2. English month-name formats (locale-independent).
+        month_name_result = _parse_english_month_date(text)
+        if month_name_result is not None:
+            return month_name_result
+
+        # 3. A bare four-digit year. Parsed via strptime so the behaviour (and the outer
+        #    defensive handler below) stays identical to the historical implementation.
+        if re.fullmatch(r"\d{4}", text):
+            date_object = datetime.strptime(text, "%Y")
+            return (f"{date_object.year:04d}", date_object.year)
+
+        logger.warning(f"Could not extract date from string: '{text}' using known formats or regex pattern.")
+        return (None, None)
 
     except Exception as e:  # noqa: X002 - defensive isolation boundary: strptime only raises ValueError (handled inline); so this catches an unexpected non-ValueError without propagating
-        logger.error(f"Error in extract_year_from_date for '{date_string}': {e}", exc_info=True)
-        return None
+        logger.error(f"Error in normalize_date for '{raw}': {e}", exc_info=True)
+        return (None, None)
+
+
+def extract_year_from_date(date_string: str) -> Optional[int]:
+    """
+    Extract the publication year from a raw site date string.
+
+    Thin backward-compatible wrapper over :func:`normalize_date` - returns only its year
+    element. Kept because the year feeds :func:`hash_book` (the book identity key), so its
+    output must remain byte-for-byte what callers and stored hashes already depend on.
+
+    :param date_string: A date string in any supported format (e.g. "2023-12-19",
+        "December 17, 2019", "1995", "Apr 23, 2021", "September 2016",
+        "Last updated on 2016-11-29", "17 Dec. 2019").
+    :returns: The extracted year, or ``None`` if no year can be determined.
+    """
+    return normalize_date(date_string)[1]
 
 
 def hash_book(title: str = "", authors: Optional[list] = None, year: Optional[int] = None) -> str:

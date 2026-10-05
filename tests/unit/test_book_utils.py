@@ -7,6 +7,8 @@ same effect. The MongoDB connection pre-flight now lives in backends/mongo/datab
 (see tests/mock/backends/mongo/test_connection_check.py).
 """
 
+import locale
+
 import pytest
 
 import bookscraper.book_utils as book_utils_module
@@ -16,6 +18,7 @@ from bookscraper.book_utils import (
     csv_safe_cell,
     extract_year_from_date,
     hash_book,
+    normalize_date,
 )
 
 
@@ -491,6 +494,111 @@ class TestExtractYearFromDate:
         assert extract_year_from_date("1995") is None
 
 
+class TestNormalizeDate:
+    """Tests for book_utils.normalize_date(): raw site date -> (iso_date_with_precision, year)."""
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("2023-12-19", ("2023-12-19", 2023)),
+            ("2023-12-19T08:00:00Z", ("2023-12-19", 2023)),
+            ("Last updated on 2016-11-29", ("2016-11-29", 2016)),
+            ("December 17, 2019", ("2019-12-17", 2019)),
+            ("Apr 23, 2021", ("2021-04-23", 2021)),
+            ("September 2016", ("2016-09", 2016)),
+            ("1995", ("1995", 1995)),
+            ("17 Dec. 2019", ("2019-12-17", 2019)),
+            ("17 December 2019", ("2019-12-17", 2019)),
+            ("N/A", (None, None)),
+            ("", (None, None)),
+            (None, (None, None)),
+            ("not a date at all", (None, None)),
+        ],
+    )
+    def test_normalize_date_table(self, raw, expected):
+        """
+        [Unit] normalize_date: every documented input maps to its (iso_date, year) tuple with preserved precision.
+
+        Scenario:
+            Given each row of the subtask's normalization table (ISO, embedded ISO, ISO+time, long/short
+                month names, day-first Packt/O'Reilly style, month-year, bare year, and junk/None/empty)
+            When normalize_date parses the input
+            Then it returns the exact (iso_date, year) tuple, with month-only precision kept as "YYYY-MM" and
+                a bare year kept as "YYYY".
+
+        Boundaries:
+            - Pure Python; no I/O, no mocking
+            - Covers the ISO regex path, the English month-name tables, the bare-year path, and the (None, None) fallbacks
+
+        On failure, first check:
+            - Whether a parsing branch was reordered or a month-table entry changed in book_utils.py
+            - Whether the ISO precision rendering (YYYY-MM-DD vs YYYY-MM vs YYYY) changed
+        """
+        assert normalize_date(raw) == expected
+
+    def test_normalize_date_is_locale_independent(self):
+        """
+        [Unit] normalize_date: English month names still parse when the process locale is non-English (de_DE).
+
+        Scenario:
+            Given the process LC_TIME locale switched to "de_DE" (skipped if that locale is unavailable)
+            When normalize_date parses "December 17, 2019" and "September 2016"
+            Then it still returns ("2019-12-17", 2019) and ("2016-09", 2016), proving it uses explicit English
+                month tables rather than locale-sensitive strptime %B/%b.
+
+        Boundaries:
+            - Mutates and restores the global LC_TIME locale; skips cleanly where de_DE is not installed
+            - Pure logic otherwise; no file or network I/O
+
+        On failure, first check:
+            - Whether normalize_date reverted to strptime("%B"/"%b") instead of _ENGLISH_MONTHS in book_utils.py
+        """
+        original = locale.setlocale(locale.LC_TIME)
+        try:
+            try:
+                locale.setlocale(locale.LC_TIME, "de_DE")
+            except locale.Error:
+                pytest.skip("de_DE locale is not available on this host")
+            assert normalize_date("December 17, 2019") == ("2019-12-17", 2019)
+            assert normalize_date("September 2016") == ("2016-09", 2016)
+        finally:
+            locale.setlocale(locale.LC_TIME, original)
+
+    @pytest.mark.parametrize(
+        ("raw", "expected_year"),
+        [
+            ("2023-12-19", 2023),
+            ("December 17, 2019", 2019),
+            ("1995", 1995),
+            ("Apr 23, 2021", 2021),
+            ("September 2016", 2016),
+            ("Last updated on 2016-11-29", 2016),
+            ("N/A", None),
+            (None, None),
+            ("not a date at all", None),
+            ("", None),
+            ("Report 9999-99-99 filed", None),
+        ],
+    )
+    def test_extract_year_from_date_backward_compatible(self, raw, expected_year):
+        """
+        [Unit] extract_year_from_date: the historical year results are unchanged after re-basing on normalize_date.
+
+        Scenario:
+            Given the previously-supported date strings (and their None/garbage edge cases)
+            When extract_year_from_date delegates to normalize_date(s)[1]
+            Then every returned year is identical to the pre-refactor output, so hash_book inputs never shift.
+
+        Boundaries:
+            - Pure Python; guards hash stability (a changed year silently re-identifies a book)
+            - Mirrors the standalone cases in TestExtractYearFromDate as a single parametrized contract
+
+        On failure, first check:
+            - Whether normalize_date's year element diverged from the legacy extract_year_from_date in book_utils.py
+        """
+        assert extract_year_from_date(raw) == expected_year
+
+
 class TestCheckLocalWritePermission:
     """Tests for book_utils.check_local_write_permission(): pre-flight write check for the json backend."""
 
@@ -628,4 +736,3 @@ def test_csv_safe_cell_neutralizes_formula_prefixes(value, expected):
         - Whether a new caller needs a non-string value rendered differently
     """
     assert csv_safe_cell(value) == expected
-
