@@ -81,7 +81,7 @@ def _fake_client(message: object, input_tokens: int = 100) -> MagicMock:
 # --------------------------------------------------------------------------- #
 # call_anthropic (anthropic SDK mocked)
 # --------------------------------------------------------------------------- #
-def test_call_anthropic_returns_reply_text_and_usage() -> None:
+def test_call_anthropic_returns_reply_text_and_usage():
     """
     [Local] schema detection: verifies call anthropic returns reply text and usage.
 
@@ -107,7 +107,7 @@ def test_call_anthropic_returns_reply_text_and_usage() -> None:
     assert kwargs["model"] == "model-x"
 
 
-def test_call_anthropic_sets_bounded_retries() -> None:
+def test_call_anthropic_sets_bounded_retries():
     """
     [Local] schema detection: verifies call anthropic sets bounded retries.
 
@@ -129,7 +129,7 @@ def test_call_anthropic_sets_bounded_retries() -> None:
     assert kwargs["max_retries"] == sd.MAX_API_RETRIES == 1
 
 
-def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
+def test_instruction_block_marked_cacheable_and_snapshot_not():
     """
     [Local] schema detection: verifies instruction block marked cacheable and snapshot not.
 
@@ -157,7 +157,7 @@ def test_instruction_block_marked_cacheable_and_snapshot_not() -> None:
     assert not isinstance(user_content, dict)
 
 
-def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
+def test_call_anthropic_wraps_sdk_error_without_body_or_key():
     """
     [Local] schema detection: verifies call anthropic wraps sdk error without body or key.
 
@@ -190,7 +190,7 @@ def test_call_anthropic_wraps_sdk_error_without_body_or_key() -> None:
     assert secret_body not in message
 
 
-def test_call_anthropic_raises_on_truncated_response() -> None:
+def test_call_anthropic_raises_on_truncated_response():
     """
     [Local] schema detection: verifies call anthropic raises on truncated response.
 
@@ -210,7 +210,7 @@ def test_call_anthropic_raises_on_truncated_response() -> None:
             sd.call_anthropic("instructions", "snapshot", "test-key")
 
 
-def test_call_anthropic_raises_on_context_window_exceeded() -> None:
+def test_call_anthropic_raises_on_context_window_exceeded():
     """
     [Local] schema detection: verifies call anthropic raises on context window exceeded.
 
@@ -230,7 +230,7 @@ def test_call_anthropic_raises_on_context_window_exceeded() -> None:
             sd.call_anthropic("instructions", "snapshot", "test-key")
 
 
-def test_call_anthropic_raises_on_refusal_naming_category() -> None:
+def test_call_anthropic_raises_on_refusal_naming_category():
     """
     [Local] schema detection: verifies call anthropic raises on refusal naming category.
 
@@ -251,7 +251,7 @@ def test_call_anthropic_raises_on_refusal_naming_category() -> None:
             sd.call_anthropic("instructions", "snapshot", "test-key")
 
 
-def test_call_anthropic_skips_thinking_blocks() -> None:
+def test_call_anthropic_skips_thinking_blocks():
     """
     [Local] schema detection: verifies call anthropic skips thinking blocks.
 
@@ -277,7 +277,7 @@ def test_call_anthropic_skips_thinking_blocks() -> None:
     assert "reason about selectors" not in text
 
 
-def test_call_anthropic_raises_on_empty_content() -> None:
+def test_call_anthropic_raises_on_empty_content():
     """
     [Local] schema detection: verifies call anthropic raises on empty content.
 
@@ -300,7 +300,7 @@ def test_call_anthropic_raises_on_empty_content() -> None:
 # --------------------------------------------------------------------------- #
 # token-budget pre-flight (_fit_snapshot_to_budget via call_anthropic)
 # --------------------------------------------------------------------------- #
-def test_over_budget_prompt_is_repruned_then_sent() -> None:
+def test_over_budget_prompt_is_repruned_then_sent():
     """
     [Local] schema detection: verifies over budget prompt is repruned then sent.
 
@@ -332,7 +332,7 @@ def test_over_budget_prompt_is_repruned_then_sent() -> None:
     assert len(kwargs["messages"][0]["content"]) < len(big_snapshot)
 
 
-def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
+def test_still_over_budget_after_min_prune_raises_without_sending():
     """
     [Local] schema detection: verifies still over budget after min prune raises without sending.
 
@@ -357,7 +357,7 @@ def test_still_over_budget_after_min_prune_raises_without_sending() -> None:
     client.messages.create.assert_not_called()
 
 
-def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
+def test_count_tokens_sdk_error_is_wrapped_body_free():
     """
     [Local] schema detection: verifies count tokens sdk error is wrapped body free.
 
@@ -384,7 +384,7 @@ def test_count_tokens_sdk_error_is_wrapped_body_free() -> None:
     client.messages.create.assert_not_called()
 
 
-def test_create_sdk_error_is_wrapped_body_free() -> None:
+def test_create_sdk_error_is_wrapped_body_free():
     """
     [Local] schema detection: verifies create sdk error is wrapped body free.
 
@@ -414,7 +414,7 @@ def test_create_sdk_error_is_wrapped_body_free() -> None:
 # --------------------------------------------------------------------------- #
 # fetch_pruned_html
 # --------------------------------------------------------------------------- #
-async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
+async def test_fetch_pruned_html_returns_pruned_snapshot():
     """
     [Local] schema detection: verifies that fetch_pruned_html strips scripts and returns a pruned snapshot containing visible text.
 
@@ -437,7 +437,7 @@ async def test_fetch_pruned_html_returns_pruned_snapshot() -> None:
     page.route.assert_awaited_once()
 
 
-async def test_fetch_pruned_html_raises_on_timeout() -> None:
+async def test_fetch_pruned_html_raises_on_timeout():
     """
     [Local] schema detection: verifies that a PlaywrightTimeoutError from page.goto raises SchemaDetectionError("Timed out loading").
 
@@ -458,7 +458,7 @@ async def test_fetch_pruned_html_raises_on_timeout() -> None:
         await sd.fetch_pruned_html("https://x/book", page)
 
 
-async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
+async def test_fetch_pruned_html_raises_on_generic_load_error():
     """
     [Local] schema detection: verifies that a generic PlaywrightError from page.goto raises SchemaDetectionError("Failed to load").
 
@@ -482,7 +482,7 @@ async def test_fetch_pruned_html_raises_on_generic_load_error() -> None:
 # --------------------------------------------------------------------------- #
 # validate_across_samples
 # --------------------------------------------------------------------------- #
-async def test_validate_across_samples_consistent_match() -> None:
+async def test_validate_across_samples_consistent_match():
     """
     [Local] schema detection: verifies that a selector matching on every sample is marked consistent with per-URL snippets.
 
@@ -510,7 +510,7 @@ async def test_validate_across_samples_consistent_match() -> None:
     assert per_url[0]["snippet"] == "Book One"
 
 
-async def test_validate_across_samples_flags_inconsistency() -> None:
+async def test_validate_across_samples_flags_inconsistency():
     # ".tag" matches on page1 only -> inconsistent, must be flagged.
     """
     [Local] schema detection: verifies that a selector matching on some but not all samples is marked inconsistent.
@@ -538,7 +538,7 @@ async def test_validate_across_samples_flags_inconsistency() -> None:
     assert matched == [True, False]
 
 
-async def test_validate_across_samples_null_selector_is_miss() -> None:
+async def test_validate_across_samples_null_selector_is_miss():
     """
     [Local] schema detection: verifies that a null/None selector is recorded as a miss with snippet "null selector".
 
@@ -564,7 +564,7 @@ async def test_validate_across_samples_null_selector_is_miss() -> None:
     assert entry["snippet"] == "null selector"
 
 
-async def test_validate_across_samples_bad_selector_does_not_abort() -> None:
+async def test_validate_across_samples_bad_selector_does_not_abort():
     """
     [Local] schema detection: verifies that a PlaywrightError from a bad selector is caught and recorded as "query error" without aborting.
 
@@ -600,7 +600,7 @@ class _HangingLocator(FakeLocator):
         return 0
 
 
-async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch) -> None:
+async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch):
     """
     [Local] schema detection: verifies pathological selector is bounded by timeout not hung.
 
@@ -624,7 +624,7 @@ async def test_pathological_selector_is_bounded_by_timeout_not_hung(monkeypatch)
     assert entry["snippet"] == "query error"
 
 
-async def test_check_current_only_still_evaluates_has_text_current_selector(monkeypatch) -> None:
+async def test_check_current_only_still_evaluates_has_text_current_selector(monkeypatch):
     """
     [Local] schema detection: verifies check current only still evaluates has text current selector.
 
@@ -671,7 +671,7 @@ def _amazon_pages() -> tuple[FakePage, FakePage]:
     return page1, page2
 
 
-async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None:
+async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch):
     """
     [Local] schema detection: verifies the full detect_schema pipeline: consistent proposals show [MATCH], inconsistent ones show INCONSISTENT, and call_anthropic is invoked once per URL.
 
@@ -716,7 +716,7 @@ async def test_detect_schema_happy_path_flags_inconsistency(monkeypatch) -> None
     browser.close.assert_awaited_once()
 
 
-async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) -> None:
+async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch):
     """
     [Local] schema detection: verifies detect schema sums usage across one request per url.
 
@@ -761,7 +761,7 @@ async def test_detect_schema_sums_usage_across_one_request_per_url(monkeypatch) 
     assert "model=claude-sonnet-5" in usage_line
 
 
-async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
+async def test_detect_schema_rejects_too_many_urls(monkeypatch):
     """
     [Local] schema detection: verifies detect schema rejects too many urls.
 
@@ -780,7 +780,7 @@ async def test_detect_schema_rejects_too_many_urls(monkeypatch) -> None:
         await sd.detect_schema("amazon", too_many)
 
 
-async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
+async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch):
     """
     [Local] schema detection: verifies detect schema no detail fields fails loudly.
 
@@ -799,7 +799,7 @@ async def test_detect_schema_no_detail_fields_fails_loudly(monkeypatch) -> None:
         await sd.detect_schema("emptysite", ["https://x/1"])
 
 
-async def test_detect_schema_missing_api_key(monkeypatch) -> None:
+async def test_detect_schema_missing_api_key(monkeypatch):
     """
     [Local] schema detection: verifies that a missing ANTHROPIC_API_KEY raises SchemaDetectionError before any browser or API call.
 
@@ -819,7 +819,7 @@ async def test_detect_schema_missing_api_key(monkeypatch) -> None:
         await sd.detect_schema("amazon", ["https://x/1"])
 
 
-async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None:
+async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch):
     """
     [Local] schema detection: verifies that a non-JSON AI response raises SchemaDetectionError and the browser is still closed.
 
@@ -849,7 +849,7 @@ async def test_detect_schema_malformed_ai_json_fails_loudly(monkeypatch) -> None
     browser.close.assert_awaited_once()
 
 
-async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None:
+async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch):
     """
     [Local] schema detection: verifies that a page-load failure raises SchemaDetectionError, skips the AI call, and still closes the browser.
 
@@ -881,7 +881,7 @@ async def test_detect_schema_page_load_failure_fails_loudly(monkeypatch) -> None
     browser.close.assert_awaited_once()
 
 
-async def test_detect_schema_unknown_site() -> None:
+async def test_detect_schema_unknown_site():
     """
     [Local] schema detection: verifies that an unrecognized site name raises SchemaDetectionError("Unknown site").
 
@@ -900,7 +900,7 @@ async def test_detect_schema_unknown_site() -> None:
         await sd.detect_schema("bogus", ["https://x/1"])
 
 
-async def test_detect_schema_no_urls() -> None:
+async def test_detect_schema_no_urls():
     """
     [Local] schema detection: verifies that an empty URL list raises SchemaDetectionError("At least one sample").
 
@@ -942,7 +942,7 @@ def _search_proposals() -> dict[str, dict[str, str]]:
     }
 
 
-async def test_search_validation_reports_card_count_and_match_fraction() -> None:
+async def test_search_validation_reports_card_count_and_match_fraction():
     """
     [Local] schema detection: verifies search validation reports card count and match fraction.
 
@@ -973,7 +973,7 @@ async def test_search_validation_reports_card_count_and_match_fraction() -> None
     assert result["SEARCH_NEXT_PAGE_SELECTOR"]["per_url"][0]["matched"] is True
 
 
-async def test_search_validation_caps_cards_per_sample() -> None:
+async def test_search_validation_caps_cards_per_sample():
     """
     [Local] schema detection: verifies search validation caps cards per sample.
 
@@ -996,7 +996,7 @@ async def test_search_validation_caps_cards_per_sample() -> None:
     assert title["matched"] is True
 
 
-async def test_card_relative_selector_below_80_percent_flagged_partial() -> None:
+async def test_card_relative_selector_below_80_percent_flagged_partial():
     """
     [Local] schema detection: verifies card relative selector below 80 percent flagged partial.
 
@@ -1020,7 +1020,7 @@ async def test_card_relative_selector_below_80_percent_flagged_partial() -> None
     assert result["SEARCH_TITLE"]["partial"] is True
 
 
-async def test_search_validation_card_relative_query_error_counts_as_miss() -> None:
+async def test_search_validation_card_relative_query_error_counts_as_miss():
     """
     [Local] schema detection: verifies search validation card relative query error counts as miss.
 
@@ -1043,7 +1043,7 @@ async def test_search_validation_card_relative_query_error_counts_as_miss() -> N
     assert result["SEARCH_TITLE"]["partial"] is True
 
 
-async def test_search_validation_null_card_relative_selector_is_partial() -> None:
+async def test_search_validation_null_card_relative_selector_is_partial():
     """
     [Local] schema detection: verifies search validation null card relative selector is partial.
 
@@ -1067,7 +1067,7 @@ async def test_search_validation_null_card_relative_selector_is_partial() -> Non
     assert result["SEARCH_TITLE"]["partial"] is True
 
 
-async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
+async def test_search_validation_null_card_selector_yields_zero_cards():
     """
     [Local] schema detection: verifies search validation null card selector yields zero cards.
 
@@ -1091,7 +1091,7 @@ async def test_search_validation_null_card_selector_yields_zero_cards() -> None:
     assert result["SEARCH_BOOK_CARD"]["per_url"][0]["snippet"] == "null selector"
 
 
-async def test_search_validation_bad_card_selector_does_not_abort() -> None:
+async def test_search_validation_bad_card_selector_does_not_abort():
     """
     [Local] schema detection: verifies search validation bad card selector does not abort.
 
@@ -1125,7 +1125,7 @@ async def test_search_validation_bad_card_selector_does_not_abort() -> None:
     assert result["SEARCH_TITLE"]["partial"] is True
 
 
-async def test_search_validation_no_card_field_in_proposals() -> None:
+async def test_search_validation_no_card_field_in_proposals():
     """
     [Local] schema detection: verifies search validation no card field in proposals.
 
@@ -1149,7 +1149,7 @@ async def test_search_validation_no_card_field_in_proposals() -> None:
 # --------------------------------------------------------------------------- #
 # detect_schema - search page_type end to end
 # --------------------------------------------------------------------------- #
-async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
+async def test_detect_schema_search_page_type_end_to_end(monkeypatch):
     """
     [Local] schema detection: verifies detect schema search page type end to end.
 
@@ -1194,7 +1194,7 @@ async def test_detect_schema_search_page_type_end_to_end(monkeypatch) -> None:
 # Offline helpers: prompt_hash / replay files / record files / html-file read
 # (task 04.0 subtask 07; AIS-9 / AIS-11 / AIS-14)
 # --------------------------------------------------------------------------- #
-def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
+def test_prompt_hash_is_deterministic_and_joins_blocks():
     """
     [Local] schema detection: verifies prompt hash is deterministic and joins blocks.
 
@@ -1213,7 +1213,7 @@ def test_prompt_hash_is_deterministic_and_joins_blocks() -> None:
     assert sd.prompt_hash("INSTRUCTION", "OTHER") != key
 
 
-def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> None:
+def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count():
     """
     [Local] schema detection: verifies format replay usage line reports zero tokens and replayed count.
 
@@ -1234,7 +1234,7 @@ def test_format_replay_usage_line_reports_zero_tokens_and_replayed_count() -> No
     assert "$" not in line
 
 
-def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
+def test_load_replay_file_ignores_underscore_keys(tmp_path):
     """
     [Local] schema detection: verifies load replay file ignores underscore keys.
 
@@ -1253,7 +1253,7 @@ def test_load_replay_file_ignores_underscore_keys(tmp_path) -> None:
     assert loaded == {"abc123": "{}"}
 
 
-def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
+def test_load_replay_file_missing_path_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that a nonexistent replay file path raises SchemaDetectionError("Cannot read --replay file").
 
@@ -1272,7 +1272,7 @@ def test_load_replay_file_missing_path_fails_loudly(tmp_path) -> None:
         sd.load_replay_file(str(tmp_path / "nope.json"))
 
 
-def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
+def test_load_replay_file_invalid_json_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that a replay file with invalid JSON raises SchemaDetectionError("not valid JSON").
 
@@ -1293,7 +1293,7 @@ def test_load_replay_file_invalid_json_fails_loudly(tmp_path) -> None:
         sd.load_replay_file(str(path))
 
 
-def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
+def test_load_replay_file_non_object_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that a replay file whose top-level value is not a JSON object raises SchemaDetectionError("must be a JSON object").
 
@@ -1314,7 +1314,7 @@ def test_load_replay_file_non_object_fails_loudly(tmp_path) -> None:
         sd.load_replay_file(str(path))
 
 
-def test_replay_lookup_returns_recorded_response() -> None:
+def test_replay_lookup_returns_recorded_response():
     """
     [Local] schema detection: verifies that replay_lookup returns the recorded response for a matching prompt hash.
 
@@ -1333,7 +1333,7 @@ def test_replay_lookup_returns_recorded_response() -> None:
     assert sd.replay_lookup(replay, "I", "S") == '{"BOOK_TITLE": {"selector": "#t"}}'
 
 
-def test_replay_lookup_missing_prompt_fails_loudly() -> None:
+def test_replay_lookup_missing_prompt_fails_loudly():
     """
     [Local] schema detection: verifies replay lookup missing prompt fails loudly.
 
@@ -1350,7 +1350,7 @@ def test_replay_lookup_missing_prompt_fails_loudly() -> None:
         sd.replay_lookup({}, "I", "S")
 
 
-def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) -> None:
+def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path):
     """
     [Local] schema detection: verifies write record file writes hash keyed responses and provenance.
 
@@ -1371,7 +1371,7 @@ def test_write_record_file_writes_hash_keyed_responses_and_provenance(tmp_path) 
     assert "sk-ant" not in path.read_text(encoding="utf-8")
 
 
-def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
+def test_write_record_file_oserror_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that an OSError from Path.write_text raises SchemaDetectionError("Cannot write --record file").
 
@@ -1391,7 +1391,7 @@ def test_write_record_file_oserror_fails_loudly(tmp_path) -> None:
             sd.write_record_file(str(tmp_path / "rec.json"), {})
 
 
-async def test_block_all_requests_aborts() -> None:
+async def test_block_all_requests_aborts():
     """
     [Local] schema detection: verifies block all requests aborts.
 
@@ -1412,7 +1412,7 @@ async def test_block_all_requests_aborts() -> None:
     route.continue_.assert_not_called()
 
 
-def test_read_html_file_reads_utf8(tmp_path) -> None:
+def test_read_html_file_reads_utf8(tmp_path):
     """
     [Local] schema detection: verifies that _read_html_file reads a UTF-8 HTML file and returns its content as a string.
 
@@ -1432,7 +1432,7 @@ def test_read_html_file_reads_utf8(tmp_path) -> None:
     assert sd._read_html_file(str(path)) == "<h1>Tïtle</h1>"
 
 
-def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
+def test_read_html_file_missing_path_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that a nonexistent HTML file raises SchemaDetectionError("Cannot access --html-file").
 
@@ -1451,7 +1451,7 @@ def test_read_html_file_missing_path_fails_loudly(tmp_path) -> None:
         sd._read_html_file(str(tmp_path / "nope.html"))
 
 
-def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
+def test_read_html_file_oversized_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies read html file oversized fails loudly.
 
@@ -1471,7 +1471,7 @@ def test_read_html_file_oversized_fails_loudly(tmp_path) -> None:
             sd._read_html_file(str(path))
 
 
-def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
+def test_read_html_file_non_utf8_fails_loudly(tmp_path):
     """
     [Local] schema detection: verifies that a non-UTF-8 binary file raises SchemaDetectionError("as UTF-8 text").
 
@@ -1495,7 +1495,7 @@ def test_read_html_file_non_utf8_fails_loudly(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # detect_schema - source resolution (urls vs html_files)
 # --------------------------------------------------------------------------- #
-async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None:
+async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch):
     """
     [Local] schema detection: verifies that passing both --url and --html-file raises SchemaDetectionError("either --url or --html-file").
 
@@ -1515,7 +1515,7 @@ async def test_detect_schema_rejects_both_url_and_html_file(monkeypatch) -> None
         await sd.detect_schema("amazon", urls=["https://x/1"], html_files=["/tmp/a.html"])
 
 
-async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
+async def test_detect_schema_rejects_no_source(monkeypatch):
     """
     [Local] schema detection: verifies that calling detect_schema with neither urls nor html_files raises SchemaDetectionError("At least one sample").
 
@@ -1535,7 +1535,7 @@ async def test_detect_schema_rejects_no_source(monkeypatch) -> None:
         await sd.detect_schema("amazon")
 
 
-async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
+async def test_detect_schema_rejects_too_many_html_files(monkeypatch):
     """
     [Local] schema detection: verifies that more than MAX_SAMPLE_URLS html_files raises SchemaDetectionError("--html-file paths").
 
@@ -1559,7 +1559,7 @@ async def test_detect_schema_rejects_too_many_html_files(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 # detect_schema - replay mode (AIS-9: no key, no client constructed, no network)
 # --------------------------------------------------------------------------- #
-async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
+async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies replay mode requires no api key.
 
@@ -1598,7 +1598,7 @@ async def test_replay_mode_requires_no_api_key(monkeypatch, tmp_path) -> None:
     browser.close.assert_awaited_once()
 
 
-async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None:
+async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies replay missing prompt fails loudly.
 
@@ -1625,7 +1625,7 @@ async def test_replay_missing_prompt_fails_loudly(monkeypatch, tmp_path) -> None
     browser.close.assert_awaited_once()
 
 
-async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tmp_path) -> None:
+async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies detect schema html file offline replay end to end.
 
@@ -1665,7 +1665,7 @@ async def test_detect_schema_html_file_offline_replay_end_to_end(monkeypatch, tm
 # --------------------------------------------------------------------------- #
 # detect_schema - record mode (mocked client; AIS-8 no key in the file)
 # --------------------------------------------------------------------------- #
-async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_path) -> None:
+async def test_record_mode_writes_prompt_hash_keyed_responses(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies record mode writes prompt hash keyed responses.
 
@@ -1707,7 +1707,7 @@ def _tiny_site(selector="#t") -> dict[str, dict[str, str]]:
     return {"tiny": {"BASE_URL": "https://x", "BOOK_TITLE": selector}}
 
 
-async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> None:
+async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies check current only makes no api call.
 
@@ -1748,7 +1748,7 @@ async def test_check_current_only_makes_no_api_call(monkeypatch, tmp_path) -> No
     browser.close.assert_awaited_once()
 
 
-async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> None:
+async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch):
     """
     [Local] schema detection: verifies exit code zero when all current selectors match.
 
@@ -1774,7 +1774,7 @@ async def test_exit_code_zero_when_all_current_selectors_match(monkeypatch) -> N
     browser.close.assert_awaited_once()
 
 
-async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
+async def test_exit_code_four_on_broken_current_selector(monkeypatch):
     """
     [Local] schema detection: verifies exit code four on broken current selector.
 
@@ -1799,7 +1799,7 @@ async def test_exit_code_four_on_broken_current_selector(monkeypatch) -> None:
     browser.close.assert_awaited_once()
 
 
-async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path) -> None:
+async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path):
     """
     [Local] schema detection: verifies detect schema json format offline replay.
 

@@ -176,7 +176,7 @@ def get_mongo_collection() -> Optional[Collection]:
     return _mongo_collection
 
 
-def close_mongo_connection() -> None:
+def close_mongo_connection():
     """
     Closes the global MongoDB client connection.
     """
@@ -387,7 +387,7 @@ _SECONDARY_INDEXES: Tuple[Tuple[str, str], ...] = (
 )
 
 
-def ensure_indexes(books_collection: Collection) -> None:
+def ensure_indexes(books_collection: Collection):
     """
     Ensures the unique 'hash' index and the sparse secondary lookup indexes exist.
 
@@ -435,7 +435,7 @@ def ensure_indexes(books_collection: Collection) -> None:
             print_log(f"Warning: Failed to ensure sparse index on '{field}': {e}", "warning")
 
 
-def ensure_unique_index_on_hash(books_collection: Collection) -> None:
+def ensure_unique_index_on_hash(books_collection: Collection):
     """
     Ensures the collection indexes exist.
 

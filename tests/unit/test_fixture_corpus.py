@@ -102,7 +102,7 @@ def _payload_for(sidecar: Path) -> Optional[Path]:
     return None
 
 
-def test_every_fixture_has_meta_json() -> None:
+def test_every_fixture_has_meta_json():
     """
     [Unit] fixture corpus: verifies every captured payload has a sibling .meta.json.
 
@@ -127,7 +127,7 @@ def test_every_fixture_has_meta_json() -> None:
     assert not missing, f"fixtures missing a .meta.json: {missing}"
 
 
-def test_no_orphan_meta_or_expected_files() -> None:
+def test_no_orphan_meta_or_expected_files():
     """
     [Unit] fixture corpus: verifies no .meta.json or .expected.json survives its payload being removed.
 
@@ -149,7 +149,7 @@ def test_no_orphan_meta_or_expected_files() -> None:
     assert not orphans, f"orphaned metadata/golden files: {orphans}"
 
 
-def test_fixture_file_size_budget() -> None:
+def test_fixture_file_size_budget():
     """
     [Unit] fixture corpus: verifies no single corpus file exceeds the 400 KB per-file budget.
 
@@ -174,7 +174,7 @@ def test_fixture_file_size_budget() -> None:
     assert not over, f"files over the {PER_FILE_BUDGET}-byte budget: {over}"
 
 
-def test_corpus_total_size_budget() -> None:
+def test_corpus_total_size_budget():
     """
     [Unit] fixture corpus: verifies the total corpus size stays under the 15 MB budget.
 
@@ -195,7 +195,7 @@ def test_corpus_total_size_budget() -> None:
     assert total <= CORPUS_BUDGET, f"corpus is {total} bytes, over the {CORPUS_BUDGET} budget"
 
 
-def test_meta_sha256_matches_file() -> None:
+def test_meta_sha256_matches_file():
     """
     [Unit] fixture corpus: verifies no fixture was hand-edited after capture (FIX-13 compensating control).
 
@@ -236,7 +236,7 @@ def test_meta_sha256_matches_file() -> None:
         ("leanpub", "json", 3),
     ],
 )
-def test_minimum_initial_corpus_present(site: str, kind: str, count: int) -> None:
+def test_minimum_initial_corpus_present(site: str, kind: str, count: int):
     """
     [Unit] fixture corpus: verifies the minimum initial corpus per site is present.
 

@@ -52,7 +52,7 @@ def _patch_ping(side_effect=None) -> AbstractContextManager[Any]:
 class TestCheckMongodbConnection:
     """Tests for database.check_mongodb_connection."""
 
-    def test_config_error_returns_false(self) -> None:
+    def test_config_error_returns_false(self):
         """
         [Local] check mongodb connection: verifies that a ConfigError from the resolver returns False.
 
@@ -70,7 +70,7 @@ class TestCheckMongodbConnection:
         with _patch_resolve(side_effect=ConfigError("bad settings.json")):
             assert database.check_mongodb_connection() is False
 
-    def test_no_uri_returns_false(self) -> None:
+    def test_no_uri_returns_false(self):
         """
         [Local] check mongodb connection: verifies that a None URI from the resolver returns False.
 
@@ -88,7 +88,7 @@ class TestCheckMongodbConnection:
         with _patch_resolve(return_value=(None, None)):
             assert database.check_mongodb_connection() is False
 
-    def test_success_without_tls_cert(self) -> None:
+    def test_success_without_tls_cert(self):
         """
         [Local] check mongodb connection: verifies that password auth without a TLS cert returns True.
 
@@ -116,7 +116,7 @@ class TestCheckMongodbConnection:
         assert args[1] is None  # cert_file
         mock_client.close.assert_called_once()
 
-    def test_success_with_existing_tls_cert(self, tmp_path) -> None:
+    def test_success_with_existing_tls_cert(self, tmp_path):
         """
         [Local] check mongodb connection: verifies that an existing TLS cert path is forwarded to the factory.
 
@@ -146,7 +146,7 @@ class TestCheckMongodbConnection:
         assert args[1] == str(cert_path)  # cert_file forwarded to the factory
         mock_client.close.assert_called_once()
 
-    def test_check_mongodb_connection_honors_tls_ca_file(self, monkeypatch) -> None:
+    def test_check_mongodb_connection_honors_tls_ca_file(self, monkeypatch):
         """
         [Local] book utils: verifies check mongodb connection honors tls ca file.
 
@@ -171,7 +171,7 @@ class TestCheckMongodbConnection:
         args, _ = mock_build.call_args
         assert args[2] == "/path/to/ca.pem"  # ca_file
 
-    def test_missing_cert_file_raises_and_returns_false(self, tmp_path) -> None:
+    def test_missing_cert_file_raises_and_returns_false(self, tmp_path):
         """
         [Local] book utils: verifies missing cert file raises and returns false.
 
@@ -192,7 +192,7 @@ class TestCheckMongodbConnection:
             assert database.check_mongodb_connection() is False
         mock_ctor.assert_not_called()
 
-    def test_connection_failure_returns_false_and_closes(self) -> None:
+    def test_connection_failure_returns_false_and_closes(self):
         """
         [Local] check mongodb connection: verifies that a MongoConnectionError returns False and closes the client.
 
@@ -217,7 +217,7 @@ class TestCheckMongodbConnection:
             assert database.check_mongodb_connection() is False
         mock_client.close.assert_called_once()
 
-    def test_generic_exception_returns_false_without_crashing(self) -> None:
+    def test_generic_exception_returns_false_without_crashing(self):
         # If the factory raises something that isn't a MongoConnectionError, the defensive
         # branch returns False without leaking or crashing; client stays None so the finally
         # guard must not blow up.
@@ -241,7 +241,7 @@ class TestCheckMongodbConnection:
         ):
             assert database.check_mongodb_connection() is False
 
-    def test_failure_does_not_leak_uri_or_host(self, caplog) -> None:
+    def test_failure_does_not_leak_uri_or_host(self, caplog):
         """
         [Local] book utils: verifies failure does not leak uri or host.
 

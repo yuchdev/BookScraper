@@ -50,14 +50,14 @@ class StorageBackend(ABC):
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Report whether a Leanpub book matching ``book_id`` or ``book_slug`` already exists in the backend."""
 
-    def close(self) -> None:  # noqa: B027 - intentional no-op default, not every backend holds a connection
+    def close(self):  # noqa: B027 - intentional no-op default, not every backend holds a connection
         """Optional cleanup hook; no-op unless a backend holds a live connection."""
 
 
 class MongoBackend(StorageBackend):
     """Thin :class:`StorageBackend` adapter over the MongoDB functions in :mod:`.mongo.database`."""
 
-    def __init__(self, collection: Collection) -> None:
+    def __init__(self, collection: Collection):
         """
         :param collection: The MongoDB collection this backend reads from and writes to.
         """
@@ -79,7 +79,7 @@ class MongoBackend(StorageBackend):
         """Delegate to :func:`deduplicate.leanpub_prescrape_deduplicate`."""
         return deduplicate.leanpub_prescrape_deduplicate(book_id, book_slug, self._collection)
 
-    def close(self) -> None:
+    def close(self):
         """Close the shared MongoDB connection via :func:`database.close_mongo_connection`."""
         database.close_mongo_connection()
 
@@ -97,12 +97,12 @@ class JsonBackend(StorageBackend):
 
     _INDEX_FIELDS = (("hashes", "hash"), ("asins", "asin"), ("book_ids", "book_id"), ("slugs", "slug"))
 
-    def __init__(self) -> None:
+    def __init__(self):
         """Create the backend with its in-memory index unbuilt (built lazily on first lookup)."""
         self._index: Optional[dict[str, set[str]]] = None
 
     @classmethod
-    def _add_to_index(cls, index: dict[str, set[str]], book: dict) -> None:
+    def _add_to_index(cls, index: dict[str, set[str]], book: dict):
         """Add ``book``'s non-empty indexed field values into the matching buckets of ``index``."""
         for bucket, field in cls._INDEX_FIELDS:
             value = book.get(field)
@@ -157,7 +157,7 @@ class JsonBackend(StorageBackend):
         return bool(book_slug) and book_slug in index["slugs"]
 
 
-def _warn_if_cert_expiring() -> None:
+def _warn_if_cert_expiring():
     """
     Emit an advisory pre-flight warning if the active X.509 client certificate is expired or
     close to expiring, before the mongo backend connects.

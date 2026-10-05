@@ -105,7 +105,7 @@ class CorpusMapping:
     exactly while ordinary detail pages match regardless of tracking query params).
     """
 
-    def __init__(self, mapping: dict[str, Path]) -> None:
+    def __init__(self, mapping: dict[str, Path]):
         """Partition the raw mapping into query-keyed and path-only lookup dicts."""
         self._with_query: dict[str, Path] = {}
         self._no_query: dict[str, Path] = {}
@@ -151,13 +151,13 @@ def _robots_path_for(url: str) -> Optional[Path]:
 class PlaywrightRecorder:
     """Default-deny Playwright route: fulfills mapped URLs, aborts and records the rest."""
 
-    def __init__(self, mapping: CorpusMapping) -> None:
+    def __init__(self, mapping: CorpusMapping):
         """Store the corpus mapping and initialize served/unexpected URL lists."""
         self._mapping = mapping
         self.served: list[str] = []
         self.unexpected: list[str] = []
 
-    async def handle(self, route: Route) -> None:
+    async def handle(self, route: Route):
         """Fulfill mapped routes from corpus bytes; abort and record unknown ones."""
         url = route.request.url
         fixture = self._mapping.lookup(url)
@@ -184,7 +184,7 @@ class PlaywrightRecorder:
         self.unexpected.append(url)
         await route.abort()
 
-    async def handle_web_socket(self, ws: WebSocketRoute) -> None:
+    async def handle_web_socket(self, ws: WebSocketRoute):
         """Close and record every WebSocket.
 
         Sanitized fixtures carry no scripts, so a live socket is always an offline-boundary
@@ -197,7 +197,7 @@ class PlaywrightRecorder:
 class HttpxRecorder:
     """Default-deny httpx transport handler: serves mapped JSON, rejects the rest."""
 
-    def __init__(self, mapping: CorpusMapping) -> None:
+    def __init__(self, mapping: CorpusMapping):
         """Store the corpus mapping and initialize served/unexpected URL lists."""
         self._mapping = mapping
         self.served: list[str] = []
@@ -220,7 +220,7 @@ class HttpxRecorder:
         raise OfflineNetworkError(f"Offline harness blocked unmapped httpx request: {url}")
 
 
-def assert_no_unexpected(recorders: list[Any], *, label: str) -> None:
+def assert_no_unexpected(recorders: list[Any], *, label: str):
     """Fail the test (no traceback) naming every unmapped request a recorder blocked."""
     urls = [url for recorder in recorders for url in recorder.unexpected]
     if urls:
@@ -236,7 +236,7 @@ def assert_no_unexpected(recorders: list[Any], *, label: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _route_web_sockets(target: Any, recorder: PlaywrightRecorder) -> None:
+async def _route_web_sockets(target: Any, recorder: PlaywrightRecorder):
     """Default-deny WebSockets on a page or context (close + record every socket).
 
     Playwright 1.63 supports ``route_web_socket``; without a matching handler a socket would
@@ -245,7 +245,7 @@ async def _route_web_sockets(target: Any, recorder: PlaywrightRecorder) -> None:
     await target.route_web_socket("**/*", recorder.handle_web_socket)
 
 
-async def attach_corpus_route(page: Page, recorder: PlaywrightRecorder) -> None:
+async def attach_corpus_route(page: Page, recorder: PlaywrightRecorder):
     """Install the corpus route on ``page`` and keep it at the highest precedence.
 
     A baseline ``route("**/*")`` is installed immediately (so a direct ``page.goto`` is
@@ -261,7 +261,7 @@ async def attach_corpus_route(page: Page, recorder: PlaywrightRecorder) -> None:
     await original_route("**/*", recorder.handle)
     await _route_web_sockets(page, recorder)
 
-    async def wrapped_route(pattern: Any, handler: Any, **kwargs: Any) -> None:
+    async def wrapped_route(pattern: Any, handler: Any, **kwargs: Any):
         """Re-append the corpus route after every production route install."""
         await original_route(pattern, handler, **kwargs)
         await original_route("**/*", recorder.handle)
@@ -269,7 +269,7 @@ async def attach_corpus_route(page: Page, recorder: PlaywrightRecorder) -> None:
     page.route = wrapped_route  # type: ignore[method-assign]
 
 
-async def attach_corpus_context_route(context: BrowserContext, recorder: PlaywrightRecorder) -> None:
+async def attach_corpus_context_route(context: BrowserContext, recorder: PlaywrightRecorder):
     """Install the corpus route at CONTEXT level and wrap the context so it stays default-deny.
 
     A baseline ``context.route("**/*")`` (plus WebSocket routing) covers any page the context
@@ -283,7 +283,7 @@ async def attach_corpus_context_route(context: BrowserContext, recorder: Playwri
     await original_context_route("**/*", recorder.handle)
     await _route_web_sockets(context, recorder)
 
-    async def wrapped_context_route(pattern: Any, handler: Any, **kwargs: Any) -> None:
+    async def wrapped_context_route(pattern: Any, handler: Any, **kwargs: Any):
         """Re-append the corpus route after every production context route install."""
         await original_context_route(pattern, handler, **kwargs)
         await original_context_route("**/*", recorder.handle)
@@ -392,7 +392,7 @@ async def corpus_router() -> Any:
         browser.new_page = wrapped_new_page  # type: ignore[method-assign]
         browser.new_context = wrapped_new_context  # type: ignore[method-assign]
 
-        def _restore() -> None:
+        def _restore():
             """Restore the original browser methods after the test."""
             browser.new_page = original_new_page  # type: ignore[method-assign]
             browser.new_context = original_new_context  # type: ignore[method-assign]

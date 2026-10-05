@@ -19,7 +19,7 @@ from bookscraper.book_utils import (
 class TestHashBook:
     """Tests for book_utils.hash_book(): SHA-256 identity function for book deduplication."""
 
-    def test_same_inputs_produce_same_hash(self) -> None:
+    def test_same_inputs_produce_same_hash(self):
         """
         [Unit] hash_book: identical title, authors, and year produce the same 64-character SHA-256 hexdigest.
 
@@ -40,7 +40,7 @@ class TestHashBook:
         assert h1 == h2
         assert len(h1) == 64  # SHA-256 hexdigest
 
-    def test_author_order_does_not_matter(self) -> None:
+    def test_author_order_does_not_matter(self):
         """
         [Unit] hash_book: authors are sorted before hashing so order does not affect the result.
 
@@ -59,7 +59,7 @@ class TestHashBook:
         h2 = hash_book("T", ["Bob", "Alice"], 2020)
         assert h1 == h2
 
-    def test_author_whitespace_and_case_normalized(self) -> None:
+    def test_author_whitespace_and_case_normalized(self):
         """
         [Unit] hash_book: author names are stripped and lowercased before hashing.
 
@@ -78,7 +78,7 @@ class TestHashBook:
         h2 = hash_book("T", [" bob "], 2020)
         assert h1 == h2
 
-    def test_title_whitespace_and_case_normalized(self) -> None:
+    def test_title_whitespace_and_case_normalized(self):
         """
         [Unit] hash_book: titles are stripped and lowercased before hashing.
 
@@ -97,7 +97,7 @@ class TestHashBook:
         h2 = hash_book("  fluent python  ", ["A"], 2020)
         assert h1 == h2
 
-    def test_different_title_produces_different_hash(self) -> None:
+    def test_different_title_produces_different_hash(self):
         """
         [Unit] hash_book: different titles produce different hashes.
 
@@ -116,7 +116,7 @@ class TestHashBook:
         h2 = hash_book("Effective Python", ["A"], 2020)
         assert h1 != h2
 
-    def test_different_year_produces_different_hash(self) -> None:
+    def test_different_year_produces_different_hash(self):
         """
         [Unit] hash_book: different publication years produce different hashes.
 
@@ -135,7 +135,7 @@ class TestHashBook:
         h2 = hash_book("T", ["A"], 2021)
         assert h1 != h2
 
-    def test_empty_title_still_returns_hash(self) -> None:
+    def test_empty_title_still_returns_hash(self):
         """
         [Unit] hash_book: an empty string title produces a valid 64-character hash, not an error sentinel.
 
@@ -155,7 +155,7 @@ class TestHashBook:
         assert isinstance(h, str)
         assert len(h) == 64
 
-    def test_none_title_does_not_raise_but_returns_error_sentinel(self) -> None:
+    def test_none_title_does_not_raise_but_returns_error_sentinel(self):
         # Documents a real quirk (candidate product bug): unlike an EMPTY-string
         # title (which hashes fine, see test_empty_title_still_returns_hash),
         # a None title makes `title.strip()` raise AttributeError, which the
@@ -183,7 +183,7 @@ class TestHashBook:
         h = hash_book(None, ["A"], 2020)
         assert h == ""
 
-    def test_authors_none_treated_as_empty_list(self) -> None:
+    def test_authors_none_treated_as_empty_list(self):
         """
         [Unit] hash_book: None for authors produces the same hash as an empty list.
 
@@ -202,7 +202,7 @@ class TestHashBook:
         h2 = hash_book("T", [], 2020)
         assert h1 == h2
 
-    def test_none_year_differs_from_zero_year(self) -> None:
+    def test_none_year_differs_from_zero_year(self):
         # year=None -> "" ; year=0 -> "0" : must be distinct identities.
         """
         [Unit] hash_book: None year and year=0 produce different hashes.
@@ -220,7 +220,7 @@ class TestHashBook:
         """
         assert hash_book("T", ["A"], None) != hash_book("T", ["A"], 0)
 
-    def test_none_authors_entries_are_dropped(self) -> None:
+    def test_none_authors_entries_are_dropped(self):
         """
         [Unit] hash_book: None entries inside the authors list are silently dropped before hashing.
 
@@ -241,7 +241,7 @@ class TestHashBook:
 class TestExtractYearFromDate:
     """Tests for book_utils.extract_year_from_date(): normalises site-specific date strings to a year int."""
 
-    def test_iso_date(self) -> None:
+    def test_iso_date(self):
         """
         [Unit] extract_year_from_date: ISO "YYYY-MM-DD" format extracts the year correctly.
 
@@ -259,7 +259,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("2023-12-19") == 2023
 
-    def test_long_month_name(self) -> None:
+    def test_long_month_name(self):
         """
         [Unit] extract_year_from_date: "Month DD, YYYY" format extracts the year correctly.
 
@@ -276,7 +276,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("December 17, 2019") == 2019
 
-    def test_bare_year(self) -> None:
+    def test_bare_year(self):
         """
         [Unit] extract_year_from_date: a four-digit year string returns that year as an int.
 
@@ -293,7 +293,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("1995") == 1995
 
-    def test_short_month_name(self) -> None:
+    def test_short_month_name(self):
         """
         [Unit] extract_year_from_date: abbreviated-month "Mon DD, YYYY" format extracts the year correctly.
 
@@ -310,7 +310,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("Apr 23, 2021") == 2021
 
-    def test_month_and_year_only(self) -> None:
+    def test_month_and_year_only(self):
         """
         [Unit] extract_year_from_date: "Month YYYY" (no day) format extracts the year correctly.
 
@@ -327,7 +327,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("September 2016") == 2016
 
-    def test_embedded_iso_date_regex_path(self) -> None:
+    def test_embedded_iso_date_regex_path(self):
         """
         [Unit] extract_year_from_date: an ISO date embedded in surrounding text is extracted via the regex path.
 
@@ -344,7 +344,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("Last updated on 2016-11-29") == 2016
 
-    def test_na_returns_none(self) -> None:
+    def test_na_returns_none(self):
         """
         [Unit] extract_year_from_date: "N/A" returns None.
 
@@ -361,7 +361,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("N/A") is None
 
-    def test_none_returns_none(self) -> None:
+    def test_none_returns_none(self):
         """
         [Unit] extract_year_from_date: None input returns None without raising.
 
@@ -378,7 +378,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date(None) is None
 
-    def test_non_string_returns_none(self) -> None:
+    def test_non_string_returns_none(self):
         """
         [Unit] extract_year_from_date: non-string input (e.g. int) returns None without raising.
 
@@ -395,7 +395,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date(123) is None
 
-    def test_unparsable_string_returns_none(self) -> None:
+    def test_unparsable_string_returns_none(self):
         """
         [Unit] extract_year_from_date: an unrecognized date string returns None.
 
@@ -412,7 +412,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("not a date at all") is None
 
-    def test_empty_string_returns_none(self) -> None:
+    def test_empty_string_returns_none(self):
         """
         [Unit] extract_year_from_date: an empty string returns None.
 
@@ -429,7 +429,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("") is None
 
-    def test_regex_matched_but_invalid_date_falls_through_to_none(self) -> None:
+    def test_regex_matched_but_invalid_date_falls_through_to_none(self):
         # "9999-99-99" matches the \d{4}-\d{2}-\d{2} embedded-date regex shape but
         # isn't a real date (month/day out of range) - exercises the regex block's
         # ValueError branch, then falls through to the direct-format loop, which
@@ -450,7 +450,7 @@ class TestExtractYearFromDate:
         """
         assert extract_year_from_date("Report 9999-99-99 filed") is None
 
-    def test_non_valueerror_from_strptime_is_caught_by_outer_handler(self, monkeypatch) -> None:
+    def test_non_valueerror_from_strptime_is_caught_by_outer_handler(self, monkeypatch):
         # Defensive outer `except Exception` around the direct-format loop; real
         # strptime never raises anything but ValueError for a str input, so exercise
         # it directly. "1995" has no embedded YYYY-MM-DD substring, so it skips the
@@ -491,7 +491,7 @@ class TestExtractYearFromDate:
 class TestCheckLocalWritePermission:
     """Tests for book_utils.check_local_write_permission(): pre-flight write check for the json backend."""
 
-    def test_success_cleans_up_test_file(self, tmp_path) -> None:
+    def test_success_cleans_up_test_file(self, tmp_path):
         """
         [Unit] check_local_write_permission: returns True for a writable directory and removes the temp probe file.
 
@@ -511,7 +511,7 @@ class TestCheckLocalWritePermission:
         assert result is True
         assert not (tmp_path / "test_write_permission.tmp").exists()
 
-    def test_oserror_returns_false(self, monkeypatch, tmp_path) -> None:
+    def test_oserror_returns_false(self, monkeypatch, tmp_path):
         """
         [Local] check_local_write_permission: an OSError from open() causes the function to return False.
 
@@ -534,7 +534,7 @@ class TestCheckLocalWritePermission:
         monkeypatch.setattr("builtins.open", raise_oserror)
         assert check_local_write_permission(str(tmp_path)) is False
 
-    def test_generic_exception_returns_false(self, monkeypatch, tmp_path) -> None:
+    def test_generic_exception_returns_false(self, monkeypatch, tmp_path):
         """
         [Local] check_local_write_permission: a non-OSError exception from open() also causes the function to return False.
 
@@ -561,7 +561,7 @@ class TestCheckLocalWritePermission:
 class TestAtomicWriteBytesPermissions:
     """Tests for atomic_write_bytes() permission handling: default 0644 and preserve-existing-mode."""
 
-    def test_new_file_defaults_to_0644_and_existing_mode_is_preserved(self, tmp_path) -> None:
+    def test_new_file_defaults_to_0644_and_existing_mode_is_preserved(self, tmp_path):
         """
         [Unit] book utils: verifies atomic_write_bytes defaults to 0644 for new files and preserves the existing mode on rewrites.
 

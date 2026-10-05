@@ -12,7 +12,7 @@ from ..backends.mongo import cert_rotation, config
 from ..book_utils import print_log
 
 
-def _run_check(warn_days: int) -> None:
+def _run_check(warn_days: int):
     """
     ``--check`` mode: report the currently active X.509 certificate's expiry and exit with a
     cron/CI-friendly status code.
@@ -56,7 +56,7 @@ def _run_check(warn_days: int) -> None:
     sys.exit(0)
 
 
-async def run(args: argparse.Namespace) -> None:
+async def run(args: argparse.Namespace):
     """The "rotate the Atlas X.509 client certificate" workflow. Exits non-zero on any failure.
 
     With ``--check`` it reports the active certificate's expiry instead of rotating (see

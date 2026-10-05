@@ -63,7 +63,7 @@ class FakeLocator:
     an invalid selector string (used to test the "bad selector must not abort" path).
     """
 
-    def __init__(self, matches: LocatorInit = None, raises: Optional[BaseException] = None) -> None:
+    def __init__(self, matches: LocatorInit = None, raises: Optional[BaseException] = None):
         """Store normalized matches and an optional exception to raise on count()."""
         self._matches: list[Match] = _normalize(matches)
         self._raises = raises
@@ -101,9 +101,8 @@ class FakeLocator:
             raise self._raises
         return len(self._matches)
 
-    async def click(self, *args: Any, **kwargs: Any) -> None:
+    async def click(self, *args: Any, **kwargs: Any):
         """No-op click stub."""
-        return None
 
     async def is_visible(self, *args: Any, **kwargs: Any) -> bool:
         """Return True if the first match is visible (or absent means False)."""
@@ -134,7 +133,7 @@ class FakePage:
         title: str = "",
         url: str = "https://example.test/",
         content: str = "",
-    ) -> None:
+    ):
         """Set up AsyncMock stubs and the locator map."""
         self._locators: dict[str, FakeLocator] = locators or {}
         self.url = url
@@ -168,7 +167,7 @@ class FakeContext:
         cookies: Optional[list] = None,
         cookies_after_clear: Optional[list] = None,
         origins: Optional[list] = None,
-    ) -> None:
+    ):
         """Set up AsyncMock stubs, cookie lists, and storage state."""
         self._cookies = list(cookies or [])
         self._cookies_after_clear = list(cookies_after_clear or [])
@@ -181,7 +180,7 @@ class FakeContext:
         """Return post-clear cookies if cleared, else the initial list."""
         return self._cookies_after_clear if self._cleared else self._cookies
 
-    async def clear_cookies(self, *args: Any, **kwargs: Any) -> None:
+    async def clear_cookies(self, *args: Any, **kwargs: Any):
         """Mark cookies as cleared so subsequent cookies() returns the after-clear list."""
         self._cleared = True
 
@@ -200,7 +199,7 @@ class FakeBrowser:
         page: Optional[FakePage] = None,
         page_factory: Optional[Any] = None,
         context: Optional[FakeContext] = None,
-    ) -> None:
+    ):
         """Configure new_page/new_context stubs from a fixed page or factory callable."""
         if page_factory is not None:
             self.new_page = AsyncMock(side_effect=page_factory)
@@ -246,14 +245,14 @@ class FakeResponse:
         json_exc: Optional[BaseException] = None,
         raise_status_exc: Optional[BaseException] = None,
         text: str = "",
-    ) -> None:
+    ):
         """Store the canned response data and optional exception triggers."""
         self._json_data = json_data
         self._json_exc = json_exc
         self._raise_status_exc = raise_status_exc
         self.text = text
 
-    def raise_for_status(self) -> None:
+    def raise_for_status(self):
         """Raise raise_status_exc if set, otherwise no-op."""
         if self._raise_status_exc is not None:
             raise self._raise_status_exc

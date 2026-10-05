@@ -11,7 +11,7 @@ import pytest
 from bookscraper.cli import build_parser
 
 
-def test_scrape_urls_parses_full_valid_arg_set() -> None:
+def test_scrape_urls_parses_full_valid_arg_set():
     """
     [Unit] cli scrape-urls: parses -f, --store-backend, and --log-severity into the expected dest= attributes.
 
@@ -45,7 +45,7 @@ def test_scrape_urls_parses_full_valid_arg_set() -> None:
     assert args.log_severity == "debug"
 
 
-def test_scrape_urls_long_input_file_flag() -> None:
+def test_scrape_urls_long_input_file_flag():
     """
     [Unit] cli scrape-urls: --input-file (long form) binds to args.input_file correctly.
 
@@ -67,7 +67,7 @@ def test_scrape_urls_long_input_file_flag() -> None:
     assert args.store_backend == "json"
 
 
-def test_search_parses_full_valid_arg_set() -> None:
+def test_search_parses_full_valid_arg_set():
     """
     [Unit] cli search: parses --store-backend, --max-search-pages, and --log-severity into the expected dest= attributes.
 
@@ -101,7 +101,7 @@ def test_search_parses_full_valid_arg_set() -> None:
     assert args.log_severity == "warning"
 
 
-def test_scrape_urls_requires_store_backend() -> None:
+def test_scrape_urls_requires_store_backend():
     """
     [Unit] cli scrape-urls: omitting --store-backend causes argparse to exit.
 
@@ -121,7 +121,7 @@ def test_scrape_urls_requires_store_backend() -> None:
         build_parser().parse_args(["scrape-urls", "-f", "content/urls.csv"])
 
 
-def test_search_requires_store_backend() -> None:
+def test_search_requires_store_backend():
     """
     [Unit] cli search: omitting --store-backend causes argparse to exit.
 
@@ -141,7 +141,7 @@ def test_search_requires_store_backend() -> None:
         build_parser().parse_args(["search"])
 
 
-def test_scrape_urls_requires_input_file() -> None:
+def test_scrape_urls_requires_input_file():
     """
     [Unit] cli scrape-urls: omitting -f / --input-file causes argparse to exit.
 
@@ -161,7 +161,7 @@ def test_scrape_urls_requires_input_file() -> None:
         build_parser().parse_args(["scrape-urls", "--store-backend", "mongo"])
 
 
-def test_invalid_store_backend_choice_rejected() -> None:
+def test_invalid_store_backend_choice_rejected():
     """
     [Unit] cli: an unrecognized --store-backend value causes argparse to exit.
 
@@ -182,7 +182,7 @@ def test_invalid_store_backend_choice_rejected() -> None:
         build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "sqlite"])
 
 
-def test_invalid_log_severity_choice_rejected() -> None:
+def test_invalid_log_severity_choice_rejected():
     """
     [Unit] cli: an unrecognized --log-severity value causes argparse to exit.
 
@@ -203,7 +203,7 @@ def test_invalid_log_severity_choice_rejected() -> None:
         build_parser().parse_args(["search", "--store-backend", "json", "--log-severity", "trace"])
 
 
-def test_search_max_search_pages_defaults_to_three() -> None:
+def test_search_max_search_pages_defaults_to_three():
     """
     [Unit] cli search: --max-search-pages defaults to 3 when not supplied.
 
@@ -222,7 +222,7 @@ def test_search_max_search_pages_defaults_to_three() -> None:
     assert args.max_search_pages == 3
 
 
-def test_search_max_search_pages_type_is_int() -> None:
+def test_search_max_search_pages_type_is_int():
     """
     [Unit] cli search: --max-search-pages is coerced to int by argparse.
 
@@ -241,7 +241,7 @@ def test_search_max_search_pages_type_is_int() -> None:
     assert isinstance(args.max_search_pages, int)
 
 
-def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
+def test_log_severity_defaults_to_info_on_both_subcommands():
     """
     [Unit] cli: --log-severity defaults to "info" on both scrape-urls and search.
 
@@ -263,7 +263,7 @@ def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
     assert search_args.log_severity == "info"
 
 
-def test_missing_subcommand_rejected() -> None:
+def test_missing_subcommand_rejected():
     """
     [Unit] cli: an empty argument list causes argparse to exit.
 
@@ -283,7 +283,7 @@ def test_missing_subcommand_rejected() -> None:
         build_parser().parse_args([])
 
 
-def test_rotate_cert_parses_full_valid_arg_set() -> None:
+def test_rotate_cert_parses_full_valid_arg_set():
     """
     [Unit] cli rotate-cert: parses --months, --output, and --log-severity into the expected dest= attributes.
 
@@ -310,7 +310,7 @@ def test_rotate_cert_parses_full_valid_arg_set() -> None:
     assert args.log_severity == "error"
 
 
-def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env() -> None:
+def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env():
     """
     [Unit] cli rotate-cert: all optional flags default to None or "info" when not supplied.
 
@@ -333,7 +333,7 @@ def test_rotate_cert_needs_no_arguments_and_defaults_defer_to_env() -> None:
     assert args.log_severity == "info"
 
 
-def test_rotate_cert_rejects_non_integer_months() -> None:
+def test_rotate_cert_rejects_non_integer_months():
     """
     [Unit] cli rotate-cert: a non-integer --months value causes argparse to exit.
 
@@ -352,7 +352,7 @@ def test_rotate_cert_rejects_non_integer_months() -> None:
         build_parser().parse_args(["rotate-cert", "--months", "soon"])
 
 
-def test_rotate_cert_check_flags() -> None:
+def test_rotate_cert_check_flags():
     """
     [Unit] cli rotate-cert: --check and --warn-days parse into their expected dest= attributes.
 
@@ -375,7 +375,7 @@ def test_rotate_cert_check_flags() -> None:
     assert isinstance(args.warn_days, int)
 
 
-def test_rotate_cert_check_defaults() -> None:
+def test_rotate_cert_check_defaults():
     """
     [Unit] cli rotate-cert: --check defaults to False and --warn-days defaults to 30.
 
@@ -396,7 +396,7 @@ def test_rotate_cert_check_defaults() -> None:
     assert args.warn_days == 30
 
 
-def test_rotate_cert_warn_days_rejects_non_integer() -> None:
+def test_rotate_cert_warn_days_rejects_non_integer():
     """
     [Unit] cli rotate-cert: a non-integer --warn-days value causes argparse to exit.
 
@@ -415,7 +415,7 @@ def test_rotate_cert_warn_days_rejects_non_integer() -> None:
         build_parser().parse_args(["rotate-cert", "--check", "--warn-days", "soon"])
 
 
-def test_rotate_cert_verify_flags() -> None:
+def test_rotate_cert_verify_flags():
     """
     [Unit] cli rotate-cert: --no-verify and --verify-attempts parse into their expected dest= attributes.
 
@@ -438,7 +438,7 @@ def test_rotate_cert_verify_flags() -> None:
     assert isinstance(args.verify_attempts, int)
 
 
-def test_rotate_cert_verify_defaults() -> None:
+def test_rotate_cert_verify_defaults():
     """
     [Unit] cli rotate-cert: --no-verify defaults to False and --verify-attempts defaults to 5.
 
@@ -459,7 +459,7 @@ def test_rotate_cert_verify_defaults() -> None:
     assert args.verify_attempts == 5
 
 
-def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
+def test_rotate_cert_verify_attempts_rejects_non_integer():
     """
     [Unit] cli rotate-cert: a non-integer --verify-attempts value causes argparse to exit.
 
@@ -478,7 +478,7 @@ def test_rotate_cert_verify_attempts_rejects_non_integer() -> None:
         build_parser().parse_args(["rotate-cert", "--verify-attempts", "many"])
 
 
-def test_rotate_cert_prune_defaults() -> None:
+def test_rotate_cert_prune_defaults():
     """
     [Unit] cli rotate-cert: --keep defaults to 2 and --no-prune defaults to False.
 
@@ -500,7 +500,7 @@ def test_rotate_cert_prune_defaults() -> None:
     assert args.no_prune is False
 
 
-def test_rotate_cert_keep_and_no_prune_flags() -> None:
+def test_rotate_cert_keep_and_no_prune_flags():
     """
     [Unit] cli rotate-cert: --keep and --no-prune parse into their expected dest= attributes.
 
@@ -520,7 +520,7 @@ def test_rotate_cert_keep_and_no_prune_flags() -> None:
     assert args.no_prune is True
 
 
-def test_keep_zero_rejected_by_cli() -> None:
+def test_keep_zero_rejected_by_cli():
     """
     [Unit] cli rotate-cert: --keep 0 causes argparse to exit.
 
@@ -539,7 +539,7 @@ def test_keep_zero_rejected_by_cli() -> None:
         build_parser().parse_args(["rotate-cert", "--keep", "0"])
 
 
-def test_keep_negative_rejected_by_cli() -> None:
+def test_keep_negative_rejected_by_cli():
     """
     [Unit] cli rotate-cert: negative --keep value causes argparse to exit.
 
@@ -558,7 +558,7 @@ def test_keep_negative_rejected_by_cli() -> None:
         build_parser().parse_args(["rotate-cert", "--keep", "-3"])
 
 
-def test_keep_non_integer_rejected_by_cli() -> None:
+def test_keep_non_integer_rejected_by_cli():
     """
     [Unit] cli rotate-cert: non-integer --keep value causes argparse to exit.
 
@@ -580,7 +580,7 @@ def test_keep_non_integer_rejected_by_cli() -> None:
 # --------------------------------------------------------------------------- #
 # detect-schema subparser
 # --------------------------------------------------------------------------- #
-def test_detect_schema_parses_full_valid_arg_set() -> None:
+def test_detect_schema_parses_full_valid_arg_set():
     """
     [Unit] cli detect-schema: parses all flags into their expected dest= attributes.
 
@@ -629,7 +629,7 @@ def test_detect_schema_parses_full_valid_arg_set() -> None:
     assert args.log_severity == "debug"
 
 
-def test_cli_page_type_defaults_to_detail() -> None:
+def test_cli_page_type_defaults_to_detail():
     """
     [Unit] cli detect-schema: --page-type defaults to "detail" when not supplied.
 
@@ -648,7 +648,7 @@ def test_cli_page_type_defaults_to_detail() -> None:
     assert args.page_type == "detail"
 
 
-def test_detect_schema_rejects_unknown_page_type() -> None:
+def test_detect_schema_rejects_unknown_page_type():
     """
     [Unit] cli detect-schema: an unrecognized --page-type value causes argparse to exit.
 
@@ -667,7 +667,7 @@ def test_detect_schema_rejects_unknown_page_type() -> None:
         build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--page-type", "api"])
 
 
-def test_detect_schema_model_defaults_to_none() -> None:
+def test_detect_schema_model_defaults_to_none():
     """
     [Unit] cli detect-schema: --model defaults to None when not supplied.
 
@@ -686,7 +686,7 @@ def test_detect_schema_model_defaults_to_none() -> None:
     assert args.model is None
 
 
-def test_detect_schema_max_input_tokens_defaults_to_40000() -> None:
+def test_detect_schema_max_input_tokens_defaults_to_40000():
     """
     [Unit] cli detect-schema: --max-input-tokens defaults to 40000 when not supplied.
 
@@ -705,7 +705,7 @@ def test_detect_schema_max_input_tokens_defaults_to_40000() -> None:
     assert args.max_input_tokens == 40000
 
 
-def test_detect_schema_url_is_repeatable_into_a_list() -> None:
+def test_detect_schema_url_is_repeatable_into_a_list():
     """
     [Unit] cli detect-schema: a single --url argument is stored as a one-element list.
 
@@ -724,7 +724,7 @@ def test_detect_schema_url_is_repeatable_into_a_list() -> None:
     assert args.url == ["https://leanpub.com/a"]
 
 
-def test_detect_schema_requires_site() -> None:
+def test_detect_schema_requires_site():
     """
     [Unit] cli detect-schema: omitting --site causes argparse to exit.
 
@@ -743,7 +743,7 @@ def test_detect_schema_requires_site() -> None:
         build_parser().parse_args(["detect-schema", "--url", "https://x/1"])
 
 
-def test_detect_schema_requires_url() -> None:
+def test_detect_schema_requires_url():
     """
     [Unit] cli detect-schema: omitting --url (and --html-file) causes argparse to exit.
 
@@ -762,7 +762,7 @@ def test_detect_schema_requires_url() -> None:
         build_parser().parse_args(["detect-schema", "--site", "amazon"])
 
 
-def test_detect_schema_rejects_unknown_site() -> None:
+def test_detect_schema_rejects_unknown_site():
     """
     [Unit] cli detect-schema: an unrecognized --site value causes argparse to exit.
 
@@ -781,7 +781,7 @@ def test_detect_schema_rejects_unknown_site() -> None:
         build_parser().parse_args(["detect-schema", "--site", "goodreads", "--url", "https://x/1"])
 
 
-def test_detect_schema_output_defaults_to_none() -> None:
+def test_detect_schema_output_defaults_to_none():
     """
     [Unit] cli detect-schema: --output defaults to None when not supplied.
 
@@ -800,7 +800,7 @@ def test_detect_schema_output_defaults_to_none() -> None:
     assert args.output is None
 
 
-def test_detect_schema_log_severity_defaults_to_info() -> None:
+def test_detect_schema_log_severity_defaults_to_info():
     """
     [Unit] cli detect-schema: --log-severity defaults to "info" when not supplied.
 
@@ -819,7 +819,7 @@ def test_detect_schema_log_severity_defaults_to_info() -> None:
     assert args.log_severity == "info"
 
 
-def test_html_file_and_url_are_mutually_exclusive() -> None:
+def test_html_file_and_url_are_mutually_exclusive():
     """
     [Unit] cli: verifies that --url and --html-file are mutually exclusive and that one is required.
 
@@ -845,7 +845,7 @@ def test_html_file_and_url_are_mutually_exclusive() -> None:
         build_parser().parse_args(["detect-schema", "--site", "amazon"])
 
 
-def test_detect_schema_html_file_is_repeatable_into_a_list() -> None:
+def test_detect_schema_html_file_is_repeatable_into_a_list():
     """
     [Unit] cli detect-schema: multiple --html-file arguments accumulate into a list and args.url is None.
 
@@ -867,7 +867,7 @@ def test_detect_schema_html_file_is_repeatable_into_a_list() -> None:
     assert args.url is None
 
 
-def test_detect_schema_replay_and_record_default_to_none() -> None:
+def test_detect_schema_replay_and_record_default_to_none():
     """
     [Unit] cli detect-schema: --replay and --record default to None when not supplied.
 
@@ -887,7 +887,7 @@ def test_detect_schema_replay_and_record_default_to_none() -> None:
     assert args.record is None
 
 
-def test_detect_schema_replay_and_record_parse() -> None:
+def test_detect_schema_replay_and_record_parse():
     """
     [Unit] cli detect-schema: --replay and --record parse into their expected dest= attributes.
 
@@ -920,7 +920,7 @@ def test_detect_schema_replay_and_record_parse() -> None:
     assert args.record == "rec.json"
 
 
-def test_detect_schema_format_defaults_to_text() -> None:
+def test_detect_schema_format_defaults_to_text():
     """
     [Unit] cli detect-schema: --format defaults to "text" and --check-current-only defaults to False.
 
@@ -940,7 +940,7 @@ def test_detect_schema_format_defaults_to_text() -> None:
     assert args.check_current_only is False
 
 
-def test_detect_schema_format_json_parses() -> None:
+def test_detect_schema_format_json_parses():
     """
     [Unit] cli detect-schema: --format json parses to "json".
 
@@ -959,7 +959,7 @@ def test_detect_schema_format_json_parses() -> None:
     assert args.format == "json"
 
 
-def test_detect_schema_rejects_unknown_format() -> None:
+def test_detect_schema_rejects_unknown_format():
     """
     [Unit] cli detect-schema: an unrecognized --format value causes argparse to exit.
 
@@ -978,7 +978,7 @@ def test_detect_schema_rejects_unknown_format() -> None:
         build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1", "--format", "yaml"])
 
 
-def test_detect_schema_check_current_only_flag_sets_true() -> None:
+def test_detect_schema_check_current_only_flag_sets_true():
     """
     [Unit] cli detect-schema: --check-current-only sets args.check_current_only to True.
 

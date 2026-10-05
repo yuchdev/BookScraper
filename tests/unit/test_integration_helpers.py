@@ -33,7 +33,7 @@ def _make_cert(directory, name: str, mtime: float) -> Path:
     return path
 
 
-def test_no_certificates_returns_none(cert_dir) -> None:
+def test_no_certificates_returns_none(cert_dir):
     """
     [Unit] integration helpers: verifies an empty cert directory returns None from both resolution functions.
 
@@ -54,7 +54,7 @@ def test_no_certificates_returns_none(cert_dir) -> None:
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) is None
 
 
-def test_picks_newest_certificate_by_mtime(cert_dir) -> None:
+def test_picks_newest_certificate_by_mtime(cert_dir):
     """
     [Unit] integration helpers: verifies the cert with the highest mtime is returned by both resolution functions.
 
@@ -79,7 +79,7 @@ def test_picks_newest_certificate_by_mtime(cert_dir) -> None:
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) == str(newest)
 
 
-def test_newest_wins_even_when_name_sorts_lower(cert_dir) -> None:
+def test_newest_wins_even_when_name_sorts_lower(cert_dir):
     """
     [Unit] integration helpers: verifies mtime beats lexical name order when selecting the newest cert.
 
@@ -102,7 +102,7 @@ def test_newest_wins_even_when_name_sorts_lower(cert_dir) -> None:
     assert mongo_test_helpers.get_default_tls_cert_file(cert_dir) == newest
 
 
-def test_a_freshly_rotated_cert_is_picked_up(cert_dir) -> None:
+def test_a_freshly_rotated_cert_is_picked_up(cert_dir):
     """
     [Unit] integration helpers: verifies a freshly-rotated cert is picked up via mtime glob.
 
@@ -125,7 +125,7 @@ def test_a_freshly_rotated_cert_is_picked_up(cert_dir) -> None:
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) == str(rotated)
 
 
-def test_unrelated_files_are_ignored(cert_dir) -> None:
+def test_unrelated_files_are_ignored(cert_dir):
     """
     [Unit] integration helpers: verifies non-matching files are excluded from cert discovery.
 
@@ -149,7 +149,7 @@ def test_unrelated_files_are_ignored(cert_dir) -> None:
     assert mongo_test_helpers.get_default_tls_cert_file(cert_dir) is None
 
 
-def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> None:
+def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch):
     """
     [Local] integration helpers: verifies TLS_CERT_FILE env var takes precedence over the directory glob.
 
@@ -174,7 +174,7 @@ def test_env_var_overrides_the_directory(cert_dir, tmp_path, monkeypatch) -> Non
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) == str(override)
 
 
-def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch) -> None:
+def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch):
     """
     [Local] integration helpers: verifies a nonexistent TLS_CERT_FILE path falls back to the directory glob.
 
@@ -197,7 +197,7 @@ def test_nonexistent_env_var_path_falls_back_to_directory(cert_dir, monkeypatch)
     assert mongo_test_helpers.get_tls_cert_file(config_dir=cert_dir) == str(newest)
 
 
-def test_helper_no_longer_pins_a_hardcoded_certificate_name() -> None:
+def test_helper_no_longer_pins_a_hardcoded_certificate_name():
     """
     [Unit] integration helpers: verifies the hardcoded cert constant is absent and the glob is present.
 

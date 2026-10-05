@@ -34,7 +34,7 @@ def _load_capture_module() -> ModuleType:
 capture = _load_capture_module()
 
 
-async def test_assert_logged_out_passes_for_cookieless_context() -> None:
+async def test_assert_logged_out_passes_for_cookieless_context():
     """
     [Local] capture fixtures: verifies assert logged out passes for cookieless context.
     
@@ -51,7 +51,7 @@ async def test_assert_logged_out_passes_for_cookieless_context() -> None:
     await capture._assert_logged_out(context)
 
 
-async def test_assert_logged_out_aborts_when_cookies_persist() -> None:
+async def test_assert_logged_out_aborts_when_cookies_persist():
     """
     [Local] capture fixtures: verifies assert logged out aborts when cookies persist.
     
@@ -72,7 +72,7 @@ async def test_assert_logged_out_aborts_when_cookies_persist() -> None:
         await capture._assert_logged_out(context)
 
 
-async def test_assert_logged_out_aborts_when_storage_state_has_origins() -> None:
+async def test_assert_logged_out_aborts_when_storage_state_has_origins():
     """
     [Local] capture fixtures: verifies assert logged out aborts when storage state has origins.
     
@@ -90,7 +90,7 @@ async def test_assert_logged_out_aborts_when_storage_state_has_origins() -> None
         await capture._assert_logged_out(context)
 
 
-async def test_capture_document_uses_fresh_context_and_reasserts_before_content() -> None:
+async def test_capture_document_uses_fresh_context_and_reasserts_before_content():
     """
     [Local] capture fixtures: verifies capture document uses fresh context and reasserts before content.
     
@@ -114,7 +114,7 @@ async def test_capture_document_uses_fresh_context_and_reasserts_before_content(
     context.close.assert_awaited_once()
 
 
-async def test_capture_document_aborts_on_dirty_context_without_reading_content() -> None:
+async def test_capture_document_aborts_on_dirty_context_without_reading_content():
     """
     [Local] capture fixtures: verifies capture document aborts on dirty context without reading content.
     
@@ -142,7 +142,7 @@ async def test_capture_document_aborts_on_dirty_context_without_reading_content(
     context.close.assert_awaited_once()
 
 
-def test_keep_selectors_excludes_description() -> None:
+def test_keep_selectors_excludes_description():
     """
     [Local] capture fixtures: verifies keep selectors excludes description.
     
@@ -162,7 +162,7 @@ def test_keep_selectors_excludes_description() -> None:
     assert site_constants["amazon"]["SEARCH_BASE_URL"] not in selectors
 
 
-def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
+def test_search_selectors_keep_css_but_not_base_url_or_page_count():
     """
     [Local] capture fixtures: verifies search selectors keep css but not base url or page count.
     
@@ -189,7 +189,7 @@ def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
     assert amazon["BOOK_TITLE"] not in selectors
 
 
-def test_trim_repeated_blocks_keeps_only_first_n_matches() -> None:
+def test_trim_repeated_blocks_keeps_only_first_n_matches():
     """
     [Local] capture fixtures: verifies trim repeated blocks keeps only first n matches.
     
@@ -215,7 +215,7 @@ def test_trim_repeated_blocks_keeps_only_first_n_matches() -> None:
     assert "<span>4</span>" not in trimmed
 
 
-def test_trim_repeated_blocks_returns_input_when_under_limit() -> None:
+def test_trim_repeated_blocks_returns_input_when_under_limit():
     """
     [Local] capture fixtures: verifies trim repeated blocks returns input when under limit.
     
@@ -233,7 +233,7 @@ def test_trim_repeated_blocks_returns_input_when_under_limit() -> None:
     assert capture._trim_repeated_blocks(html, ".card", 8) == html
 
 
-def test_strip_subresources_removes_loaders_but_keeps_anchors() -> None:
+def test_strip_subresources_removes_loaders_but_keeps_anchors():
     """
     [Local] capture fixtures: verifies strip subresources removes loaders but keeps anchors.
     

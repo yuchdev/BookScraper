@@ -33,7 +33,7 @@ BARE_URI = "mongodb+srv://cluster.example.net/db?retryWrites=true"
         ("mongodb+srv://c.example.net/db?authMechanism=SCRAM-SHA-256", False),
     ],
 )
-def test_uri_selects_x509_auth(uri, expected) -> None:
+def test_uri_selects_x509_auth(uri, expected):
     """
     [Local] client: verifies that uri_selects_x509_auth detects the MONGODB-X509 authMechanism (case-insensitive).
 
@@ -56,7 +56,7 @@ def test_uri_selects_x509_auth(uri, expected) -> None:
     "uri, expected",
     [(SCRAM_URI, True), (X509_URI, False), (BARE_URI, False)],
 )
-def test_uri_has_embedded_credentials(uri, expected) -> None:
+def test_uri_has_embedded_credentials(uri, expected):
     """
     [Local] client: verifies that uri_has_embedded_credentials detects user:password in the URI.
 
@@ -77,7 +77,7 @@ def test_uri_has_embedded_credentials(uri, expected) -> None:
 # --------------------------------------------------------------------------- #
 # _warn_if_x509_mechanism_missing - the three-way branch
 # --------------------------------------------------------------------------- #
-def test_x509_mechanism_present_warns_nothing() -> None:
+def test_x509_mechanism_present_warns_nothing():
     """
     [Local] client: verifies that a properly configured X.509 URI with a cert emits no warning or critical log.
 
@@ -104,7 +104,7 @@ def test_x509_mechanism_present_warns_nothing() -> None:
     printed.assert_not_called()
 
 
-def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
+def test_scram_uri_with_stray_cert_warns_but_does_not_escalate():
     """
     [Local] client: verifies scram uri with stray cert warns but does not escalate.
 
@@ -129,7 +129,7 @@ def test_scram_uri_with_stray_cert_warns_but_does_not_escalate() -> None:
     assert "SCRAM" in warn.call_args.args[0]
 
 
-def test_cert_without_mechanism_or_credentials_is_critical() -> None:
+def test_cert_without_mechanism_or_credentials_is_critical():
     """
     [Local] client: verifies cert without mechanism or credentials is critical.
 
@@ -159,7 +159,7 @@ def test_cert_without_mechanism_or_credentials_is_critical() -> None:
 class TestResolveTimeout:
     """Tests for client.resolve_server_selection_timeout_ms."""
 
-    def test_timeout_default_and_env_override(self, monkeypatch) -> None:
+    def test_timeout_default_and_env_override(self, monkeypatch):
         """
         [Local] client: verifies timeout default and env override.
 
@@ -179,7 +179,7 @@ class TestResolveTimeout:
         monkeypatch.setenv(client.SERVER_SELECTION_TIMEOUT_ENV, "2500")
         assert client.resolve_server_selection_timeout_ms() == 2500
 
-    def test_blank_env_falls_back_to_default(self, monkeypatch) -> None:
+    def test_blank_env_falls_back_to_default(self, monkeypatch):
         """
         [Local] client: verifies blank env falls back to default.
 
@@ -195,7 +195,7 @@ class TestResolveTimeout:
         monkeypatch.setenv(client.SERVER_SELECTION_TIMEOUT_ENV, "   ")
         assert client.resolve_server_selection_timeout_ms() == client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
 
-    def test_non_integer_env_warns_and_defaults(self, monkeypatch) -> None:
+    def test_non_integer_env_warns_and_defaults(self, monkeypatch):
         """
         [Local] client: verifies non integer env warns and defaults.
 
@@ -213,7 +213,7 @@ class TestResolveTimeout:
             assert client.resolve_server_selection_timeout_ms() == client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
         warn.assert_called_once()
 
-    def test_non_positive_env_warns_and_defaults(self, monkeypatch) -> None:
+    def test_non_positive_env_warns_and_defaults(self, monkeypatch):
         """
         [Local] client: verifies non positive env warns and defaults.
 
@@ -238,7 +238,7 @@ class TestResolveTimeout:
 class TestBuildMongoClient:
     """Tests for client.build_mongo_client."""
 
-    def test_build_client_with_cert_sets_tls_and_key_file(self, tmp_path) -> None:
+    def test_build_client_with_cert_sets_tls_and_key_file(self, tmp_path):
         """
         [Local] client: verifies build client with cert sets tls and key file.
 
@@ -267,7 +267,7 @@ class TestBuildMongoClient:
         assert kwargs["server_api"].version == "1"
         assert "tlsCAFile" not in kwargs
 
-    def test_build_client_without_cert_omits_tls_kwargs(self) -> None:
+    def test_build_client_without_cert_omits_tls_kwargs(self):
         """
         [Local] client: verifies build client without cert omits tls kwargs.
 
@@ -290,7 +290,7 @@ class TestBuildMongoClient:
         assert kwargs["tlsAllowInvalidCertificates"] is False
         assert kwargs["serverSelectionTimeoutMS"] == client.DEFAULT_SERVER_SELECTION_TIMEOUT_MS
 
-    def test_build_client_passes_ca_file_only_when_set(self) -> None:
+    def test_build_client_passes_ca_file_only_when_set(self):
         """
         [Local] client: verifies build client passes ca file only when set.
 
@@ -314,7 +314,7 @@ class TestBuildMongoClient:
         _, kwargs = mock_ctor.call_args
         assert "tlsCAFile" not in kwargs
 
-    def test_build_client_missing_cert_file_raises(self, tmp_path) -> None:
+    def test_build_client_missing_cert_file_raises(self, tmp_path):
         """
         [Local] client: verifies build client missing cert file raises.
 
@@ -333,7 +333,7 @@ class TestBuildMongoClient:
                 client.build_mongo_client(SCRAM_URI, missing, None)
         mock_ctor.assert_not_called()
 
-    def test_build_client_warns_when_cert_lacks_x509_mechanism(self, tmp_path) -> None:
+    def test_build_client_warns_when_cert_lacks_x509_mechanism(self, tmp_path):
         """
         [Local] client: verifies build client warns when cert lacks x509 mechanism.
 
@@ -355,7 +355,7 @@ class TestBuildMongoClient:
             client.build_mongo_client(BARE_URI, str(cert), None)
         warn.assert_called_once_with(BARE_URI, str(cert))
 
-    def test_build_client_wraps_construction_error_redacted(self) -> None:
+    def test_build_client_wraps_construction_error_redacted(self):
         """
         [Local] client: verifies build client wraps construction error redacted.
 
@@ -384,7 +384,7 @@ class TestBuildMongoClient:
 class TestPing:
     """Tests for client.ping."""
 
-    def test_ping_success_is_silent(self) -> None:
+    def test_ping_success_is_silent(self):
         """
         [Local] client: verifies ping success is silent.
 
@@ -401,7 +401,7 @@ class TestPing:
         client.ping(instance)
         instance.admin.command.assert_called_once_with("ping")
 
-    def test_ping_wraps_error_keeping_code_name_only(self) -> None:
+    def test_ping_wraps_error_keeping_code_name_only(self):
         """
         [Local] client: verifies ping wraps error keeping code name only.
 
@@ -421,7 +421,7 @@ class TestPing:
             client.ping(instance)
         assert str(excinfo.value) == "OperationFailure 8000 AtlasError"
 
-    def test_ping_wraps_error_without_code(self) -> None:
+    def test_ping_wraps_error_without_code(self):
         """
         [Local] client: verifies ping wraps error without code.
 
@@ -440,7 +440,7 @@ class TestPing:
             client.ping(instance)
         assert str(excinfo.value) == "ServerSelectionTimeoutError"
 
-    def test_ping_error_does_not_leak_host_in_message_or_logs(self, caplog) -> None:
+    def test_ping_error_does_not_leak_host_in_message_or_logs(self, caplog):
         """
         [Local] client: verifies ping error does not leak host in message or logs.
 
@@ -469,7 +469,7 @@ class TestPing:
         assert secret not in caplog.text
         assert "cluster0.example.net" not in caplog.text
 
-    def test_redact_ignores_non_dict_details(self) -> None:
+    def test_redact_ignores_non_dict_details(self):
         """
         [Local] client: verifies redact ignores non dict details.
 
@@ -495,7 +495,7 @@ class TestPing:
 # --------------------------------------------------------------------------- #
 # Cross-path parity: database init and the pre-flight check build identical kwargs
 # --------------------------------------------------------------------------- #
-def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_path) -> None:
+def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_path):
     """
     [Local] client: verifies database and preflight build identical client kwargs.
 

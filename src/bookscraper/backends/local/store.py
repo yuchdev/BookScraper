@@ -67,7 +67,7 @@ def _load_books(path: Path = LOCAL_STORE_FILE, *, raise_on_corrupt: bool = False
     return data if isinstance(data, list) else []
 
 
-def assert_store_readable(path: Path = LOCAL_STORE_FILE) -> None:
+def assert_store_readable(path: Path = LOCAL_STORE_FILE):
     """
     Raise :class:`LocalStoreCorruptError` if an existing store file cannot be parsed.
 
@@ -79,7 +79,7 @@ def assert_store_readable(path: Path = LOCAL_STORE_FILE) -> None:
     _load_books(path, raise_on_corrupt=True)
 
 
-def _write_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
+def _write_books(books: list[dict], path: Path = LOCAL_STORE_FILE):
     """
     Persist ``books`` atomically, keeping one backup generation.
 

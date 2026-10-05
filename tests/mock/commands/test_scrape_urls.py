@@ -38,7 +38,7 @@ MODULE = "bookscraper.commands.scrape_urls"
         ("https://example.com/book", "other"),
     ],
 )
-def test_identify_website_all_branches(url: str, expected: str) -> None:
+def test_identify_website_all_branches(url: str, expected: str):
     """
     [Local] scrape urls: verifies that each supported URL pattern maps to the correct site tag.
 
@@ -60,7 +60,7 @@ def test_identify_website_all_branches(url: str, expected: str) -> None:
 # --------------------------------------------------------------------------- #
 # save_failed_urls_to_csv  (scrape_urls variant: csv.writer, (url, status) tuples)
 # --------------------------------------------------------------------------- #
-def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
+def test_save_failed_urls_empty_creates_no_file(tmp_path):
     """
     [Local] scrape urls: verifies that an empty failed-URL list creates no CSV file.
 
@@ -80,7 +80,7 @@ def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
     assert not target.exists()
 
 
-def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path) -> None:
+def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path):
     """
     [Local] scrape urls: verifies that the failed-URLs CSV has the correct header and rows.
 
@@ -111,7 +111,7 @@ def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path) -> None:
     assert read_rows[1:] == [list(r) for r in rows]
 
 
-def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
+def test_save_failed_urls_open_failure_is_swallowed(tmp_path):
     """
     [Local] scrape urls: verifies that an OSError on file open is swallowed, not propagated.
 
@@ -136,7 +136,7 @@ def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # save_other_links_to_csv  (csv.writer, single "url" column)
 # --------------------------------------------------------------------------- #
-def test_save_other_links_empty_creates_no_file(tmp_path) -> None:
+def test_save_other_links_empty_creates_no_file(tmp_path):
     """
     [Local] scrape urls: verifies that an empty other-links list creates no CSV file.
 
@@ -156,7 +156,7 @@ def test_save_other_links_empty_creates_no_file(tmp_path) -> None:
     assert not target.exists()
 
 
-def test_save_other_links_writes_header_and_rows(tmp_path) -> None:
+def test_save_other_links_writes_header_and_rows(tmp_path):
     """
     [Local] scrape urls: verifies that save_other_links_to_csv writes a single-column CSV.
 
@@ -182,7 +182,7 @@ def test_save_other_links_writes_header_and_rows(tmp_path) -> None:
     assert read_rows[1:] == [[link] for link in links]
 
 
-def test_save_other_links_open_failure_is_swallowed(tmp_path) -> None:
+def test_save_other_links_open_failure_is_swallowed(tmp_path):
     """
     [Local] scrape urls: verifies that an OSError on file open is swallowed in save_other_links_to_csv.
 
@@ -238,7 +238,7 @@ def _make_playwright_factory() -> tuple[MagicMock, MagicMock]:
 # --------------------------------------------------------------------------- #
 # run() - early-exit / error branches
 # --------------------------------------------------------------------------- #
-async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> None:
+async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
     """
     [Local] scrape urls: verifies that a CSV with only "other" URLs exits 0 without scraping.
 
@@ -279,7 +279,7 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> N
     backend.save_books.assert_not_called()
 
 
-async def test_run_missing_input_file_exits_one(tmp_path) -> None:
+async def test_run_missing_input_file_exits_one(tmp_path):
     """
     [Local] scrape urls: verifies that a nonexistent input CSV exits 1 without saving.
 
@@ -308,7 +308,7 @@ async def test_run_missing_input_file_exits_one(tmp_path) -> None:
     backend.save_books.assert_not_called()
 
 
-async def test_run_missing_url_column_exits_one(tmp_path) -> None:
+async def test_run_missing_url_column_exits_one(tmp_path):
     """
     [Local] scrape urls: verifies that a CSV without a "url" column header exits 1.
 
@@ -337,7 +337,7 @@ async def test_run_missing_url_column_exits_one(tmp_path) -> None:
     backend.save_books.assert_not_called()
 
 
-async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
+async def test_run_unparseable_csv_exits_one(tmp_path):
     """
     [Local] scrape urls: verifies that a pd.errors.ParserError on CSV load exits 1.
 
@@ -370,7 +370,7 @@ async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # run() - scraping loop / result type-switch
 # --------------------------------------------------------------------------- #
-async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None:
+async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
     """
     [Local] scrape urls: verifies that a SUCCESS result saves the book and closes browser/backend.
 
@@ -439,7 +439,7 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
         ),
     ],
 )
-async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_result, expected_row) -> None:
+async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_result, expected_row):
     """
     [Local] scrape urls: verifies that non-SUCCESS results are recorded in the CSV but not saved.
 
@@ -485,7 +485,7 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
     assert recorded == [expected_row]
 
 
-async def test_run_summary_counts_each_status(tmp_path) -> None:
+async def test_run_summary_counts_each_status(tmp_path):
     """
     [Local] scrape urls: verifies run summary counts each status.
 
@@ -537,7 +537,7 @@ async def test_run_summary_counts_each_status(tmp_path) -> None:
     assert "FAILED" not in line
 
 
-async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> None:
+async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path):
     # 11 recognized URLs => two batches (batch_size hardcoded at 10) => one pause.
     """
     [Local] scrape urls: verifies that 11 URLs produce two batches and exactly one inter-batch pause.

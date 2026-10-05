@@ -8,7 +8,7 @@ flipped HEADLESS_BROWSER all silently change scraper behavior with no crash.
 from bookscraper.scraping import parameters
 
 
-def test_headless_browser_is_false() -> None:
+def test_headless_browser_is_false():
     """
     [Unit] parameters: verifies HEADLESS_BROWSER is False (headed mode).
 
@@ -27,7 +27,7 @@ def test_headless_browser_is_false() -> None:
     assert parameters.HEADLESS_BROWSER is False
 
 
-def test_sites_to_scrape_is_leanpub_only() -> None:
+def test_sites_to_scrape_is_leanpub_only():
     """
     [Unit] parameters: verifies SITES_TO_SCRAPE is exactly ["leanpub"].
 
@@ -46,7 +46,7 @@ def test_sites_to_scrape_is_leanpub_only() -> None:
     assert parameters.SITES_TO_SCRAPE == ["leanpub"]
 
 
-def test_site_constants_has_all_four_sites() -> None:
+def test_site_constants_has_all_four_sites():
     """
     [Unit] parameters: verifies site_constants contains exactly the four supported sites.
 
@@ -65,7 +65,7 @@ def test_site_constants_has_all_four_sites() -> None:
     assert set(parameters.site_constants) == {"amazon", "leanpub", "packtpub", "oreilly"}
 
 
-def test_user_agents_non_empty_strings() -> None:
+def test_user_agents_non_empty_strings():
     """
     [Unit] parameters: verifies USER_AGENTS is a non-empty list of non-empty strings.
 
@@ -85,7 +85,7 @@ def test_user_agents_non_empty_strings() -> None:
     assert all(isinstance(ua, str) and ua for ua in parameters.USER_AGENTS)
 
 
-def test_min_rating_is_float() -> None:
+def test_min_rating_is_float():
     """
     [Unit] parameters: verifies SCRAPE_FILTERS["min_rating"] is a float.
 

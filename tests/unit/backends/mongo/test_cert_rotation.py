@@ -52,7 +52,7 @@ def _combined_pem(not_valid_after: datetime, *, key_first: bool = True) -> bytes
     return (_TEST_KEY_PEM + cert_pem) if key_first else (cert_pem + _TEST_KEY_PEM)
 
 
-def _write_settings(config_dir, settings: dict) -> None:
+def _write_settings(config_dir, settings: dict):
     """Write a settings dict as JSON into ``config_dir/settings.json``."""
     (config_dir / "settings.json").write_text(json.dumps(settings))
 
@@ -60,7 +60,7 @@ def _write_settings(config_dir, settings: dict) -> None:
 # --------------------------------------------------------------------------- #
 # resolve_months
 # --------------------------------------------------------------------------- #
-def test_resolve_months_defaults_to_six(monkeypatch) -> None:
+def test_resolve_months_defaults_to_six(monkeypatch):
     """
     [Local] cert rotation: verifies resolve_months returns 6 when ATLAS_CERT_MONTHS is unset.
 
@@ -81,7 +81,7 @@ def test_resolve_months_defaults_to_six(monkeypatch) -> None:
     assert cert_rotation.resolve_months() == 6
 
 
-def test_resolve_months_reads_env(monkeypatch) -> None:
+def test_resolve_months_reads_env(monkeypatch):
     """
     [Local] cert rotation: verifies ATLAS_CERT_MONTHS env var is used when set and no argument is given.
 
@@ -102,7 +102,7 @@ def test_resolve_months_reads_env(monkeypatch) -> None:
     assert cert_rotation.resolve_months() == 12
 
 
-def test_resolve_months_argument_beats_env(monkeypatch) -> None:
+def test_resolve_months_argument_beats_env(monkeypatch):
     """
     [Local] cert rotation: verifies an explicit argument takes precedence over ATLAS_CERT_MONTHS.
 
@@ -123,7 +123,7 @@ def test_resolve_months_argument_beats_env(monkeypatch) -> None:
     assert cert_rotation.resolve_months(3) == 3
 
 
-def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
+def test_resolve_months_rejects_non_integer_env(monkeypatch):
     """
     [Local] cert rotation: verifies a non-integer ATLAS_CERT_MONTHS raises RotationError naming the var.
 
@@ -146,7 +146,7 @@ def test_resolve_months_rejects_non_integer_env(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("months", [0, -1, 25])
-def test_resolve_months_rejects_out_of_range(months) -> None:
+def test_resolve_months_rejects_out_of_range(months):
     """
     [Unit] cert rotation: verifies months outside the 1-24 range raise RotationError.
 
@@ -168,7 +168,7 @@ def test_resolve_months_rejects_out_of_range(months) -> None:
 
 
 @pytest.mark.parametrize("months", [1, 24])
-def test_resolve_months_accepts_range_boundaries(months) -> None:
+def test_resolve_months_accepts_range_boundaries(months):
     """
     [Unit] cert rotation: verifies the boundary months 1 and 24 are accepted without error.
 
@@ -191,7 +191,7 @@ def test_resolve_months_accepts_range_boundaries(months) -> None:
 # --------------------------------------------------------------------------- #
 # atomic_write / default_output_path
 # --------------------------------------------------------------------------- #
-def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
+def test_atomic_write_creates_parents_and_owner_only_file(tmp_path):
     """
     [Unit] cert rotation: verifies atomic_write creates parent directories and sets mode 0o600.
 
@@ -215,7 +215,7 @@ def test_atomic_write_creates_parents_and_owner_only_file(tmp_path) -> None:
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
-def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) -> None:
+def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path):
     """
     [Unit] cert rotation: verifies atomic_write overwrites an existing file and leaves no temp files behind.
 
@@ -241,7 +241,7 @@ def test_atomic_write_replaces_existing_file_and_leaves_no_temp_files(tmp_path) 
     assert [p.name for p in tmp_path.iterdir()] == ["cert.pem"]
 
 
-def test_default_output_path_is_timestamped_under_config_dir(isolated_config) -> None:
+def test_default_output_path_is_timestamped_under_config_dir(isolated_config):
     """
     [Unit] cert rotation: verifies default_output_path returns a timestamped .pem path under CONFIG_DIR.
 
@@ -267,7 +267,7 @@ def test_default_output_path_is_timestamped_under_config_dir(isolated_config) ->
 # --------------------------------------------------------------------------- #
 # update_settings_after_rotation
 # --------------------------------------------------------------------------- #
-def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> None:
+def test_update_settings_no_file_reports_legacy_fallback(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation reports "nothing to update" when settings.json is absent.
 
@@ -291,7 +291,7 @@ def test_update_settings_no_file_reports_legacy_fallback(isolated_config) -> Non
     assert not (isolated_config / "settings.json").exists()
 
 
-def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) -> None:
+def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation warns and leaves a malformed settings.json unchanged.
 
@@ -317,7 +317,7 @@ def test_update_settings_malformed_file_warns_and_is_untouched(isolated_config) 
     assert settings_file.read_text() == "{not json"
 
 
-def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
+def test_update_settings_pass_auth_is_untouched(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation is a no-op for password auth.
 
@@ -343,7 +343,7 @@ def test_update_settings_pass_auth_is_untouched(isolated_config) -> None:
     assert json.loads((isolated_config / "settings.json").read_text()) == settings
 
 
-def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
+def test_update_settings_literal_cert_is_repointed(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation rewrites the cert filename for a literal source.
 
@@ -381,7 +381,7 @@ def test_update_settings_literal_cert_is_repointed(isolated_config) -> None:
     assert "X509-cert-new.pem" in notes[0]
 
 
-def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
+def test_update_settings_env_cert_only_reminds(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation prints a reminder for an env-sourced cert.
 
@@ -415,7 +415,7 @@ def test_update_settings_env_cert_only_reminds(isolated_config) -> None:
     assert json.loads((isolated_config / "settings.json").read_text()) == settings
 
 
-def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config) -> None:
+def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config):
     """
     [Unit] cert rotation: verifies update_settings_after_rotation reports "unrecognized shape" for an unknown cert source.
 
@@ -444,7 +444,7 @@ def test_update_settings_unrecognized_cert_shape_is_untouched(isolated_config) -
 # --------------------------------------------------------------------------- #
 # read_certificate_expiry
 # --------------------------------------------------------------------------- #
-def test_read_expiry_from_combined_key_and_cert_pem(tmp_path) -> None:
+def test_read_expiry_from_combined_key_and_cert_pem(tmp_path):
     """
     [Unit] cert rotation: verifies read_certificate_expiry parses the expiry from a key-first combined PEM.
 
@@ -471,7 +471,7 @@ def test_read_expiry_from_combined_key_and_cert_pem(tmp_path) -> None:
     assert result.tzinfo is not None
 
 
-def test_read_expiry_parses_first_cert_when_cert_precedes_key(tmp_path) -> None:
+def test_read_expiry_parses_first_cert_when_cert_precedes_key(tmp_path):
     """
     [Unit] cert rotation: verifies read_certificate_expiry still parses when the cert block precedes the key.
 
@@ -495,7 +495,7 @@ def test_read_expiry_parses_first_cert_when_cert_precedes_key(tmp_path) -> None:
     assert cert_rotation.read_certificate_expiry(cert_file) == expiry
 
 
-def test_read_expiry_missing_file_raises_rotation_error(tmp_path) -> None:
+def test_read_expiry_missing_file_raises_rotation_error(tmp_path):
     """
     [Unit] cert rotation: verifies a missing cert file raises RotationError naming only the path.
 
@@ -517,7 +517,7 @@ def test_read_expiry_missing_file_raises_rotation_error(tmp_path) -> None:
         cert_rotation.read_certificate_expiry(missing)
 
 
-def test_read_expiry_pem_without_certificate_block_raises(tmp_path) -> None:
+def test_read_expiry_pem_without_certificate_block_raises(tmp_path):
     """
     [Unit] cert rotation: verifies a key-only PEM raises RotationError with no certificate block.
 
@@ -541,7 +541,7 @@ def test_read_expiry_pem_without_certificate_block_raises(tmp_path) -> None:
         cert_rotation.read_certificate_expiry(key_only)
 
 
-def test_read_expiry_garbage_certificate_block_raises(tmp_path) -> None:
+def test_read_expiry_garbage_certificate_block_raises(tmp_path):
     """
     [Unit] cert rotation: verifies garbage inside a CERTIFICATE block raises RotationError.
 
@@ -565,7 +565,7 @@ def test_read_expiry_garbage_certificate_block_raises(tmp_path) -> None:
         cert_rotation.read_certificate_expiry(garbage)
 
 
-def test_read_expiry_never_leaks_key_bytes_on_error(tmp_path) -> None:
+def test_read_expiry_never_leaks_key_bytes_on_error(tmp_path):
     """
     [Unit] cert rotation: verifies private key bytes do not appear in RotationError messages (CWE-532/CWE-312).
 
@@ -596,7 +596,7 @@ def test_read_expiry_never_leaks_key_bytes_on_error(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # cert_expiry_warning
 # --------------------------------------------------------------------------- #
-def test_cert_expiry_warning_none_cert_returns_none() -> None:
+def test_cert_expiry_warning_none_cert_returns_none():
     """
     [Unit] cert rotation: verifies cert_expiry_warning returns None when no cert is configured.
 
@@ -616,7 +616,7 @@ def test_cert_expiry_warning_none_cert_returns_none() -> None:
     assert cert_rotation.cert_expiry_warning(None) is None
 
 
-def test_cert_expiry_warning_far_expiry_returns_none(tmp_path) -> None:
+def test_cert_expiry_warning_far_expiry_returns_none(tmp_path):
     """
     [Unit] cert rotation: verifies cert_expiry_warning returns None for a cert expiring far in the future.
 
@@ -639,7 +639,7 @@ def test_cert_expiry_warning_far_expiry_returns_none(tmp_path) -> None:
     assert cert_rotation.cert_expiry_warning(cert_file) is None
 
 
-def test_cert_expiry_warning_within_window_warns(tmp_path) -> None:
+def test_cert_expiry_warning_within_window_warns(tmp_path):
     """
     [Unit] cert rotation: verifies cert_expiry_warning returns a renewal warning when expiry is within the window.
 
@@ -666,7 +666,7 @@ def test_cert_expiry_warning_within_window_warns(tmp_path) -> None:
     assert "rotate-cert" in warning
 
 
-def test_cert_expiry_warning_expired_warns(tmp_path) -> None:
+def test_cert_expiry_warning_expired_warns(tmp_path):
     """
     [Unit] cert rotation: verifies cert_expiry_warning returns an expired warning for an already-expired cert.
 
@@ -692,7 +692,7 @@ def test_cert_expiry_warning_expired_warns(tmp_path) -> None:
     assert "expired on" in warning
 
 
-def test_cert_expiry_warning_parse_failure_is_warning_not_raise(tmp_path) -> None:
+def test_cert_expiry_warning_parse_failure_is_warning_not_raise(tmp_path):
     """
     [Unit] cert rotation: verifies cert_expiry_warning returns a warning string instead of raising on parse failure (ROT-17).
 
@@ -743,7 +743,7 @@ def _make_cert(config_dir: pathlib.Path, name: str, mtime: float) -> pathlib.Pat
     return path
 
 
-def test_prune_keeps_newest_n(prune_config) -> None:
+def test_prune_keeps_newest_n(prune_config):
     """
     [Unit] cert rotation: verifies prune_old_certificates keeps only the newest N certs by mtime.
 
@@ -770,7 +770,7 @@ def test_prune_keeps_newest_n(prune_config) -> None:
     assert sum("Pruned superseded" in s for s in status) == 3
 
 
-def test_prune_never_deletes_protected_even_if_oldest(prune_config) -> None:
+def test_prune_never_deletes_protected_even_if_oldest(prune_config):
     """
     [Unit] cert rotation: verifies a protected cert is never deleted even when it is the oldest (ROT-6).
 
@@ -796,7 +796,7 @@ def test_prune_never_deletes_protected_even_if_oldest(prune_config) -> None:
     assert remaining == ["X509-cert-0.pem", "X509-cert-3.pem", "X509-cert-4.pem"]
 
 
-def test_prune_ignores_files_outside_glob_and_dir(prune_config, tmp_path) -> None:
+def test_prune_ignores_files_outside_glob_and_dir(prune_config, tmp_path):
     """
     [Unit] cert rotation: verifies only X509-cert-*.pem files inside CONFIG_DIR are pruning candidates (ROT-9).
 
@@ -832,7 +832,7 @@ def test_prune_ignores_files_outside_glob_and_dir(prune_config, tmp_path) -> Non
     assert outside.exists()  # matching name but outside CONFIG_DIR - never a candidate
 
 
-def test_prune_unlink_failure_is_warning(prune_config, monkeypatch) -> None:
+def test_prune_unlink_failure_is_warning(prune_config, monkeypatch):
     """
     [Local] cert rotation: verifies a failed unlink produces a WARNING status line and does not raise (ROT-10).
 
@@ -864,7 +864,7 @@ def test_prune_unlink_failure_is_warning(prune_config, monkeypatch) -> None:
     assert (prune_config / "X509-cert-0.pem").exists()  # survived the failed unlink
 
 
-def test_prune_tolerates_dangling_symlink_and_vanished_file(prune_config, monkeypatch) -> None:
+def test_prune_tolerates_dangling_symlink_and_vanished_file(prune_config, monkeypatch):
     """
     [Local] cert rotation: verifies pruning tolerates a dangling symlink and a file that vanished between glob and mtime read.
 
@@ -901,7 +901,7 @@ def test_prune_tolerates_dangling_symlink_and_vanished_file(prune_config, monkey
 
 
 @pytest.mark.parametrize("spelling", ["relative", "dotdot", "symlink"])
-def test_prune_protects_active_cert_via_different_spelling(prune_config, tmp_path, monkeypatch, spelling) -> None:
+def test_prune_protects_active_cert_via_different_spelling(prune_config, tmp_path, monkeypatch, spelling):
     """
     [Local] cert rotation: verifies the active cert is protected even when its path is spelled differently from the glob result (ROT-7).
 
@@ -936,7 +936,7 @@ def test_prune_protects_active_cert_via_different_spelling(prune_config, tmp_pat
     assert active.exists()  # protected despite the different spelling and being the oldest
 
 
-def test_prune_symlink_candidate_outside_dir_removes_link_not_target(prune_config, tmp_path) -> None:
+def test_prune_symlink_candidate_outside_dir_removes_link_not_target(prune_config, tmp_path):
     """
     [Unit] cert rotation: verifies a symlink candidate outside CONFIG_DIR has the link itself removed, not the target (ROT-10).
 
@@ -967,7 +967,7 @@ def test_prune_symlink_candidate_outside_dir_removes_link_not_target(prune_confi
     assert any("Pruned superseded" in s for s in status)
 
 
-def test_prune_reports_nothing_when_within_keep(prune_config) -> None:
+def test_prune_reports_nothing_when_within_keep(prune_config):
     """
     [Unit] cert rotation: verifies prune_old_certificates emits a no-op status line when fewer candidates than keep.
 

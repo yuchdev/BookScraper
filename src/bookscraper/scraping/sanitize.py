@@ -98,7 +98,7 @@ class _Text:
 
     __slots__ = ("data", "parent")
 
-    def __init__(self, data: str) -> None:
+    def __init__(self, data: str):
         """
         :param data: The already entity-decoded text content of the node.
         """
@@ -111,7 +111,7 @@ class _Element:
 
     __slots__ = ("tag", "attrs", "children", "parent")
 
-    def __init__(self, tag: str, attrs: list[list[Optional[str]]]) -> None:
+    def __init__(self, tag: str, attrs: list[list[Optional[str]]]):
         """
         :param tag: The element's tag name.
         :param attrs: Ordered mutable ``[name, value]`` attribute pairs (value may be ``None``).
@@ -125,42 +125,42 @@ class _Element:
 class _TreeBuilder(HTMLParser):
     """Builds a bounded ``_Element`` tree from an HTML string."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         """Initialize the parser with an empty document root and a single-entry element stack."""
         super().__init__(convert_charrefs=True)
         self.root = _Element(_DOCUMENT, [])
         self.doctype: Optional[str] = None
         self._stack: list[_Element] = [self.root]
 
-    def _append(self, node: Any) -> None:
+    def _append(self, node: Any):
         """Attach ``node`` as a child of the current top-of-stack element."""
         parent = self._stack[-1]
         node.parent = parent
         parent.children.append(node)
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]):
         """Append a new element and, unless void or past :data:`MAX_TREE_DEPTH`, push it as the open parent."""
         el = _Element(tag, [[name, value] for name, value in attrs])
         self._append(el)
         if tag not in _VOID_ELEMENTS and len(self._stack) < MAX_TREE_DEPTH:
             self._stack.append(el)
 
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]):
         """Append a self-closing element without pushing it onto the open-parent stack."""
         self._append(_Element(tag, [[name, value] for name, value in attrs]))
 
-    def handle_endtag(self, tag: str) -> None:
+    def handle_endtag(self, tag: str):
         """Close the nearest matching open element, discarding any unclosed children above it."""
         for i in range(len(self._stack) - 1, 0, -1):
             if self._stack[i].tag == tag:
                 del self._stack[i:]
                 return
 
-    def handle_data(self, data: str) -> None:
+    def handle_data(self, data: str):
         """Append a text node for character data under the current element."""
         self._append(_Text(data))
 
-    def handle_decl(self, decl: str) -> None:
+    def handle_decl(self, decl: str):
         """Record a document-type declaration so the serializer can re-emit it."""
         self.doctype = f"<!{decl}>"
 
@@ -191,7 +191,7 @@ def _escape_attr(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
-def _emit(node: Any, parts: list[str]) -> None:
+def _emit(node: Any, parts: list[str]):
     """Serialize ``node`` and its descendants into ``parts``, emitting rawtext element bodies verbatim."""
     if isinstance(node, _Text):
         parts.append(_escape_text(node.data))
@@ -239,7 +239,7 @@ def _iter_elements(node: Any) -> Any:
             yield from _iter_elements(child)
 
 
-def _filter_tree(el: _Element, should_remove: Any) -> None:
+def _filter_tree(el: _Element, should_remove: Any):
     """Drop whole subtrees for which ``should_remove(child)`` is True; recurse into the rest."""
     kept: list[Any] = []
     for child in el.children:
@@ -266,7 +266,7 @@ def _attr(el: _Element, name: str, default: Optional[str] = None) -> Optional[st
     return default
 
 
-def _set_attr(el: _Element, name: str, value: str) -> None:
+def _set_attr(el: _Element, name: str, value: str):
     """Set ``el``'s attribute ``name`` (case-insensitive) to ``value``, appending it if not already present."""
     lowered = name.lower()
     for pair in el.attrs:
@@ -298,7 +298,7 @@ class _Compound:
 
     __slots__ = ("tag", "id", "classes", "attrs", "has_text")
 
-    def __init__(self) -> None:
+    def __init__(self):
         """Initialize an empty compound with no constraints."""
         self.tag: Optional[str] = None
         self.id: Optional[str] = None
@@ -321,7 +321,7 @@ def _read_ident(text: str, i: int) -> tuple[str, int]:
     return text[start:i], i
 
 
-def _parse_attr(inner: str, compound: _Compound) -> None:
+def _parse_attr(inner: str, compound: _Compound):
     """
     Parse the ``inner`` text of an ``[attr]`` / ``[attr="value"]`` selector onto ``compound``.
 
@@ -477,7 +477,7 @@ def _text_content(el: _Element) -> str:
     """
     parts: list[str] = []
 
-    def collect(node: _Element) -> None:
+    def collect(node: _Element):
         """Append ``node``'s descendant text into ``parts``, skipping script/style subtrees."""
         for child in node.children:
             if isinstance(child, _Text):
@@ -960,7 +960,7 @@ def _nonprotected_text(el: _Element, protected: set[int]) -> str:
     script/style) descendants - the basis for the aggregate prose decision."""
     parts: list[str] = []
 
-    def walk(node: _Element) -> None:
+    def walk(node: _Element):
         """Append ``node``'s text into ``parts``, descending only into non-protected child elements."""
         for child in node.children:
             if isinstance(child, _Text):
@@ -972,14 +972,14 @@ def _nonprotected_text(el: _Element, protected: set[int]) -> str:
     return " ".join("".join(parts).split())
 
 
-def _collapse_text_to_placeholder(el: _Element, protected: set[int]) -> None:
+def _collapse_text_to_placeholder(el: _Element, protected: set[int]):
     """Neutralize ``el``'s prose by TEXT ONLY: the first non-protected, non-empty text
     node in the subtree becomes the placeholder and every other non-protected text node
     is blanked. Every element, attribute and sibling is kept (so a description selector
     still resolves), and protected keep-text subtrees are never touched."""
     placed = False
 
-    def walk(node: _Element) -> None:
+    def walk(node: _Element):
         """Place the placeholder on the first non-protected non-empty text node and blank the rest."""
         nonlocal placed
         for child in node.children:
@@ -995,7 +995,7 @@ def _collapse_text_to_placeholder(el: _Element, protected: set[int]) -> None:
     walk(el)
 
 
-def _neutralize(el: _Element, protected: set[int]) -> None:
+def _neutralize(el: _Element, protected: set[int]):
     """Post-order aggregate neutralization.
 
     Children are processed first, so neutralization happens at the SMALLEST qualifying
@@ -1253,7 +1253,7 @@ def _collapse_all_whitespace(text: str) -> str:
     return _ALL_WHITESPACE_RE.sub("", text)
 
 
-def _scan_segment(segment: str, where: str) -> None:
+def _scan_segment(segment: str, where: str):
     """
     Run every secret detector over ``segment``, raising on any non-placeholder hit.
 
@@ -1268,7 +1268,7 @@ def _scan_segment(segment: str, where: str) -> None:
             raise SanitizationError(f"assert_clean: possible {name} at {where}")
 
 
-def assert_clean(text: str) -> None:
+def assert_clean(text: str):
     """Fail-closed final gate: raise :class:`SanitizationError` if any secret survives.
 
     Scenario: the last check before sanitized bytes (and the .meta.json) are written to

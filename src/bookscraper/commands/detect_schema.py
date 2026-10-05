@@ -29,7 +29,7 @@ from ..book_utils import print_log
 from ..scraping.schema_detection import SchemaDetectionError, detect_schema
 
 
-async def run(args: argparse.Namespace) -> None:
+async def run(args: argparse.Namespace):
     """
     The "propose selector-schema updates" workflow (dev maintenance, never touches book data).
 
@@ -68,7 +68,7 @@ async def run(args: argparse.Namespace) -> None:
     sys.stdout.write(report + "\n")
     sys.stdout.flush()
 
-    def _status(message: str, level: str) -> None:
+    def _status(message: str, level: str):
         """Emit a human status line to stderr in JSON mode, else via ``print_log`` to stdout."""
         if json_format:
             print(message, file=sys.stderr)

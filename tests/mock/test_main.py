@@ -23,7 +23,7 @@ def _fake_parser(args) -> Mock:
 
 
 @pytest.mark.asyncio
-async def test_main_dispatches_to_scrape_urls_run() -> None:
+async def test_main_dispatches_to_scrape_urls_run():
     """
     [Local] main: verifies that command="scrape-urls" dispatches to scrape_urls.run().
 
@@ -55,7 +55,7 @@ async def test_main_dispatches_to_scrape_urls_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_dispatches_to_search_run() -> None:
+async def test_main_dispatches_to_search_run():
     """
     [Local] main: verifies that command="search" dispatches to search.run().
 
@@ -87,7 +87,7 @@ async def test_main_dispatches_to_search_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_dispatches_to_rotate_cert_run() -> None:
+async def test_main_dispatches_to_rotate_cert_run():
     """
     [Local] main: verifies that command="rotate-cert" dispatches to rotate_cert.run().
 
@@ -121,7 +121,7 @@ async def test_main_dispatches_to_rotate_cert_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_dispatches_to_detect_schema_run() -> None:
+async def test_main_dispatches_to_detect_schema_run():
     """
     [Local] main: verifies that command="detect-schema" dispatches to detect_schema.run().
 
@@ -155,7 +155,7 @@ async def test_main_dispatches_to_detect_schema_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_unknown_command_calls_parser_error() -> None:
+async def test_main_unknown_command_calls_parser_error():
     """
     [Local] main: verifies main unknown command calls parser error.
 
@@ -186,7 +186,7 @@ async def test_main_unknown_command_calls_parser_error() -> None:
     mock_search_run.assert_not_called()
 
 
-def test_main_sync_wraps_main_in_asyncio_run() -> None:
+def test_main_sync_wraps_main_in_asyncio_run():
     """
     [Local] main: verifies main sync wraps main in asyncio run.
 

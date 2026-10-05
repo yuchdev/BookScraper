@@ -109,7 +109,7 @@ async def test_amazon_search_golden(
     corpus_router: Any,
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] search goldens: verifies amazon search golden.
 
@@ -146,7 +146,7 @@ async def test_amazon_search_stops_on_last_page(
     chromium_browser: Any,
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] search goldens: verifies amazon search stops on last page.
 
@@ -177,7 +177,7 @@ async def test_amazon_search_no_results_returns_empty(
     chromium_browser: Any,
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] search goldens: verifies amazon search no results returns empty.
 
@@ -202,7 +202,7 @@ async def test_amazon_sponsored_card_unwrapped(
     chromium_browser: Any,
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] search goldens: verifies amazon sponsored card unwrapped.
 
@@ -239,7 +239,7 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
     httpx_corpus: Any,
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] search goldens: verifies leanpub search api golden paginates until short page.
 
@@ -271,7 +271,7 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
     )
 
 
-async def test_leanpub_search_api_empty_result(httpx_corpus: Any) -> None:
+async def test_leanpub_search_api_empty_result(httpx_corpus: Any):
     """
     [Local] search goldens: verifies leanpub search api empty result.
     

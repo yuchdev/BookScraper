@@ -51,7 +51,7 @@ def _write_combined_cert(path, expiry: datetime) -> Path:
 class TestSaveSummary:
     """Tests for the SaveSummary dataclass."""
 
-    def test_total_sums_the_three_fields(self) -> None:
+    def test_total_sums_the_three_fields(self):
         """
         [Local] save summary: verifies total sums the three fields.
 
@@ -67,7 +67,7 @@ class TestSaveSummary:
         summary = SaveSummary(inserted=3, duplicates=2, errors=1)
         assert summary.total == 6
 
-    def test_is_frozen(self) -> None:
+    def test_is_frozen(self):
         """
         [Local] save summary: verifies is frozen.
 
@@ -88,7 +88,7 @@ class TestSaveSummary:
 class TestMongoBackend:
     """Tests for storage.MongoBackend."""
 
-    def test_save_books_delegates_to_database(self) -> None:
+    def test_save_books_delegates_to_database(self):
         """
         [Local] mongo backend: verifies that MongoBackend.save_books delegates to database.save_books_to_mongodb and returns its SaveSummary.
 
@@ -116,7 +116,7 @@ class TestMongoBackend:
         # save_books now returns the SaveSummary its collaborator produced.
         assert result is expected
 
-    def test_book_exists_by_hash_returns_delegated_value(self) -> None:
+    def test_book_exists_by_hash_returns_delegated_value(self):
         """
         [Local] mongo backend: verifies that MongoBackend.book_exists_by_hash delegates to database.check_book_exists_in_db.
 
@@ -141,7 +141,7 @@ class TestMongoBackend:
         mock_db.check_book_exists_in_db.assert_called_once_with("deadbeef", collection)
         assert result is True
 
-    def test_book_exists_by_asin_returns_delegated_value(self) -> None:
+    def test_book_exists_by_asin_returns_delegated_value(self):
         """
         [Local] mongo backend: verifies that MongoBackend.book_exists_by_asin delegates to database.check_amazon_asin_exists_in_db.
 
@@ -166,7 +166,7 @@ class TestMongoBackend:
         mock_db.check_amazon_asin_exists_in_db.assert_called_once_with("B00XYZ", collection)
         assert result is False
 
-    def test_leanpub_book_exists_delegates_to_deduplicate(self) -> None:
+    def test_leanpub_book_exists_delegates_to_deduplicate(self):
         """
         [Local] mongo backend: verifies that MongoBackend.leanpub_book_exists delegates to deduplicate.leanpub_prescrape_deduplicate.
 
@@ -191,7 +191,7 @@ class TestMongoBackend:
         mock_dedup.leanpub_prescrape_deduplicate.assert_called_once_with("id-1", "slug-1", collection)
         assert result is True
 
-    def test_close_delegates_to_database(self) -> None:
+    def test_close_delegates_to_database(self):
         """
         [Local] mongo backend: verifies that MongoBackend.close delegates to database.close_mongo_connection.
 
@@ -218,7 +218,7 @@ class TestMongoBackend:
 class TestJsonBackend:
     """Tests for storage.JsonBackend."""
 
-    def test_save_books_delegates_to_store(self) -> None:
+    def test_save_books_delegates_to_store(self):
         """
         [Local] json backend: verifies that JsonBackend.save_books delegates to store.save_books with the configured store path.
 
@@ -246,7 +246,7 @@ class TestJsonBackend:
         mock_store.save_books.assert_called_once_with(books, mock_store.LOCAL_STORE_FILE)
         assert result is expected
 
-    def test_lookups_read_from_the_cached_index(self, isolated_local_store) -> None:
+    def test_lookups_read_from_the_cached_index(self, isolated_local_store):
         """
         [Local] json backend: verifies lookups read from the cached index.
 
@@ -276,7 +276,7 @@ class TestJsonBackend:
         assert backend.leanpub_book_exists("99", "other") is False
         assert backend.leanpub_book_exists(None, None) is False
 
-    def test_json_backend_reads_file_once_for_many_lookups(self, isolated_local_store) -> None:
+    def test_json_backend_reads_file_once_for_many_lookups(self, isolated_local_store):
         """
         [Local] json backend: verifies json backend reads file once for many lookups.
 
@@ -300,7 +300,7 @@ class TestJsonBackend:
 
         spy.assert_called_once()
 
-    def test_json_backend_cache_sees_books_saved_in_same_process(self, isolated_local_store) -> None:
+    def test_json_backend_cache_sees_books_saved_in_same_process(self, isolated_local_store):
         """
         [Local] json backend: verifies json backend cache sees books saved in same process.
 
@@ -326,7 +326,7 @@ class TestJsonBackend:
         assert backend.book_exists_by_asin("B001") is True
         assert backend.leanpub_book_exists("42", None) is True
 
-    def test_close_is_noop_default(self) -> None:
+    def test_close_is_noop_default(self):
         """
         [Local] json backend: verifies close is noop default.
 
@@ -343,7 +343,7 @@ class TestJsonBackend:
         assert backend.close() is None
 
 
-def test_mongo_and_json_backends_return_save_summary() -> None:
+def test_mongo_and_json_backends_return_save_summary():
     """
     [Local] storage: verifies mongo and json backends return save summary.
 
@@ -376,7 +376,7 @@ def test_mongo_and_json_backends_return_save_summary() -> None:
 class TestResolveStoreBackend:
     """Tests for storage.resolve_store_backend."""
 
-    def test_mongo_with_live_collection_returns_mongo_backend(self) -> None:
+    def test_mongo_with_live_collection_returns_mongo_backend(self):
         """
         [Local] resolve store backend: verifies that resolve_store_backend("mongo") returns a MongoBackend wrapping the live collection.
 
@@ -404,7 +404,7 @@ class TestResolveStoreBackend:
         assert backend._collection is fake_collection
         mock_db.get_mongo_collection.assert_called_once_with()
 
-    def test_mongo_with_no_collection_exits(self) -> None:
+    def test_mongo_with_no_collection_exits(self):
         """
         [Local] resolve store backend: verifies that resolve_store_backend("mongo") exits with code 1 when the collection is unavailable.
 
@@ -429,7 +429,7 @@ class TestResolveStoreBackend:
 
         assert exc_info.value.code == 1
 
-    def test_json_with_write_permission_returns_json_backend(self, isolated_local_store) -> None:
+    def test_json_with_write_permission_returns_json_backend(self, isolated_local_store):
         """
         [Local] resolve store backend: verifies that resolve_store_backend("json") returns a JsonBackend when write permission is granted.
 
@@ -450,7 +450,7 @@ class TestResolveStoreBackend:
         assert isinstance(backend, JsonBackend)
         mock_check.assert_called_once_with()
 
-    def test_preflight_exits_on_corrupt_store(self, isolated_local_store) -> None:
+    def test_preflight_exits_on_corrupt_store(self, isolated_local_store):
         """
         [Local] resolve store backend: verifies preflight exits on corrupt store.
 
@@ -471,7 +471,7 @@ class TestResolveStoreBackend:
 
         assert exc_info.value.code == 1
 
-    def test_json_without_write_permission_exits(self) -> None:
+    def test_json_without_write_permission_exits(self):
         """
         [Local] resolve store backend: verifies that resolve_store_backend("json") exits with code 1 when write permission is denied.
 
@@ -492,7 +492,7 @@ class TestResolveStoreBackend:
 
         assert exc_info.value.code == 1
 
-    def test_unknown_backend_exits_without_running_checks(self) -> None:
+    def test_unknown_backend_exits_without_running_checks(self):
         """
         [Local] resolve store backend: verifies that resolve_store_backend with an unknown name exits with code 1 without running any pre-flight checks.
 
@@ -522,7 +522,7 @@ class TestResolveStoreBackend:
 class TestCertExpiryPreflight:
     """Tests for the cert-expiry pre-flight check in resolve_store_backend."""
 
-    def test_preflight_prints_warning_for_soon_expiring_cert(self, tmp_path) -> None:
+    def test_preflight_prints_warning_for_soon_expiring_cert(self, tmp_path):
         """
         [Local] cert expiry preflight: verifies preflight prints warning for soon expiring cert.
 
@@ -549,7 +549,7 @@ class TestCertExpiryPreflight:
         warnings = [c.args for c in mock_print.call_args_list if c.args[1] == "warning"]
         assert any("expires on" in msg for msg, _ in warnings)
 
-    def test_preflight_parse_failure_is_warning_not_crash(self, tmp_path) -> None:
+    def test_preflight_parse_failure_is_warning_not_crash(self, tmp_path):
         """
         [Local] cert expiry preflight: verifies preflight parse failure is warning not crash.
 
@@ -579,7 +579,7 @@ class TestCertExpiryPreflight:
         # The private key body never appears in any logged line (ROT-3).
         assert all("PRIVATE KEY" not in c.args[0] for c in mock_print.call_args_list)
 
-    def test_preflight_no_warning_when_cert_far_from_expiry(self, tmp_path) -> None:
+    def test_preflight_no_warning_when_cert_far_from_expiry(self, tmp_path):
         """
         [Local] cert expiry preflight: verifies preflight no warning when cert far from expiry.
 
@@ -604,7 +604,7 @@ class TestCertExpiryPreflight:
 
         assert not [c for c in mock_print.call_args_list if c.args[1] == "warning"]
 
-    def test_preflight_no_cert_configured_is_silent(self) -> None:
+    def test_preflight_no_cert_configured_is_silent(self):
         """
         [Local] cert expiry preflight: verifies preflight no cert configured is silent.
 
@@ -627,7 +627,7 @@ class TestCertExpiryPreflight:
 
         assert not [c for c in mock_print.call_args_list if c.args[1] == "warning"]
 
-    def test_preflight_never_leaks_key_material_to_log_or_console(self, tmp_path, caplog, capsys) -> None:
+    def test_preflight_never_leaks_key_material_to_log_or_console(self, tmp_path, caplog, capsys):
         """
         [Local] cert expiry preflight: verifies preflight never leaks key material to log or console.
 
@@ -659,7 +659,7 @@ class TestCertExpiryPreflight:
         assert all("PRIVATE KEY" not in rec.getMessage() for rec in caplog.records)
         assert all(key_body not in rec.getMessage() for rec in caplog.records)
 
-    def test_preflight_config_error_is_swallowed(self) -> None:
+    def test_preflight_config_error_is_swallowed(self):
         """
         [Local] cert expiry preflight: verifies preflight config error is swallowed.
 

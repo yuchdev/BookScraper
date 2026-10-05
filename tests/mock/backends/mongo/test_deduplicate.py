@@ -16,7 +16,7 @@ from bookscraper.backends.mongo import deduplicate
 class TestLeanpubPrescrapeDeduplicate:
     """Tests for deduplicate.leanpub_prescrape_deduplicate."""
 
-    def test_book_id_only_builds_id_only_query(self) -> None:
+    def test_book_id_only_builds_id_only_query(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a book_id-only call builds a single-clause $or query.
 
@@ -38,7 +38,7 @@ class TestLeanpubPrescrapeDeduplicate:
         assert result is False
         collection.find_one.assert_called_once_with({"$or": [{"book_id": "id-1"}]})
 
-    def test_book_slug_only_builds_slug_only_query(self) -> None:
+    def test_book_slug_only_builds_slug_only_query(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a slug-only call builds a single-clause $or query.
 
@@ -60,7 +60,7 @@ class TestLeanpubPrescrapeDeduplicate:
         assert result is False
         collection.find_one.assert_called_once_with({"$or": [{"slug": "slug-1"}]})
 
-    def test_both_identifiers_build_combined_query(self) -> None:
+    def test_both_identifiers_build_combined_query(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that providing both identifiers builds a two-clause $or query.
 
@@ -81,7 +81,7 @@ class TestLeanpubPrescrapeDeduplicate:
         deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
         collection.find_one.assert_called_once_with({"$or": [{"book_id": "id-1"}, {"slug": "slug-1"}]})
 
-    def test_no_identifiers_returns_false_without_query(self) -> None:
+    def test_no_identifiers_returns_false_without_query(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that passing neither identifier short-circuits without querying.
 
@@ -102,7 +102,7 @@ class TestLeanpubPrescrapeDeduplicate:
         assert result is False
         collection.find_one.assert_not_called()
 
-    def test_found_returns_true(self) -> None:
+    def test_found_returns_true(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a truthy find_one result causes the function to return True.
 
@@ -123,7 +123,7 @@ class TestLeanpubPrescrapeDeduplicate:
         result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
         assert result is True
 
-    def test_not_found_returns_false(self) -> None:
+    def test_not_found_returns_false(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a None find_one result causes the function to return False.
 
@@ -143,7 +143,7 @@ class TestLeanpubPrescrapeDeduplicate:
         result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
         assert result is False
 
-    def test_none_collection_returns_false(self) -> None:
+    def test_none_collection_returns_false(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a None collection short-circuits to False.
 
@@ -162,7 +162,7 @@ class TestLeanpubPrescrapeDeduplicate:
             result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", None)
         assert result is False
 
-    def test_find_one_exception_returns_false(self) -> None:
+    def test_find_one_exception_returns_false(self):
         """
         [Local] leanpub prescrape deduplicate: verifies that a PyMongoError from find_one is caught and returns False.
 

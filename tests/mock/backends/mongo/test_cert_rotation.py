@@ -51,7 +51,7 @@ def _response(*, json_body=None, content=b"", status=200, url="https://cloud.mon
 # --------------------------------------------------------------------------- #
 # get_access_token / issue_certificate
 # --------------------------------------------------------------------------- #
-def test_get_access_token_posts_client_credentials() -> None:
+def test_get_access_token_posts_client_credentials():
     """
     [Local] cert rotation: verifies that get_access_token POSTs client_credentials to the Atlas OAuth URL and returns the token.
 
@@ -74,7 +74,7 @@ def test_get_access_token_posts_client_credentials() -> None:
     assert post.call_args.kwargs["data"] == {"grant_type": "client_credentials"}
 
 
-def test_get_access_token_propagates_http_errors() -> None:
+def test_get_access_token_propagates_http_errors():
     """
     [Local] cert rotation: verifies that get_access_token raises HTTPStatusError on a 401 response.
 
@@ -96,7 +96,7 @@ def test_get_access_token_propagates_http_errors() -> None:
         cert_rotation.get_access_token("id", "bad")
 
 
-def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
+def test_issue_certificate_sends_months_in_json_body_not_query():
     """
     [Local] cert rotation: verifies that issue_certificate sends monthsUntilExpiration in the JSON body, not query params.
 
@@ -125,7 +125,7 @@ def test_issue_certificate_sends_months_in_json_body_not_query() -> None:
 # rotate_certificate
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("missing", ["ATLAS_CLIENT_ID", "ATLAS_CLIENT_SECRET", "ATLAS_PROJECT_ID", "ATLAS_DB_USER"])
-def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, missing) -> None:
+def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, missing):
     """
     [Local] cert rotation: verifies that each missing ATLAS_* env var causes a RotationError before any HTTP request.
 
@@ -151,7 +151,7 @@ def test_rotate_certificate_requires_each_credential(atlas_env, monkeypatch, mis
     post.assert_not_called()
 
 
-def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -> None:
+def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env):
     """
     [Local] cert rotation: verifies that months=99 raises RotationError mentioning "1-24" before any HTTP request.
 
@@ -175,7 +175,7 @@ def test_rotate_certificate_invalid_months_fails_before_any_request(atlas_env) -
     post.assert_not_called()
 
 
-def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies that a successful rotation writes the PEM, defaults to 6 months, and repoints settings.json.
 
@@ -216,7 +216,7 @@ def test_rotate_certificate_happy_path_writes_cert_and_updates_settings(atlas_en
     assert any(path.name in n for n in notes)
 
 
-def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, tmp_path, isolated_config) -> None:
+def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, tmp_path, isolated_config):
     """
     [Local] cert rotation: verifies that explicit months/output arguments override ATLAS_CERT_MONTHS/ATLAS_CERT_FILE env vars.
 
@@ -247,7 +247,7 @@ def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, 
 
 def test_rotate_certificate_env_overrides_apply_when_no_arguments(
     atlas_env, monkeypatch, tmp_path, isolated_config
-) -> None:
+):
     """
     [Local] cert rotation: verifies that ATLAS_CERT_MONTHS and ATLAS_CERT_FILE env vars apply when no explicit arguments are passed.
 
@@ -275,7 +275,7 @@ def test_rotate_certificate_env_overrides_apply_when_no_arguments(
 
 def test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body(
     atlas_env, isolated_config
-) -> None:
+):
     """
     [Local] cert rotation: verifies that an Atlas 403 becomes RotationError with the status code but no response body content.
 
@@ -303,7 +303,7 @@ def test_rotate_certificate_http_status_error_becomes_rotation_error_without_lea
     assert list(pathlib.Path(isolated_config).glob("X509-cert-*.pem")) == []
 
 
-def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies that an httpx.ConnectError during the Atlas API call becomes a RotationError("ConnectError").
 
@@ -325,7 +325,7 @@ def test_rotate_certificate_network_error_becomes_rotation_error(atlas_env, isol
         cert_rotation.rotate_certificate()
 
 
-def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies that an Atlas 500 error leaves settings.json untouched.
 
@@ -361,7 +361,7 @@ def test_rotate_certificate_does_not_touch_settings_when_atlas_fails(atlas_env, 
 # --------------------------------------------------------------------------- #
 # verify_certificate
 # --------------------------------------------------------------------------- #
-def test_verify_retries_then_succeeds() -> None:
+def test_verify_retries_then_succeeds():
     """
     [Local] cert rotation: verifies verify retries then succeeds.
 
@@ -390,7 +390,7 @@ def test_verify_retries_then_succeeds() -> None:
     assert client.close.call_count == 3  # closed after every attempt
 
 
-def test_verify_failure_message_has_code_but_no_host() -> None:
+def test_verify_failure_message_has_code_but_no_host():
     """
     [Local] cert rotation: verifies verify failure message has code but no host.
 
@@ -421,7 +421,7 @@ def test_verify_failure_message_has_code_but_no_host() -> None:
     assert sleep.call_count == 1
 
 
-def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
+def test_verify_certificate_runs_once_when_attempts_below_one():
     """
     [Local] cert rotation: verifies verify certificate runs once when attempts below one.
 
@@ -448,7 +448,7 @@ def test_verify_certificate_runs_once_when_attempts_below_one() -> None:
 # --------------------------------------------------------------------------- #
 # rotate_certificate verification integration
 # --------------------------------------------------------------------------- #
-def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> None:
+def test_verify_success_then_repoints_settings(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies verify success then repoints settings.
 
@@ -478,7 +478,7 @@ def test_verify_success_then_repoints_settings(atlas_env, isolated_config) -> No
     assert any("Verified" in n for n in notes)
 
 
-def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> None:
+def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies verify skipped when no uri configured.
 
@@ -510,7 +510,7 @@ def test_verify_skipped_when_no_uri_configured(atlas_env, isolated_config) -> No
     assert written["x509"]["cert"]["value"] == path.name
 
 
-def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies rotate certificate verify failure leaves settings untouched.
 
@@ -540,7 +540,7 @@ def test_rotate_certificate_verify_failure_leaves_settings_untouched(atlas_env, 
     assert any(n.startswith("WARNING") and "8000" in n for n in notes)
 
 
-def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies rotate certificate no verify skips ping and repoints.
 
@@ -569,7 +569,7 @@ def test_rotate_certificate_no_verify_skips_ping_and_repoints(atlas_env, isolate
     assert any("Verification skipped" in n for n in notes)
 
 
-def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(atlas_env, isolated_config) -> None:
+def test_rotate_certificate_config_error_during_verify_becomes_rotation_error(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies rotate certificate config error during verify becomes rotation error.
 
@@ -612,7 +612,7 @@ def prune_guard(isolated_config) -> Path:
     return isolated_config
 
 
-def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard) -> None:
+def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies verify success prunes superseded keeping active.
 
@@ -649,7 +649,7 @@ def test_verify_success_prunes_superseded_keeping_active(atlas_env, prune_guard)
     assert any("Pruned superseded" in n for n in notes)
 
 
-def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -> None:
+def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch):
     """
     [Local] cert rotation: verifies prune protects tls cert file env.
 
@@ -681,7 +681,7 @@ def test_prune_protects_tls_cert_file_env(atlas_env, prune_guard, monkeypatch) -
     assert tls_cert.exists()  # protected via TLS_CERT_FILE despite being older than keep=1
 
 
-def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> None:
+def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies prune skipped when active cert unresolvable.
 
@@ -716,7 +716,7 @@ def test_prune_skipped_when_active_cert_unresolvable(atlas_env, prune_guard) -> 
     assert any("Skipping cert pruning" in n and "uncertainty" in n for n in notes)
 
 
-def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
+def test_prune_not_run_when_verification_fails(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies prune not run when verification fails.
 
@@ -745,7 +745,7 @@ def test_prune_not_run_when_verification_fails(atlas_env, prune_guard) -> None:
     mock_prune.assert_not_called()
 
 
-def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
+def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies prune not run when rotation fails.
 
@@ -768,7 +768,7 @@ def test_prune_not_run_when_rotation_fails(atlas_env, prune_guard) -> None:
     mock_prune.assert_not_called()
 
 
-def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
+def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies no prune argument keeps all certs.
 
@@ -800,7 +800,7 @@ def test_no_prune_argument_keeps_all_certs(atlas_env, prune_guard) -> None:
     assert not any("Pruned" in n for n in notes)
 
 
-def test_no_verify_does_not_prune(atlas_env, prune_guard) -> None:
+def test_no_verify_does_not_prune(atlas_env, prune_guard):
     """
     [Local] cert rotation: verifies no verify does not prune.
 

@@ -86,7 +86,7 @@ def uri_has_embedded_credentials(uri: str) -> bool:
     return bool(urlsplit(uri).username)
 
 
-def _warn_if_x509_mechanism_missing(uri: str, cert_file: str) -> None:
+def _warn_if_x509_mechanism_missing(uri: str, cert_file: str):
     """
     Logs a diagnostic when a client cert is supplied but the URI doesn't select X.509.
 
@@ -219,7 +219,7 @@ def _redact_pymongo_error(exc: BaseException) -> str:
     return " ".join(parts)
 
 
-def ping(client: MongoClient) -> None:
+def ping(client: MongoClient):
     """
     Confirm the connection with an ``admin.command("ping")``, re-raising any failure as a
     redacted :class:`MongoConnectionError`.

@@ -92,7 +92,7 @@ def _resolve_cert_field(spec: dict, field_name: str) -> str:
     return str(path if path.is_absolute() else CONFIG_DIR / path)
 
 
-def _warn_once(key: str, message: str) -> None:
+def _warn_once(key: str, message: str):
     """
     Warn once per process, deduplicated on ``key``. Goes through ``print_log`` so the
     warning reaches the console as well as the run log - the root logger only has a file
@@ -104,7 +104,7 @@ def _warn_once(key: str, message: str) -> None:
     print_log(message, "warning")
 
 
-def _check_settings_file_security(settings_file: Path) -> None:
+def _check_settings_file_security(settings_file: Path):
     """
     Emit advisory warnings about an untrustworthy settings.json (SEC-9).
 
@@ -143,7 +143,7 @@ def _check_settings_file_security(settings_file: Path) -> None:
         )
 
 
-def _validate_top_level_keys(settings: dict) -> None:
+def _validate_top_level_keys(settings: dict):
     """
     Reject any top-level key outside :data:`_ALLOWED_TOP_LEVEL_KEYS` (SEC-11).
 

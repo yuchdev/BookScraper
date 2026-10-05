@@ -8,7 +8,7 @@ from .cli import build_parser
 from .commands import detect_schema, rotate_cert, scrape_urls, search
 
 
-async def main() -> None:
+async def main():
     """Parse CLI arguments, configure logging, and dispatch to the matching command's ``run``."""
     parser = build_parser()
     args = parser.parse_args()
@@ -27,7 +27,7 @@ async def main() -> None:
         parser.error(f"Unknown command: {args.command}")
 
 
-def main_sync() -> None:
+def main_sync():
     """Synchronous wrapper so the console-script entry point and `python -m bookscraper` can call this directly."""
     asyncio.run(main())
 

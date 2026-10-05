@@ -53,7 +53,7 @@ class ScrapeResult:
     error: Optional[str] = None
     attempts: int = 1
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
         """Enforce the invariant ``book is not None`` ⇔ ``status is SUCCESS``.
 
         :raises ValueError: if a book document is present on a non-success status, or a

@@ -20,7 +20,7 @@ from ..scraping.scrape_details import scrape_book
 
 def save_failed_urls_to_csv(
     failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"
-) -> None:
+):
     """Save the failed/duplicate URLs with their status and error reason to a CSV file.
 
     :param failed_urls_with_status: A list of ``(url, status, error)`` tuples, where ``status``
@@ -55,7 +55,7 @@ def save_failed_urls_to_csv(
         )
 
 
-def save_other_links_to_csv(other_links: list[str], filename: str = "other_links.csv") -> None:
+def save_other_links_to_csv(other_links: list[str], filename: str = "other_links.csv"):
     """Saves the 'other' links (skipped URLs) to a CSV file."""
     if not other_links:
         logger.info(f"No 'other' links to save to {filename}.")
@@ -95,7 +95,7 @@ def identify_website(url: str) -> str:
         return "other"
 
 
-async def run(args: argparse.Namespace) -> None:
+async def run(args: argparse.Namespace):
     """
     The "I already have URLs" workflow: scrape a CSV of book URLs into the chosen store.
 

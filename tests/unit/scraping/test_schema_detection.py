@@ -47,7 +47,7 @@ from bookscraper.scraping.schema_detection import (
 # --------------------------------------------------------------------------- #
 # detail_selector_fields
 # --------------------------------------------------------------------------- #
-def test_detail_selector_fields_excludes_search_url_api_and_sentinels() -> None:
+def test_detail_selector_fields_excludes_search_url_api_and_sentinels():
     """
     [Unit] schema detection: verifies detail_selector_fields retains only CSS detail-page fields.
 
@@ -79,7 +79,7 @@ def test_detail_selector_fields_excludes_search_url_api_and_sentinels() -> None:
     assert set(fields) == {"BOOK_TITLE", "AUTHORS", "AUTHORS_META", "ISBN10"}
 
 
-def test_detail_selector_fields_on_real_leanpub_entry() -> None:
+def test_detail_selector_fields_on_real_leanpub_entry():
     """
     [Unit] schema detection: verifies detail_selector_fields on the real leanpub site entry.
 
@@ -110,7 +110,7 @@ def test_detail_selector_fields_on_real_leanpub_entry() -> None:
 # --------------------------------------------------------------------------- #
 # search_selector_fields
 # --------------------------------------------------------------------------- #
-def test_search_selector_fields_selects_card_and_card_relative_keys() -> None:
+def test_search_selector_fields_selects_card_and_card_relative_keys():
     """
     [Unit] schema detection: verifies search_selector_fields retains CSS SEARCH_* selectors and drops non-selector constants.
 
@@ -143,7 +143,7 @@ def test_search_selector_fields_selects_card_and_card_relative_keys() -> None:
     assert "BOOK_TITLE" not in fields
 
 
-def test_search_selector_fields_result_item_sites() -> None:
+def test_search_selector_fields_result_item_sites():
     """
     [Unit] schema detection: verifies SEARCH_RESULT_ITEM_SELECTOR sites keep their card key.
 
@@ -168,7 +168,7 @@ def test_search_selector_fields_result_item_sites() -> None:
 # --------------------------------------------------------------------------- #
 # build_instruction_block - search variant
 # --------------------------------------------------------------------------- #
-def test_search_prompt_explains_card_relative_semantics() -> None:
+def test_search_prompt_explains_card_relative_semantics():
     """
     [Unit] schema detection: verifies the search instruction block explains card-relative semantics.
 
@@ -199,7 +199,7 @@ def test_search_prompt_explains_card_relative_semantics() -> None:
 # --------------------------------------------------------------------------- #
 # prune_html
 # --------------------------------------------------------------------------- #
-def test_prune_html_removes_script_style_svg_and_comments() -> None:
+def test_prune_html_removes_script_style_svg_and_comments():
     """
     [Unit] schema detection: verifies prune_html strips script/style/svg/comments while keeping body text.
 
@@ -230,7 +230,7 @@ def test_prune_html_removes_script_style_svg_and_comments() -> None:
     assert "Body" in pruned
 
 
-def test_prune_html_collapses_whitespace() -> None:
+def test_prune_html_collapses_whitespace():
     """
     [Unit] schema detection: verifies prune_html collapses runs of whitespace and newlines.
 
@@ -251,7 +251,7 @@ def test_prune_html_collapses_whitespace() -> None:
     assert "\n" not in pruned
 
 
-def test_prune_html_truncates_to_budget() -> None:
+def test_prune_html_truncates_to_budget():
     """
     [Unit] schema detection: verifies prune_html truncates output to the given max_chars budget.
 
@@ -272,7 +272,7 @@ def test_prune_html_truncates_to_budget() -> None:
     assert len(pruned) == 50
 
 
-def test_prune_html_empty_input() -> None:
+def test_prune_html_empty_input():
     """
     [Unit] schema detection: verifies prune_html returns an empty string for empty input.
 
@@ -294,7 +294,7 @@ def test_prune_html_empty_input() -> None:
 # --------------------------------------------------------------------------- #
 # _strip_code_fences
 # --------------------------------------------------------------------------- #
-def test_strip_code_fences_json_fence() -> None:
+def test_strip_code_fences_json_fence():
     """
     [Unit] schema detection: verifies _strip_code_fences removes a ```json ... ``` wrapper.
 
@@ -313,7 +313,7 @@ def test_strip_code_fences_json_fence() -> None:
     assert _strip_code_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
 
 
-def test_strip_code_fences_bare_fence() -> None:
+def test_strip_code_fences_bare_fence():
     """
     [Unit] schema detection: verifies _strip_code_fences removes a bare ``` ... ``` wrapper.
 
@@ -332,7 +332,7 @@ def test_strip_code_fences_bare_fence() -> None:
     assert _strip_code_fences('```\n{"a": 1}\n```') == '{"a": 1}'
 
 
-def test_strip_code_fences_no_fence_passthrough() -> None:
+def test_strip_code_fences_no_fence_passthrough():
     """
     [Unit] schema detection: verifies _strip_code_fences passes through plain JSON (no fences).
 
@@ -357,7 +357,7 @@ def test_strip_code_fences_no_fence_passthrough() -> None:
 FIELDS = ["BOOK_TITLE", "AUTHORS", "ISBN10"]
 
 
-def test_validate_ai_response_happy_path() -> None:
+def test_validate_ai_response_happy_path():
     """
     [Unit] schema detection: verifies validate_ai_response parses a well-formed JSON response.
 
@@ -382,7 +382,7 @@ def test_validate_ai_response_happy_path() -> None:
     assert proposals["AUTHORS"]["selector"] == ".a"
 
 
-def test_validate_ai_response_accepts_null_selector() -> None:
+def test_validate_ai_response_accepts_null_selector():
     """
     [Unit] schema detection: verifies validate_ai_response accepts a JSON null selector value.
 
@@ -403,7 +403,7 @@ def test_validate_ai_response_accepts_null_selector() -> None:
     assert proposals["ISBN10"]["selector"] is None
 
 
-def test_validate_ai_response_strips_fence() -> None:
+def test_validate_ai_response_strips_fence():
     """
     [Unit] schema detection: verifies validate_ai_response accepts a fenced JSON response.
 
@@ -425,7 +425,7 @@ def test_validate_ai_response_strips_fence() -> None:
     assert proposals["BOOK_TITLE"]["rationale"] == ""
 
 
-def test_validate_ai_response_ignores_unknown_keys() -> None:
+def test_validate_ai_response_ignores_unknown_keys():
     """
     [Unit] schema detection: verifies validate_ai_response silently drops keys not in the field list.
 
@@ -447,7 +447,7 @@ def test_validate_ai_response_ignores_unknown_keys() -> None:
     assert "BOOK_TITLE" in proposals
 
 
-def test_validate_ai_response_rejects_non_json() -> None:
+def test_validate_ai_response_rejects_non_json():
     """
     [Unit] schema detection: verifies validate_ai_response raises SchemaDetectionError on non-JSON input.
 
@@ -467,7 +467,7 @@ def test_validate_ai_response_rejects_non_json() -> None:
         validate_ai_response("this is not json", FIELDS)
 
 
-def test_validate_ai_response_rejects_non_object_top_level() -> None:
+def test_validate_ai_response_rejects_non_object_top_level():
     """
     [Unit] schema detection: verifies validate_ai_response raises when the JSON top level is not an object.
 
@@ -487,7 +487,7 @@ def test_validate_ai_response_rejects_non_object_top_level() -> None:
         validate_ai_response('["BOOK_TITLE", "#t"]', FIELDS)
 
 
-def test_validate_ai_response_rejects_proposal_without_selector_key() -> None:
+def test_validate_ai_response_rejects_proposal_without_selector_key():
     """
     [Unit] schema detection: verifies validate_ai_response raises when a proposal omits the "selector" key.
 
@@ -507,7 +507,7 @@ def test_validate_ai_response_rejects_proposal_without_selector_key() -> None:
         validate_ai_response('{"BOOK_TITLE": {"rationale": "oops"}}', FIELDS)
 
 
-def test_validate_ai_response_rejects_non_string_selector() -> None:
+def test_validate_ai_response_rejects_non_string_selector():
     """
     [Unit] schema detection: verifies validate_ai_response raises when a selector value is not string or null.
 
@@ -527,7 +527,7 @@ def test_validate_ai_response_rejects_non_string_selector() -> None:
         validate_ai_response('{"BOOK_TITLE": {"selector": 42}}', FIELDS)
 
 
-def test_validate_ai_response_rejects_empty_proposal_set() -> None:
+def test_validate_ai_response_rejects_empty_proposal_set():
     """
     [Unit] schema detection: verifies validate_ai_response raises when no proposals match the field list.
 
@@ -550,7 +550,7 @@ def test_validate_ai_response_rejects_empty_proposal_set() -> None:
 # --------------------------------------------------------------------------- #
 # build_prompt
 # --------------------------------------------------------------------------- #
-def test_build_prompt_includes_site_fields_and_html() -> None:
+def test_build_prompt_includes_site_fields_and_html():
     """
     [Unit] schema detection: verifies build_prompt embeds the site name, field list, and HTML snapshot.
 
@@ -587,7 +587,7 @@ def _validation(consistent: bool, matched_flags: list[bool]) -> dict:
     return {"per_url": per_url, "consistent": consistent}
 
 
-def test_format_diff_report_marks_changed_field() -> None:
+def test_format_diff_report_marks_changed_field():
     """
     [Unit] schema detection: verifies format_diff_report shows the diff lines for a changed field.
 
@@ -617,7 +617,7 @@ def test_format_diff_report_marks_changed_field() -> None:
     assert "proposal only" in report.lower()
 
 
-def test_format_diff_report_marks_unchanged_field() -> None:
+def test_format_diff_report_marks_unchanged_field():
     """
     [Unit] schema detection: verifies format_diff_report labels a field "(unchanged)" when proposed == current.
 
@@ -643,7 +643,7 @@ def test_format_diff_report_marks_unchanged_field() -> None:
     assert "(unchanged)" in report
 
 
-def test_format_diff_report_flags_inconsistent_field() -> None:
+def test_format_diff_report_flags_inconsistent_field():
     """
     [Unit] schema detection: verifies format_diff_report emits INCONSISTENT and a WARNING for an unstable selector.
 
@@ -671,7 +671,7 @@ def test_format_diff_report_flags_inconsistent_field() -> None:
     assert "TAGS" in report
 
 
-def test_format_diff_report_all_consistent_summary() -> None:
+def test_format_diff_report_all_consistent_summary():
     """
     [Unit] schema detection: verifies format_diff_report emits a "validated consistently" summary line.
 
@@ -697,7 +697,7 @@ def test_format_diff_report_all_consistent_summary() -> None:
     assert "validated consistently" in report
 
 
-def test_format_diff_report_renders_card_fraction_and_flags_partial() -> None:
+def test_format_diff_report_renders_card_fraction_and_flags_partial():
     """
     [Unit] schema detection: verifies format_diff_report renders per-card fractions and flags sub-80% selectors as PARTIAL.
 
@@ -746,7 +746,7 @@ def test_format_diff_report_renders_card_fraction_and_flags_partial() -> None:
     assert "SEARCH_AUTHORS" in report
 
 
-def test_format_diff_report_handles_field_not_currently_present() -> None:
+def test_format_diff_report_handles_field_not_currently_present():
     """
     [Unit] schema detection: verifies format_diff_report labels a newly-proposed field as "not currently present".
 
@@ -775,7 +775,7 @@ def test_format_diff_report_handles_field_not_currently_present() -> None:
 # --------------------------------------------------------------------------- #
 # build_instruction_block / build_prompt - caching split
 # --------------------------------------------------------------------------- #
-def test_build_instruction_block_has_no_per_page_content() -> None:
+def test_build_instruction_block_has_no_per_page_content():
     """
     [Unit] schema detection: verifies build_instruction_block contains no per-page HTML snapshot.
 
@@ -799,7 +799,7 @@ def test_build_instruction_block_has_no_per_page_content() -> None:
     assert "Pruned HTML snapshot" not in block
 
 
-def test_build_prompt_combines_instruction_and_snapshot() -> None:
+def test_build_prompt_combines_instruction_and_snapshot():
     """
     [Unit] schema detection: verifies build_prompt concatenates the instruction block and the HTML snapshot.
 
@@ -823,7 +823,7 @@ def test_build_prompt_combines_instruction_and_snapshot() -> None:
 # --------------------------------------------------------------------------- #
 # resolve_model - precedence flag > env > default, empty rejected
 # --------------------------------------------------------------------------- #
-def test_model_precedence_flag_env_default(monkeypatch) -> None:
+def test_model_precedence_flag_env_default(monkeypatch):
     """
     [Local] schema detection: verifies resolve_model respects --model > ANTHROPIC_MODEL > default precedence.
 
@@ -847,7 +847,7 @@ def test_model_precedence_flag_env_default(monkeypatch) -> None:
     assert DEFAULT_MODEL == "claude-sonnet-5"
 
 
-def test_empty_model_id_rejected(monkeypatch) -> None:
+def test_empty_model_id_rejected(monkeypatch):
     """
     [Local] schema detection: verifies resolve_model rejects empty or whitespace model IDs.
 
@@ -879,7 +879,7 @@ def test_empty_model_id_rejected(monkeypatch) -> None:
 class _Usage:
     """Minimal stand-in for an anthropic usage object."""
 
-    def __init__(self, inp: int, cread: int, ccreate: int, out: int) -> None:
+    def __init__(self, inp: int, cread: int, ccreate: int, out: int):
         """Store the four token counts that format_usage_line reads."""
         self.input_tokens = inp
         self.cache_read_input_tokens = cread
@@ -887,7 +887,7 @@ class _Usage:
         self.output_tokens = out
 
 
-def test_usage_line_sums_tokens_across_requests() -> None:
+def test_usage_line_sums_tokens_across_requests():
     """
     [Unit] schema detection: verifies format_usage_line sums all token fields across multiple responses.
 
@@ -914,7 +914,7 @@ def test_usage_line_sums_tokens_across_requests() -> None:
     assert "$" not in line
 
 
-def test_usage_line_tolerates_missing_usage_fields() -> None:
+def test_usage_line_tolerates_missing_usage_fields():
     """
     [Unit] schema detection: verifies format_usage_line treats missing cache attributes as zero.
 
@@ -939,7 +939,7 @@ def test_usage_line_tolerates_missing_usage_fields() -> None:
 # --------------------------------------------------------------------------- #
 # _merge_proposals - first non-null wins; null fallback; absent field dropped
 # --------------------------------------------------------------------------- #
-def test_merge_proposals_first_non_null_selector_wins() -> None:
+def test_merge_proposals_first_non_null_selector_wins():
     """
     [Unit] schema detection: verifies _merge_proposals takes the first non-null selector across pages.
 
@@ -963,7 +963,7 @@ def test_merge_proposals_first_non_null_selector_wins() -> None:
     assert merged["BOOK_TITLE"]["selector"] == "#t"
 
 
-def test_merge_proposals_falls_back_to_null_when_no_page_matches() -> None:
+def test_merge_proposals_falls_back_to_null_when_no_page_matches():
     """
     [Unit] schema detection: verifies _merge_proposals keeps null when every page returns null.
 
@@ -987,7 +987,7 @@ def test_merge_proposals_falls_back_to_null_when_no_page_matches() -> None:
     assert merged["ISBN10"]["selector"] is None
 
 
-def test_merge_proposals_drops_field_absent_from_every_page() -> None:
+def test_merge_proposals_drops_field_absent_from_every_page():
     """
     [Unit] schema detection: verifies _merge_proposals omits a field that no page included at all.
 
@@ -1011,7 +1011,7 @@ def test_merge_proposals_drops_field_absent_from_every_page() -> None:
 # --------------------------------------------------------------------------- #
 # sanitize_untrusted / _is_current_broken / count_current_broken (subtask 08)
 # --------------------------------------------------------------------------- #
-def test_sanitize_untrusted_strips_ansi_and_control_chars() -> None:
+def test_sanitize_untrusted_strips_ansi_and_control_chars():
     """
     [Unit] schema detection: verifies sanitize_untrusted strips ESC/ANSI/C0/C1/DEL while keeping printable bytes (AIS-13).
 
@@ -1037,7 +1037,7 @@ def test_sanitize_untrusted_strips_ansi_and_control_chars() -> None:
     assert sanitize_untrusted(None) is None
 
 
-def test_compute_field_statuses_four_cases() -> None:
+def test_compute_field_statuses_four_cases():
     """
     [Unit] schema detection: verifies compute_field_statuses assigns all four drift statuses correctly.
 
@@ -1088,7 +1088,7 @@ def test_compute_field_statuses_four_cases() -> None:
     assert count_current_broken(fields, cur_prop, cur_val) == 2
 
 
-def test_primary_is_broken_guard_branches() -> None:
+def test_primary_is_broken_guard_branches():
     """
     [Unit] schema detection: verifies _primary_is_broken returns False for absent/unset/optional primaries.
 
@@ -1121,7 +1121,7 @@ def test_primary_is_broken_guard_branches() -> None:
     assert _primary_is_broken("X", ["X"], {"X": {"selector": "#x"}}, miss) is True
 
 
-def test_alt_without_primary_is_a_normal_gating_field() -> None:
+def test_alt_without_primary_is_a_normal_gating_field():
     """
     [Unit] schema detection: verifies an *_ALT field without its primary in the field set gates as a normal primary.
 
@@ -1143,7 +1143,7 @@ def test_alt_without_primary_is_a_normal_gating_field() -> None:
     assert compute_field_statuses(fields, cur_prop, cur_val) == {"FOO_ALT": "broken"}
 
 
-def test_card_relative_zero_cards_is_broken() -> None:
+def test_card_relative_zero_cards_is_broken():
     """
     [Unit] schema detection: verifies a card-relative selector matching zero cards is classified as broken.
 
@@ -1165,7 +1165,7 @@ def test_card_relative_zero_cards_is_broken() -> None:
     assert compute_field_statuses(fields, cur_prop, cur_val) == {"SEARCH_TITLE": "broken"}
 
 
-def test_format_check_only_usage_line_names_no_ai_no_key() -> None:
+def test_format_check_only_usage_line_names_no_ai_no_key():
     """
     [Unit] schema detection: verifies format_check_only_usage_line reports no AI call, no key, and sample count.
 
@@ -1222,7 +1222,7 @@ def _json_inputs() -> tuple[Any, ...]:
     return site, labels, fields, proposals, current, validation, current_proposals, current_validation
 
 
-def test_json_report_matches_schema() -> None:
+def test_json_report_matches_schema():
     """
     [Unit] schema detection: verifies the JSON drift report carries the documented schema and summary (subtask 08).
 
@@ -1273,7 +1273,7 @@ def test_json_report_matches_schema() -> None:
     assert data["summary"] == {"changed": 1, "inconsistent": 1, "current_broken": 1}
 
 
-def test_current_matches_reported_for_each_sample() -> None:
+def test_current_matches_reported_for_each_sample():
     """
     [Unit] schema detection: verifies every field's current_matches dict has one entry per sample (subtask 08).
 
@@ -1309,7 +1309,7 @@ def test_current_matches_reported_for_each_sample() -> None:
         assert set(field["current_matches"].keys()) == {"u0", "u1"}
 
 
-def test_json_report_check_current_only_nulls_proposed_fields() -> None:
+def test_json_report_check_current_only_nulls_proposed_fields():
     """
     [Unit] schema detection: verifies check-current-only JSON nulls model, proposed, rationale, changed, and summary.changed.
 
@@ -1353,7 +1353,7 @@ def test_json_report_check_current_only_nulls_proposed_fields() -> None:
     assert data["summary"]["current_broken"] == 1
 
 
-def test_json_report_field_absent_from_proposals_is_null() -> None:
+def test_json_report_field_absent_from_proposals_is_null():
     """
     [Unit] schema detection: verifies a field absent from merged proposals serializes with null proposed/changed.
 
@@ -1397,7 +1397,7 @@ def test_json_report_field_absent_from_proposals_is_null() -> None:
     assert tags["matches"] == {}
 
 
-def test_json_report_null_current_selector_serializes_as_null() -> None:
+def test_json_report_null_current_selector_serializes_as_null():
     """
     [Unit] schema detection: verifies a site-unset (None) current selector serializes as JSON null.
 
@@ -1438,7 +1438,7 @@ def test_json_report_null_current_selector_serializes_as_null() -> None:
     assert data["summary"]["current_broken"] == 0
 
 
-def test_json_report_omits_key_and_html_bounds_rationale() -> None:
+def test_json_report_omits_key_and_html_bounds_rationale():
     """
     [Unit] schema detection: verifies the JSON report omits API keys, HTML, and bounds rationale to 200 chars (AIS-12).
 
@@ -1477,7 +1477,7 @@ def test_json_report_omits_key_and_html_bounds_rationale() -> None:
     assert "<body>" not in report
 
 
-def test_reports_strip_ansi_and_control_chars_from_rationale_and_selector() -> None:
+def test_reports_strip_ansi_and_control_chars_from_rationale_and_selector():
     """
     [Unit] schema detection: verifies AIS-13 stripping applies to both rationale and selector in both report formats.
 
@@ -1530,7 +1530,7 @@ def test_reports_strip_ansi_and_control_chars_from_rationale_and_selector() -> N
 # --------------------------------------------------------------------------- #
 # AIS-1: snapshot fenced as data + un-spoofable fence (subtask 09)
 # --------------------------------------------------------------------------- #
-def test_snapshot_wrapped_in_delimiters_with_data_only_instruction() -> None:
+def test_snapshot_wrapped_in_delimiters_with_data_only_instruction():
     """
     [Unit] schema detection: verifies the snapshot is fenced and the instruction block declares it untrusted data (AIS-1).
 
@@ -1559,7 +1559,7 @@ def test_snapshot_wrapped_in_delimiters_with_data_only_instruction() -> None:
     assert "PLAIN CSS" in instr
 
 
-def test_fence_breakout_in_snapshot_is_neutralized() -> None:
+def test_fence_breakout_in_snapshot_is_neutralized():
     """
     [Unit] schema detection: verifies hostile fence tags in the snapshot are escaped and cannot break the data fence (AIS-1).
 
@@ -1589,7 +1589,7 @@ def test_fence_breakout_in_snapshot_is_neutralized() -> None:
     assert "safe" in block and "tail" in block
 
 
-def test_fence_breakout_with_attributes_is_neutralized() -> None:
+def test_fence_breakout_with_attributes_is_neutralized():
     """
     [Unit] schema detection: verifies attributed fence tags in the snapshot are also escaped (PI-2).
 
@@ -1612,7 +1612,7 @@ def test_fence_breakout_with_attributes_is_neutralized() -> None:
     assert "&lt;page_html data-a&gt;" in block
 
 
-def test_sanitize_strips_unicode_line_and_paragraph_separators() -> None:
+def test_sanitize_strips_unicode_line_and_paragraph_separators():
     """
     [Unit] schema detection: verifies sanitize_untrusted strips U+2028/U+2029/U+0085 Unicode line separators (PI-3).
 
@@ -1644,7 +1644,7 @@ def _downgraded(selector: str) -> dict:
 
 
 @pytest.mark.parametrize("selector", ["*", "html", "body", ":root", "  BODY  ", "*"])
-def test_universal_selector_downgraded_to_null(selector: str) -> None:
+def test_universal_selector_downgraded_to_null(selector: str):
     """
     [Unit] schema detection: verifies a universal selector is downgraded to null and never queried (AIS-5).
 
@@ -1665,7 +1665,7 @@ def test_universal_selector_downgraded_to_null(selector: str) -> None:
     assert proposal["rationale"] == "rejected: universal selector"
 
 
-def test_overlong_selector_downgraded_to_null() -> None:
+def test_overlong_selector_downgraded_to_null():
     """
     [Unit] schema detection: verifies a selector longer than 300 chars is downgraded to null (AIS-5).
 
@@ -1696,7 +1696,7 @@ def test_overlong_selector_downgraded_to_null() -> None:
         ("a[href=javascript:alert(1)]", "rejected: contains javascript:"),
     ],
 )
-def test_selector_with_markup_or_newline_downgraded(selector: str, rule: str) -> None:
+def test_selector_with_markup_or_newline_downgraded(selector: str, rule: str):
     """
     [Unit] schema detection: verifies selectors with markup, newlines, or javascript: are downgraded (AIS-5).
 
@@ -1742,7 +1742,7 @@ def test_selector_with_markup_or_newline_downgraded(selector: str, rule: str) ->
         ("div.card /py.*/i span", "rejected: regex-form selector"),  # PI-1: regex ANYWHERE, not full-match
     ],
 )
-def test_ais6_engine_prefix_chaining_and_pseudo_rejection_matrix(selector: str, rule: str) -> None:
+def test_ais6_engine_prefix_chaining_and_pseudo_rejection_matrix(selector: str, rule: str):
     """
     [Unit] schema detection: verifies AIS-6 rejects Playwright engine prefixes, >> chaining, pseudo-engines, and /regex/ forms.
 
@@ -1763,7 +1763,7 @@ def test_ais6_engine_prefix_chaining_and_pseudo_rejection_matrix(selector: str, 
     assert proposal["rationale"] == rule
 
 
-def test_plain_css_proposals_are_not_rejected() -> None:
+def test_plain_css_proposals_are_not_rejected():
     """
     [Unit] schema detection: verifies ordinary safe CSS proposals are not rejected by AIS-5/AIS-6 rules.
 
@@ -1793,7 +1793,7 @@ def test_plain_css_proposals_are_not_rejected() -> None:
         assert _downgraded(selector)["selector"] == selector
 
 
-def test_rationale_truncated_and_control_chars_stripped() -> None:
+def test_rationale_truncated_and_control_chars_stripped():
     """
     [Unit] schema detection: verifies format_diff_report sanitizes (AIS-13) and truncates (AIS-12) the rationale.
 
@@ -1826,7 +1826,7 @@ def test_rationale_truncated_and_control_chars_stripped() -> None:
 # --------------------------------------------------------------------------- #
 # AIS-15: fixed untrusted-content review footer in both reports (subtask 09)
 # --------------------------------------------------------------------------- #
-def test_report_footer_contains_review_reminder() -> None:
+def test_report_footer_contains_review_reminder():
     """
     [Unit] schema detection: verifies the text report ends with the REPORT_NOTICE untrusted-content footer (AIS-15).
 
@@ -1855,7 +1855,7 @@ def test_report_footer_contains_review_reminder() -> None:
     assert "parameters.py" in report
 
 
-def test_json_report_contains_notice_key() -> None:
+def test_json_report_contains_notice_key():
     """
     [Unit] schema detection: verifies the JSON report carries REPORT_NOTICE under a "notice" key (AIS-15).
 
@@ -1896,7 +1896,7 @@ def test_json_report_contains_notice_key() -> None:
 # --------------------------------------------------------------------------- #
 # AIS-4: a proposed selector's only sink is page.locator(...).count()/.text_content()
 # --------------------------------------------------------------------------- #
-def test_ais4_only_sink_is_locator_never_eval_or_write() -> None:
+def test_ais4_only_sink_is_locator_never_eval_or_write():
     """
     [Unit] schema detection: verifies selector validation never uses eval/shell/page.evaluate/file-write sinks (AIS-4).
 

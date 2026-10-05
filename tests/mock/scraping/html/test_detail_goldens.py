@@ -141,7 +141,7 @@ def diff_fields(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
     return lines
 
 
-def write_golden(expected_path: Path, actual: dict[str, Any], *, prior: Optional[dict[str, Any]]) -> None:
+def write_golden(expected_path: Path, actual: dict[str, Any], *, prior: Optional[dict[str, Any]]):
     """Rewrite a golden from ``actual``, preserving a hand-curated ``_known_issues`` list."""
     payload = dict(actual)
     if prior and "_known_issues" in prior:
@@ -149,7 +149,7 @@ def write_golden(expected_path: Path, actual: dict[str, Any], *, prior: Optional
     expected_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def compare_or_update(expected_path: Path, actual: dict[str, Any], *, update: bool, label: str) -> None:
+def compare_or_update(expected_path: Path, actual: dict[str, Any], *, update: bool, label: str):
     """Either rewrite the golden (then fail), or assert ``actual`` matches it field-by-field."""
     prior: Optional[dict[str, Any]] = None
     if expected_path.exists():
@@ -179,7 +179,7 @@ async def test_detail_golden(
     corpus_router: Any,
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] detail goldens: verifies detail golden.
 
@@ -217,7 +217,7 @@ async def test_detail_golden_leanpub(
     case: GoldenCase,
     httpx_corpus: Any,
     update_goldens: bool,
-) -> None:
+):
     """
     [Local] detail goldens: verifies detail golden leanpub.
 
@@ -243,7 +243,7 @@ async def test_detail_golden_leanpub(
 # ---------------------------------------------------------------------------
 
 
-def test_update_goldens_option_rewrites_and_fails(pytester: pytest.Pytester) -> None:
+def test_update_goldens_option_rewrites_and_fails(pytester: pytest.Pytester):
     """
     [Local] detail goldens: verifies update goldens option rewrites and fails.
 

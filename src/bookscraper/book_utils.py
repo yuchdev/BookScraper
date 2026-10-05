@@ -37,14 +37,14 @@ LOG_FILE_PATH = LOG_DIR / f"bookscraper_{datetime.now():%Y%m%d_%H%M%S}_{os.getpi
 logger = logging.getLogger("bookscraper_app")
 
 
-def _prune_old_logs(max_files: int = MAX_LOG_FILES) -> None:
+def _prune_old_logs(max_files: int = MAX_LOG_FILES):
     """Delete the oldest run logs in LOG_DIR beyond the `max_files` most recently modified."""
     log_files = sorted(LOG_DIR.glob("bookscraper_*.log"), key=lambda p: p.stat().st_mtime)
     for old_file in log_files[:-max_files]:
         old_file.unlink(missing_ok=True)
 
 
-def configure_logging(level: int = logging.INFO) -> None:
+def configure_logging(level: int = logging.INFO):
     """
     Write every log record in the process to this run's file under ~/.bookscrapper/logs/ at the
     given severity, and prune old run logs down to MAX_LOG_FILES.
@@ -78,7 +78,7 @@ configure_logging()
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 
-def print_log(text: str, status: str = "info") -> None:
+def print_log(text: str, status: str = "info"):
     """
     Logs the given text with color-coding for console output,
     and plain text for file logs.
@@ -110,7 +110,7 @@ def print_log(text: str, status: str = "info") -> None:
         )
 
 
-def atomic_write_bytes(path: Path, data: bytes, mode: Optional[int] = None) -> None:
+def atomic_write_bytes(path: Path, data: bytes, mode: Optional[int] = None):
     """
     Write ``data`` to ``path`` atomically: a crash or interrupt mid-write can never
     leave ``path`` truncated. Writes to a temp file in the same directory, ``fsync``s

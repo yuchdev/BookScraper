@@ -66,7 +66,7 @@ def backend(request: pytest.FixtureRequest, isolated_local_store) -> Backend:
     return _make_mongo_backend()
 
 
-def test_saved_book_found_by_hash(backend: Backend) -> None:
+def test_saved_book_found_by_hash(backend: Backend):
     """
     [Local] storage backend parity: verifies saved book found by hash.
     
@@ -87,7 +87,7 @@ def test_saved_book_found_by_hash(backend: Backend) -> None:
     assert backend.book_exists_by_hash("") is False
 
 
-def test_duplicate_hash_counted_once(backend: Backend) -> None:
+def test_duplicate_hash_counted_once(backend: Backend):
     """
     [Local] storage backend parity: verifies duplicate hash counted once.
     
@@ -109,7 +109,7 @@ def test_duplicate_hash_counted_once(backend: Backend) -> None:
     assert len(_stored_docs(backend)) == 1
 
 
-def test_book_without_hash_is_error(backend: Backend) -> None:
+def test_book_without_hash_is_error(backend: Backend):
     """
     [Local] storage backend parity: verifies book without hash is error.
     
@@ -129,7 +129,7 @@ def test_book_without_hash_is_error(backend: Backend) -> None:
     assert backend.book_exists_by_asin("B999") is False
 
 
-def test_asin_lookup(backend: Backend) -> None:
+def test_asin_lookup(backend: Backend):
     """
     [Local] storage backend parity: verifies asin lookup.
     
@@ -149,7 +149,7 @@ def test_asin_lookup(backend: Backend) -> None:
     assert backend.book_exists_by_asin("") is False
 
 
-def test_leanpub_lookup_by_id_or_slug(backend: Backend) -> None:
+def test_leanpub_lookup_by_id_or_slug(backend: Backend):
     """
     [Local] storage backend parity: verifies leanpub lookup by id or slug.
     
@@ -170,7 +170,7 @@ def test_leanpub_lookup_by_id_or_slug(backend: Backend) -> None:
     assert backend.leanpub_book_exists(None, None) is False
 
 
-def test_stored_documents_identical_across_backends(isolated_local_store) -> None:
+def test_stored_documents_identical_across_backends(isolated_local_store):
     """
     [Local] storage backend parity: verifies stored documents identical across backends.
     

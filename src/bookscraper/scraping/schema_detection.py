@@ -976,7 +976,7 @@ def _sdk_error_summary(exc: Exception) -> str:
     return summary
 
 
-def _check_stop_reason(message: anthropic.types.Message) -> None:
+def _check_stop_reason(message: anthropic.types.Message):
     """Raise ``SchemaDetectionError`` for a truncated or refused response, so neither is parsed.
 
     ``max_tokens`` means the JSON answer was cut off (incomplete, must not be parsed); ``refusal``
@@ -1096,7 +1096,7 @@ async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_
     return prune_html(html, max_chars=max_chars)
 
 
-async def _block_all_requests(route: Route) -> None:
+async def _block_all_requests(route: Route):
     """Abort every request (default-deny), used for ``--html-file`` pages.
 
     Unlike ``route_handler`` (which blocks only non-document subresources and lets the
@@ -1188,7 +1188,7 @@ def replay_lookup(replay: dict[str, str], instruction_block: str, snapshot_block
     return replay[key]
 
 
-def write_record_file(path: str, recorded: dict[str, str]) -> None:
+def write_record_file(path: str, recorded: dict[str, str]):
     """Write a ``--record`` file: ``{sha256(prompt): raw_model_response}`` from a live run.
 
     For maintainers refreshing the committed replay recordings. Carries a ``_provenance`` note

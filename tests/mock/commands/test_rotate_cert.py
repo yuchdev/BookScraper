@@ -81,7 +81,7 @@ def _args(
 # rotation mode
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_run_success_passes_args_through_and_reports_notes(tmp_path) -> None:
+async def test_run_success_passes_args_through_and_reports_notes(tmp_path):
     """
     [Local] rotate-cert command: verifies a successful rotation forwards the flags and reports the new path, notes and expiry.
 
@@ -117,7 +117,7 @@ async def test_run_success_passes_args_through_and_reports_notes(tmp_path) -> No
 
 
 @pytest.mark.asyncio
-async def test_run_reports_when_new_cert_expiry_unreadable(tmp_path) -> None:
+async def test_run_reports_when_new_cert_expiry_unreadable(tmp_path):
     # rotate_certificate reports a path that isn't a real cert; reading its expiry fails,
     # which is reported as a warning rather than crashing the (already-succeeded) rotation.
     """
@@ -147,7 +147,7 @@ async def test_run_reports_when_new_cert_expiry_unreadable(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_without_output_flag_passes_none(tmp_path) -> None:
+async def test_run_without_output_flag_passes_none(tmp_path):
     """
     [Local] rotate-cert command: verifies omitted --months and --output reach rotate_certificate() as None.
 
@@ -174,7 +174,7 @@ async def test_run_without_output_flag_passes_none(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_expands_user_in_output_flag(tmp_path) -> None:
+async def test_run_expands_user_in_output_flag(tmp_path):
     """
     [Local] rotate-cert command: verifies a ~ in --output is expanded before it reaches rotate_certificate().
 
@@ -201,7 +201,7 @@ async def test_run_expands_user_in_output_flag(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_prune_flag_disables_pruning(tmp_path) -> None:
+async def test_no_prune_flag_disables_pruning(tmp_path):
     """
     [Local] rotate cert: verifies no prune flag disables pruning.
 
@@ -226,7 +226,7 @@ async def test_no_prune_flag_disables_pruning(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_settings_warning_is_logged_as_warning(tmp_path) -> None:
+async def test_run_settings_warning_is_logged_as_warning(tmp_path):
     """
     [Local] rotate-cert command: verifies a status note starting with WARNING: is logged at warning level.
 
@@ -256,7 +256,7 @@ async def test_run_settings_warning_is_logged_as_warning(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_rotation_error_logs_and_exits_nonzero() -> None:
+async def test_run_rotation_error_logs_and_exits_nonzero():
     """
     [Local] rotate-cert command: verifies a RotationError is logged as an error and exits with code 1.
 
@@ -288,7 +288,7 @@ async def test_run_rotation_error_logs_and_exits_nonzero() -> None:
 # --------------------------------------------------------------------------- #
 # verification (rotation mode, full flow through cert_rotation.rotate_certificate)
 # --------------------------------------------------------------------------- #
-def _atlas_env(monkeypatch) -> None:
+def _atlas_env(monkeypatch):
     """Monkeypatch ATLAS_* credentials so the rotate-cert command can proceed."""
     monkeypatch.setenv("ATLAS_CLIENT_ID", "client-id")
     monkeypatch.setenv("ATLAS_CLIENT_SECRET", "client-secret")
@@ -306,7 +306,7 @@ def _atlas_responses() -> list[httpx.Response]:
 
 
 @pytest.mark.asyncio
-async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monkeypatch, isolated_config) -> None:
+async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monkeypatch, isolated_config):
     """
     [Local] rotate cert: verifies verify final failure leaves settings untouched and exits one.
 
@@ -352,7 +352,7 @@ async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monk
 
 
 @pytest.mark.asyncio
-async def test_no_verify_flag_skips_ping(monkeypatch, isolated_config) -> None:
+async def test_no_verify_flag_skips_ping(monkeypatch, isolated_config):
     """
     [Local] rotate cert: verifies no verify flag skips ping.
 
@@ -394,7 +394,7 @@ async def test_no_verify_flag_skips_ping(monkeypatch, isolated_config) -> None:
 
 
 @pytest.mark.asyncio
-async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isolated_config, caplog) -> None:
+async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isolated_config, caplog):
     """
     [Local] rotate cert: verifies verify failure message has no password or host.
 
@@ -428,7 +428,7 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
 
     printed: list[str] = []
 
-    def _capture(msg, status="info") -> None:
+    def _capture(msg, status="info"):
         """Capture a print_log call's message into the printed list."""
         printed.append(msg)
 
@@ -459,7 +459,7 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
 # --check mode
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path) -> None:
+async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path):
     """
     [Local] rotate-cert --check: verifies a cert with 180 days left exits 0 and never rotates.
 
@@ -493,7 +493,7 @@ async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_exit_three_within_warn_window(tmp_path) -> None:
+async def test_check_mode_exit_three_within_warn_window(tmp_path):
     """
     [Local] rotate-cert --check: verifies a cert expiring inside --warn-days exits 3.
 
@@ -521,7 +521,7 @@ async def test_check_mode_exit_three_within_warn_window(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_exit_one_when_expired(tmp_path) -> None:
+async def test_check_mode_exit_one_when_expired(tmp_path):
     """
     [Local] rotate-cert --check: verifies an already expired cert exits 1 and says so.
 
@@ -550,7 +550,7 @@ async def test_check_mode_exit_one_when_expired(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_exit_one_when_unreadable(tmp_path) -> None:
+async def test_check_mode_exit_one_when_unreadable(tmp_path):
     """
     [Local] rotate-cert --check: verifies an unreadable active cert exits 1 with a check-failed message.
 
@@ -579,7 +579,7 @@ async def test_check_mode_exit_one_when_unreadable(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_without_x509_config_is_noop_zero() -> None:
+async def test_check_mode_without_x509_config_is_noop_zero():
     """
     [Local] rotate-cert --check: verifies a setup with no x509 cert configured is a no-op that exits 0.
 
@@ -607,7 +607,7 @@ async def test_check_mode_without_x509_config_is_noop_zero() -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_config_error_exits_one() -> None:
+async def test_check_mode_config_error_exits_one():
     """
     [Local] rotate-cert --check: verifies a ConfigError while resolving the active cert exits 1.
 
@@ -636,7 +636,7 @@ async def test_check_mode_config_error_exits_one() -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_returns_without_rotating() -> None:
+async def test_check_mode_returns_without_rotating():
     """
     [Local] rotate cert: verifies check mode returns without rotating.
 
@@ -662,7 +662,7 @@ async def test_check_mode_returns_without_rotating() -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_mode_never_requires_atlas_env(tmp_path, monkeypatch) -> None:
+async def test_check_mode_never_requires_atlas_env(tmp_path, monkeypatch):
     """
     [Local] rotate cert: verifies check mode never requires atlas env.
 

@@ -32,7 +32,7 @@ def _leanpub_book(slug: str, title: str) -> dict:
 # --------------------------------------------------------------------------- #
 # save_failed_urls_to_csv  (search variant: csv.DictWriter, list[dict])
 # --------------------------------------------------------------------------- #
-def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
+def test_save_failed_urls_empty_creates_no_file(tmp_path):
     """
     [Local] search: verifies that an empty list passed to save_failed_urls_to_csv creates no file.
 
@@ -53,7 +53,7 @@ def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
     assert not target.exists()
 
 
-def test_save_failed_urls_writes_header_and_dict_rows(tmp_path) -> None:
+def test_save_failed_urls_writes_header_and_dict_rows(tmp_path):
     """
     [Local] search: verifies that two dict items are written as a proper DictWriter CSV.
 
@@ -83,7 +83,7 @@ def test_save_failed_urls_writes_header_and_dict_rows(tmp_path) -> None:
     assert rows[0]["site"] == "leanpub"
 
 
-def test_save_failed_urls_missing_key_uses_restval(tmp_path) -> None:
+def test_save_failed_urls_missing_key_uses_restval(tmp_path):
     """
     [Local] search: verifies that a dict missing the "error" key is written with an empty string.
 
@@ -112,7 +112,7 @@ def test_save_failed_urls_missing_key_uses_restval(tmp_path) -> None:
     assert rows[0]["error"] == ""
 
 
-def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path) -> None:
+def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path):
     """
     [Local] search: verifies that a per-row ValueError skips only that row and the loop continues.
 
@@ -145,7 +145,7 @@ def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path
     assert urls == ["https://leanpub.com/good1", "https://leanpub.com/good2"]
 
 
-def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(tmp_path) -> None:
+def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(tmp_path):
     """
     [Local] search: verifies that a per-row csv.Error skips only that row and the loop continues.
 
@@ -194,7 +194,7 @@ def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(t
     assert [r["url"] for r in rows] == ["https://leanpub.com/good1", "https://leanpub.com/good2"]
 
 
-def test_save_failed_urls_ioerror_is_swallowed(tmp_path) -> None:
+def test_save_failed_urls_ioerror_is_swallowed(tmp_path):
     """
     [Local] search: verifies that an IOError on file open is swallowed without propagating.
 
@@ -218,7 +218,7 @@ def test_save_failed_urls_ioerror_is_swallowed(tmp_path) -> None:
     assert not target.exists()
 
 
-def test_save_failed_urls_generic_exception_is_swallowed(tmp_path) -> None:
+def test_save_failed_urls_generic_exception_is_swallowed(tmp_path):
     """
     [Local] search: verifies that a csv.Error at DictWriter construction is swallowed.
 
@@ -247,7 +247,7 @@ def test_save_failed_urls_generic_exception_is_swallowed(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 # run()
 # --------------------------------------------------------------------------- #
-async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
+async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
     """
     [Local] search: verifies that only non-duplicate books proceed to detail scrape.
 
@@ -304,7 +304,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
     backend.close.assert_called_once_with()
 
 
-async def test_run_detail_results_partition_into_saved_and_failed() -> None:
+async def test_run_detail_results_partition_into_saved_and_failed():
     """
     [Local] search: verifies that SUCCESS results are saved and non-success results go to the CSV.
 
@@ -377,7 +377,7 @@ async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     assert "detail scrape blew up" in boom_entry["error"]
 
 
-async def test_search_failed_record_uses_real_book_url() -> None:
+async def test_search_failed_record_uses_real_book_url():
     """
     [Local] search: verifies search failed record uses real book url.
 
@@ -421,7 +421,7 @@ async def test_search_failed_record_uses_real_book_url() -> None:
     assert record["error"] == "HTTP 500"
 
 
-async def test_run_no_new_books_skips_save_but_closes_backend() -> None:
+async def test_run_no_new_books_skips_save_but_closes_backend():
     """
     [Local] search: verifies that empty search results skip detail scraping but still close the backend.
 
@@ -457,7 +457,7 @@ async def test_run_no_new_books_skips_save_but_closes_backend() -> None:
     backend.close.assert_called_once_with()
 
 
-async def test_run_keyboard_interrupt_is_caught_and_backend_closed() -> None:
+async def test_run_keyboard_interrupt_is_caught_and_backend_closed():
     """
     [Local] search: verifies that a KeyboardInterrupt is caught and the backend is still closed.
 
@@ -492,7 +492,7 @@ async def test_run_keyboard_interrupt_is_caught_and_backend_closed() -> None:
     backend.close.assert_called_once_with()
 
 
-async def test_run_generic_exception_is_caught_and_backend_closed() -> None:
+async def test_run_generic_exception_is_caught_and_backend_closed():
     """
     [Local] search: verifies that a RuntimeError from the search API is caught and the backend closed.
 
@@ -526,7 +526,7 @@ async def test_run_generic_exception_is_caught_and_backend_closed() -> None:
     backend.close.assert_called_once_with()
 
 
-def test_search_module_uses_real_leanpub_only_sites() -> None:
+def test_search_module_uses_real_leanpub_only_sites():
     # Sanity guard: the run() tests monkeypatch SEARCH_QUERIES but rely on the real
     # single-site config; if this changes the run() tests may need revisiting.
     """

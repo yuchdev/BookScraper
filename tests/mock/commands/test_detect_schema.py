@@ -38,7 +38,7 @@ def _args(**overrides) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
-async def test_run_prints_report_and_usage_line(capsys) -> None:
+async def test_run_prints_report_and_usage_line(capsys):
     """
     [Local] detect-schema command: verifies run() forwards every CLI option to the engine and prints the report plus the usage line.
 
@@ -83,7 +83,7 @@ async def test_run_prints_report_and_usage_line(capsys) -> None:
     assert "Anthropic usage: model=claude-sonnet-5 requests=1" in out
 
 
-async def test_run_threads_search_page_type(capsys) -> None:
+async def test_run_threads_search_page_type(capsys):
     """
     [Local] detect schema: verifies run threads search page type.
     
@@ -122,7 +122,7 @@ async def test_run_threads_search_page_type(capsys) -> None:
     assert "SEARCH REPORT" in capsys.readouterr().out
 
 
-async def test_run_threads_offline_html_file_replay_record(capsys) -> None:
+async def test_run_threads_offline_html_file_replay_record(capsys):
     """
     [Local] detect schema: verifies run threads offline html file replay record.
     
@@ -161,7 +161,7 @@ async def test_run_threads_offline_html_file_replay_record(capsys) -> None:
     assert "OFFLINE REPORT" in capsys.readouterr().out
 
 
-async def test_run_exits_one_on_detection_error() -> None:
+async def test_run_exits_one_on_detection_error():
     """
     [Local] detect-schema command: verifies a SchemaDetectionError ends the run with exit code 1.
 
@@ -186,7 +186,7 @@ async def test_run_exits_one_on_detection_error() -> None:
     assert exc_info.value.code == 1
 
 
-async def test_run_writes_report_to_output_file(tmp_path) -> None:
+async def test_run_writes_report_to_output_file(tmp_path):
     """
     [Local] detect-schema command: verifies --output writes the report body to the given file.
 
@@ -213,7 +213,7 @@ async def test_run_writes_report_to_output_file(tmp_path) -> None:
     assert out_path.read_text(encoding="utf-8").strip() == "REPORT BODY"
 
 
-async def test_run_exits_one_when_output_write_fails(tmp_path) -> None:
+async def test_run_exits_one_when_output_write_fails(tmp_path):
     """
     [Local] detect-schema command: verifies a failure writing --output exits with code 1.
 
@@ -239,7 +239,7 @@ async def test_run_exits_one_when_output_write_fails(tmp_path) -> None:
     assert exc_info.value.code == 1
 
 
-async def test_run_threads_format_and_check_current_only(capsys) -> None:
+async def test_run_threads_format_and_check_current_only(capsys):
     """
     [Local] detect schema: verifies run threads format and check current only.
     
@@ -277,7 +277,7 @@ async def test_run_threads_format_and_check_current_only(capsys) -> None:
     )
 
 
-async def test_run_json_format_stdout_is_pure_json(capsys) -> None:
+async def test_run_json_format_stdout_is_pure_json(capsys):
     """
     [Local] detect schema: verifies run json format stdout is pure json.
     
@@ -306,7 +306,7 @@ async def test_run_json_format_stdout_is_pure_json(capsys) -> None:
     assert "USAGE LINE" in captured.err
 
 
-async def test_run_exits_four_on_drift() -> None:
+async def test_run_exits_four_on_drift():
     """
     [Local] detect schema: verifies run exits four on drift.
     
@@ -329,7 +329,7 @@ async def test_run_exits_four_on_drift() -> None:
     assert exc_info.value.code == 4
 
 
-async def test_run_exits_four_on_drift_json_format(capsys) -> None:
+async def test_run_exits_four_on_drift_json_format(capsys):
     """
     [Local] detect schema: verifies run exits four on drift json format.
     

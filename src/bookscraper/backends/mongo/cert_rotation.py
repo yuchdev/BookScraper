@@ -160,7 +160,7 @@ def issue_certificate(token: str, project_id: str, db_user: str, months: int) ->
     return response.content
 
 
-def atomic_write(path: pathlib.Path, data: bytes) -> None:
+def atomic_write(path: pathlib.Path, data: bytes):
     """
     Atomically write ``data`` to ``path`` with owner-only (``0600``) permissions.
 
@@ -238,7 +238,7 @@ def verify_certificate(
     attempts: int = DEFAULT_VERIFY_ATTEMPTS,
     delay_s: float = DEFAULT_VERIFY_DELAY_S,
     sleep: Callable[[float], None] = time.sleep,
-) -> None:
+):
     """
     Confirm that the freshly written certificate at ``cert_path`` actually authenticates to
     MongoDB Atlas, before any caller repoints ``settings.json`` at it.

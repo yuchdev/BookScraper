@@ -11,7 +11,7 @@ import pytest
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 
-def test_scrape_result_success_requires_book() -> None:
+def test_scrape_result_success_requires_book():
     """
     [Unit] scrape results: verifies a SUCCESS ScrapeResult with a book document is accepted.
 
@@ -36,7 +36,7 @@ def test_scrape_result_success_requires_book() -> None:
     assert result.attempts == 1
 
 
-def test_scrape_result_success_without_book_is_rejected() -> None:
+def test_scrape_result_success_without_book_is_rejected():
     """
     [Unit] scrape results: verifies constructing a SUCCESS ScrapeResult without a book raises.
 
@@ -68,7 +68,7 @@ def test_scrape_result_success_without_book_is_rejected() -> None:
         ScrapeStatus.FAILED,
     ],
 )
-def test_scrape_result_non_success_forbids_book(status: ScrapeStatus) -> None:
+def test_scrape_result_non_success_forbids_book(status: ScrapeStatus):
     """
     [Unit] scrape results: verifies every non-success status rejects a book document.
 
@@ -89,7 +89,7 @@ def test_scrape_result_non_success_forbids_book(status: ScrapeStatus) -> None:
         ScrapeResult(status, url="https://x", site="amazon", book={"title": "Nope"})
 
 
-def test_scrape_result_non_success_allows_error_and_attempts() -> None:
+def test_scrape_result_non_success_allows_error_and_attempts():
     """
     [Unit] scrape results: verifies a non-success result accepts error and attempts metadata.
 
@@ -115,7 +115,7 @@ def test_scrape_result_non_success_allows_error_and_attempts() -> None:
     assert result.attempts == 3
 
 
-def test_scrape_status_values_serialize_to_their_names() -> None:
+def test_scrape_status_values_serialize_to_their_names():
     """
     [Unit] scrape results: verifies ScrapeStatus.value equals the member name for CSV serialization.
 

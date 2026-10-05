@@ -22,7 +22,7 @@ from bookscraper.backends.mongo import config
 pytest_plugins = ["pytester"]
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
+def pytest_addoption(parser: pytest.Parser):
     """Register ``--update-goldens`` for the detail-page golden tier (task 06.0, subtask 04).
 
     When set, each golden test rewrites its ``<name>.expected.json`` from the *current* scraper

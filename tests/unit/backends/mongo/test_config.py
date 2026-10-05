@@ -23,7 +23,7 @@ CONFIG_LOGGER = "bookscraper.backends.mongo.config"
 URI = "mongodb+srv://u:p@cluster/db?retryWrites=true&w=majority"
 
 
-def _write_settings(path, data) -> None:
+def _write_settings(path, data):
     """Write a settings dict as JSON to ``path``."""
     path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -31,7 +31,7 @@ def _write_settings(path, data) -> None:
 class TestResolveField:
     """Tests for config._resolve_field(): literal vs env-var source resolution."""
 
-    def test_literal_returns_value_as_is(self) -> None:
+    def test_literal_returns_value_as_is(self):
         """
         [Unit] resolve field: verifies a literal source field returns its value without modification.
 
@@ -50,7 +50,7 @@ class TestResolveField:
         """
         assert config._resolve_field({"source": "literal", "value": URI}, "f") == URI
 
-    def test_env_returns_looked_up_value(self, monkeypatch) -> None:
+    def test_env_returns_looked_up_value(self, monkeypatch):
         """
         [Local] resolve field: verifies an env source field returns the looked-up env variable value.
 
@@ -70,7 +70,7 @@ class TestResolveField:
         monkeypatch.setenv("SOME_VAR", URI)
         assert config._resolve_field({"source": "env", "value": "SOME_VAR"}, "f") == URI
 
-    def test_env_unset_raises(self, monkeypatch) -> None:
+    def test_env_unset_raises(self, monkeypatch):
         """
         [Local] resolve field: verifies a missing env variable raises ConfigError.
 
@@ -91,7 +91,7 @@ class TestResolveField:
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "env", "value": "MISSING_VAR"}, "f")
 
-    def test_missing_source_raises(self) -> None:
+    def test_missing_source_raises(self):
         """
         [Unit] settings.json field resolver: verifies a field without 'source' raises ConfigError.
 
@@ -109,7 +109,7 @@ class TestResolveField:
         with pytest.raises(ConfigError):
             config._resolve_field({"value": URI}, "f")
 
-    def test_missing_value_raises(self) -> None:
+    def test_missing_value_raises(self):
         """
         [Unit] settings.json field resolver: verifies a field without 'value' raises ConfigError.
 
@@ -127,7 +127,7 @@ class TestResolveField:
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "literal"}, "f")
 
-    def test_not_a_dict_raises(self) -> None:
+    def test_not_a_dict_raises(self):
         """
         [Unit] settings.json field resolver: verifies a bare string instead of a {source, value} object raises ConfigError.
 
@@ -145,7 +145,7 @@ class TestResolveField:
         with pytest.raises(ConfigError):
             config._resolve_field("just a string", "f")
 
-    def test_unrecognized_source_raises(self) -> None:
+    def test_unrecognized_source_raises(self):
         """
         [Unit] settings.json field resolver: verifies a source other than 'env' or 'literal' raises ConfigError.
 
@@ -167,7 +167,7 @@ class TestResolveField:
 class TestResolveCertField:
     """Tests for config._resolve_cert_field(): resolves a cert path literal or env var relative to CONFIG_DIR."""
 
-    def test_bare_filename_resolved_under_config_dir(self, monkeypatch, tmp_path) -> None:
+    def test_bare_filename_resolved_under_config_dir(self, monkeypatch, tmp_path):
         """
         [Unit] settings.json cert resolver: verifies a bare literal cert filename resolves under CONFIG_DIR.
 
@@ -187,7 +187,7 @@ class TestResolveCertField:
         resolved = config._resolve_cert_field({"source": "literal", "value": "cert.pem"}, "x509.cert")
         assert resolved == str(tmp_path / "cert.pem")
 
-    def test_absolute_path_returned_untouched(self, monkeypatch, tmp_path) -> None:
+    def test_absolute_path_returned_untouched(self, monkeypatch, tmp_path):
         """
         [Unit] settings.json cert resolver: verifies an absolute literal cert path is returned unchanged.
 
@@ -211,7 +211,7 @@ class TestResolveCertField:
 class TestGetDefaultTlsCertFile:
     """Tests for config.get_default_tls_cert_file(): returns the newest X509-cert-*.pem by mtime."""
 
-    def test_no_certs_returns_none(self, monkeypatch, tmp_path) -> None:
+    def test_no_certs_returns_none(self, monkeypatch, tmp_path):
         """
         [Unit] legacy cert fallback: verifies an empty config dir yields no default cert.
 
@@ -229,7 +229,7 @@ class TestGetDefaultTlsCertFile:
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         assert config.get_default_tls_cert_file() is None
 
-    def test_returns_newest_by_mtime(self, monkeypatch, tmp_path) -> None:
+    def test_returns_newest_by_mtime(self, monkeypatch, tmp_path):
         """
         [Unit] legacy cert fallback: verifies the newest X509-cert-*.pem by modification time wins.
 
@@ -254,7 +254,7 @@ class TestGetDefaultTlsCertFile:
         os.utime(new, (2_000_000_000, 2_000_000_000))
         assert config.get_default_tls_cert_file() == str(new)
 
-    def test_ignores_non_matching_files(self, monkeypatch, tmp_path) -> None:
+    def test_ignores_non_matching_files(self, monkeypatch, tmp_path):
         """
         [Unit] legacy cert fallback: verifies files not matching X509-cert-*.pem are never picked.
 
@@ -278,7 +278,7 @@ class TestGetDefaultTlsCertFile:
 class TestLoadSettings:
     """Tests for config.load_settings(): reads and parses settings.json, returns None when absent."""
 
-    def test_nonexistent_path_returns_none(self, tmp_path) -> None:
+    def test_nonexistent_path_returns_none(self, tmp_path):
         """
         [Unit] settings.json loader: verifies a missing settings file means legacy mode (None).
 
@@ -295,7 +295,7 @@ class TestLoadSettings:
         """
         assert config.load_settings(tmp_path / "does_not_exist.json") is None
 
-    def test_malformed_json_raises(self, tmp_path) -> None:
+    def test_malformed_json_raises(self, tmp_path):
         """
         [Unit] settings.json loader: verifies invalid JSON raises ConfigError instead of falling back.
 
@@ -315,7 +315,7 @@ class TestLoadSettings:
         with pytest.raises(ConfigError):
             config.load_settings(bad)
 
-    def test_valid_json_returns_parsed_dict(self, tmp_path) -> None:
+    def test_valid_json_returns_parsed_dict(self, tmp_path):
         """
         [Unit] settings.json loader: verifies a valid file is returned as the parsed dict.
 
@@ -338,7 +338,7 @@ class TestLoadSettings:
 class TestResolveMongoConnectionSettings:
     """Tests for config.resolve_mongo_connection() with settings.json: all six valid auth shapes plus error paths."""
 
-    def test_pass_literal_uri(self, tmp_path) -> None:
+    def test_pass_literal_uri(self, tmp_path):
         """
         [Unit] resolve mongo connection settings: verifies pass auth with a literal URI resolves to (uri, None).
 
@@ -362,7 +362,7 @@ class TestResolveMongoConnectionSettings:
         )
         assert config.resolve_mongo_connection(path) == (URI, None)
 
-    def test_pass_env_uri(self, monkeypatch, tmp_path) -> None:
+    def test_pass_env_uri(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo connection settings: verifies pass auth with an env-sourced URI resolves correctly.
 
@@ -390,7 +390,7 @@ class TestResolveMongoConnectionSettings:
         )
         assert config.resolve_mongo_connection(path) == (URI, None)
 
-    def test_x509_literal_uri_literal_bare_cert(self, monkeypatch, tmp_path) -> None:
+    def test_x509_literal_uri_literal_bare_cert(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo connection settings: verifies x509 with a literal URI and bare cert filename resolves the cert under CONFIG_DIR.
 
@@ -425,7 +425,7 @@ class TestResolveMongoConnectionSettings:
         assert uri == URI
         assert cert == str(config_dir / "cert.pem")
 
-    def test_all_four_x509_source_combos_resolve_identically(self, monkeypatch, tmp_path) -> None:
+    def test_all_four_x509_source_combos_resolve_identically(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo connection settings: verifies all four x509 source combinations resolve to the same (uri, cert).
 
@@ -477,7 +477,7 @@ class TestResolveMongoConnectionSettings:
 
         assert results == [(URI, expected_cert)] * 4
 
-    def test_missing_auth_type_raises(self, tmp_path) -> None:
+    def test_missing_auth_type_raises(self, tmp_path):
         """
         [Unit] resolve mongo connection settings: verifies a settings.json without auth_type raises ConfigError.
 
@@ -499,7 +499,7 @@ class TestResolveMongoConnectionSettings:
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
-    def test_unrecognized_auth_type_raises(self, tmp_path) -> None:
+    def test_unrecognized_auth_type_raises(self, tmp_path):
         """
         [Unit] resolve mongo connection settings: verifies an unsupported auth_type raises ConfigError.
 
@@ -521,7 +521,7 @@ class TestResolveMongoConnectionSettings:
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
-    def test_pass_without_pass_block_raises(self, tmp_path) -> None:
+    def test_pass_without_pass_block_raises(self, tmp_path):
         """
         [Unit] resolve mongo connection settings: verifies auth_type "pass" without a "pass" block raises ConfigError.
 
@@ -543,7 +543,7 @@ class TestResolveMongoConnectionSettings:
         with pytest.raises(ConfigError):
             config.resolve_mongo_connection(path)
 
-    def test_x509_without_x509_block_raises(self, tmp_path) -> None:
+    def test_x509_without_x509_block_raises(self, tmp_path):
         """
         [Unit] resolve mongo connection settings: verifies auth_type "x509" without an "x509" block raises ConfigError.
 
@@ -569,7 +569,7 @@ class TestResolveMongoConnectionSettings:
 class TestResolveMongoConnectionLegacyFallback:
     """Tests for config.resolve_mongo_connection() legacy fallback (no settings.json): MONGODB_URI / TLS_CERT_FILE / X509 glob."""
 
-    def test_env_uri_no_cert(self, monkeypatch, tmp_path, no_real_env) -> None:
+    def test_env_uri_no_cert(self, monkeypatch, tmp_path, no_real_env):
         """
         [Local] resolve mongo connection legacy fallback: verifies MONGODB_URI without a cert resolves to (uri, None).
 
@@ -594,7 +594,7 @@ class TestResolveMongoConnectionLegacyFallback:
         result = config.resolve_mongo_connection(config_dir / "settings.json")
         assert result == (URI, None)
 
-    def test_cert_glob_used_when_no_tls_cert_env(self, monkeypatch, tmp_path, no_real_env) -> None:
+    def test_cert_glob_used_when_no_tls_cert_env(self, monkeypatch, tmp_path, no_real_env):
         """
         [Local] resolve mongo connection legacy fallback: verifies the newest X509-cert-*.pem is used when TLS_CERT_FILE is unset.
 
@@ -621,7 +621,7 @@ class TestResolveMongoConnectionLegacyFallback:
         assert uri == URI
         assert resolved_cert == str(cert)
 
-    def test_explicit_tls_cert_env_wins_over_glob(self, monkeypatch, tmp_path, no_real_env) -> None:
+    def test_explicit_tls_cert_env_wins_over_glob(self, monkeypatch, tmp_path, no_real_env):
         """
         [Local] resolve mongo connection legacy fallback: verifies TLS_CERT_FILE takes precedence over the X509 glob.
 
@@ -668,7 +668,7 @@ class TestSettingsFileSecurity:
         config._SECURITY_WARNINGS_EMITTED.clear()
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
-    def test_world_readable_settings_warns_once(self, tmp_path, caplog) -> None:
+    def test_world_readable_settings_warns_once(self, tmp_path, caplog):
         """
         [Local] settings file security: verifies a world-readable settings.json emits the warning exactly once per process.
 
@@ -696,7 +696,7 @@ class TestSettingsFileSecurity:
         assert "chmod 600" in warnings[0].message
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
-    def test_security_warning_reaches_console(self, tmp_path, capsys) -> None:
+    def test_security_warning_reaches_console(self, tmp_path, capsys):
         """
         [Local] settings file security: verifies the world-readable warning is printed to stdout, not only logged.
 
@@ -719,7 +719,7 @@ class TestSettingsFileSecurity:
         assert "readable by group/other" in capsys.readouterr().out
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
-    def test_owner_only_settings_does_not_warn(self, tmp_path, caplog) -> None:
+    def test_owner_only_settings_does_not_warn(self, tmp_path, caplog):
         """
         [Unit] settings file security: verifies a correctly locked-down settings.json loads without a warning.
 
@@ -742,7 +742,7 @@ class TestSettingsFileSecurity:
             config.load_settings(path)
         assert caplog.records == []
 
-    def test_permission_check_skipped_on_windows(self, tmp_path, caplog, monkeypatch) -> None:
+    def test_permission_check_skipped_on_windows(self, tmp_path, caplog, monkeypatch):
         """
         [Local] settings file security: verifies the POSIX permission check is skipped when os.name is "nt".
 
@@ -767,7 +767,7 @@ class TestSettingsFileSecurity:
         assert caplog.records == []
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink semantics")
-    def test_symlinked_settings_warns(self, tmp_path, caplog) -> None:
+    def test_symlinked_settings_warns(self, tmp_path, caplog):
         """
         [Local] settings file security: verifies a symlinked settings.json emits an "is a symlink" warning.
 
@@ -793,7 +793,7 @@ class TestSettingsFileSecurity:
         assert any("is a symlink" in r.message for r in caplog.records)
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX ownership semantics")
-    def test_foreign_owned_settings_warns(self, tmp_path, caplog, monkeypatch) -> None:
+    def test_foreign_owned_settings_warns(self, tmp_path, caplog, monkeypatch):
         """
         [Local] settings file security: verifies a settings.json owned by a different UID emits a warning.
 
@@ -821,7 +821,7 @@ class TestSettingsFileSecurity:
 class TestUnknownTopLevelKeys:
     """Tests for settings.json unknown-key detection: ConfigError raised loudly, values never leaked (SEC-11)."""
 
-    def test_unknown_top_level_key_raises(self, tmp_path) -> None:
+    def test_unknown_top_level_key_raises(self, tmp_path):
         """
         [Unit] unknown top-level keys: verifies an unrecognized top-level key raises ConfigError naming the key.
 
@@ -843,7 +843,7 @@ class TestUnknownTopLevelKeys:
             config.load_settings(path)
         assert "x059" in str(exc.value)
 
-    def test_unknown_key_error_lists_only_key_names_not_values(self, tmp_path) -> None:
+    def test_unknown_key_error_lists_only_key_names_not_values(self, tmp_path):
         """
         [Unit] unknown top-level keys: verifies the ConfigError names the offending key but never leaks its value (SEC-11).
 
@@ -873,7 +873,7 @@ class TestUnknownTopLevelKeys:
 class TestResolveMongoNamespace:
     """Tests for config.resolve_mongo_namespace(): database block resolution, defaults, and legacy env-var fallback."""
 
-    def test_database_block_resolves_name_and_collection(self, monkeypatch, tmp_path) -> None:
+    def test_database_block_resolves_name_and_collection(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo namespace: verifies a settings.json database block resolves name and collection, ignoring env vars.
 
@@ -905,7 +905,7 @@ class TestResolveMongoNamespace:
         )
         assert config.resolve_mongo_namespace(path) == ("custom_db", "custom_books")
 
-    def test_database_block_env_sourced(self, monkeypatch, tmp_path) -> None:
+    def test_database_block_env_sourced(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo namespace: verifies a database block field with source "env" is resolved from the environment.
 
@@ -935,7 +935,7 @@ class TestResolveMongoNamespace:
         )
         assert config.resolve_mongo_namespace(path) == ("resolved_db", "books")
 
-    def test_settings_without_database_block_uses_defaults_and_ignores_env(self, monkeypatch, tmp_path) -> None:
+    def test_settings_without_database_block_uses_defaults_and_ignores_env(self, monkeypatch, tmp_path):
         """
         [Local] resolve mongo namespace: verifies settings.json without a database block returns defaults, not env vars.
 
@@ -957,7 +957,7 @@ class TestResolveMongoNamespace:
         _write_settings(path, _pass_settings())
         assert config.resolve_mongo_namespace(path) == (config.DEFAULT_DB_NAME, config.DEFAULT_COLLECTION_NAME)
 
-    def test_database_block_missing_field_raises(self, tmp_path) -> None:
+    def test_database_block_missing_field_raises(self, tmp_path):
         """
         [Unit] resolve mongo namespace: verifies a database block missing "collection" raises ConfigError.
 
@@ -982,7 +982,7 @@ class TestResolveMongoNamespace:
             config.resolve_mongo_namespace(path)
 
     @pytest.mark.parametrize("block", [{}, "bookscraper_db", []])
-    def test_database_block_empty_or_malformed_raises(self, tmp_path, block) -> None:
+    def test_database_block_empty_or_malformed_raises(self, tmp_path, block):
         """
         [Unit] resolve mongo namespace: verifies an empty or non-object database key raises ConfigError.
 
@@ -1003,7 +1003,7 @@ class TestResolveMongoNamespace:
         with pytest.raises(ConfigError):
             config.resolve_mongo_namespace(path)
 
-    def test_legacy_mode_honors_db_name_env_vars(self, monkeypatch, tmp_path, no_real_env) -> None:
+    def test_legacy_mode_honors_db_name_env_vars(self, monkeypatch, tmp_path, no_real_env):
         """
         [Local] resolve mongo namespace: verifies legacy mode uses MONGODB_DB_NAME and MONGODB_COLLECTION_NAME.
 
@@ -1023,7 +1023,7 @@ class TestResolveMongoNamespace:
         monkeypatch.setenv("MONGODB_COLLECTION_NAME", "legacy_coll")
         assert config.resolve_mongo_namespace(tmp_path / "nope.json") == ("legacy_db", "legacy_coll")
 
-    def test_legacy_mode_defaults_when_env_unset(self, monkeypatch, tmp_path, no_real_env) -> None:
+    def test_legacy_mode_defaults_when_env_unset(self, monkeypatch, tmp_path, no_real_env):
         """
         [Local] resolve mongo namespace: verifies legacy mode returns defaults when namespace env vars are unset.
 
@@ -1050,7 +1050,7 @@ class TestResolveMongoNamespace:
 class TestExampleSettingsFile:
     """Tests that docs/examples/settings.example.json parses and resolves through the real resolver."""
 
-    def test_example_settings_file_is_valid_for_resolver(self, isolated_config, monkeypatch) -> None:
+    def test_example_settings_file_is_valid_for_resolver(self, isolated_config, monkeypatch):
         """
         [Local] example settings file: verifies docs/examples/settings.example.json resolves cleanly when MONGODB_URI is set.
 

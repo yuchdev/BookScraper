@@ -17,7 +17,7 @@ from ..scraping.search_utils import get_leanpub_search_results_via_api
 module_logger = logging.getLogger(__name__)
 
 
-def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv") -> None:
+def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv"):
     """
     Saves a list of dictionaries with failed URLs and their errors to a CSV file.
     Each dictionary should contain 'url', 'site', and 'error'.
@@ -66,7 +66,7 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
         print_log(f"Critical Error saving failed URLs to {filename}. Check log file.", "error")
 
 
-async def run(args: argparse.Namespace) -> None:
+async def run(args: argparse.Namespace):
     """
     The "discover new books" workflow: search each configured site, then scrape survivors.
 

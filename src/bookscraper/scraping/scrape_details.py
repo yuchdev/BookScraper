@@ -28,7 +28,7 @@ LEANPUB_SITE = "leanpub"
 module_logger = logging.getLogger("scrape_details")
 
 
-async def route_handler(route: Route) -> None:
+async def route_handler(route: Route):
     """
     Playwright route handler that lets document requests through and aborts the rest.
 

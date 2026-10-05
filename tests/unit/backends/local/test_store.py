@@ -33,7 +33,7 @@ def _temp_leftovers(store_path) -> list[str]:
 class TestSaveBooks:
     """Tests for store.save_books(): write, dedup, and SaveSummary contract."""
 
-    def test_creates_file_with_content_on_fresh_store(self, isolated_local_store) -> None:
+    def test_creates_file_with_content_on_fresh_store(self, isolated_local_store):
         """
         [Unit] save books: verifies save_books creates the store file and writes the book on first use.
 
@@ -58,7 +58,7 @@ class TestSaveBooks:
         assert data[0]["hash"] == "h1"
         assert data[0]["title"] == "Book One"
 
-    def test_duplicate_hash_is_skipped(self, isolated_local_store) -> None:
+    def test_duplicate_hash_is_skipped(self, isolated_local_store):
         """
         [Unit] save books: verifies a second book with the same hash is rejected without overwriting the first.
 
@@ -81,7 +81,7 @@ class TestSaveBooks:
         assert len(data) == 1
         assert data[0]["title"] == "First"  # original kept, not overwritten
 
-    def test_new_book_appends_alongside_existing(self, isolated_local_store) -> None:
+    def test_new_book_appends_alongside_existing(self, isolated_local_store):
         """
         [Unit] save books: verifies a book with a new hash is appended without removing existing entries.
 
@@ -103,7 +103,7 @@ class TestSaveBooks:
         data = _read(isolated_local_store)
         assert {b["hash"] for b in data} == {"h1", "h2"}
 
-    def test_book_missing_hash_is_skipped_not_written(self, isolated_local_store) -> None:
+    def test_book_missing_hash_is_skipped_not_written(self, isolated_local_store):
         """
         [Unit] save books: verifies a book dict without a "hash" key is silently skipped.
 
@@ -124,7 +124,7 @@ class TestSaveBooks:
         # _write_books only runs if something was inserted; nothing was.
         assert not isolated_local_store.exists()
 
-    def test_mixed_batch_writes_only_valid_book(self, isolated_local_store) -> None:
+    def test_mixed_batch_writes_only_valid_book(self, isolated_local_store):
         """
         [Unit] save books: verifies that in a mixed batch only the hash-bearing book is written.
 
@@ -149,7 +149,7 @@ class TestSaveBooks:
         assert len(data) == 1
         assert data[0]["hash"] == "h1"
 
-    def test_empty_list_is_noop_no_file_created(self, isolated_local_store) -> None:
+    def test_empty_list_is_noop_no_file_created(self, isolated_local_store):
         """
         [Unit] save books: verifies an empty book list is a no-op and does not create the store file.
 
@@ -169,7 +169,7 @@ class TestSaveBooks:
         store.save_books([], isolated_local_store)
         assert not isolated_local_store.exists()
 
-    def test_all_duplicates_does_not_rewrite_missing_file(self, isolated_local_store) -> None:
+    def test_all_duplicates_does_not_rewrite_missing_file(self, isolated_local_store):
         """
         [Unit] save books: verifies a batch of all-duplicates does not trigger a file rewrite.
 
@@ -193,7 +193,7 @@ class TestSaveBooks:
         store.save_books([{"hash": "h1", "title": "Dup"}], isolated_local_store)
         assert _read(isolated_local_store) == before
 
-    def test_json_save_books_returns_summary(self, isolated_local_store) -> None:
+    def test_json_save_books_returns_summary(self, isolated_local_store):
         """
         [Unit] save books: verifies save_books returns a SaveSummary matching the mongo backend's contract.
 
@@ -229,7 +229,7 @@ class TestSaveBooks:
 class TestCheckBookExists:
     """Tests for store.check_book_exists(): hash-based duplicate lookup in the json store."""
 
-    def test_found(self, isolated_local_store) -> None:
+    def test_found(self, isolated_local_store):
         """
         [Unit] check book exists: verifies True is returned when the hash is present in the store.
 
@@ -249,7 +249,7 @@ class TestCheckBookExists:
         store.save_books([{"hash": "h1", "title": "T"}], isolated_local_store)
         assert store.check_book_exists("h1", isolated_local_store) is True
 
-    def test_not_found(self, isolated_local_store) -> None:
+    def test_not_found(self, isolated_local_store):
         """
         [Unit] check book exists: verifies False is returned when the hash is absent from the store.
 
@@ -269,7 +269,7 @@ class TestCheckBookExists:
         store.save_books([{"hash": "h1", "title": "T"}], isolated_local_store)
         assert store.check_book_exists("nope", isolated_local_store) is False
 
-    def test_empty_store_returns_false(self, isolated_local_store) -> None:
+    def test_empty_store_returns_false(self, isolated_local_store):
         """
         [Unit] check book exists: verifies False is returned when the store file does not exist.
 
@@ -288,7 +288,7 @@ class TestCheckBookExists:
         """
         assert store.check_book_exists("h1", isolated_local_store) is False
 
-    def test_empty_hash_returns_false(self, isolated_local_store) -> None:
+    def test_empty_hash_returns_false(self, isolated_local_store):
         """
         [Unit] check book exists: verifies False is returned when an empty string hash is queried.
 
@@ -311,7 +311,7 @@ class TestCheckBookExists:
 class TestCheckAmazonAsinExists:
     """Tests for store.check_amazon_asin_exists(): ASIN-based dedup lookup in the json store."""
 
-    def test_found(self, isolated_local_store) -> None:
+    def test_found(self, isolated_local_store):
         """
         [Unit] check amazon asin exists: verifies True is returned when the ASIN is present.
 
@@ -331,7 +331,7 @@ class TestCheckAmazonAsinExists:
         store.save_books([{"hash": "h1", "asin": "B001"}], isolated_local_store)
         assert store.check_amazon_asin_exists("B001", isolated_local_store) is True
 
-    def test_not_found(self, isolated_local_store) -> None:
+    def test_not_found(self, isolated_local_store):
         """
         [Unit] check amazon asin exists: verifies False is returned when the ASIN is absent.
 
@@ -351,7 +351,7 @@ class TestCheckAmazonAsinExists:
         store.save_books([{"hash": "h1", "asin": "B001"}], isolated_local_store)
         assert store.check_amazon_asin_exists("B999", isolated_local_store) is False
 
-    def test_empty_store_returns_false(self, isolated_local_store) -> None:
+    def test_empty_store_returns_false(self, isolated_local_store):
         """
         [Unit] check amazon asin exists: verifies False is returned when the store file does not exist.
 
@@ -370,7 +370,7 @@ class TestCheckAmazonAsinExists:
         """
         assert store.check_amazon_asin_exists("B001", isolated_local_store) is False
 
-    def test_empty_asin_returns_false(self, isolated_local_store) -> None:
+    def test_empty_asin_returns_false(self, isolated_local_store):
         """
         [Unit] check amazon asin exists: verifies False is returned when an empty string ASIN is queried.
 
@@ -393,7 +393,7 @@ class TestCheckAmazonAsinExists:
 class TestLeanpubBookExists:
     """Tests for store.leanpub_book_exists(): book_id/slug dedup lookup for the Leanpub scrape path."""
 
-    def test_match_by_book_id_alone(self, isolated_local_store) -> None:
+    def test_match_by_book_id_alone(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies True is returned when only book_id matches (slug is None).
 
@@ -413,7 +413,7 @@ class TestLeanpubBookExists:
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("42", None, isolated_local_store) is True
 
-    def test_match_by_slug_alone(self, isolated_local_store) -> None:
+    def test_match_by_slug_alone(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies True is returned when only slug matches (book_id is None).
 
@@ -433,7 +433,7 @@ class TestLeanpubBookExists:
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists(None, "some-book", isolated_local_store) is True
 
-    def test_match_by_both(self, isolated_local_store) -> None:
+    def test_match_by_both(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies True is returned when both book_id and slug are provided and match.
 
@@ -453,7 +453,7 @@ class TestLeanpubBookExists:
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("42", "some-book", isolated_local_store) is True
 
-    def test_no_match(self, isolated_local_store) -> None:
+    def test_no_match(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies False when neither book_id nor slug matches.
 
@@ -473,7 +473,7 @@ class TestLeanpubBookExists:
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("99", "other-book", isolated_local_store) is False
 
-    def test_neither_identifier_returns_false(self, isolated_local_store) -> None:
+    def test_neither_identifier_returns_false(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies False and no exception when both identifiers are None.
 
@@ -494,7 +494,7 @@ class TestLeanpubBookExists:
         # Both falsy -> the "no identifier" warning branch, must not raise.
         assert store.leanpub_book_exists(None, None, isolated_local_store) is False
 
-    def test_empty_store_returns_false(self, isolated_local_store) -> None:
+    def test_empty_store_returns_false(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies False is returned when the store file does not exist.
 
@@ -513,7 +513,7 @@ class TestLeanpubBookExists:
         """
         assert store.leanpub_book_exists("42", "some-book", isolated_local_store) is False
 
-    def test_non_dict_entry_is_skipped(self, isolated_local_store) -> None:
+    def test_non_dict_entry_is_skipped(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies a non-dict entry in the store is skipped, not raised on.
 
@@ -540,7 +540,7 @@ class TestLeanpubBookExists:
 class TestAtomicWriteAndBackup:
     """Tests for the atomic write and .bak backup behaviour of save_books()."""
 
-    def test_write_is_atomic_and_leaves_no_temp_files(self, isolated_local_store) -> None:
+    def test_write_is_atomic_and_leaves_no_temp_files(self, isolated_local_store):
         """
         [Unit] atomic write: verifies a completed save leaves no in-flight temp files.
 
@@ -562,7 +562,7 @@ class TestAtomicWriteAndBackup:
         assert _read(isolated_local_store) == [{"hash": "h1", "title": "Book One"}]
         assert _temp_leftovers(isolated_local_store) == []
 
-    def test_interrupted_write_preserves_previous_store(self, isolated_local_store, monkeypatch) -> None:
+    def test_interrupted_write_preserves_previous_store(self, isolated_local_store, monkeypatch):
         """
         [Unit] atomic write: verifies an interrupted rename leaves the previous store intact.
 
@@ -595,7 +595,7 @@ class TestAtomicWriteAndBackup:
         # ...and the failed attempt cleaned up its temp file.
         assert list(isolated_local_store.parent.glob(f".{isolated_local_store.name}.*")) == []
 
-    def test_save_refuses_to_overwrite_corrupt_store(self, isolated_local_store) -> None:
+    def test_save_refuses_to_overwrite_corrupt_store(self, isolated_local_store):
         """
         [Unit] atomic write: verifies save_books raises LocalStoreCorruptError and leaves a corrupt file untouched.
 
@@ -620,7 +620,7 @@ class TestAtomicWriteAndBackup:
         # File left byte-for-byte untouched.
         assert isolated_local_store.read_text(encoding="utf-8") == '[{"hash": "h1", "title": "trunc'
 
-    def test_backup_file_holds_previous_generation(self, isolated_local_store) -> None:
+    def test_backup_file_holds_previous_generation(self, isolated_local_store):
         """
         [Unit] atomic write: verifies each save rotates the previous store into a .bak file.
 
@@ -651,7 +651,7 @@ class TestAtomicWriteAndBackup:
 class TestAssertStoreReadable:
     """Tests for store.assert_store_readable(): pre-flight guard that raises on a corrupt store file."""
 
-    def test_valid_store_does_not_raise(self, isolated_local_store) -> None:
+    def test_valid_store_does_not_raise(self, isolated_local_store):
         """
         [Unit] assert store readable: verifies a well-formed store passes the pre-flight check without error.
 
@@ -671,7 +671,7 @@ class TestAssertStoreReadable:
         store.save_books([{"hash": "h1"}], isolated_local_store)
         store.assert_store_readable(isolated_local_store)  # must not raise
 
-    def test_missing_store_does_not_raise(self, isolated_local_store) -> None:
+    def test_missing_store_does_not_raise(self, isolated_local_store):
         """
         [Unit] assert store readable: verifies a missing store file passes without error.
 
@@ -690,7 +690,7 @@ class TestAssertStoreReadable:
         """
         store.assert_store_readable(isolated_local_store)  # must not raise
 
-    def test_corrupt_store_raises(self, isolated_local_store) -> None:
+    def test_corrupt_store_raises(self, isolated_local_store):
         """
         [Unit] assert store readable: verifies a corrupt store file raises LocalStoreCorruptError.
 
@@ -715,7 +715,7 @@ class TestAssertStoreReadable:
 class TestLoadBooksRecovery:
     """Tests for store._load_books() recovery: returns [] on malformed JSON, non-list JSON, missing file, or read error."""
 
-    def test_malformed_json_returns_empty_list(self, isolated_local_store) -> None:
+    def test_malformed_json_returns_empty_list(self, isolated_local_store):
         """
         [Unit] load books recovery: verifies _load_books returns [] when the file contains invalid JSON.
 
@@ -735,7 +735,7 @@ class TestLoadBooksRecovery:
         isolated_local_store.write_text("{not valid json", encoding="utf-8")
         assert store._load_books(isolated_local_store) == []
 
-    def test_valid_json_non_list_returns_empty_list(self, isolated_local_store) -> None:
+    def test_valid_json_non_list_returns_empty_list(self, isolated_local_store):
         """
         [Unit] load books recovery: verifies _load_books returns [] when the file contains valid JSON but not a list.
 
@@ -755,7 +755,7 @@ class TestLoadBooksRecovery:
         isolated_local_store.write_text('{"hash": "h1"}', encoding="utf-8")
         assert store._load_books(isolated_local_store) == []
 
-    def test_nonexistent_file_returns_empty_list(self, isolated_local_store) -> None:
+    def test_nonexistent_file_returns_empty_list(self, isolated_local_store):
         """
         [Unit] load books recovery: verifies _load_books returns [] when the store file does not exist.
 
@@ -774,7 +774,7 @@ class TestLoadBooksRecovery:
         """
         assert store._load_books(isolated_local_store) == []
 
-    def test_unreadable_file_returns_empty_list(self, isolated_local_store) -> None:
+    def test_unreadable_file_returns_empty_list(self, isolated_local_store):
         """
         [Unit] load books recovery: verifies an OSError while reading the store degrades gracefully to an empty list.
 

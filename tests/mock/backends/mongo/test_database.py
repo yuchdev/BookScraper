@@ -53,7 +53,7 @@ def reset_globals(monkeypatch):
 class TestInitializeMongodbConnection:
     """Tests for database._initialize_mongodb_connection."""
 
-    def test_config_error_returns_none_none(self, monkeypatch, no_real_env) -> None:
+    def test_config_error_returns_none_none(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies config error returns none none.
 
@@ -77,7 +77,7 @@ class TestInitializeMongodbConnection:
         assert result == (None, None)
         mock_build.assert_not_called()
 
-    def test_missing_uri_returns_none_none(self, monkeypatch, no_real_env) -> None:
+    def test_missing_uri_returns_none_none(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies missing uri returns none none.
 
@@ -101,7 +101,7 @@ class TestInitializeMongodbConnection:
         assert result == (None, None)
         mock_build.assert_not_called()
 
-    def test_missing_cert_file_returns_none_none(self, monkeypatch, no_real_env, tmp_path) -> None:
+    def test_missing_cert_file_returns_none_none(self, monkeypatch, no_real_env, tmp_path):
         """
         [Local] database connection: verifies missing cert file returns none none.
 
@@ -127,7 +127,7 @@ class TestInitializeMongodbConnection:
         assert result == (None, None)
         mock_client.assert_not_called()
 
-    def test_with_cert_file_builds_via_factory_and_pings(self, monkeypatch, no_real_env, tmp_path) -> None:
+    def test_with_cert_file_builds_via_factory_and_pings(self, monkeypatch, no_real_env, tmp_path):
         """
         [Local] database connection: verifies with cert file builds via factory and pings.
 
@@ -169,7 +169,7 @@ class TestInitializeMongodbConnection:
         assert returned_collection is database._mongo_collection
         assert returned_collection is not None
 
-    def test_without_cert_file_forwards_none_cert(self, monkeypatch, no_real_env) -> None:
+    def test_without_cert_file_forwards_none_cert(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies without cert file forwards none cert.
 
@@ -201,7 +201,7 @@ class TestInitializeMongodbConnection:
         assert returned_client is client_instance
         assert returned_collection is not None
 
-    def test_namespace_from_resolver_used_for_db_and_collection(self, monkeypatch, no_real_env) -> None:
+    def test_namespace_from_resolver_used_for_db_and_collection(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies namespace from resolver used for db and collection.
 
@@ -238,7 +238,7 @@ class TestInitializeMongodbConnection:
         assert database._mongo_db_name == "settings_db"
         assert database._mongo_collection_name == "settings_coll"
 
-    def test_tls_ca_file_env_is_forwarded_to_factory(self, monkeypatch, no_real_env) -> None:
+    def test_tls_ca_file_env_is_forwarded_to_factory(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies tls ca file env is forwarded to factory.
 
@@ -268,7 +268,7 @@ class TestInitializeMongodbConnection:
         args, _ = build_spy.call_args
         assert args[2] == "/path/to/ca.pem"
 
-    def test_ping_connection_error_resets_globals(self, monkeypatch, no_real_env) -> None:
+    def test_ping_connection_error_resets_globals(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies ping connection error resets globals.
 
@@ -298,7 +298,7 @@ class TestInitializeMongodbConnection:
         assert database._mongo_db is None
         assert database._mongo_collection is None
 
-    def test_generic_exception_resets_globals(self, monkeypatch, no_real_env) -> None:
+    def test_generic_exception_resets_globals(self, monkeypatch, no_real_env):
         """
         [Local] database connection: verifies generic exception resets globals.
 
@@ -325,7 +325,7 @@ class TestInitializeMongodbConnection:
         assert database._mongo_db is None
         assert database._mongo_collection is None
 
-    def test_init_failure_does_not_leak_uri_or_host(self, monkeypatch, no_real_env, caplog) -> None:
+    def test_init_failure_does_not_leak_uri_or_host(self, monkeypatch, no_real_env, caplog):
         """
         [Local] database connection: verifies init failure does not leak uri or host.
 
@@ -365,7 +365,7 @@ class TestInitializeMongodbConnection:
 class TestGetMongoCollection:
     """Tests for database.get_mongo_collection."""
 
-    def test_returns_cached_collection_without_reinitializing(self, monkeypatch) -> None:
+    def test_returns_cached_collection_without_reinitializing(self, monkeypatch):
         """
         [Local] get mongo collection: verifies that a cached collection is returned without calling _initialize_mongodb_connection.
 
@@ -390,7 +390,7 @@ class TestGetMongoCollection:
         assert result is cached
         init_spy.assert_not_called()
 
-    def test_initializes_when_unset(self, monkeypatch) -> None:
+    def test_initializes_when_unset(self, monkeypatch):
         """
         [Local] get mongo collection: verifies that _initialize_mongodb_connection is called and the resulting collection is returned when the cache is empty.
 
@@ -415,7 +415,7 @@ class TestGetMongoCollection:
         init_spy.assert_called_once_with()
         assert result is collection
 
-    def test_initialize_raises_is_caught_and_returns_none(self, monkeypatch) -> None:
+    def test_initialize_raises_is_caught_and_returns_none(self, monkeypatch):
         """
         [Local] get mongo collection: verifies that a RuntimeError from _initialize_mongodb_connection is caught, returns None, and prints a FAILED message.
 
@@ -443,7 +443,7 @@ class TestGetMongoCollection:
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("FAILED" in msg for msg in printed)
 
-    def test_success_message_only_printed_when_collection_initialized(self, monkeypatch) -> None:
+    def test_success_message_only_printed_when_collection_initialized(self, monkeypatch):
         """
         [Local] database connection: verifies success message only printed when collection initialized.
 
@@ -469,7 +469,7 @@ class TestGetMongoCollection:
         success_calls = [c for c in mock_print.call_args_list if c.args[1] == "success"]
         assert len(success_calls) == 1
 
-    def test_no_success_message_when_initialization_returns_none(self, monkeypatch) -> None:
+    def test_no_success_message_when_initialization_returns_none(self, monkeypatch):
         """
         [Local] database connection: verifies no success message when initialization returns none.
 
@@ -494,7 +494,7 @@ class TestGetMongoCollection:
         statuses = [c.args[1] for c in mock_print.call_args_list]
         assert "success" not in statuses
 
-    def test_success_message_names_db_and_collection_not_uri(self, monkeypatch) -> None:
+    def test_success_message_names_db_and_collection_not_uri(self, monkeypatch):
         """
         [Local] database connection: verifies success message names db and collection not uri.
 
@@ -523,7 +523,7 @@ class TestGetMongoCollection:
         assert "://" not in message
         assert "@" not in message
 
-    def test_success_message_uses_resolved_namespace_globals(self, monkeypatch) -> None:
+    def test_success_message_uses_resolved_namespace_globals(self, monkeypatch):
         """
         [Local] database connection: verifies success message uses resolved namespace globals.
 
@@ -557,7 +557,7 @@ class TestGetMongoCollection:
 class TestCloseMongoConnection:
     """Tests for database.close_mongo_connection."""
 
-    def test_closes_client_and_resets_globals(self, monkeypatch) -> None:
+    def test_closes_client_and_resets_globals(self, monkeypatch):
         """
         [Local] close mongo connection: verifies that close_mongo_connection calls client.close() and resets all three globals to None.
 
@@ -584,7 +584,7 @@ class TestCloseMongoConnection:
         assert database._mongo_db is None
         assert database._mongo_collection is None
 
-    def test_no_client_is_noop(self) -> None:
+    def test_no_client_is_noop(self):
         # Globals already None via reset_globals; must not raise.
         """
         [Local] close mongo connection: verifies that close_mongo_connection is a no-op when no client is set.
@@ -610,7 +610,7 @@ class TestCloseMongoConnection:
 class TestSaveBooksToMongodb:
     """Tests for database.save_books_to_mongodb."""
 
-    def test_save_returns_all_errors_and_skips_io_when_collection_is_none(self, monkeypatch) -> None:
+    def test_save_returns_all_errors_and_skips_io_when_collection_is_none(self, monkeypatch):
         """
         [Local] database save books: verifies save returns all errors and skips io when collection is none.
 
@@ -633,7 +633,7 @@ class TestSaveBooksToMongodb:
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("not available" in msg for msg in printed)
 
-    def test_save_empty_list_returns_zero_summary_without_db_call(self) -> None:
+    def test_save_empty_list_returns_zero_summary_without_db_call(self):
         """
         [Local] database save books: verifies save empty list returns zero summary without db call.
 
@@ -653,7 +653,7 @@ class TestSaveBooksToMongodb:
         assert summary == SaveSummary(inserted=0, duplicates=0, errors=0)
         collection.insert_many.assert_not_called()
 
-    def test_save_uses_single_unordered_insert_many(self) -> None:
+    def test_save_uses_single_unordered_insert_many(self):
         """
         [Local] database save books: verifies save uses single unordered insert many.
 
@@ -679,7 +679,7 @@ class TestSaveBooksToMongodb:
         assert kwargs["ordered"] is False
         assert summary == SaveSummary(inserted=100, duplicates=0, errors=0)
 
-    def test_bulk_write_error_splits_duplicates_from_other_errors(self) -> None:
+    def test_bulk_write_error_splits_duplicates_from_other_errors(self):
         """
         [Local] database save books: verifies bulk write error splits duplicates from other errors.
 
@@ -709,7 +709,7 @@ class TestSaveBooksToMongodb:
 
         assert summary == SaveSummary(inserted=2, duplicates=2, errors=1)
 
-    def test_invalid_document_counted_as_error_without_aborting_batch(self) -> None:
+    def test_invalid_document_counted_as_error_without_aborting_batch(self):
         """
         [Local] database save books: verifies invalid document counted as error without aborting batch.
 
@@ -735,7 +735,7 @@ class TestSaveBooksToMongodb:
         assert [d["hash"] for d in args[0]] == ["h1"]
         assert summary == SaveSummary(inserted=1, duplicates=0, errors=1)
 
-    def test_all_invalid_documents_skip_insert_many(self) -> None:
+    def test_all_invalid_documents_skip_insert_many(self):
         """
         [Local] database save books: verifies all invalid documents skip insert many.
 
@@ -757,7 +757,7 @@ class TestSaveBooksToMongodb:
         collection.insert_many.assert_not_called()
         assert summary == SaveSummary(inserted=0, duplicates=0, errors=1)
 
-    def test_caller_dicts_are_not_mutated_with_object_id(self) -> None:
+    def test_caller_dicts_are_not_mutated_with_object_id(self):
         """
         [Local] database save books: verifies caller dicts are not mutated with object id.
 
@@ -786,7 +786,7 @@ class TestSaveBooksToMongodb:
 
         assert "_id" not in book
 
-    def test_unexpected_insert_many_error_counts_whole_batch_as_errors(self) -> None:
+    def test_unexpected_insert_many_error_counts_whole_batch_as_errors(self):
         """
         [Local] database save books: verifies unexpected insert many error counts whole batch as errors.
 
@@ -815,7 +815,7 @@ class TestSaveBooksToMongodb:
 class TestCheckAmazonAsinExists:
     """Tests for database.check_amazon_asin_exists_in_db."""
 
-    def test_found(self) -> None:
+    def test_found(self):
         """
         [Local] check amazon asin exists: verifies that a matching find_one result returns True and uses the correct query.
 
@@ -835,7 +835,7 @@ class TestCheckAmazonAsinExists:
         assert database.check_amazon_asin_exists_in_db("B00X", collection) is True
         collection.find_one.assert_called_once_with({"asin": "B00X"})
 
-    def test_not_found(self) -> None:
+    def test_not_found(self):
         """
         [Local] check amazon asin exists: verifies that a None find_one result returns False.
 
@@ -854,7 +854,7 @@ class TestCheckAmazonAsinExists:
         collection.find_one.return_value = None
         assert database.check_amazon_asin_exists_in_db("B00X", collection) is False
 
-    def test_none_collection_returns_false(self, monkeypatch) -> None:
+    def test_none_collection_returns_false(self, monkeypatch):
         """
         [Local] check amazon asin exists: verifies that a None collection returns False without querying.
 
@@ -872,7 +872,7 @@ class TestCheckAmazonAsinExists:
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
         assert database.check_amazon_asin_exists_in_db("B00X", None) is False
 
-    def test_find_one_exception_returns_false(self) -> None:
+    def test_find_one_exception_returns_false(self):
         """
         [Local] check amazon asin exists: verifies that a PyMongoError from find_one is caught and returns False.
 
@@ -895,7 +895,7 @@ class TestCheckAmazonAsinExists:
 class TestCheckBookExists:
     """Tests for database.check_book_exists_in_db."""
 
-    def test_found(self) -> None:
+    def test_found(self):
         """
         [Local] check book exists: verifies that a matching find_one result returns True and uses the correct query.
 
@@ -915,7 +915,7 @@ class TestCheckBookExists:
         assert database.check_book_exists_in_db("abc", collection) is True
         collection.find_one.assert_called_once_with({"hash": "abc"})
 
-    def test_not_found(self) -> None:
+    def test_not_found(self):
         """
         [Local] check book exists: verifies that a None find_one result returns False.
 
@@ -934,7 +934,7 @@ class TestCheckBookExists:
         collection.find_one.return_value = None
         assert database.check_book_exists_in_db("abc", collection) is False
 
-    def test_none_collection_returns_false(self, monkeypatch) -> None:
+    def test_none_collection_returns_false(self, monkeypatch):
         """
         [Local] check book exists: verifies that a None collection returns False without querying.
 
@@ -952,7 +952,7 @@ class TestCheckBookExists:
         monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
         assert database.check_book_exists_in_db("abc", None) is False
 
-    def test_find_one_exception_returns_false(self) -> None:
+    def test_find_one_exception_returns_false(self):
         """
         [Local] check book exists: verifies that a PyMongoError from find_one is caught and returns False.
 
@@ -978,7 +978,7 @@ class TestCheckBookExists:
 class TestUpdateBookIsbn:
     """Tests for database.update_book_isbn."""
 
-    def test_both_isbns_set_and_modified(self) -> None:
+    def test_both_isbns_set_and_modified(self):
         """
         [Local] update book isbn: verifies that both isbn10 and isbn13 are included in the $set when both are valid.
 
@@ -999,7 +999,7 @@ class TestUpdateBookIsbn:
         assert result is True
         collection.update_one.assert_called_once_with({"hash": "abc"}, {"$set": {"isbn10": "111", "isbn13": "222"}})
 
-    def test_only_isbn10_when_isbn13_is_na(self) -> None:
+    def test_only_isbn10_when_isbn13_is_na(self):
         """
         [Local] update book isbn: verifies that isbn13 is omitted from $set when it is "N/A".
 
@@ -1020,7 +1020,7 @@ class TestUpdateBookIsbn:
         assert result is True
         collection.update_one.assert_called_once_with({"hash": "abc"}, {"$set": {"isbn10": "111"}})
 
-    def test_neither_valid_returns_false_without_update(self) -> None:
+    def test_neither_valid_returns_false_without_update(self):
         """
         [Local] update book isbn: verifies that False is returned and update_one is not called when both ISBNs are invalid.
 
@@ -1040,7 +1040,7 @@ class TestUpdateBookIsbn:
         assert result is False
         collection.update_one.assert_not_called()
 
-    def test_modified_count_zero_returns_false(self) -> None:
+    def test_modified_count_zero_returns_false(self):
         """
         [Local] update book isbn: verifies that False is returned when update_one reports modified_count=0.
 
@@ -1060,7 +1060,7 @@ class TestUpdateBookIsbn:
         result = database.update_book_isbn(collection, "abc", new_isbn10="111")
         assert result is False
 
-    def test_none_collection_returns_false_without_calls(self) -> None:
+    def test_none_collection_returns_false_without_calls(self):
         """
         [Local] update book isbn: verifies that a None collection returns False without calling update_one.
 
@@ -1078,7 +1078,7 @@ class TestUpdateBookIsbn:
         result = database.update_book_isbn(None, "abc", new_isbn10="111", new_isbn13="222")
         assert result is False
 
-    def test_update_one_exception_returns_false(self) -> None:
+    def test_update_one_exception_returns_false(self):
         """
         [Local] update book isbn: verifies that a PyMongoError from update_one is caught and returns False.
 
@@ -1108,7 +1108,7 @@ _ALL_SECONDARY_NAMES = ("asin_lookup_index", "book_id_lookup_index", "slug_looku
 class TestEnsureUniqueIndexOnHash:
     """Tests for the unique hash index via database.ensure_indexes."""
 
-    def test_creates_index_when_absent(self) -> None:
+    def test_creates_index_when_absent(self):
         """
         [Local] ensure unique index on hash: verifies that hash_unique_index is created when it is not present.
 
@@ -1130,7 +1130,7 @@ class TestEnsureUniqueIndexOnHash:
         database.ensure_unique_index_on_hash(collection)
         collection.create_index.assert_called_once_with("hash", unique=True, name="hash_unique_index")
 
-    def test_skips_create_when_present(self) -> None:
+    def test_skips_create_when_present(self):
         """
         [Local] ensure unique index on hash: verifies that create_index is not called when hash_unique_index already exists.
 
@@ -1153,7 +1153,7 @@ class TestEnsureUniqueIndexOnHash:
         database.ensure_unique_index_on_hash(collection)
         collection.create_index.assert_not_called()
 
-    def test_none_collection_is_noop(self) -> None:
+    def test_none_collection_is_noop(self):
         # Must not raise.
         """
         [Local] ensure unique index on hash: verifies that a None collection is a no-op.
@@ -1171,7 +1171,7 @@ class TestEnsureUniqueIndexOnHash:
         """
         database.ensure_unique_index_on_hash(None)
 
-    def test_exception_is_caught(self) -> None:
+    def test_exception_is_caught(self):
         """
         [Local] ensure unique index on hash: verifies that a PyMongoError from index_information is caught and does not propagate.
 
@@ -1195,7 +1195,7 @@ class TestEnsureUniqueIndexOnHash:
 class TestEnsureIndexes:
     """Tests for database.ensure_indexes."""
 
-    def test_ensure_indexes_creates_all_four_when_absent(self) -> None:
+    def test_ensure_indexes_creates_all_four_when_absent(self):
         """
         [Local] database ensure indexes: verifies ensure indexes creates all four when absent.
 
@@ -1217,7 +1217,7 @@ class TestEnsureIndexes:
         collection.create_index.assert_any_call("slug", sparse=True, name="slug_lookup_index")
         assert collection.create_index.call_count == 4
 
-    def test_ensure_indexes_is_idempotent_when_all_present(self) -> None:
+    def test_ensure_indexes_is_idempotent_when_all_present(self):
         """
         [Local] database ensure indexes: verifies ensure indexes is idempotent when all present.
 
@@ -1238,7 +1238,7 @@ class TestEnsureIndexes:
         database.ensure_indexes(collection)
         collection.create_index.assert_not_called()
 
-    def test_secondary_index_failure_warns_and_continues(self) -> None:
+    def test_secondary_index_failure_warns_and_continues(self):
         """
         [Local] database ensure indexes: verifies secondary index failure warns and continues.
 
@@ -1269,7 +1269,7 @@ class TestEnsureIndexes:
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("Warning: Failed to ensure sparse index on 'asin'" in msg for msg in printed)
 
-    def test_secondary_indexes_are_sparse_and_non_unique(self) -> None:
+    def test_secondary_indexes_are_sparse_and_non_unique(self):
         """
         [Local] database ensure indexes: verifies secondary indexes are sparse and non unique.
 
@@ -1293,7 +1293,7 @@ class TestEnsureIndexes:
             assert kwargs.get("sparse") is True
             assert "unique" not in kwargs
 
-    def test_none_collection_is_noop(self) -> None:
+    def test_none_collection_is_noop(self):
         # Must not raise.
         """
         [Local] ensure indexes: verifies that a None collection is a no-op.
@@ -1311,7 +1311,7 @@ class TestEnsureIndexes:
         """
         database.ensure_indexes(None)
 
-    def test_index_information_failure_aborts(self) -> None:
+    def test_index_information_failure_aborts(self):
         """
         [Local] database ensure indexes: verifies index information failure aborts.
 
@@ -1337,7 +1337,7 @@ class TestEnsureIndexes:
 # database.py so pre-existing `from ...database import ...` imports keep working. The
 # behavioral tests for those helpers live in tests/mock/backends/mongo/test_client.py.
 # --------------------------------------------------------------------------- #
-def test_x509_and_factory_symbols_are_reexported_from_client() -> None:
+def test_x509_and_factory_symbols_are_reexported_from_client():
     """
     [Local] database: verifies x509 and factory symbols are reexported from client.
 

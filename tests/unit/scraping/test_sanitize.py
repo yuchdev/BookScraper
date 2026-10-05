@@ -49,7 +49,7 @@ AWS_SHAPED = "AKIA" + "ABCDEFGHIJKLMNOP"
 # --------------------------------------------------------------------------- #
 # Spec-named tests
 # --------------------------------------------------------------------------- #
-def test_scripts_removed_but_ld_json_kept() -> None:
+def test_scripts_removed_but_ld_json_kept():
     """
     [Unit] sanitize: verifies strip_scripts_and_styles removes JS/CSS/noscript/iframe but keeps ld+json.
 
@@ -81,7 +81,7 @@ def test_scripts_removed_but_ld_json_kept() -> None:
     assert '{"@type":"Book"}' in out
 
 
-def test_inline_event_handlers_removed() -> None:
+def test_inline_event_handlers_removed():
     """
     [Unit] sanitize: verifies strip_scripts_and_styles strips all inline event handlers.
 
@@ -103,7 +103,7 @@ def test_inline_event_handlers_removed() -> None:
     assert 'id="k"' in out
 
 
-def test_tracking_query_params_stripped_from_links() -> None:
+def test_tracking_query_params_stripped_from_links():
     """
     [Unit] sanitize: verifies strip_tracking removes known tracking query params from href URLs.
 
@@ -126,7 +126,7 @@ def test_tracking_query_params_stripped_from_links() -> None:
     assert out == '<a href="https://x.test/dp/1?keep=yes">L</a>'
 
 
-def test_hidden_input_values_and_csrf_meta_removed() -> None:
+def test_hidden_input_values_and_csrf_meta_removed():
     """
     [Unit] sanitize: verifies strip_secrets removes CSRF meta tags and blanks hidden input values.
 
@@ -159,7 +159,7 @@ def test_hidden_input_values_and_csrf_meta_removed() -> None:
     assert 'value="visible"' in out
 
 
-def test_emails_replaced_with_invalid_domain() -> None:
+def test_emails_replaced_with_invalid_domain():
     """
     [Unit] sanitize: verifies strip_secrets replaces email addresses with the reserved-domain placeholder.
 
@@ -179,7 +179,7 @@ def test_emails_replaced_with_invalid_domain() -> None:
     assert EMAIL_PLACEHOLDER in out
 
 
-def test_shrink_keeps_subtrees_containing_selectors() -> None:
+def test_shrink_keeps_subtrees_containing_selectors():
     """
     [Unit] sanitize: verifies shrink retains subtrees matched by a keep-selector and drops unmatched siblings.
 
@@ -202,7 +202,7 @@ def test_shrink_keeps_subtrees_containing_selectors() -> None:
     assert filler not in out
 
 
-def test_sanitize_json_redacts_sensitive_keys() -> None:
+def test_sanitize_json_redacts_sensitive_keys():
     """
     [Unit] sanitize: verifies sanitize_json redacts sensitive keys and cleans prose, emails, and URLs.
 
@@ -239,7 +239,7 @@ def test_sanitize_json_redacts_sensitive_keys() -> None:
     assert "keep=1" in out["image"]
 
 
-def test_assert_clean_rejects_known_secret_patterns() -> None:
+def test_assert_clean_rejects_known_secret_patterns():
     """
     [Unit] sanitize: verifies assert_clean raises on a string containing an AWS-key-shaped credential.
 
@@ -261,7 +261,7 @@ def test_assert_clean_rejects_known_secret_patterns() -> None:
 # --------------------------------------------------------------------------- #
 # FIX-2 - assert_clean is extended and fail-closed
 # --------------------------------------------------------------------------- #
-def test_assert_clean_rejects_jwt() -> None:
+def test_assert_clean_rejects_jwt():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises on a bearer JWT that is not a vendor credential.
 
@@ -280,7 +280,7 @@ def test_assert_clean_rejects_jwt() -> None:
         assert_clean("Authorization Bearer eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF")
 
 
-def test_assert_clean_rejects_aws_shaped_key() -> None:
+def test_assert_clean_rejects_aws_shaped_key():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises on an AWS-access-key-shaped string.
 
@@ -299,7 +299,7 @@ def test_assert_clean_rejects_aws_shaped_key() -> None:
         assert_clean(f"cred {AWS_SHAPED} end")
 
 
-def test_assert_clean_rejects_cookie_header() -> None:
+def test_assert_clean_rejects_cookie_header():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises on a Set-Cookie header echo in markup.
 
@@ -318,7 +318,7 @@ def test_assert_clean_rejects_cookie_header() -> None:
         assert_clean("Set-Cookie: at-main=abcd")
 
 
-def test_assert_clean_rejects_email() -> None:
+def test_assert_clean_rejects_email():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises on a raw email that the vendor catalog would miss.
 
@@ -337,7 +337,7 @@ def test_assert_clean_rejects_email() -> None:
         assert_clean("mailto jane@corp-real.net")
 
 
-def test_assert_clean_rejects_session_token_value() -> None:
+def test_assert_clean_rejects_session_token_value():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises on a session-id key=value assignment.
 
@@ -356,7 +356,7 @@ def test_assert_clean_rejects_session_token_value() -> None:
         assert_clean("session-id=176-9999999-0000000")
 
 
-def test_assert_clean_passes_clean_and_placeholder_values() -> None:
+def test_assert_clean_passes_clean_and_placeholder_values():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2/V-1) accepts clean text and the sanitizer's own placeholder values.
 
@@ -378,7 +378,7 @@ def test_assert_clean_passes_clean_and_placeholder_values() -> None:
     assert_clean(f'"about": "{PROSE_PLACEHOLDER}"')
 
 
-def test_assert_clean_v1_does_not_allowlist_words_on_the_line() -> None:
+def test_assert_clean_v1_does_not_allowlist_words_on_the_line():
     """
     [Unit] sanitize: verifies assert_clean (V-1) does not disable the gate when a common word appears on the same line.
 
@@ -399,7 +399,7 @@ def test_assert_clean_v1_does_not_allowlist_words_on_the_line() -> None:
         assert_clean(f"our test build key {AWS_SHAPED} deploy")
 
 
-def test_assert_clean_r1_exempts_only_exact_placeholder_values() -> None:
+def test_assert_clean_r1_exempts_only_exact_placeholder_values():
     """
     [Unit] sanitize: verifies assert_clean (R-1) exempts only exact placeholder values, not REDACTED-prefixed strings.
 
@@ -424,7 +424,7 @@ def test_assert_clean_r1_exempts_only_exact_placeholder_values() -> None:
         assert_clean('password = "%s"' % angle_wrapped)
 
 
-def test_assert_clean_v4_catches_secret_split_across_sibling_nodes() -> None:
+def test_assert_clean_v4_catches_secret_split_across_sibling_nodes():
     """
     [Unit] sanitize: verifies assert_clean (V-4) catches a JWT or email split across sibling DOM text nodes.
 
@@ -447,7 +447,7 @@ def test_assert_clean_v4_catches_secret_split_across_sibling_nodes() -> None:
         assert_clean(email)
 
 
-def test_assert_clean_email_placeholder_is_not_flagged() -> None:
+def test_assert_clean_email_placeholder_is_not_flagged():
     """
     [Unit] sanitize: verifies assert_clean accepts the reserved-domain email placeholder but rejects a real address.
 
@@ -467,7 +467,7 @@ def test_assert_clean_email_placeholder_is_not_flagged() -> None:
         assert_clean("contact jane@corp-real.com")
 
 
-def test_assert_clean_r3_catches_whitespace_split_token() -> None:
+def test_assert_clean_r3_catches_whitespace_split_token():
     """
     [Unit] sanitize: verifies assert_clean (R-3) catches a JWT split by whitespace or zero-width separators.
 
@@ -488,7 +488,7 @@ def test_assert_clean_r3_catches_whitespace_split_token() -> None:
             assert_clean(f"<div>{jwt[:40]}{sep}{jwt[40:]}</div>")
 
 
-def test_assert_clean_r4_example_domain_exemption_is_exact() -> None:
+def test_assert_clean_r4_example_domain_exemption_is_exact():
     """
     [Unit] sanitize: verifies assert_clean (R-4) exempts only exact RFC-2606 reserved email domains.
 
@@ -510,7 +510,7 @@ def test_assert_clean_r4_example_domain_exemption_is_exact() -> None:
         assert_clean("reach exfil@myexample.net")
 
 
-def test_r4_retina_and_image_filenames_are_not_rewritten() -> None:
+def test_r4_retina_and_image_filenames_are_not_rewritten():
     """
     [Unit] sanitize: verifies strip_secrets (R-4) does not rewrite retina image filenames as emails.
 
@@ -534,7 +534,7 @@ def test_r4_retina_and_image_filenames_are_not_rewritten() -> None:
     assert EMAIL_PLACEHOLDER in strip_secrets("<p>jane@corp-real.com</p>")
 
 
-def test_assert_clean_no_false_positive_on_benign_book_text() -> None:
+def test_assert_clean_no_false_positive_on_benign_book_text():
     """
     [Unit] sanitize: verifies assert_clean raises no false positive on benign book page text (R-3 guard).
 
@@ -561,7 +561,7 @@ def test_assert_clean_no_false_positive_on_benign_book_text() -> None:
     assert_clean(sanitize_html('<img src="https://images.test/sprite@2x.png">'))
 
 
-def test_assert_clean_rejects_non_string() -> None:
+def test_assert_clean_rejects_non_string():
     """
     [Unit] sanitize: verifies assert_clean (FIX-2) raises SanitizationError on a non-string payload.
 
@@ -583,7 +583,7 @@ def test_assert_clean_rejects_non_string() -> None:
 # --------------------------------------------------------------------------- #
 # FIX-3 - sensitive data-* stripped whatever their length
 # --------------------------------------------------------------------------- #
-def test_strip_secrets_removes_short_sensitive_data_attrs() -> None:
+def test_strip_secrets_removes_short_sensitive_data_attrs():
     """
     [Unit] sanitize: verifies strip_secrets (FIX-3) strips short session/ubid/customer/csm data-* attributes.
 
@@ -611,7 +611,7 @@ def test_strip_secrets_removes_short_sensitive_data_attrs() -> None:
     assert 'data-note="ok"' in out
 
 
-def test_strip_secrets_removes_long_opaque_data_attr() -> None:
+def test_strip_secrets_removes_long_opaque_data_attr():
     """
     [Unit] sanitize: verifies strip_secrets (FIX-3) drops any data-* attribute whose value exceeds 200 chars.
 
@@ -632,7 +632,7 @@ def test_strip_secrets_removes_long_opaque_data_attr() -> None:
     assert 'data-keep="v"' in out
 
 
-def test_strip_secrets_drops_amazon_correlation_data_attrs() -> None:
+def test_strip_secrets_drops_amazon_correlation_data_attrs():
     """
     [Unit] sanitize: verifies strip_secrets (CL-1) drops data-uuid and data-csa-c-* correlation attrs by name.
 
@@ -664,7 +664,7 @@ def test_strip_secrets_drops_amazon_correlation_data_attrs() -> None:
 # --------------------------------------------------------------------------- #
 # FIX-4 - ld+json parsed and sanitized; other inline JSON removed
 # --------------------------------------------------------------------------- #
-def test_sanitize_ld_json_sanitizes_and_reembeds() -> None:
+def test_sanitize_ld_json_sanitizes_and_reembeds():
     """
     [Unit] sanitize: verifies sanitize_ld_json (FIX-4) parses, sanitizes, and re-embeds an ld+json blob.
 
@@ -696,7 +696,7 @@ def test_sanitize_ld_json_sanitizes_and_reembeds() -> None:
     assert '"name": "Python"' in out or '"name":"Python"' in out
 
 
-def test_sanitize_ld_json_drops_unparseable_blob() -> None:
+def test_sanitize_ld_json_drops_unparseable_blob():
     """
     [Unit] sanitize: verifies sanitize_ld_json (FIX-4) empties an ld+json blob that cannot be parsed as JSON.
 
@@ -717,7 +717,7 @@ def test_sanitize_ld_json_drops_unparseable_blob() -> None:
     assert 'type="application/ld+json"' in out
 
 
-def test_non_ld_json_state_blob_removed() -> None:
+def test_non_ld_json_state_blob_removed():
     """
     [Unit] sanitize: verifies strip_scripts_and_styles (FIX-4) removes an inline __INITIAL_STATE__ script.
 
@@ -741,7 +741,7 @@ def test_non_ld_json_state_blob_removed() -> None:
 # --------------------------------------------------------------------------- #
 # FIX-5 - signed-URL and session params stripped across attributes and ld+json
 # --------------------------------------------------------------------------- #
-def test_strip_url_params_removes_signed_and_session_params() -> None:
+def test_strip_url_params_removes_signed_and_session_params():
     """
     [Unit] sanitize: verifies strip_url_params (FIX-5) removes AWS/CloudFront signed and session params.
 
@@ -777,7 +777,7 @@ def test_strip_url_params_removes_signed_and_session_params() -> None:
     assert "w=640" in out
 
 
-def test_strip_tracking_cleans_srcset_and_action() -> None:
+def test_strip_tracking_cleans_srcset_and_action():
     """
     [Unit] sanitize: verifies strip_tracking (FIX-5) strips params from srcset candidates and form action.
 
@@ -803,7 +803,7 @@ def test_strip_tracking_cleans_srcset_and_action() -> None:
     assert "keep=1" in out
 
 
-def test_strip_url_params_passthrough_and_empty_query() -> None:
+def test_strip_url_params_passthrough_and_empty_query():
     """
     [Unit] sanitize: verifies strip_url_params returns URLs with no query or empty query unchanged.
 
@@ -822,7 +822,7 @@ def test_strip_url_params_passthrough_and_empty_query() -> None:
     assert strip_url_params("https://x.test/path?") == "https://x.test/path?"
 
 
-def test_amazon_search_href_token_params_stripped() -> None:
+def test_amazon_search_href_token_params_stripped():
     """
     [Unit] sanitize: verifies strip_url_params removes dib/dib_tag JWT tokens from Amazon search hrefs.
 
@@ -848,7 +848,7 @@ def test_amazon_search_href_token_params_stripped() -> None:
     assert_clean(out)
 
 
-def test_strip_url_params_drops_opaque_token_value_any_name() -> None:
+def test_strip_url_params_drops_opaque_token_value_any_name():
     """
     [Unit] sanitize: verifies strip_url_params drops opaque mixed-class token values regardless of param name.
 
@@ -872,7 +872,7 @@ def test_strip_url_params_drops_opaque_token_value_any_name() -> None:
     assert "kw=python" in out  # single class (lower) -> kept
 
 
-def test_strip_tracking_strips_dib_in_href() -> None:
+def test_strip_tracking_strips_dib_in_href():
     """
     [Unit] sanitize: verifies strip_tracking removes dib/dib_tag JWT tokens from anchor href attributes.
 
@@ -895,7 +895,7 @@ def test_strip_tracking_strips_dib_in_href() -> None:
     assert "/dp/B0X/" in out
 
 
-def test_strip_url_params_unparseable_returns_input(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_strip_url_params_unparseable_returns_input(monkeypatch: pytest.MonkeyPatch):
     """
     [Local] sanitize: verifies strip_url_params returns the original URL unchanged when urlsplit raises.
 
@@ -911,7 +911,7 @@ def test_strip_url_params_unparseable_returns_input(monkeypatch: pytest.MonkeyPa
         - A raised exception means strip_url_params no longer catches urlsplit failures gracefully.
     """
 
-    def _boom(_: str) -> None:
+    def _boom(_: str):
         """Raise unconditionally to simulate a urlsplit parse failure."""
         raise ValueError("bad url")
 
@@ -919,7 +919,7 @@ def test_strip_url_params_unparseable_returns_input(monkeypatch: pytest.MonkeyPa
     assert strip_url_params("https://x.test/p?a=b") == "https://x.test/p?a=b"
 
 
-def test_strip_tracking_removes_tracker_beacon_and_keeps_content_img() -> None:
+def test_strip_tracking_removes_tracker_beacon_and_keeps_content_img():
     """
     [Unit] sanitize: verifies strip_tracking removes tracker beacon img/link elements but keeps content images.
 
@@ -950,7 +950,7 @@ def test_strip_tracking_removes_tracker_beacon_and_keeps_content_img() -> None:
 # --------------------------------------------------------------------------- #
 # neutralize_prose
 # --------------------------------------------------------------------------- #
-def test_neutralize_prose_replaces_long_text_keeps_metadata() -> None:
+def test_neutralize_prose_replaces_long_text_keeps_metadata():
     """
     [Unit] sanitize: verifies neutralize_prose collapses long prose to the placeholder while preserving keep-selector text.
 
@@ -973,7 +973,7 @@ def test_neutralize_prose_replaces_long_text_keeps_metadata() -> None:
     assert PROSE_PLACEHOLDER in out
 
 
-def test_neutralize_prose_container_hint_neutralizes_only_long_text() -> None:
+def test_neutralize_prose_container_hint_neutralizes_only_long_text():
     """
     [Unit] sanitize: verifies neutralize_prose collapses only long text in a prose container, keeping short text.
 
@@ -999,7 +999,7 @@ def test_neutralize_prose_container_hint_neutralizes_only_long_text() -> None:
     assert PROSE_PLACEHOLDER in long_out
 
 
-def test_neutralize_prose_keeps_short_factual_text() -> None:
+def test_neutralize_prose_keeps_short_factual_text():
     """
     [Unit] sanitize: verifies neutralize_prose leaves short factual text (a date) untouched.
 
@@ -1019,7 +1019,7 @@ def test_neutralize_prose_keeps_short_factual_text() -> None:
     assert PROSE_PLACEHOLDER not in out
 
 
-def test_neutralize_prose_protects_descendant_text() -> None:
+def test_neutralize_prose_protects_descendant_text():
     """
     [Unit] sanitize: verifies neutralize_prose preserves long text inside a matched keep-selector descendant.
 
@@ -1043,7 +1043,7 @@ def test_neutralize_prose_protects_descendant_text() -> None:
 # --------------------------------------------------------------------------- #
 # sanitize_json edge cases
 # --------------------------------------------------------------------------- #
-def test_sanitize_json_prose_key_short_value_recurses() -> None:
+def test_sanitize_json_prose_key_short_value_recurses():
     """
     [Unit] sanitize: verifies sanitize_json cleans a short prose-keyed value rather than replacing it with a placeholder.
 
@@ -1063,7 +1063,7 @@ def test_sanitize_json_prose_key_short_value_recurses() -> None:
     assert out["description"] != PROSE_PLACEHOLDER
 
 
-def test_sanitize_json_handles_lists_and_non_string_keys() -> None:
+def test_sanitize_json_handles_lists_and_non_string_keys():
     """
     [Unit] sanitize: verifies sanitize_json recurses into lists and ignores non-string dict keys for redaction.
 
@@ -1084,7 +1084,7 @@ def test_sanitize_json_handles_lists_and_non_string_keys() -> None:
     assert out[1][2] is None
 
 
-def test_sanitize_json_key_redaction_is_segment_based() -> None:
+def test_sanitize_json_key_redaction_is_segment_based():
     """
     [Unit] sanitize: verifies sanitize_json redacts only segment-matched sensitive keys, not arbitrary substrings.
 
@@ -1107,7 +1107,7 @@ def test_sanitize_json_key_redaction_is_segment_based() -> None:
         assert sanitize_json({benign: "keep-this-value"})[benign] == "keep-this-value"
 
 
-def test_sanitize_json_preserves_leanpub_accepted_authors_shape() -> None:
+def test_sanitize_json_preserves_leanpub_accepted_authors_shape():
     """
     [Unit] sanitize: verifies sanitize_json preserves the Leanpub accepted_authors relationship structure intact.
 
@@ -1133,7 +1133,7 @@ def test_sanitize_json_preserves_leanpub_accepted_authors_shape() -> None:
     assert sanitize_json(payload) == payload
 
 
-def test_sanitize_json_depth_cap_returns_value() -> None:
+def test_sanitize_json_depth_cap_returns_value():
     """
     [Unit] sanitize: verifies sanitize_json returns the sub-value as-is when recursion exceeds the depth cap (FIX-11).
 
@@ -1159,7 +1159,7 @@ def test_sanitize_json_depth_cap_returns_value() -> None:
 # --------------------------------------------------------------------------- #
 # DOM parser / serializer internals
 # --------------------------------------------------------------------------- #
-def test_parse_roundtrips_doctype_void_and_boolean_attrs() -> None:
+def test_parse_roundtrips_doctype_void_and_boolean_attrs():
     """
     [Unit] sanitize: verifies _parse/_serialize roundtrips DOCTYPE, void elements, and boolean attributes.
 
@@ -1183,7 +1183,7 @@ def test_parse_roundtrips_doctype_void_and_boolean_attrs() -> None:
     assert "hi &amp; bye" in out
 
 
-def test_parse_bounds_depth_without_error() -> None:
+def test_parse_bounds_depth_without_error():
     """
     [Unit] sanitize: verifies _parse/_serialize handles a document deeper than MAX_TREE_DEPTH without a stack overflow.
 
@@ -1204,7 +1204,7 @@ def test_parse_bounds_depth_without_error() -> None:
     assert "leaf" in out
 
 
-def test_parse_ignores_unmatched_end_tag() -> None:
+def test_parse_ignores_unmatched_end_tag():
     """
     [Unit] sanitize: verifies _parse ignores a stray closing tag with nothing open.
 
@@ -1223,7 +1223,7 @@ def test_parse_ignores_unmatched_end_tag() -> None:
     assert "<p>x</p>" in out
 
 
-def test_serialize_rawtext_skips_non_text_children() -> None:
+def test_serialize_rawtext_skips_non_text_children():
     """
     [Unit] sanitize: verifies _serialize emits only text children of a rawtext element, skipping element children.
 
@@ -1247,7 +1247,7 @@ def test_serialize_rawtext_skips_non_text_children() -> None:
 # --------------------------------------------------------------------------- #
 # selector splitting / selecting
 # --------------------------------------------------------------------------- #
-def test_split_group_handles_combinators_and_valid_pseudo() -> None:
+def test_split_group_handles_combinators_and_valid_pseudo():
     """
     [Unit] sanitize: verifies _split_group tokenizes all CSS combinators and a valid :has-text() compound.
 
@@ -1267,7 +1267,7 @@ def test_split_group_handles_combinators_and_valid_pseudo() -> None:
     assert ">" in combinators and "+" in combinators and "~" in combinators
 
 
-def test_split_group_fails_closed_on_unterminated_syntax() -> None:
+def test_split_group_fails_closed_on_unterminated_syntax():
     """
     [Unit] sanitize: verifies _split_group raises on unterminated bracket or paren syntax (FIX: over-match).
 
@@ -1288,7 +1288,7 @@ def test_split_group_fails_closed_on_unterminated_syntax() -> None:
         _split_group("a:has(")
 
 
-def test_selector_combinators_and_attributes() -> None:
+def test_selector_combinators_and_attributes():
     """
     [Unit] sanitize: verifies _select resolves child, sibling, descendant, and attribute selectors correctly.
 
@@ -1316,7 +1316,7 @@ def test_selector_combinators_and_attributes() -> None:
     assert _select(root, "section, >") == _select(root, "section")
 
 
-def test_selector_star_and_attribute_value_mismatch() -> None:
+def test_selector_star_and_attribute_value_mismatch():
     """
     [Unit] sanitize: verifies _select handles the universal selector and returns nothing on attribute value mismatch.
 
@@ -1337,7 +1337,7 @@ def test_selector_star_and_attribute_value_mismatch() -> None:
     assert _select(root, "p[data-role=other]") == []
 
 
-def test_element_siblings_orphan_returns_self() -> None:
+def test_element_siblings_orphan_returns_self():
     """
     [Unit] sanitize: verifies _element_siblings returns the element itself when it has no parent.
 
@@ -1357,7 +1357,7 @@ def test_element_siblings_orphan_returns_self() -> None:
     assert _element_siblings(orphan) == [orphan]
 
 
-def test_select_skips_empty_group() -> None:
+def test_select_skips_empty_group():
     """
     [Unit] sanitize: verifies _select skips a trailing empty selector group without raising.
 
@@ -1377,7 +1377,7 @@ def test_select_skips_empty_group() -> None:
     assert [e.tag for e in _select(root, "p,")] == ["p"]
 
 
-def test_startendtag_self_closing_element_roundtrips() -> None:
+def test_startendtag_self_closing_element_roundtrips():
     """
     [Unit] sanitize: verifies _parse/_serialize roundtrips an XHTML-style self-closing custom element.
 
@@ -1397,7 +1397,7 @@ def test_startendtag_self_closing_element_roundtrips() -> None:
     assert "<p>ok</p>" in out
 
 
-def test_strip_secrets_blanks_hidden_input_without_value_attr() -> None:
+def test_strip_secrets_blanks_hidden_input_without_value_attr():
     """
     [Unit] sanitize: verifies strip_secrets adds a blank value attribute to a hidden input that has none.
 
@@ -1416,7 +1416,7 @@ def test_strip_secrets_blanks_hidden_input_without_value_attr() -> None:
     assert 'value=""' in out
 
 
-def test_strip_tracking_skips_valueless_attribute() -> None:
+def test_strip_tracking_skips_valueless_attribute():
     """
     [Unit] sanitize: verifies strip_tracking leaves valueless boolean attributes untouched while cleaning URLs.
 
@@ -1437,7 +1437,7 @@ def test_strip_tracking_skips_valueless_attribute() -> None:
     assert "keep=1" in out
 
 
-def test_strip_srcset_skips_empty_candidate() -> None:
+def test_strip_srcset_skips_empty_candidate():
     """
     [Unit] sanitize: verifies strip_tracking skips an empty srcset candidate caused by a double comma.
 
@@ -1457,7 +1457,7 @@ def test_strip_srcset_skips_empty_candidate() -> None:
     assert "b.jpg" in out
 
 
-def test_neutralize_prose_skips_whitespace_text_nodes() -> None:
+def test_neutralize_prose_skips_whitespace_text_nodes():
     """
     [Unit] sanitize: verifies neutralize_prose leaves whitespace-only text nodes untouched.
 
@@ -1476,7 +1476,7 @@ def test_neutralize_prose_skips_whitespace_text_nodes() -> None:
     assert "2024" in out
 
 
-def test_selector_no_match_paths() -> None:
+def test_selector_no_match_paths():
     """
     [Unit] sanitize: verifies _select returns an empty list when an adjacent selector has no predecessor or ancestor is missing.
 
@@ -1519,7 +1519,7 @@ def _selector_values() -> list[tuple[str, str, str]]:
     return out
 
 
-def test_all_site_constants_selectors_parse() -> None:
+def test_all_site_constants_selectors_parse():
     """
     [Unit] sanitize: verifies all site_constants selectors parse without raising against an empty document.
 
@@ -1542,7 +1542,7 @@ def test_all_site_constants_selectors_parse() -> None:
         assert isinstance(selector, str), f"{site}.{field}"
 
 
-def test_has_text_disambiguates_packtpub_isbn() -> None:
+def test_has_text_disambiguates_packtpub_isbn():
     """
     [Unit] sanitize: verifies the packtpub ISBN-13 selector returns only the ISBN-13 value via :has-text (FIX: over-match).
 
@@ -1570,7 +1570,7 @@ def test_has_text_disambiguates_packtpub_isbn() -> None:
     assert [_text_content(m) for m in matches] == ["9781234567890"]
 
 
-def test_has_text_disambiguates_oreilly_isbn() -> None:
+def test_has_text_disambiguates_oreilly_isbn():
     """
     [Unit] sanitize: verifies the oreilly ISBN-13 selector returns only the ISBN span via :has-text (FIX: over-match).
 
@@ -1596,7 +1596,7 @@ def test_has_text_disambiguates_oreilly_isbn() -> None:
     assert [_text_content(m) for m in matches] == ["9780123456789"]
 
 
-def test_has_text_scopes_amazon_expander_group() -> None:
+def test_has_text_scopes_amazon_expander_group():
     """
     [Unit] sanitize: verifies the amazon DETAILS_BUTTON selector matches only the named expander headers (FIX: over-match).
 
@@ -1623,7 +1623,7 @@ def test_has_text_scopes_amazon_expander_group() -> None:
     assert "Reviews" not in texts
 
 
-def test_has_text_is_case_insensitive() -> None:
+def test_has_text_is_case_insensitive():
     """
     [Unit] sanitize: verifies :has-text() matches case-insensitively on normalized text content.
 
@@ -1643,7 +1643,7 @@ def test_has_text_is_case_insensitive() -> None:
     assert len(_select(root, "a:has-text('product details')")) == 1
 
 
-def test_unknown_pseudo_class_raises() -> None:
+def test_unknown_pseudo_class_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on an unsupported pseudo-class (FIX: fail-closed).
 
@@ -1664,7 +1664,7 @@ def test_unknown_pseudo_class_raises() -> None:
         _select(root, "div:nth-last-of-type(2)")
 
 
-def test_pseudo_element_raises() -> None:
+def test_pseudo_element_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on a pseudo-element (FIX: fail-closed).
 
@@ -1684,7 +1684,7 @@ def test_pseudo_element_raises() -> None:
         _select(_parse("<p></p>"), "p::before")
 
 
-def test_has_text_without_parens_raises() -> None:
+def test_has_text_without_parens_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError when :has-text has no argument list (FIX: fail-closed).
 
@@ -1704,7 +1704,7 @@ def test_has_text_without_parens_raises() -> None:
         _select(_parse("<span></span>"), "span:has-text")
 
 
-def test_has_text_unterminated_raises() -> None:
+def test_has_text_unterminated_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on an unterminated :has-text() argument (FIX: fail-closed).
 
@@ -1724,7 +1724,7 @@ def test_has_text_unterminated_raises() -> None:
         _select(_parse("<a></a>"), "a:has-text('x'")
 
 
-def test_has_text_regex_form_raises() -> None:
+def test_has_text_regex_form_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on the :has-text(/regex/) variant (FIX: fail-closed).
 
@@ -1744,7 +1744,7 @@ def test_has_text_regex_form_raises() -> None:
         _select(_parse("<a></a>"), "a:has-text(/x/)")
 
 
-def test_attribute_operator_unsupported_raises() -> None:
+def test_attribute_operator_unsupported_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on a non-'=' attribute operator (FIX: fail-closed).
 
@@ -1764,7 +1764,7 @@ def test_attribute_operator_unsupported_raises() -> None:
         _select(_parse("<a></a>"), "a[data-x~=b]")
 
 
-def test_unterminated_attribute_selector_raises() -> None:
+def test_unterminated_attribute_selector_raises():
     """
     [Unit] sanitize: verifies _split_group raises SanitizationError on an unterminated attribute selector (FIX: fail-closed).
 
@@ -1783,7 +1783,7 @@ def test_unterminated_attribute_selector_raises() -> None:
         _split_group("[attr")
 
 
-def test_unsupported_character_raises() -> None:
+def test_unsupported_character_raises():
     """
     [Unit] sanitize: verifies _select raises SanitizationError on a stray unsupported character (FIX: fail-closed).
 
@@ -1803,7 +1803,7 @@ def test_unsupported_character_raises() -> None:
         _select(_parse("<a></a>"), "a%b")
 
 
-def test_neutralize_prose_neutralizes_li_not_matching_has_text() -> None:
+def test_neutralize_prose_neutralizes_li_not_matching_has_text():
     """
     [Unit] sanitize: verifies neutralize_prose collapses a long list item that does not match the oreilly ISBN selector.
 
@@ -1830,7 +1830,7 @@ def test_neutralize_prose_neutralizes_li_not_matching_has_text() -> None:
 # --------------------------------------------------------------------------- #
 # V-2 - JSON-shaped data-* values are parsed and sanitized
 # --------------------------------------------------------------------------- #
-def test_v2_sensitive_named_data_attrs_dropped() -> None:
+def test_v2_sensitive_named_data_attrs_dropped():
     """
     [Unit] sanitize: verifies strip_secrets (V-2) drops data-state/config/auth-named data-* attributes wholesale.
 
@@ -1859,7 +1859,7 @@ def test_v2_sensitive_named_data_attrs_dropped() -> None:
     assert 'data-title="Fluent Python"' in out
 
 
-def test_r2_json_data_attr_with_non_sensitive_name_is_dropped() -> None:
+def test_r2_json_data_attr_with_non_sensitive_name_is_dropped():
     """
     [Unit] sanitize: verifies strip_secrets (R-2) drops any JSON-valued data-* attribute regardless of attribute name.
 
@@ -1890,7 +1890,7 @@ def test_r2_json_data_attr_with_non_sensitive_name_is_dropped() -> None:
         assert_clean(sanitize_html(html))
 
 
-def test_r2_unparseable_json_looking_data_attr_dropped() -> None:
+def test_r2_unparseable_json_looking_data_attr_dropped():
     """
     [Unit] sanitize: verifies strip_secrets (R-2) drops a JSON-looking data-* attribute even when the JSON is malformed.
 
@@ -1913,7 +1913,7 @@ def test_r2_unparseable_json_looking_data_attr_dropped() -> None:
 # --------------------------------------------------------------------------- #
 # V-3 - ld+json re-embed is output-encoded (no </script> breakout)
 # --------------------------------------------------------------------------- #
-def test_v3_ld_json_script_breakout_is_neutralized() -> None:
+def test_v3_ld_json_script_breakout_is_neutralized():
     """
     [Unit] sanitize: verifies sanitize_ld_json (V-3) prevents a </script> inside JSON from breaking out of the element.
 
@@ -1950,7 +1950,7 @@ def test_v3_ld_json_script_breakout_is_neutralized() -> None:
 # --------------------------------------------------------------------------- #
 # V-5 - prose chunked under threshold across siblings is neutralized
 # --------------------------------------------------------------------------- #
-def test_v5_prose_chunked_across_siblings_is_neutralized() -> None:
+def test_v5_prose_chunked_across_siblings_is_neutralized():
     """
     [Unit] sanitize: verifies neutralize_prose (V-5) collapses marketing prose split across three sibling spans.
 
@@ -1972,7 +1972,7 @@ def test_v5_prose_chunked_across_siblings_is_neutralized() -> None:
     assert PROSE_PLACEHOLDER in out
 
 
-def test_v5_long_direct_text_beside_protected_field_is_neutralized() -> None:
+def test_v5_long_direct_text_beside_protected_field_is_neutralized():
     """
     [Unit] sanitize: verifies neutralize_prose (V-5) collapses long direct text beside a protected field.
 
@@ -1995,7 +1995,7 @@ def test_v5_long_direct_text_beside_protected_field_is_neutralized() -> None:
     assert PROSE_PLACEHOLDER in out
 
 
-def test_v5_prose_container_long_text_beside_protected_field_is_neutralized() -> None:
+def test_v5_prose_container_long_text_beside_protected_field_is_neutralized():
     """
     [Unit] sanitize: verifies neutralize_prose (V-5) collapses long prose-container text even when a protected sibling is present.
 
@@ -2018,7 +2018,7 @@ def test_v5_prose_container_long_text_beside_protected_field_is_neutralized() ->
     assert PROSE_PLACEHOLDER in out
 
 
-def test_v5_prose_chunked_into_sub_80_char_spans_is_neutralized() -> None:
+def test_v5_prose_chunked_into_sub_80_char_spans_is_neutralized():
     """
     [Unit] sanitize: verifies neutralize_prose (V-5 re-fix) collapses prose chunked into many sub-80-char sibling spans.
 
@@ -2046,7 +2046,7 @@ def test_v5_prose_chunked_into_sub_80_char_spans_is_neutralized() -> None:
     assert len(_select(root, "div.description span")) == 10
 
 
-def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
+def test_neutralize_prose_keeps_short_prose_heading_for_selector():
     """
     [Unit] sanitize: verifies neutralize_prose preserves a short prose-container heading so its selector still resolves.
 
@@ -2176,7 +2176,7 @@ _SITE_DESCRIPTION_MARKUP = {
 }
 
 
-def test_description_selectors_survive_sanitize_for_all_sites() -> None:
+def test_description_selectors_survive_sanitize_for_all_sites():
     """
     [Unit] sanitize: verifies sanitize_html preserves all four sites' DESCRIPTION selectors and neutralizes their content.
 
@@ -2215,7 +2215,7 @@ def test_description_selectors_survive_sanitize_for_all_sites() -> None:
 # --------------------------------------------------------------------------- #
 # V-6 - opaque inline style values
 # --------------------------------------------------------------------------- #
-def test_v6_opaque_style_data_url_is_dropped() -> None:
+def test_v6_opaque_style_data_url_is_dropped():
     """
     [Unit] sanitize: verifies strip_secrets (V-6) removes an inline style containing a base64 url(data:...) blob.
 
@@ -2240,7 +2240,7 @@ def test_v6_opaque_style_data_url_is_dropped() -> None:
 # --------------------------------------------------------------------------- #
 # V-7 - namespaced script tags are stripped
 # --------------------------------------------------------------------------- #
-def test_v7_namespaced_svg_script_is_stripped() -> None:
+def test_v7_namespaced_svg_script_is_stripped():
     """
     [Unit] sanitize: verifies strip_scripts_and_styles (V-7) strips a namespaced svg:script like a plain script.
 
@@ -2264,7 +2264,7 @@ def test_v7_namespaced_svg_script_is_stripped() -> None:
 # --------------------------------------------------------------------------- #
 # top-level composition + hostile page
 # --------------------------------------------------------------------------- #
-def test_sanitize_text_rewrites_emails() -> None:
+def test_sanitize_text_rewrites_emails():
     """
     [Unit] sanitize: verifies sanitize_text replaces email addresses with the EMAIL_PLACEHOLDER.
 
@@ -2282,7 +2282,7 @@ def test_sanitize_text_rewrites_emails() -> None:
     assert EMAIL_PLACEHOLDER in sanitize_text("abuse@corp-real.com")
 
 
-def test_hostile_page_is_cleaned_and_neutralized() -> None:
+def test_hostile_page_is_cleaned_and_neutralized():
     """
     [Unit] sanitize: verifies sanitize_html cleans a page carrying every corpus-specific secret type.
 

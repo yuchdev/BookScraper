@@ -79,7 +79,7 @@ _WALL_HTML = (
 # --------------------------------------------------------------------------- #
 
 
-def test_compare_selector_matches_flags_one_to_zero() -> None:
+def test_compare_selector_matches_flags_one_to_zero():
     """
     [Unit] fixture drift: verifies compare_selector_matches flags only >=1 -> 0 transitions.
 
@@ -100,7 +100,7 @@ def test_compare_selector_matches_flags_one_to_zero() -> None:
     assert capture.compare_selector_matches(old, new) == ["ISBN10", "TAGS"]
 
 
-def test_compare_selector_matches_ignores_non_drift_transitions() -> None:
+def test_compare_selector_matches_ignores_non_drift_transitions():
     """
     [Unit] fixture drift: verifies compare_selector_matches ignores non-drift transitions.
 
@@ -121,7 +121,7 @@ def test_compare_selector_matches_ignores_non_drift_transitions() -> None:
     assert capture.compare_selector_matches(old, new) == ["gone"]
 
 
-def test_compare_selector_matches_empty() -> None:
+def test_compare_selector_matches_empty():
     """
     [Unit] fixture drift: verifies compare_selector_matches returns [] for empty maps.
 
@@ -145,7 +145,7 @@ def test_compare_selector_matches_empty() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_count_selector_matches_counts_offline() -> None:
+def test_count_selector_matches_counts_offline():
     """
     [Unit] fixture drift: verifies count_selector_matches counts elements without a browser.
 
@@ -179,7 +179,7 @@ def test_count_selector_matches_counts_offline() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_drift_selectors_for_detail_includes_description_not_search() -> None:
+def test_drift_selectors_for_detail_includes_description_not_search():
     """
     [Unit] fixture drift: verifies drift_selectors_for returns CSS detail selectors only.
 
@@ -202,7 +202,7 @@ def test_drift_selectors_for_detail_includes_description_not_search() -> None:
     assert not any(k.startswith("SEARCH_") for k in sel)
 
 
-def test_drift_selectors_for_search_only_css_selectors() -> None:
+def test_drift_selectors_for_search_only_css_selectors():
     """
     [Unit] fixture drift: verifies drift_selectors_for returns only CSS SEARCH_* selectors.
 
@@ -224,7 +224,7 @@ def test_drift_selectors_for_search_only_css_selectors() -> None:
     assert "BOOK_TITLE" not in sel
 
 
-def test_drift_selectors_for_api_is_empty() -> None:
+def test_drift_selectors_for_api_is_empty():
     """
     [Unit] fixture drift: verifies drift_selectors_for returns {} for a JSON/api kind.
 
@@ -248,7 +248,7 @@ def test_drift_selectors_for_api_is_empty() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_detect_wall_flags_known_marker() -> None:
+def test_detect_wall_flags_known_marker():
     """
     [Unit] fixture drift: verifies detect_wall flags a page with a known CAPTCHA marker.
 
@@ -267,7 +267,7 @@ def test_detect_wall_flags_known_marker() -> None:
     assert capture.detect_wall(_WALL_HTML, "#productTitle") is not None
 
 
-def test_detect_wall_flags_missing_title() -> None:
+def test_detect_wall_flags_missing_title():
     """
     [Unit] fixture drift: verifies detect_wall flags a page whose title selector matches nothing.
 
@@ -287,7 +287,7 @@ def test_detect_wall_flags_missing_title() -> None:
     assert reason is not None and "title selector" in reason
 
 
-def test_detect_wall_passes_real_page() -> None:
+def test_detect_wall_passes_real_page():
     """
     [Unit] fixture drift: verifies detect_wall returns None for a clean detail page.
 
@@ -346,7 +346,7 @@ def temp_corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 async def test_refresh_flags_drift_and_writes_nothing(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+):
     """
     [Unit] fixture drift: verifies --refresh reports drift without writing to tests/fixtures.
 
@@ -382,7 +382,7 @@ async def test_refresh_flags_drift_and_writes_nothing(
 
 async def test_refresh_apply_refuses_wall(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+):
     """
     [Unit] fixture drift: verifies --apply refuses to overwrite a hand-built fixture with a walled page.
 
@@ -417,7 +417,7 @@ async def test_refresh_apply_refuses_wall(
 
 async def test_refresh_apply_refuses_wall_for_live_fixture(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+):
     """
     [Unit] fixture drift: verifies --apply refuses to overwrite a live fixture with a walled page.
 
@@ -452,7 +452,7 @@ async def test_refresh_apply_refuses_wall_for_live_fixture(
 
 async def test_refresh_apply_writes_clean_recapture(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+):
     """
     [Unit] fixture drift: verifies --apply writes and re-checksums a clean recapture.
 
@@ -488,7 +488,7 @@ async def test_refresh_apply_writes_clean_recapture(
 
 async def test_refresh_derived_reports_no_live_source(
     temp_corpus: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+):
     """
     [Unit] fixture drift: verifies derived fixtures are not re-captured but their selectors are checked.
 

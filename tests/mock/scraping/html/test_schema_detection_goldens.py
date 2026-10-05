@@ -66,7 +66,7 @@ def _normalize_report(report: str) -> str:
     return _TIMESTAMP_RE.sub("<TIMESTAMP>", report)
 
 
-def _compare_or_update_text(path: Path, actual: str, *, update: bool, label: str) -> None:
+def _compare_or_update_text(path: Path, actual: str, *, update: bool, label: str):
     """Either rewrite the ``.report.txt`` golden (then fail), or assert ``actual`` matches it."""
     if update:
         path.write_text(actual, encoding="utf-8")
@@ -137,7 +137,7 @@ async def test_golden_report_matches_for_site(
     chromium_browser: Any,
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies golden report matches for site.
 
@@ -174,7 +174,7 @@ async def test_golden_report_matches_for_amazon_search(
     chromium_browser: Any,
     update_goldens: bool,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies golden report matches for amazon search.
 
@@ -216,7 +216,7 @@ async def test_html_file_mode_makes_no_network_request(
     chromium_browser: Any,
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies html file mode makes no network request.
 
@@ -307,7 +307,7 @@ async def test_ci_gate_hand_built_detail_set_exits_zero(
     site: str,
     chromium_browser: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies ci gate hand built detail set exits zero.
 
@@ -333,7 +333,7 @@ async def test_ci_gate_live_amazon_detail_reported(
     chromium_browser: Any,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies ci gate live amazon detail reported.
 
@@ -359,7 +359,7 @@ async def test_ci_gate_amazon_search_reported(
     chromium_browser: Any,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies ci gate amazon search reported.
 
@@ -393,7 +393,7 @@ async def test_check_current_only_html_file_makes_no_network_request(
     chromium_browser: Any,
     corpus_router: Any,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies check current only html file makes no network request.
 
@@ -482,7 +482,7 @@ async def test_pruning_preserves_every_currently_matching_selector(
     site: str,
     fixture: Path,
     chromium_browser: Any,
-) -> None:
+):
     """
     [Local] schema detection goldens: verifies pruning preserves every currently matching selector.
 
