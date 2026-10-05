@@ -56,7 +56,7 @@ include = ["src", "tests"]
 
 exclude = []
 
-select = ["X001", "X002", "X003", "X004", "X005", "X006", "X007", "X008", "X009", "X010", "X011", "X012", "X013"]
+select = ["X001", "X002", "X003", "X004", "X005", "X006", "X007", "X008", "X009", "X010", "X011", "X012", "X013", "X014"]
 
 # Pre-existing violations accepted at migration time (the plugin was never
 # actually wired into Flake8 before, so these were invisible until now).
