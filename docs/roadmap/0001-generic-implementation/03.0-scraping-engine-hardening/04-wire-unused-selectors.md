@@ -1,7 +1,7 @@
 # 04 - Wire unused selectors (tags, fallbacks, expanders)
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [03-missing-field-resilience.md](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/03-missing-field-resilience.md)
 **Role:** Scraping Expert
 

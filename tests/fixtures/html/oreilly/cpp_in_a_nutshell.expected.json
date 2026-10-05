@@ -9,6 +9,10 @@
   "publication_date": "May 2003",
   "publication_year": 2003,
   "site": "oreilly",
+  "tags": [
+    "C++",
+    "Programming"
+  ],
   "title": "C++ In a Nutshell",
   "url": "https://www.oreilly.com/library/view/c-in-a/0596002985/"
 }

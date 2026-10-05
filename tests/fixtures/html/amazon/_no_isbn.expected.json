@@ -2,7 +2,6 @@
   "_known_issues": [
     "03.1/02 ISBN normalization & validation (a Kindle-only edition has no ISBN rows, so both selectors miss and store the sentinel 'N/A'; 03.1/02 would store None instead)",
     "03.1/03 date normalization (publication_date is the raw site string, not a normalized/ISO date)",
-    "03.0/04 wire unused selectors (TAGS) (TAGS is defined in parameters.py but never read, so no tags field exists)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
   "asin": "B00LZW07P0",
@@ -18,6 +17,10 @@
   "publication_date": "August 16, 2012",
   "publication_year": 2012,
   "site": "amazon",
+  "tags": [
+    "C++ Programming",
+    "Software Development"
+  ],
   "title": "C++ Primer",
   "url": "https://www.amazon.com/dp/B00LZW07P0"
 }

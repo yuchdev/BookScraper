@@ -5,7 +5,22 @@ drives every scrape: a truncated site_constants, an emptied USER_AGENTS, or a
 flipped HEADLESS_BROWSER all silently change scraper behavior with no crash.
 """
 
-from bookscraper.scraping import parameters
+from bookscraper.scraping import parameters, schema_detection, scrape_details
+
+# Detail-page selector keys that ``detail_selector_fields`` returns but ``scrape_book`` does
+# not read by their canonical name, each with the reason it is a deliberate exception rather
+# than dead config (success criterion of subtask 03.0/04).
+_CONSUMED_ALLOW_LIST = {
+    # Read via the dedicated meta-tag author branch; the canonical AUTHORS key represents the
+    # author field in CONSUMED_DETAIL_KEYS.
+    "AUTHORS_META": "read via the meta-author branch, tracked under AUTHORS",
+    # Read via the dedicated meta-tag date branch; the canonical PUBLICATION_DATE key represents
+    # the publication-date field in CONSUMED_DETAIL_KEYS.
+    "PUBLICATION_DATE_META": "read via the meta-date branch, tracked under PUBLICATION_DATE",
+    # The ASIN is taken from the page URL; this detail block is an unused alternate locator and
+    # is listed as OPTIONAL_SELECTOR_KEYS in parameters.py.
+    "ASIN_DETAIL_PAGE_SELECTOR": "ASIN comes from the URL, not this detail block",
+}
 
 
 def test_headless_browser_is_false():
@@ -102,3 +117,36 @@ def test_min_rating_is_float():
         - SCRAPE_FILTERS["min_rating"] was changed to an int or string literal
     """
     assert isinstance(parameters.SCRAPE_FILTERS["min_rating"], float)
+
+
+def test_every_detail_selector_key_is_consumed():
+    """
+    [Unit] parameters: verifies every detail-page selector key is read by scrape_book.
+
+    Scenario:
+        Given the union of detail-page selector keys across every site_constants entry (via
+        schema_detection.detail_selector_fields)
+        When compared with scrape_details.CONSUMED_DETAIL_KEYS
+        Then every key is either consumed or a documented allow-list exception, and
+        CONSUMED_DETAIL_KEYS names no key that is not a real detail selector
+
+    Boundaries:
+        - Pure set comparison over static data; no scrape, browser, or network
+        - The only tolerated unconsumed keys are the three documented in _CONSUMED_ALLOW_LIST
+
+    On failure, first check:
+        - A selector was added to parameters.py but never wired into scrape_book (add it to the
+          relevant branch and to CONSUMED_DETAIL_KEYS), or a key was removed from one side only
+    """
+    all_detail_keys: set[str] = set()
+    for entry in parameters.site_constants.values():
+        all_detail_keys |= set(schema_detection.detail_selector_fields(entry))
+
+    consumed = set(scrape_details.CONSUMED_DETAIL_KEYS)
+    # Nothing in the consumed list is stale (every entry is a real detail selector key).
+    assert consumed <= all_detail_keys
+    # Everything defined is either consumed or a documented, reasoned exception.
+    unconsumed = all_detail_keys - consumed
+    assert unconsumed == set(_CONSUMED_ALLOW_LIST)
+    # Each allow-list entry carries a one-line reason.
+    assert all(reason for reason in _CONSUMED_ALLOW_LIST.values())

@@ -14,6 +14,10 @@
   "publication_date": "September 2017",
   "publication_year": 2017,
   "site": "packtpub",
+  "tags": [
+    "C++",
+    "Programming"
+  ],
   "title": "Mastering the C++17 STL",
   "url": "https://www.packtpub.com/product/many-authors/9781800000000"
 }

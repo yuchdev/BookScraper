@@ -1263,9 +1263,7 @@ async def test_meta_authors_extracted_from_content():
     """
     locators = {
         "#productTitle": FakeLocator("Great Python Book"),
-        'meta[name="author"]': FakeLocator(
-            [{"attrs": {"content": "Jane Doe"}}, {"attrs": {"content": "John Smith"}}]
-        ),
+        'meta[name="author"]': FakeLocator([{"attrs": {"content": "Jane Doe"}}, {"attrs": {"content": "John Smith"}}]),
     }
     page = FakePage(locators=locators, title="Great Python Book - Amazon")
     browser = FakeBrowser(page=page)
@@ -1338,3 +1336,192 @@ async def test_read_more_expander_is_clicked_before_reading_description():
     assert result.status is ScrapeStatus.SUCCESS
     assert result.book["description"] == "Full description."
     page.wait_for_timeout.assert_awaited()
+
+
+# ---------------------------------------------------------------------------
+# scrape_book - wired-in selectors: tags, description fallback, details expander
+# (subtask 03.0/04)
+# ---------------------------------------------------------------------------
+
+
+async def test_tags_extracted_deduplicated_in_order():
+    """
+    [Local] scrape details: verifies tags are stripped, de-duplicated in order, and listed.
+
+    Scenario:
+        an amazon page whose TAGS selector matches several anchors, including a duplicate, a
+        whitespace-only one, and names in a specific order.
+
+    Boundaries:
+        - the TAGS branch collects every match through ``_texts``: empty/whitespace matches are
+          dropped, later duplicates are removed while first-seen order is preserved, and the
+          result is stored as ``book["tags"]`` (the neutral ``[]`` shape added this subtask).
+
+    On failure, first check:
+        - the TAGS read stopped using ``_texts`` (so dedup/order/cap regressed) or the ``tags``
+          key is no longer populated from it.
+    """
+    tags_selector = scrape_details.site_constants["amazon"]["TAGS"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        tags_selector: FakeLocator(
+            [{"text": "Python"}, {"text": "Data"}, {"text": "  "}, {"text": "Python"}, {"text": "Data Science"}]
+        ),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    # Duplicate "Python" removed, blank dropped, first-seen order preserved.
+    assert result.book["tags"] == ["Python", "Data", "Data Science"]
+
+
+async def test_tags_missing_selector_yields_empty_list():
+    """
+    [Local] scrape details: verifies an unconfigured TAGS selector leaves tags an empty list.
+
+    Scenario:
+        an amazon scrape whose ``TAGS`` entry is patched to ``None`` (no selector configured).
+
+    Boundaries:
+        - with no TAGS selector the branch is skipped and the neutral ``[]`` initialised up front
+          survives, so a site that exposes no tags still produces a well-shaped record with an
+          empty ``tags`` list rather than a missing key.
+
+    On failure, first check:
+        - the ``tags`` key was dropped from the neutral init, or ``_selector`` stopped treating a
+          ``None``/absent TAGS value as unconfigured.
+    """
+    page = FakePage(
+        locators={
+            "#productTitle": FakeLocator("Great Python Book"),
+            ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        },
+        title="Great Python Book - Amazon",
+    )
+    browser = FakeBrowser(page=page)
+
+    with patch.dict(scrape_details.site_constants["amazon"], {"TAGS": None}):
+        result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["tags"] == []
+
+
+async def test_description_alt_used_when_primary_empty():
+    """
+    [Local] scrape details: verifies DESCRIPTION_ALT supplies the description when DESCRIPTION is empty.
+
+    Scenario:
+        an amazon page whose primary ``DESCRIPTION`` selector matches nothing but whose
+        ``DESCRIPTION_ALT`` selector carries the description text.
+
+    Boundaries:
+        - the primary read yields ``None``, so the fallback selector is queried and supplies the
+          description (defect-free degradation); the primary-present case is covered by the
+          amazon happy-path test.
+
+    On failure, first check:
+        - the ``if not description`` fallback to DESCRIPTION_ALT was removed or the ALT selector
+          is read before the primary.
+    """
+    alt_selector = scrape_details.site_constants["amazon"]["DESCRIPTION_ALT"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        # Primary DESCRIPTION selector intentionally absent -> empty read.
+        alt_selector: FakeLocator("  A fallback description.  "),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["description"] == "A fallback description."
+
+
+class _OrderRecordingLocator(FakeLocator):
+    """A FakeLocator that appends a label to a shared list on click/text reads (order probe)."""
+
+    def __init__(self, matches: Any, events: list, label: str):
+        """Store the shared ``events`` list and this locator's ``label``."""
+        super().__init__(matches)
+        self._events = events
+        self._label = label
+
+    @property
+    def first(self) -> "_OrderRecordingLocator":
+        """Return a labelled recorder around the first match so the chain still records."""
+        return _OrderRecordingLocator(self._matches[:1], self._events, self._label)
+
+    async def click(self, *args: Any, **kwargs: Any) -> Any:
+        """Record a ``"<label>:click"`` event before the no-op click."""
+        self._events.append(f"{self._label}:click")
+
+    async def text_content(self, *args: Any, **kwargs: Any) -> Any:
+        """Record a ``"<label>:read"`` event, then delegate to the FakeLocator read."""
+        self._events.append(f"{self._label}:read")
+        return await super().text_content(*args, **kwargs)
+
+
+async def test_details_button_clicked_before_isbn_read():
+    """
+    [Local] scrape details: verifies the DETAILS_BUTTON expander is clicked before the ISBN read.
+
+    Scenario:
+        an amazon page whose visible DETAILS_BUTTON and ISBN10 locators both append to a shared
+        ordered event list when clicked / read.
+
+    Boundaries:
+        - the expander reveals the ISBN/date blocks, so the click must happen BEFORE those reads;
+          the test asserts the ``details:click`` event precedes the ``isbn10:read`` event rather
+          than only that both occurred.
+
+    On failure, first check:
+        - the DETAILS_BUTTON click moved after (or into) the ISBN/publication-date block, or its
+          ``is_visible`` gate stopped firing.
+    """
+    events: list = []
+    details_selector = scrape_details.site_constants["amazon"]["DETAILS_BUTTON"]
+    isbn10_selector = scrape_details.site_constants["amazon"]["ISBN10"]
+    locators = {
+        "#productTitle": FakeLocator("Great Python Book"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}]),
+        details_selector: _OrderRecordingLocator([{"text": "Product details", "visible": True}], events, "details"),
+        isbn10_selector: _OrderRecordingLocator("1234567890", events, "isbn10"),
+    }
+    page = FakePage(locators=locators, title="Great Python Book - Amazon")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert "details:click" in events
+    assert "isbn10:read" in events
+    assert events.index("details:click") < events.index("isbn10:read")
+
+
+def test_empty_string_selector_treated_as_unconfigured():
+    """
+    [Local] scrape details: verifies _selector treats "" and None identically as unconfigured.
+
+    Scenario:
+        the ``_selector`` helper is called for an empty-string value (packtpub's READ_MORE_LINK
+        sentinel), a ``None`` value, an absent key, and a real selector string.
+
+    Boundaries:
+        - ``""`` and ``None`` and a missing key all resolve to ``None`` ("not configured") so no
+          caller has to special-case the empty-string spelling; a non-empty selector is returned
+          verbatim.
+
+    On failure, first check:
+        - ``_selector`` started distinguishing ``""`` from ``None`` or dropped the falsy guard.
+    """
+    assert scrape_details._selector({"READ_MORE_LINK": ""}, "READ_MORE_LINK") is None
+    assert scrape_details._selector({"READ_MORE_LINK": None}, "READ_MORE_LINK") is None
+    assert scrape_details._selector({}, "READ_MORE_LINK") is None
+    assert scrape_details._selector({"DESCRIPTION": ".about"}, "DESCRIPTION") == ".about"

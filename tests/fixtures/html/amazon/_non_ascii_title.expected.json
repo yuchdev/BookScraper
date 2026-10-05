@@ -3,7 +3,6 @@
     "03.1/04 per-site normalizers (the non-ASCII title and its hash are stored as captured, with no Unicode (NFC) normalization today; 03.1/04 would normalize before hashing)",
     "03.1/03 date normalization (publication_date is the raw site string, not a normalized/ISO date)",
     "03.1/02 ISBN normalization & validation (isbn10/isbn13 are raw site strings, not normalized/validated)",
-    "03.0/04 wire unused selectors (TAGS) (TAGS is defined in parameters.py but never read, so no tags field exists)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
   "asin": "2072000000",
@@ -19,6 +18,10 @@
   "publication_date": "August 16, 2012",
   "publication_year": 2012,
   "site": "amazon",
+  "tags": [
+    "C++ Programming",
+    "Software Development"
+  ],
   "title": "Caf\u00e9 M\u00f8derne C++: \u00dcn\u00efc\u00f6de \u00c9dici\u00f3n",
   "url": "https://www.amazon.com/dp/2072000000"
 }

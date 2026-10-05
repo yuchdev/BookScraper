@@ -10,6 +10,10 @@
   "publication_date": "August 2016",
   "publication_year": 2016,
   "site": "oreilly",
+  "tags": [
+    "C++",
+    "Programming"
+  ],
   "title": "Practical C++ Metaprogramming",
   "url": "https://www.oreilly.com/library/view/practical-c-metaprogramming/9781492042778/"
 }

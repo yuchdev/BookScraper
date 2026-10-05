@@ -9,6 +9,10 @@
   "publication_date": "September 2016",
   "publication_year": 2016,
   "site": "packtpub",
+  "tags": [
+    "C++",
+    "Programming"
+  ],
   "title": "C++ Windows Programming",
   "url": "https://www.packtpub.com/product/c-windows-programming/9781786464224"
 }

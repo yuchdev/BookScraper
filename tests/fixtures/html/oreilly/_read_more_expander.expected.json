@@ -12,6 +12,10 @@
   "publication_date": "November 2014",
   "publication_year": 2014,
   "site": "oreilly",
+  "tags": [
+    "C++",
+    "Programming"
+  ],
   "title": "Effective Modern C++",
   "url": "https://www.oreilly.com/library/view/read-more/9781491900000/"
 }

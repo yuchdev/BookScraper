@@ -31,6 +31,33 @@ FIELD_TIMEOUT_MS = 10_000
 OPTIONAL_FIELD_TIMEOUT_MS = 2_000
 MAX_ATTEMPTS = 3
 
+# Upper bound on the number of tags kept per book. A page-controlled tag list is untrusted
+# input, so the collection is capped (after de-duplication) rather than stored unbounded.
+TAGS_LIMIT = 50
+
+# The ``site_constants`` detail-page selector keys that ``scrape_book`` reads by their
+# canonical name. This is the static counterpart of
+# ``schema_detection.detail_selector_fields()``; the sanity test
+# ``test_every_detail_selector_key_is_consumed`` compares the two so a selector defined in
+# ``parameters.py`` can never silently go unread again. The documented exceptions (the
+# meta-tag author/date variants, read via their own dedicated branches, and the unused
+# alternate ASIN locator) live in that test's allow-list, each with a one-line reason.
+CONSUMED_DETAIL_KEYS: frozenset[str] = frozenset(
+    {
+        "BOOK_TITLE",
+        "AUTHORS",
+        "AUTHORS_ALT",
+        "ISBN10",
+        "ISBN13",
+        "PUBLICATION_DATE",
+        "DESCRIPTION",
+        "DESCRIPTION_ALT",
+        "TAGS",
+        "DETAILS_BUTTON",
+        "READ_MORE_LINK",
+    }
+)
+
 # Substrings (compared case-insensitively) in a Playwright error message that mark a
 # *transient* navigation/network fault worth retrying - as opposed to a deterministic
 # selector/parse bug that would fail identically on every attempt.
@@ -138,6 +165,47 @@ async def _collect_texts(page: Page, selector: str, *, timeout_ms: int) -> list[
         if text and text.strip():
             texts.append(text.strip())
     return texts
+
+
+def _selector(selectors: dict, key: str) -> Optional[str]:
+    """Return the configured CSS selector for ``key``, or ``None`` if it is "not configured".
+
+    A selector value of ``""`` (e.g. packtpub's ``READ_MORE_LINK`` sentinel for "no expander")
+    and a missing/``None`` value are treated identically: both mean "this site has no selector
+    for this field", so callers do not have to distinguish the two spellings everywhere.
+
+    :param selectors: The site's ``site_constants`` entry.
+    :param key: The selector key to look up.
+    :returns: The non-empty selector string, or ``None`` when unset/empty.
+    """
+    value = selectors.get(key)
+    return value if value else None
+
+
+async def _texts(page: Page, selector: str, *, timeout_ms: int) -> list[str]:
+    """Return every match's stripped text, de-duplicated in order and capped at ``TAGS_LIMIT``.
+
+    Built on :func:`_collect_texts` (so it inherits the same never-raise, per-element timeout
+    behaviour) for multi-valued fields where duplicates are meaningless and the page controls
+    the element count - tags/topics. Empty strings are already dropped by :func:`_collect_texts`;
+    this helper additionally removes later duplicates while preserving first-seen order and caps
+    the result so a page cannot inflate the stored list without bound.
+
+    :param page: The Playwright page to query.
+    :param selector: The CSS selector whose matches to read.
+    :param timeout_ms: The per-read wall-clock budget in milliseconds.
+    :returns: An order-preserving, de-duplicated list of at most ``TAGS_LIMIT`` texts.
+    """
+    seen: set[str] = set()
+    unique: list[str] = []
+    for text in await _collect_texts(page, selector, timeout_ms=timeout_ms):
+        if text in seen:
+            continue
+        seen.add(text)
+        unique.append(text)
+        if len(unique) >= TAGS_LIMIT:
+            break
+    return unique
 
 
 async def route_handler(route: Route):
@@ -355,11 +423,12 @@ async def scrape_book(
                     "isbn10": "N/A",
                     "isbn13": "N/A",
                     "description": None,
+                    "tags": [],
                 }
 
                 # Title (required): a missing or empty title after the page loads is a parse
                 # error, not a transient fault - return immediately with no retry.
-                title_selector = selectors.get("BOOK_TITLE")
+                title_selector = _selector(selectors, "BOOK_TITLE")
                 title = await _text(page, title_selector, timeout_ms=FIELD_TIMEOUT_MS) if title_selector else None
                 if not title:
                     module_logger.warning(f"Required title not found for {full_url}.")
@@ -374,8 +443,8 @@ async def scrape_book(
                 book_details["title"] = title
 
                 # Authors (metadata tags, else linked text, else the alternative selector).
-                meta_author_selector = selectors.get("AUTHORS_META")
-                author_selector = selectors.get("AUTHORS")
+                meta_author_selector = _selector(selectors, "AUTHORS_META")
+                author_selector = _selector(selectors, "AUTHORS")
                 if meta_author_selector:
                     authors_list: list[str] = []
                     for element in await page.locator(meta_author_selector).all():
@@ -386,22 +455,35 @@ async def scrape_book(
                 elif author_selector:
                     authors_list = await _collect_texts(page, author_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
                     if not authors_list:
-                        alt_author_selector = selectors.get("AUTHORS_ALT")
+                        alt_author_selector = _selector(selectors, "AUTHORS_ALT")
                         if alt_author_selector:
                             authors_list = await _collect_texts(
                                 page, alt_author_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS
                             )
                     book_details["authors"] = authors_list
 
+                # Details expander (amazon): a visible "Product details" button reveals the
+                # ISBN/publication-date blocks, so click it (best-effort) BEFORE those reads.
+                # A missing/invisible button or a failed click is non-fatal - logged and skipped.
+                details_button_selector = _selector(selectors, "DETAILS_BUTTON")
+                if details_button_selector:
+                    try:
+                        details_button = page.locator(details_button_selector).first
+                        if await details_button.is_visible():
+                            await details_button.click(timeout=OPTIONAL_FIELD_TIMEOUT_MS)
+                            await page.wait_for_timeout(500)
+                    except PlaywrightError as exc:
+                        module_logger.debug(f"No usable details expander for {full_url}: {exc}")
+
                 # Publication date (metadata ``content`` attribute, else page text).
-                meta_date_selector = selectors.get("PUBLICATION_DATE_META")
+                meta_date_selector = _selector(selectors, "PUBLICATION_DATE_META")
                 if meta_date_selector:
                     pub_date_text = await _attr(page, meta_date_selector, "content", timeout_ms=FIELD_TIMEOUT_MS)
                     if pub_date_text:
                         book_details["publication_date"] = pub_date_text.split("T")[0]
                         book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
                 else:
-                    date_selector = selectors.get("PUBLICATION_DATE")
+                    date_selector = _selector(selectors, "PUBLICATION_DATE")
                     if date_selector:
                         pub_date_text = await _text(page, date_selector, timeout_ms=FIELD_TIMEOUT_MS)
                         if pub_date_text:
@@ -409,12 +491,12 @@ async def scrape_book(
                             book_details["publication_year"] = extract_year_from_date(pub_date_text)
 
                 # ISBN10 & ISBN13 (optional - keep the "N/A" sentinel when absent; 03.1 replaces it).
-                isbn10_selector = selectors.get("ISBN10")
+                isbn10_selector = _selector(selectors, "ISBN10")
                 if isbn10_selector:
                     isbn10 = await _text(page, isbn10_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
                     if isbn10:
                         book_details["isbn10"] = isbn10
-                isbn13_selector = selectors.get("ISBN13")
+                isbn13_selector = _selector(selectors, "ISBN13")
                 if isbn13_selector:
                     isbn13 = await _text(page, isbn13_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
                     if isbn13:
@@ -428,19 +510,32 @@ async def scrape_book(
                         book_details["asin"] = asin_match.group(1)
                         module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']}.")
 
-                # Description (optionally behind a "Read more" expander).
-                description_selector = selectors.get("DESCRIPTION")
+                # Description (optionally behind a "Read more" expander, else a fallback selector).
+                description_selector = _selector(selectors, "DESCRIPTION")
+                description: Optional[str] = None
                 if description_selector:
-                    read_more_selector = selectors.get("READ_MORE_LINK")
+                    read_more_selector = _selector(selectors, "READ_MORE_LINK")
                     if read_more_selector:
                         try:
                             read_more_button = page.locator(read_more_selector).first
                             if await read_more_button.is_visible():
-                                await read_more_button.click(timeout=5000)
+                                await read_more_button.click(timeout=OPTIONAL_FIELD_TIMEOUT_MS)
                                 await page.wait_for_timeout(500)
                         except PlaywrightError as exc:
                             module_logger.debug(f"No usable 'Read more' expander for {full_url}: {exc}")
-                    book_details["description"] = await _text(page, description_selector, timeout_ms=FIELD_TIMEOUT_MS)
+                    description = await _text(page, description_selector, timeout_ms=FIELD_TIMEOUT_MS)
+                # Fall back to DESCRIPTION_ALT when the primary selector matched nothing.
+                if not description:
+                    description_alt_selector = _selector(selectors, "DESCRIPTION_ALT")
+                    if description_alt_selector:
+                        description = await _text(page, description_alt_selector, timeout_ms=FIELD_TIMEOUT_MS)
+                book_details["description"] = description
+
+                # Tags / topics: every match, stripped, de-duplicated in order, capped at
+                # TAGS_LIMIT. A missing selector or no matches leaves the neutral empty list.
+                tags_selector = _selector(selectors, "TAGS")
+                if tags_selector:
+                    book_details["tags"] = await _texts(page, tags_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
 
                 # Generate hash
                 book_details["hash"] = hash_book(

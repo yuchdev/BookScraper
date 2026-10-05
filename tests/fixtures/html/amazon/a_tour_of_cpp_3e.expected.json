@@ -2,8 +2,7 @@
   "_known_issues": [
     "live-capture drift signal: DESCRIPTION/DESCRIPTION_ALT matched nothing in the live Amazon DOM, so description is null (unlike the hand-built amazon fixtures) - the live tier exists to surface exactly this kind of selector drift",
     "03.1/03 date normalization (publication_date is the raw site string, not a normalized/ISO date)",
-    "03.1/02 ISBN normalization & validation (isbn10/isbn13 are raw site strings, not normalized/validated)",
-    "03.0/04 wire unused selectors (TAGS) (TAGS is defined in parameters.py but never read, so no tags field exists)"
+    "03.1/02 ISBN normalization & validation (isbn10/isbn13 are raw site strings, not normalized/validated)"
   ],
   "asin": "0136816487",
   "authors": [
@@ -16,6 +15,11 @@
   "publication_date": "September 24, 2022",
   "publication_year": 2022,
   "site": "amazon",
+  "tags": [
+    "C++ Programming Language",
+    "Object-Oriented Design",
+    "Computer Programming Languages"
+  ],
   "title": "Tour of C++, A (C++ In-Depth Series)",
   "url": "https://www.amazon.com/dp/0136816487"
 }

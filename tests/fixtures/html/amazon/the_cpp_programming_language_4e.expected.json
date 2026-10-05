@@ -2,7 +2,6 @@
   "_known_issues": [
     "03.1/03 date normalization (publication_date is the raw site string 'August 16, 2012' rather than a normalized/ISO date)",
     "03.1/02 ISBN normalization & validation (isbn10/isbn13 are stored as raw site strings, e.g. '978-0321714114', neither normalized nor validated)",
-    "03.0/04 wire unused selectors (TAGS) (the TAGS selector is defined in parameters.py but never read, so the record has no tags/categories field at all)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
   "asin": "0321563840",
@@ -16,6 +15,10 @@
   "publication_date": "May 19, 2013",
   "publication_year": 2013,
   "site": "amazon",
+  "tags": [
+    "C++ Programming",
+    "Software Development"
+  ],
   "title": "The C++ Programming Language",
   "url": "https://www.amazon.com/dp/0321563840"
 }
