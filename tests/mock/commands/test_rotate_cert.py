@@ -18,9 +18,11 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from pymongo.errors import OperationFailure
 
 from bookscraper.backends.mongo.cert_rotation import RotationError
 from bookscraper.backends.mongo.client import MongoConnectionError
+from bookscraper.backends.mongo.config import ConfigError
 from bookscraper.commands import rotate_cert
 
 MODULE = "bookscraper.commands.rotate_cert"
@@ -405,7 +407,6 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
     On failure, first check:
         - the connection string / password reaches a user-facing sink or a log.
     """
-    from pymongo.errors import OperationFailure
 
     _atlas_env(monkeypatch)
     (isolated_config / "settings.json").write_text(
@@ -621,7 +622,6 @@ async def test_check_mode_config_error_exits_one() -> None:
     On failure, first check:
         - The ConfigError handling in the --check branch
     """
-    from bookscraper.backends.mongo.config import ConfigError
 
     with (
         patch(f"{MODULE}.load_dotenv"),

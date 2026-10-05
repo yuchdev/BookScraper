@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from pymongo.errors import ConfigurationError, OperationFailure, ServerSelectionTimeoutError
 
-from bookscraper.backends.mongo import client
+from bookscraper.backends.mongo import client, database
 from bookscraper.backends.mongo.client import MongoConnectionError
 
 X509_URI = "mongodb+srv://cluster.example.net/db?authSource=%24external&authMechanism=MONGODB-X509"
@@ -500,7 +500,7 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
     [Local] client: verifies database and preflight build identical client kwargs.
 
     Scenario:
-        for the same resolved inputs, database._initialize_mongodb_connection and book_utils.check_mongodb_connection construct MongoClient with identical kwargs (single factory, one construction site), so a diagnosis on one path carries to the other.
+        for the same resolved inputs, database._initialize_mongodb_connection and database.check_mongodb_connection construct MongoClient with identical kwargs (single factory, one construction site), so a diagnosis on one path carries to the other.
 
     Boundaries:
         - same URI, same existing cert, same TLS_CA_FILE on both paths.
@@ -508,9 +508,6 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
     On failure, first check:
         - the two paths drift again (CA ignored, cert dropped, timeout mismatch).
     """
-    from bookscraper import book_utils
-    from bookscraper.backends.mongo import database
-
     cert = tmp_path / "cert.pem"
     cert.write_text("dummy")
     resolved = (X509_URI, str(cert))
@@ -518,7 +515,6 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
     monkeypatch.setenv("TLS_CA_FILE", "/ca.pem")
     monkeypatch.delenv(client.SERVER_SELECTION_TIMEOUT_ENV, raising=False)
     monkeypatch.setattr(database, "load_dotenv", lambda *a, **k: None)
-    monkeypatch.setattr(book_utils, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(database.config, "resolve_mongo_connection", Mock(return_value=resolved))
     monkeypatch.setattr("bookscraper.backends.mongo.config.resolve_mongo_connection", Mock(return_value=resolved))
     monkeypatch.setattr(database, "_mongo_client", None)
@@ -534,7 +530,7 @@ def test_database_and_preflight_build_identical_client_kwargs(monkeypatch, tmp_p
 
     with patch.object(client, "MongoClient", side_effect=fake_ctor):
         database._initialize_mongodb_connection()
-        book_utils.check_mongodb_connection()
+        database.check_mongodb_connection()
 
     assert len(captured) == 2
     db_uri, db_kwargs = captured[0]

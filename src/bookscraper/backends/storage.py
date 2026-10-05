@@ -18,7 +18,6 @@ import logging
 import pathlib
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Optional
 
 from pymongo.collection import Collection
@@ -27,30 +26,9 @@ from ..book_utils import check_local_write_permission, print_log
 from .local import store
 from .mongo import config, database, deduplicate
 from .mongo.cert_rotation import cert_expiry_warning
+from .save_summary import SaveSummary
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class SaveSummary:
-    """
-    Outcome of a :meth:`StorageBackend.save_books` call, identical in shape for
-    both backends so a caller can distinguish a 100%-duplicate batch from a total
-    failure (which it could not when ``save_books`` returned ``None``).
-
-    :ivar inserted: Documents newly written.
-    :ivar duplicates: Documents skipped because their ``hash`` already exists.
-    :ivar errors: Documents rejected for any other reason.
-    """
-
-    inserted: int
-    duplicates: int
-    errors: int
-
-    @property
-    def total(self) -> int:
-        """Total documents accounted for: ``inserted + duplicates + errors``."""
-        return self.inserted + self.duplicates + self.errors
 
 
 class StorageBackend(ABC):

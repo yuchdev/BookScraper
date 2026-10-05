@@ -9,6 +9,8 @@ find the cert it was supposed to test. These tests pin the newest-by-mtime contr
 that cannot come back. No network, no real ~/.bookscrapper - tmp_path only.
 """
 
+import os
+
 import pytest
 
 from tests.integration import mongo_test_helpers
@@ -25,7 +27,6 @@ def _make_cert(directory, name: str, mtime: float):
     """Create a stub PEM file in ``directory`` with the given name and mtime."""
     path = directory / name
     path.write_text("-----BEGIN CERTIFICATE-----\n")
-    import os
 
     os.utime(path, (mtime, mtime))
     return path

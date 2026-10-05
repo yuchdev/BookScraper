@@ -2,7 +2,7 @@
 Single MongoClient factory shared by the real connection and the pre-flight check.
 
 Both ``database._initialize_mongodb_connection()`` (the real connection used by
-``resolve_store_backend``) and ``book_utils.check_mongodb_connection()`` (the pre-flight /
+``resolve_store_backend``) and ``database.check_mongodb_connection()`` (the pre-flight /
 ``doctor`` check) build their client here, so there is exactly one place that constructs a
 ``MongoClient`` and exactly one set of TLS kwargs to reason about - the two paths can no
 longer drift (``TLS_CA_FILE`` honored on one but not the other, a missing cert silently

@@ -7,6 +7,7 @@ filesystem access occurs. The assertions pin both the delegated call args and th
 each adapter returns exactly what its collaborator returned.
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
@@ -638,7 +639,6 @@ class TestCertExpiryPreflight:
         On failure, first check:
             - the private-key PEM body reaches ~/.bookscrapper/logs or the console.
         """
-        import logging
 
         key_only = tmp_path / "key-only.pem"
         key_only.write_bytes(_TEST_KEY_PEM)

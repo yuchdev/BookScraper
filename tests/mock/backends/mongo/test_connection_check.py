@@ -1,12 +1,10 @@
-"""Mock-tier tests for bookscraper.book_utils.check_mongodb_connection.
+"""Mock-tier tests for bookscraper.backends.mongo.database.check_mongodb_connection.
 
-The pure/local-I/O helpers in book_utils.py are covered in tests/unit/test_book_utils.py;
-this function needs mocking (the client factory, the resolver) so it lives here instead. It
-now builds its client through the single factory in ``backends.mongo.client`` via LOCAL
-imports inside the function body (see the function's own comment on why), so tests patch the
-real submodule attributes ``bookscraper.backends.mongo.client.build_mongo_client`` / ``.ping``
-and ``bookscraper.backends.mongo.config.resolve_mongo_connection`` rather than anything on
-``bookscraper.book_utils`` itself.
+The connection pre-flight lives in ``backends/mongo/database.py`` (it moved out of
+``book_utils.py``, where it needed function-level imports to dodge an import cycle). It builds
+its client through the single factory re-exported by ``database``, so tests patch
+``database.build_mongo_client`` / ``database.ping`` and the real resolver
+``bookscraper.backends.mongo.config.resolve_mongo_connection``.
 """
 
 import logging
@@ -14,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bookscraper import book_utils
+from bookscraper.backends.mongo import database
 from bookscraper.backends.mongo.client import MongoConnectionError
 from bookscraper.backends.mongo.config import ConfigError
 
@@ -22,7 +20,7 @@ from bookscraper.backends.mongo.config import ConfigError
 @pytest.fixture(autouse=True)
 def _neutralize_dotenv(monkeypatch):
     """Stop load_dotenv from reading a repo-root .env into a test."""
-    monkeypatch.setattr(book_utils, "load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(database, "load_dotenv", lambda *a, **k: None)
     yield
 
 
@@ -36,21 +34,21 @@ def _patch_resolve(return_value=None, side_effect=None):
 
 
 def _patch_build(return_value=None, side_effect=None):
-    """Patch client.build_mongo_client for check_mongodb_connection tests."""
+    """Patch database.build_mongo_client for check_mongodb_connection tests."""
     return patch(
-        "bookscraper.backends.mongo.client.build_mongo_client",
+        "bookscraper.backends.mongo.database.build_mongo_client",
         return_value=return_value,
         side_effect=side_effect,
     )
 
 
 def _patch_ping(side_effect=None):
-    """Patch client.ping for check_mongodb_connection tests."""
-    return patch("bookscraper.backends.mongo.client.ping", side_effect=side_effect)
+    """Patch database.ping for check_mongodb_connection tests."""
+    return patch("bookscraper.backends.mongo.database.ping", side_effect=side_effect)
 
 
 class TestCheckMongodbConnection:
-    """Tests for book_utils.check_mongodb_connection."""
+    """Tests for database.check_mongodb_connection."""
 
     def test_config_error_returns_false(self) -> None:
         """
@@ -68,7 +66,7 @@ class TestCheckMongodbConnection:
             - The except ConfigError branch at the top of check_mongodb_connection.
         """
         with _patch_resolve(side_effect=ConfigError("bad settings.json")):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
 
     def test_no_uri_returns_false(self) -> None:
         """
@@ -86,7 +84,7 @@ class TestCheckMongodbConnection:
             - The URI-is-None guard in check_mongodb_connection.
         """
         with _patch_resolve(return_value=(None, None)):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
 
     def test_success_without_tls_cert(self) -> None:
         """
@@ -110,7 +108,7 @@ class TestCheckMongodbConnection:
             _patch_build(return_value=mock_client) as mock_build,
             _patch_ping(),
         ):
-            assert book_utils.check_mongodb_connection() is True
+            assert database.check_mongodb_connection() is True
 
         args, _ = mock_build.call_args
         assert args[1] is None  # cert_file
@@ -140,7 +138,7 @@ class TestCheckMongodbConnection:
             _patch_build(return_value=mock_client) as mock_build,
             _patch_ping(),
         ):
-            assert book_utils.check_mongodb_connection() is True
+            assert database.check_mongodb_connection() is True
 
         args, _ = mock_build.call_args
         assert args[1] == str(cert_path)  # cert_file forwarded to the factory
@@ -166,7 +164,7 @@ class TestCheckMongodbConnection:
             _patch_build(return_value=mock_client) as mock_build,
             _patch_ping(),
         ):
-            assert book_utils.check_mongodb_connection() is True
+            assert database.check_mongodb_connection() is True
 
         args, _ = mock_build.call_args
         assert args[2] == "/path/to/ca.pem"  # ca_file
@@ -189,7 +187,7 @@ class TestCheckMongodbConnection:
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", missing)),
             patch("bookscraper.backends.mongo.client.MongoClient") as mock_ctor,
         ):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
         mock_ctor.assert_not_called()
 
     def test_connection_failure_returns_false_and_closes(self) -> None:
@@ -214,7 +212,7 @@ class TestCheckMongodbConnection:
             _patch_build(return_value=mock_client),
             _patch_ping(side_effect=MongoConnectionError("ServerSelectionTimeoutError")),
         ):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
         mock_client.close.assert_called_once()
 
     def test_generic_exception_returns_false_without_crashing(self) -> None:
@@ -239,7 +237,7 @@ class TestCheckMongodbConnection:
             _patch_resolve(return_value=("mongodb+srv://u:p@cluster/db", None)),
             _patch_build(side_effect=RuntimeError("boom")),
         ):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
 
     def test_failure_does_not_leak_uri_or_host(self, caplog) -> None:
         """
@@ -260,10 +258,10 @@ class TestCheckMongodbConnection:
             _patch_resolve(return_value=(secret_uri, None)),
             _patch_build(return_value=mock_client),
             _patch_ping(side_effect=MongoConnectionError("OperationFailure 8000 AtlasError")),
-            patch.object(book_utils, "print_log") as mock_print,
+            patch.object(database, "print_log") as mock_print,
             caplog.at_level(logging.DEBUG),
         ):
-            assert book_utils.check_mongodb_connection() is False
+            assert database.check_mongodb_connection() is False
 
         printed = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         for needle in ("cluster0.example.net", "user:pw", secret_uri):

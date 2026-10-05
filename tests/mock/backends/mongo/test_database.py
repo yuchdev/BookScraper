@@ -17,7 +17,7 @@ from pymongo.errors import (
     PyMongoError,
 )
 
-from bookscraper.backends.mongo import config, database
+from bookscraper.backends.mongo import client, config, database
 from bookscraper.backends.mongo.client import MongoConnectionError
 from bookscraper.backends.storage import SaveSummary
 
@@ -1350,7 +1350,6 @@ def test_x509_and_factory_symbols_are_reexported_from_client() -> None:
     On failure, first check:
         - a stale duplicate definition drifts from the factory.
     """
-    from bookscraper.backends.mongo import client
 
     assert database.uri_selects_x509_auth is client.uri_selects_x509_auth
     assert database.uri_has_embedded_credentials is client.uri_has_embedded_credentials

@@ -28,7 +28,7 @@ report in one screen.
   | Log dir                  | writable; number of retained logs                                            | no               |
   | `ANTHROPIC_API_KEY`      | **presence only** (`set` / `not set`)                                        | no               |
   | `ATLAS_*` vars           | presence only, per variable                                                  | no               |
-  | MongoDB ping             | `check_mongodb_connection()`                                                  | yes              |
+  | MongoDB ping             | `database.check_mongodb_connection()`                                                | yes              |
 
 - Output: an aligned table. Exit `0` if no FAIL, else `1`. `WARN` doesn't fail.
 - **Never** prints a secret value, a full URI, or a host. The detail text for credential checks is limited to

@@ -35,13 +35,12 @@ configuration for where credentials that used to live there (`driver_string.txt`
 ## Authentication configuration
 
 `src/bookscraper/backends/mongo/config.py` is the single place that decides how the app authenticates to MongoDB
-Atlas — both `backends/mongo/database.py` (the real connection) and `book_utils.py`'s `check_mongodb_connection()`
-(the pre-flight check) call `config.resolve_mongo_connection()` rather than reading `os.environ` themselves, so
-there is exactly one resolution path to reason about, not two copies that could drift. Note:
-`check_mongodb_connection()` imports `config` *inside* the function body rather than at module level — `book_utils.py`
-sits at the package root and is imported by `backends/__init__.py`'s own import chain, so a module-level
-`from .backends.mongo import config` there would be circular (see `book_utils.py`'s comment on that import). Don't
-"clean this up" by hoisting it back to the top of the file.
+Atlas — both the real connection and the pre-flight check `check_mongodb_connection()` (both in
+`backends/mongo/database.py`) call `config.resolve_mongo_connection()` rather than reading `os.environ` themselves, so
+there is exactly one resolution path to reason about, not two copies that could drift. The pre-flight check used to
+live in `book_utils.py`, where it needed function-level imports to avoid an import cycle (`book_utils.py` sits at the
+package root and is imported by `backends/__init__.py`'s own import chain); it moved to `database.py` so every import
+is module-level (flakeforge X006). Don't move it back into `book_utils.py`.
 
 **Primary mechanism — `~/.bookscrapper/settings.json` (deterministic, no fallback chain):** if this file exists, it
 is the *sole* source of truth: its declared `auth_type` and each field's declared `source` are followed exactly,
@@ -117,7 +116,7 @@ TLS_CA_FILE="/path/to/ca.pem"       # optional, for server CA verification (data
 
 **Single `MongoClient` factory (`backends/mongo/client.py`).** Both the real connection
 (`database._initialize_mongodb_connection`, used by `resolve_store_backend`) and the pre-flight /
-`doctor` check (`book_utils.check_mongodb_connection`) build their client through
+`doctor` check (`database.check_mongodb_connection`) build their client through
 `client.build_mongo_client()` + `client.ping()` — so there is exactly one `MongoClient(...)`
 construction site in `src/` and one set of TLS kwargs, and the two paths can never drift again
 (`TLS_CA_FILE` honored on both, a missing client cert failing loudly on both instead of silently
@@ -226,7 +225,8 @@ requested backend (MongoDB ping, or local write-permission test) and exits the p
 above). `backends/__init__.py` re-exports `StorageBackend`, `MongoBackend`, `JsonBackend`, and
 `resolve_store_backend` for `from ..backends import ...` elsewhere in the package.
 
-`save_books()` returns a frozen `SaveSummary` dataclass (also in `storage.py`, re-exported nowhere else) — the
+`save_books()` returns a frozen `SaveSummary` dataclass (defined in the leaf module `backends/save_summary.py`, so
+both backends can import it at module level without a cycle, and re-exported by `storage.py`) — the
 identical shape from both backends — with `inserted` / `duplicates` / `errors` counts and a `total` property. This
 lets a caller tell a 100%-duplicate batch apart from a total failure (the old `None` return could not), and both
 scraping subcommands log it and treat `summary.errors > 0` as the partial-failure signal. The mongo backend writes
@@ -560,7 +560,7 @@ Root-level entry points and shared utilities:
 - **`__main__.py`** — enables `python -m bookscraper ...`; just calls `main.main_sync()`.
 - **`book_utils.py`** — `print_log()` (color-coded console + plain-text file logging), `configure_logging(level)`
   (attaches a single `FileHandler` to the **root** logger, pointed at a fresh per-run file under
-  `~/.bookscrapper/logs/` — see below), pre-flight checks (`check_local_write_permission`, `check_mongodb_connection`),
+  `~/.bookscrapper/logs/` — see below), the local pre-flight check (`check_local_write_permission`),
   `extract_year_from_date` (handles several site-specific date formats), `hash_book`. Stays at the package root
   since every subpackage below imports from it and it has no backend/scraping-specific logic of its own.
 
@@ -600,7 +600,7 @@ up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
   `ping()` (re-raises as a redacted `MongoConnectionError` — class name + pymongo `code`/`codeName` only, never
   host/URI/credentials), and `resolve_server_selection_timeout_ms()` (honors `MONGODB_SERVER_SELECTION_TIMEOUT_MS`).
   The `uri_*` X.509 helpers and `_warn_if_x509_mechanism_missing` live here and are re-exported from `database.py`.
-  Both `database._initialize_mongodb_connection` and `book_utils.check_mongodb_connection` build through it, so
+  Both `database._initialize_mongodb_connection` and `database.check_mongodb_connection` build through it, so
   `MongoClient(` appears exactly once in `src/`. See Single `MongoClient` factory above.
 - **`mongo/cert_rotation.py`** — Atlas Admin API client for issuing a new X.509 client certificate
   (`rotate_certificate()`, raising `RotationError` on any failure), plus the atomic cert write and

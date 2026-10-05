@@ -15,12 +15,10 @@ import json
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from ...book_utils import atomic_write_bytes, print_log
-
-if TYPE_CHECKING:
-    from ..storage import SaveSummary
+from ..save_summary import SaveSummary
 
 module_logger = logging.getLogger(__name__)
 
@@ -109,10 +107,6 @@ def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> SaveSummary:
     :raises LocalStoreCorruptError: If ``path`` exists but is not valid JSON; the store
         is left untouched rather than overwritten (and its books lost).
     """
-    # Local import: backends.storage imports this module, so a module-level import of
-    # SaveSummary would be circular.
-    from ..storage import SaveSummary
-
     existing_books = _load_books(path, raise_on_corrupt=True)
     existing_hashes = {b.get("hash") for b in existing_books if isinstance(b, dict)}
 

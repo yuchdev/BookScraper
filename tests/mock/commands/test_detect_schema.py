@@ -7,6 +7,7 @@ load_dotenv is stubbed so the tests neither read the repo .env nor collide with 
 builtins.open patch.
 """
 
+import json as _json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -289,7 +290,6 @@ async def test_run_json_format_stdout_is_pure_json(capsys) -> None:
     On failure, first check:
         - human status lines in stdout would break a CI drift job's json.loads.
     """
-    import json as _json
 
     body = '{"site": "amazon", "summary": {"current_broken": 0}}'
     args = _args(format="json")
@@ -342,7 +342,6 @@ async def test_run_exits_four_on_drift_json_format(capsys) -> None:
     On failure, first check:
         - a JSON drift artifact would be corrupted by the drift notice, or exit 4 lost.
     """
-    import json as _json
 
     args = _args(format="json")
     with (

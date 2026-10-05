@@ -14,6 +14,8 @@ from types import ModuleType
 
 import pytest
 
+from bookscraper.scraping.parameters import site_constants
+
 from .playwright_fakes import FakeBrowser, FakeContext, FakePage
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -154,7 +156,6 @@ def test_keep_selectors_excludes_description() -> None:
         - see test body
     """
     selectors = capture.keep_selectors_for("amazon")
-    from bookscraper.scraping.parameters import site_constants
 
     assert site_constants["amazon"]["BOOK_TITLE"] in selectors
     assert site_constants["amazon"]["DESCRIPTION"] not in selectors
@@ -175,7 +176,6 @@ def test_search_selectors_keep_css_but_not_base_url_or_page_count() -> None:
         - see test body
     """
     selectors = capture.search_selectors_for("amazon")
-    from bookscraper.scraping.parameters import site_constants
 
     amazon = site_constants["amazon"]
     assert amazon["SEARCH_BOOK_CARD"] in selectors

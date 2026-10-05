@@ -12,6 +12,9 @@ import os
 
 import pytest
 
+from bookscraper.backends.local import store
+from bookscraper.backends.mongo import config
+
 # Enables the ``pytester`` fixture so test_detail_goldens.py can prove the --update-goldens
 # contract (rewrite-then-fail) in an isolated inline run that never touches the real goldens.
 pytest_plugins = ["pytester"]
@@ -47,7 +50,6 @@ def isolated_config(monkeypatch, tmp_path):
     """Points bookscraper.backends.mongo.config's CONFIG_DIR/SETTINGS_FILE at a tmp_path
     instead of the real ~/.bookscrapper, so get_default_tls_cert_file()'s glob and any
     relative cert-path resolution never touch real files."""
-    from bookscraper.backends.mongo import config
 
     config_dir = tmp_path / ".bookscrapper"
     config_dir.mkdir()
@@ -60,7 +62,6 @@ def isolated_config(monkeypatch, tmp_path):
 def isolated_local_store(monkeypatch, tmp_path):
     """Points bookscraper.backends.local.store's LOCAL_STORE_FILE at a tmp_path instead
     of the repo-root books.json."""
-    from bookscraper.backends.local import store
 
     store_path = tmp_path / "books.json"
     monkeypatch.setattr(store, "LOCAL_STORE_FILE", store_path)

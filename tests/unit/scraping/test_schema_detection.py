@@ -6,7 +6,9 @@ selection, and diff-report formatting. The Playwright/anthropic-driven pieces ar
 covered in tests/mock/scraping/test_schema_detection.py.
 """
 
+import inspect
 import json as _json
+import re as _re
 from types import SimpleNamespace
 
 import pytest
@@ -1909,8 +1911,6 @@ def test_ais4_only_sink_is_locator_never_eval_or_write() -> None:
     On failure, first check:
         - A proposed selector reached an execution sink other than a CSS locator query (AIS-4 violation)
     """
-    import inspect
-    import re as _re
 
     source = inspect.getsource(sd._validate_page_level_field) + inspect.getsource(sd._validate_card_relative_field)
     # Word-boundary patterns so the legitimate ``_bounded_eval(...)`` wrapper is not a false hit.

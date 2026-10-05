@@ -3,10 +3,11 @@
 hash_book is the book's identity: a change in its normalized input silently
 re-identifies a book, so it's re-scraped forever or a genuine duplicate slips
 through. extract_year_from_date feeds hash_book, so a missed date format has the
-same effect. check_mongodb_connection is intentionally NOT covered here (it
-needs mocking; it belongs to the mock tier).
+same effect. The MongoDB connection pre-flight now lives in backends/mongo/database.py
+(see tests/mock/backends/mongo/test_connection_check.py).
 """
 
+import bookscraper.book_utils as book_utils_module
 from bookscraper.book_utils import (
     atomic_write_bytes,
     check_local_write_permission,
@@ -474,7 +475,6 @@ class TestExtractYearFromDate:
             - Whether the outer except-Exception handler was narrowed to except-ValueError in book_utils.py
             - Whether "1995" now hits the regex path before the format loop, bypassing the patched datetime
         """
-        import bookscraper.book_utils as book_utils_module
 
         class _RaisingDatetime:
             """Stub that replaces datetime to make strptime raise a non-ValueError."""

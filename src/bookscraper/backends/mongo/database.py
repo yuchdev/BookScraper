@@ -16,9 +16,8 @@ from pymongo.errors import (
 if TYPE_CHECKING:
     from pymongo import MongoClient
 
-    from ..storage import SaveSummary
-
 from ...book_utils import print_log
+from ..save_summary import SaveSummary
 from . import config
 
 # The single MongoClient factory lives in client.py so there is exactly one client
@@ -206,10 +205,6 @@ def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collecti
         documents were inserted, skipped as duplicates, or rejected as errors. When the
         collection is unavailable, every book is reported as an error.
     """
-    # Local import: backends.storage imports this module, so importing SaveSummary at
-    # module level would be circular (mirrors book_utils's config import comment).
-    from ..storage import SaveSummary
-
     # Use the passed collection if provided, otherwise get the global one
     books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
 
@@ -451,3 +446,66 @@ def ensure_unique_index_on_hash(books_collection: Collection) -> None:
     :param books_collection: The MongoDB books collection, or None when unavailable.
     """
     ensure_indexes(books_collection)
+
+
+def check_mongodb_connection() -> Optional[bool]:
+    """
+    Attempts to establish and ping a MongoDB Atlas connection.
+
+    A thin pre-flight wrapper (for the planned ``doctor`` subcommand) over the single
+    :mod:`bookscraper.backends.mongo.client` factory: it resolves the connection, builds the
+    client with kwargs *identical* to the real path in :func:`_initialize_mongodb_connection`
+    (so ``TLS_CA_FILE`` is honored and a missing client cert fails loudly rather than silently
+    connecting certless), pings, and always closes the client. Every failure surfaces as a redacted
+    :class:`~bookscraper.backends.mongo.client.MongoConnectionError`, so no raw pymongo text
+    (host, URI, credentials) reaches the log or console.
+
+    :returns: True if the ping succeeds, False on any configuration or connection failure.
+    """
+    load_dotenv()  # Ensure .env variables are loaded
+    tls_ca_file = os.environ.get("TLS_CA_FILE")  # CA bundle for server certificate verification
+    try:
+        mongodb_uri, tls_cert_file = config.resolve_mongo_connection()
+    except config.ConfigError as e:
+        module_logger.error(f"Invalid MongoDB configuration: {e}")
+        print_log(f"MongoDB Check Error: Invalid MongoDB configuration: {e}", "error")
+        return False
+
+    if not mongodb_uri:
+        module_logger.error("MONGODB_URI not found in environment variables for MongoDB connection test.")
+        print_log(
+            "MongoDB Check Error: MONGODB_URI not found in environment variables. Cannot test connection.", "error"
+        )
+        return False
+
+    client = None
+    try:
+        client = build_mongo_client(
+            mongodb_uri,
+            tls_cert_file,
+            tls_ca_file,
+            timeout_ms=resolve_server_selection_timeout_ms(),
+        )
+        ping(client)
+        module_logger.info("MongoDB connection test successful.")
+        return True
+    except MongoConnectionError as e:
+        # `e` is already redacted (class name + code/codeName only) - safe to interpolate.
+        module_logger.error(f"MongoDB connection test failed: {e}")
+        print_log(
+            f"MongoDB Connection Error: Failed to connect to MongoDB Atlas. Please check your MONGODB_URI, TLS certificate, and network. Details: {e}",
+            "error",
+        )
+        return False
+    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure must surface as a class name only, never raw text
+        # Defensive: any non-pymongo failure. Log the class name only - never the raw text or
+        # exc_info, which could embed the cert path or other sensitive detail (SEC-4).
+        module_logger.critical(f"Unexpected error during MongoDB connection test: {type(e).__name__}.")
+        print_log(
+            "MongoDB Check Error: Unexpected error during connection test. Check the log file.",
+            "error",
+        )
+        return False
+    finally:
+        if client is not None:
+            client.close()

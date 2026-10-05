@@ -10,8 +10,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from dotenv import load_dotenv
-
 # --- Global logging setup ---
 # Define basic ANSI color codes (customize as needed)
 # Moved COLORS and RESET_COLOR_CODE outside print_log for efficiency
@@ -174,80 +172,6 @@ def check_local_write_permission(directory: str = ".") -> bool:
         logger.error(f"An unexpected error occurred during local write permission test: {e}", exc_info=True)
         print_log("An unexpected error occurred during local write permission test. Check log for details.", "error")
         return False
-
-
-def check_mongodb_connection() -> Optional[bool]:
-    """
-    Attempts to establish and ping a MongoDB Atlas connection.
-
-    A thin pre-flight wrapper over the single :mod:`bookscraper.backends.mongo.client`
-    factory: it resolves the connection, builds the client with kwargs *identical* to the
-    real path in ``database._initialize_mongodb_connection`` (so ``TLS_CA_FILE`` is honored
-    and a missing client cert fails loudly rather than silently connecting certless), pings,
-    and always closes the client. Every failure surfaces as a redacted
-    :class:`~bookscraper.backends.mongo.client.MongoConnectionError`, so no raw pymongo text
-    (host, URI, credentials) reaches the log or console.
-
-    :returns: True if the ping succeeds, False on any configuration or connection failure.
-    """
-    # Local import: book_utils is imported by bookscraper.backends (via backends.mongo)
-    # before backends.mongo.config exists as an importable attribute, so importing config or
-    # client at module level here would be circular. Deferring until call time breaks the cycle.
-    from .backends.mongo import config
-    from .backends.mongo.client import (
-        MongoConnectionError,
-        build_mongo_client,
-        ping,
-        resolve_server_selection_timeout_ms,
-    )
-
-    load_dotenv()  # Ensure .env variables are loaded
-    tls_ca_file = os.environ.get("TLS_CA_FILE")  # CA bundle for server certificate verification
-    try:
-        mongodb_uri, tls_cert_file = config.resolve_mongo_connection()
-    except config.ConfigError as e:
-        logger.error(f"Invalid MongoDB configuration: {e}")
-        print_log(f"MongoDB Check Error: Invalid MongoDB configuration: {e}", "error")
-        return False
-
-    if not mongodb_uri:
-        logger.error("MONGODB_URI not found in environment variables for MongoDB connection test.")
-        print_log(
-            "MongoDB Check Error: MONGODB_URI not found in environment variables. Cannot test connection.", "error"
-        )
-        return False
-
-    client = None
-    try:
-        client = build_mongo_client(
-            mongodb_uri,
-            tls_cert_file,
-            tls_ca_file,
-            timeout_ms=resolve_server_selection_timeout_ms(),
-        )
-        ping(client)
-        logger.info("MongoDB connection test successful.")
-        return True
-    except MongoConnectionError as e:
-        # `e` is already redacted (class name + code/codeName only) - safe to interpolate.
-        logger.error(f"MongoDB connection test failed: {e}")
-        print_log(
-            f"MongoDB Connection Error: Failed to connect to MongoDB Atlas. Please check your MONGODB_URI, TLS certificate, and network. Details: {e}",
-            "error",
-        )
-        return False
-    except Exception as e:  # noqa: X002 - security redaction boundary: any non-pymongo failure must surface as a class name only, never raw text
-        # Defensive: any non-pymongo failure. Log the class name only - never the raw text or
-        # exc_info, which could embed the cert path or other sensitive detail (SEC-4).
-        logger.critical(f"Unexpected error during MongoDB connection test: {type(e).__name__}.")
-        print_log(
-            "MongoDB Check Error: Unexpected error during connection test. Check the log file.",
-            "error",
-        )
-        return False
-    finally:
-        if client is not None:
-            client.close()
 
 
 def extract_year_from_date(date_string: str) -> Optional[int]:

