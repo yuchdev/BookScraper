@@ -10,7 +10,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 01.0 | Storage backend abstraction        | ✅ Complete    | 8 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`, `tests/mock/backends/test_backend_parity.py`                       |
 | 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
 | 02.1 | X.509 certificate rotation         | ✅ Complete (08 blocked) | 9 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
-| 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
+| 03.0 | Scraping engine hardening          | ✅ Complete    | 6 / 6         | `tests/mock/scraping/test_scrape_details.py`, `tests/unit/scraping/test_{results,text}.py`, `tests/unit/test_no_bare_print.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
 | 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -25,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 40 / 99 subtasks complete.
+**Totals:** 46 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -146,6 +146,36 @@ is still open under the milestone definition of done. Non-blocking review sugges
 **Reconciliation note:** 06, 07, 09 and 10 are *consumed*. 08 is *open (blocked)*. The one spec departure is in
 07: `--no-verify` also suppresses pruning, a more conservative choice than the spec wording, documented in
 CLAUDE.md and the runbook.
+
+## Task 03.0 - Scraping engine hardening
+
+### Task 03.0 - Scraping engine hardening (✅ 2026-10-05)
+
+**Delivered** (commits `0a6b71d`, `3ab4457`, `8dbae9a`, `a553807`, `f333bce`, `afc99d7`, review fixes `0762123`):
+- **01** each attempt owns one page (`_attempt_page`), closed exactly once; Leanpub opens no page.
+- **02** typed `ScrapeResult` / `ScrapeStatus` (`scraping/results.py`) on every path; `failed_books.csv` gains an
+  `error` column; `UNKNOWN_ERROR` gone; per-status run summaries.
+- **03** neutral field init, explicit per-read timeouts, missing title → `PARSE_ERROR` without retry, only transient
+  Playwright/network errors retried (`_is_transient_error`); a missing `BASE_URL` no longer raises. Deviations
+  (accepted): `tags=[]` init moved to 04; one classify-then-retry boundary instead of typed `except` clauses.
+- **04** `TAGS` (deduped, capped at 50), `DESCRIPTION_ALT` fallback, Amazon `DETAILS_BUTTON` expander, one
+  `_selector()` helper; `CONSUMED_DETAIL_KEYS` guard test against dead detail selectors.
+- **05** `scraping/text.html_to_text`; one pooled `httpx.AsyncClient` per search run; Leanpub errors report status /
+  class name / "invalid JSON" only — never a response body; missing data or title → `PARSE_ERROR`.
+- **06** no bare `print()` in `src/` (AST guard test); scrape log lines carry the URL.
+
+**Golden diffs (all reviewed, intended):** 9 packtpub/oreilly pages `FAILED` → real records and their 404s →
+`NOT_FOUND`; amazon missing-title/bot-wall → `PARSE_ERROR` (bot-wall detection is 03.2/04); 16 records gain `tags`;
+Leanpub null-about → record, Leanpub 404 → `PARSE_ERROR`.
+
+**Review** (`feature-reviewer` REQUEST_CHANGES → fixed; `security-auditor` PASS_WITH_FOLLOWUP, no CRITICAL/HIGH):
+fixed in `0762123` — `failed_urls.csv` dropped every row (missing `title` fieldname), CSV formula injection
+(`book_utils.csv_safe_cell`), blocking `save_books` on the event loop, null Leanpub slug. **Open LOW follow-ups:**
+cap page-controlled text/body sizes (→ 03.1/05 save-boundary validation); strip query strings from URLs and prefer
+the exception class name in run-log lines (→ 07.0/01 secret-redacting log filter).
+
+**Coverage:** whole suite 872+ passed, 99% total; `scrape_details.py` 98% (closes the deferred 06.1 item),
+`results.py` / `text.py` / `commands/search.py` 100%.
 
 ## Task 04.0 - AI-assisted schema detection
 

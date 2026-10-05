@@ -1,7 +1,7 @@
 # Task 03.0 - Scraping Engine Hardening
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** 🔶 In progress
+**Status:** ✅ Complete
 **Category:** bugfix | **Priority:** P0
 **Depends on:** [Task 06.0](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/README.md) (golden fixtures must characterize current behavior first)
 
