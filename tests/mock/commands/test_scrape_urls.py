@@ -539,22 +539,19 @@ async def test_run_summary_counts_each_status(tmp_path) -> None:
 async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> None:
     # 11 recognized URLs => two batches (batch_size hardcoded at 10) => one pause.
     """
-    [Local] scrape urls: verifies run more than ten urls triggers inter batch pause.
+    [Local] scrape urls: verifies that 11 URLs produce two batches and exactly one inter-batch pause.
 
     Scenario:
-        Given test inputs and fixtures for run more than ten urls triggers inter batch pause
-        When test_run_more_than_ten_urls_triggers_inter_batch_pause executes the target flow
-        Then the expected outcome for run more than ten urls triggers inter batch pause is confirmed.
+        Given 11 leanpub URLs (batch_size is hardcoded at 10) each returning SUCCESS
+        When run() is called
+        Then scrape_book is awaited 11 times, asyncio.sleep is awaited exactly once
+        (between batch 1 and batch 2), and all books are saved together.
 
     Boundaries:
-        - Focus: run more than ten urls triggers inter batch pause
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Tests the batch-boundary sleep; exactly 10 URLs (one batch) would not sleep.
 
     On failure, first check:
-        - Assertion details tied to run more than ten urls triggers inter batch pause
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by scrape urls
+        - The inter-batch sleep condition in run()'s batch loop.
     """
     urls = [f"https://leanpub.com/book-{i}" for i in range(11)]
     csv_path = _write_csv(tmp_path, urls)

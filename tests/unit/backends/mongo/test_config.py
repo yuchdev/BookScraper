@@ -93,88 +93,72 @@ class TestResolveField:
 
     def test_missing_source_raises(self) -> None:
         """
-        [Unit] resolve field: verifies missing source raises.
+        [Unit] settings.json field resolver: verifies a field without 'source' raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for missing source raises
-            When test_missing_source_raises executes the target flow
-            Then the expected outcome for missing source raises is confirmed.
+            Given a field dict carrying only 'value'
+            When config._resolve_field() resolves it
+            Then ConfigError is raised instead of guessing a source.
 
         Boundaries:
-            - Focus: missing source raises
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure resolution logic, no file or env access
 
         On failure, first check:
-            - Assertion details tied to missing source raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - The required-key validation at the top of _resolve_field()
         """
         with pytest.raises(ConfigError):
             config._resolve_field({"value": URI}, "f")
 
     def test_missing_value_raises(self) -> None:
         """
-        [Unit] resolve field: verifies missing value raises.
+        [Unit] settings.json field resolver: verifies a field without 'value' raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for missing value raises
-            When test_missing_value_raises executes the target flow
-            Then the expected outcome for missing value raises is confirmed.
+            Given a field dict carrying only source 'literal'
+            When config._resolve_field() resolves it
+            Then ConfigError is raised.
 
         Boundaries:
-            - Focus: missing value raises
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Pure resolution logic, no file or env access
 
         On failure, first check:
-            - Assertion details tied to missing value raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - The required-key validation at the top of _resolve_field()
         """
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "literal"}, "f")
 
     def test_not_a_dict_raises(self) -> None:
         """
-        [Unit] resolve field: verifies not a dict raises.
+        [Unit] settings.json field resolver: verifies a bare string instead of a {source, value} object raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for not a dict raises
-            When test_not_a_dict_raises executes the target flow
-            Then the expected outcome for not a dict raises is confirmed.
+            Given a plain string in place of the field object
+            When config._resolve_field() resolves it
+            Then ConfigError is raised rather than the string being used as a value.
 
         Boundaries:
-            - Focus: not a dict raises
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Only the shape check; valid shapes are covered by the happy-path tests
 
         On failure, first check:
-            - Assertion details tied to not a dict raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - The isinstance(dict) guard in _resolve_field()
         """
         with pytest.raises(ConfigError):
             config._resolve_field("just a string", "f")
 
     def test_unrecognized_source_raises(self) -> None:
         """
-        [Unit] resolve field: verifies unrecognized source raises.
+        [Unit] settings.json field resolver: verifies a source other than 'env' or 'literal' raises ConfigError.
 
         Scenario:
-            Given test inputs and fixtures for unrecognized source raises
-            When test_unrecognized_source_raises executes the target flow
-            Then the expected outcome for unrecognized source raises is confirmed.
+            Given a field with source 'vault'
+            When config._resolve_field() resolves it
+            Then ConfigError is raised (determinism: unknown sources fail loudly).
 
         Boundaries:
-            - Focus: unrecognized source raises
-            - Fixtures/params: none
-            - Scope: assertions and setup in this test case only
+            - Only the source whitelist
 
         On failure, first check:
-            - Assertion details tied to unrecognized source raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve field
+            - The accepted source values in _resolve_field()
         """
         with pytest.raises(ConfigError):
             config._resolve_field({"source": "vault", "value": "x"}, "f")
@@ -185,22 +169,19 @@ class TestResolveCertField:
 
     def test_bare_filename_resolved_under_config_dir(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] resolve cert field: verifies bare filename resolved under config dir.
+        [Unit] settings.json cert resolver: verifies a bare literal cert filename resolves under CONFIG_DIR.
 
         Scenario:
-            Given test inputs and fixtures for bare filename resolved under config dir
-            When test_bare_filename_resolved_under_config_dir executes the target flow
-            Then the expected outcome for bare filename resolved under config dir is confirmed.
+            Given CONFIG_DIR pointed at tmp_path and a literal cert value 'cert.pem'
+            When config._resolve_cert_field() resolves it
+            Then the result is CONFIG_DIR/cert.pem.
 
         Boundaries:
-            - Focus: bare filename resolved under config dir
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - CONFIG_DIR is monkeypatched; the real ~/.bookscrapper/ is never touched
+            - The file need not exist: resolution never opens it
 
         On failure, first check:
-            - Assertion details tied to bare filename resolved under config dir
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve cert field
+            - The relative-path join in _resolve_cert_field()
         """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         resolved = config._resolve_cert_field({"source": "literal", "value": "cert.pem"}, "x509.cert")
@@ -208,22 +189,18 @@ class TestResolveCertField:
 
     def test_absolute_path_returned_untouched(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] resolve cert field: verifies absolute path returned untouched.
+        [Unit] settings.json cert resolver: verifies an absolute literal cert path is returned unchanged.
 
         Scenario:
-            Given test inputs and fixtures for absolute path returned untouched
-            When test_absolute_path_returned_untouched executes the target flow
-            Then the expected outcome for absolute path returned untouched is confirmed.
+            Given CONFIG_DIR pointed at tmp_path and an absolute cert path outside it
+            When config._resolve_cert_field() resolves it
+            Then the absolute path comes back as given.
 
         Boundaries:
-            - Focus: absolute path returned untouched
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - CONFIG_DIR is monkeypatched; nothing is read
 
         On failure, first check:
-            - Assertion details tied to absolute path returned untouched
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by resolve cert field
+            - The is_absolute() branch in _resolve_cert_field()
         """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         abs_path = str(tmp_path / "elsewhere" / "cert.pem")
@@ -236,44 +213,36 @@ class TestGetDefaultTlsCertFile:
 
     def test_no_certs_returns_none(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] get default tls cert file: verifies no certs returns none.
+        [Unit] legacy cert fallback: verifies an empty config dir yields no default cert.
 
         Scenario:
-            Given test inputs and fixtures for no certs returns none
-            When test_no_certs_returns_none executes the target flow
-            Then the expected outcome for no certs returns none is confirmed.
+            Given CONFIG_DIR pointed at an empty tmp_path
+            When config.get_default_tls_cert_file() runs
+            Then it returns None.
 
         Boundaries:
-            - Focus: no certs returns none
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - CONFIG_DIR is monkeypatched to tmp_path
 
         On failure, first check:
-            - Assertion details tied to no certs returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get default tls cert file
+            - The glob pattern and empty-result handling in get_default_tls_cert_file()
         """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         assert config.get_default_tls_cert_file() is None
 
     def test_returns_newest_by_mtime(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] get default tls cert file: verifies returns newest by mtime.
+        [Unit] legacy cert fallback: verifies the newest X509-cert-*.pem by modification time wins.
 
         Scenario:
-            Given test inputs and fixtures for returns newest by mtime
-            When test_returns_newest_by_mtime executes the target flow
-            Then the expected outcome for returns newest by mtime is confirmed.
+            Given two cert files in tmp_path with mtimes forced apart via os.utime
+            When config.get_default_tls_cert_file() runs
+            Then the path of the newer file is returned.
 
         Boundaries:
-            - Focus: returns newest by mtime
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - mtimes are set explicitly so the result does not depend on write timing
 
         On failure, first check:
-            - Assertion details tied to returns newest by mtime
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get default tls cert file
+            - The max-by-st_mtime selection (not name order) in get_default_tls_cert_file()
         """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         old = tmp_path / "X509-cert-20200101_000000.pem"
@@ -287,22 +256,18 @@ class TestGetDefaultTlsCertFile:
 
     def test_ignores_non_matching_files(self, monkeypatch, tmp_path) -> None:
         """
-        [Local] get default tls cert file: verifies ignores non matching files.
+        [Unit] legacy cert fallback: verifies files not matching X509-cert-*.pem are never picked.
 
         Scenario:
-            Given test inputs and fixtures for ignores non matching files
-            When test_ignores_non_matching_files executes the target flow
-            Then the expected outcome for ignores non matching files is confirmed.
+            Given a config dir holding only settings.json and notes.txt
+            When config.get_default_tls_cert_file() runs
+            Then it returns None.
 
         Boundaries:
-            - Focus: ignores non matching files
-            - Fixtures/params: monkeypatch, tmp_path
-            - Scope: assertions and setup in this test case only
+            - CONFIG_DIR is monkeypatched to tmp_path
 
         On failure, first check:
-            - Assertion details tied to ignores non matching files
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by get default tls cert file
+            - The glob pattern used by get_default_tls_cert_file()
         """
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         (tmp_path / "settings.json").write_text("{}", encoding="utf-8")
@@ -315,43 +280,35 @@ class TestLoadSettings:
 
     def test_nonexistent_path_returns_none(self, tmp_path) -> None:
         """
-        [Unit] load settings: verifies nonexistent path returns none.
+        [Unit] settings.json loader: verifies a missing settings file means legacy mode (None).
 
         Scenario:
-            Given test inputs and fixtures for nonexistent path returns none
-            When test_nonexistent_path_returns_none executes the target flow
-            Then the expected outcome for nonexistent path returns none is confirmed.
+            Given a settings path that does not exist
+            When config.load_settings() reads it
+            Then None is returned, selecting the legacy env fallback.
 
         Boundaries:
-            - Focus: nonexistent path returns none
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Real file-system check under tmp_path only
 
         On failure, first check:
-            - Assertion details tied to nonexistent path returns none
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by load settings
+            - The existence check at the start of load_settings()
         """
         assert config.load_settings(tmp_path / "does_not_exist.json") is None
 
     def test_malformed_json_raises(self, tmp_path) -> None:
         """
-        [Unit] load settings: verifies malformed json raises.
+        [Unit] settings.json loader: verifies invalid JSON raises ConfigError instead of falling back.
 
         Scenario:
-            Given test inputs and fixtures for malformed json raises
-            When test_malformed_json_raises executes the target flow
-            Then the expected outcome for malformed json raises is confirmed.
+            Given a settings file containing '{not valid json'
+            When config.load_settings() reads it
+            Then ConfigError is raised.
 
         Boundaries:
-            - Focus: malformed json raises
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Real file I/O under tmp_path only
 
         On failure, first check:
-            - Assertion details tied to malformed json raises
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by load settings
+            - The JSONDecodeError handling in load_settings()
         """
         bad = tmp_path / "settings.json"
         bad.write_text("{not valid json", encoding="utf-8")
@@ -360,22 +317,18 @@ class TestLoadSettings:
 
     def test_valid_json_returns_parsed_dict(self, tmp_path) -> None:
         """
-        [Unit] load settings: verifies valid json returns parsed dict.
+        [Unit] settings.json loader: verifies a valid file is returned as the parsed dict.
 
         Scenario:
-            Given test inputs and fixtures for valid json returns parsed dict
-            When test_valid_json_returns_parsed_dict executes the target flow
-            Then the expected outcome for valid json returns parsed dict is confirmed.
+            Given a settings file holding {'auth_type': 'pass'}
+            When config.load_settings() reads it
+            Then the parsed dict is returned unchanged.
 
         Boundaries:
-            - Focus: valid json returns parsed dict
-            - Fixtures/params: tmp_path
-            - Scope: assertions and setup in this test case only
+            - Only parsing; the shape validation of the dict is covered elsewhere
 
         On failure, first check:
-            - Assertion details tied to valid json returns parsed dict
-            - Fixture or parameter values used by this test
-            - Recent changes in code paths exercised by load settings
+            - load_settings() return value and its permission-warning side path
         """
         good = tmp_path / "settings.json"
         _write_settings(good, {"auth_type": "pass"})

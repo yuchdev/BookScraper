@@ -33,22 +33,19 @@ def _leanpub_book(slug: str, title: str) -> dict:
 # --------------------------------------------------------------------------- #
 def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls empty creates no file.
+    [Local] search: verifies that an empty list passed to save_failed_urls_to_csv creates no file.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls empty creates no file
-        When test_save_failed_urls_empty_creates_no_file executes the target flow
-        Then the expected outcome for save failed urls empty creates no file is confirmed.
+        Given an empty list passed to the search command's save_failed_urls_to_csv
+        When the function is called
+        Then no file is created at the target path.
 
     Boundaries:
-        - Focus: save failed urls empty creates no file
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - This is the search variant (DictWriter); the scrape_urls variant (csv.writer) is
+          in test_scrape_urls.py.
 
     On failure, first check:
-        - Assertion details tied to save failed urls empty creates no file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The empty-list guard in the search command's save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_urls.csv"
     save_failed_urls_to_csv([], filename=str(target))
@@ -57,22 +54,18 @@ def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
 
 def test_save_failed_urls_writes_header_and_dict_rows(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls writes header and dict rows.
+    [Local] search: verifies that two dict items are written as a proper DictWriter CSV.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls writes header and dict rows
-        When test_save_failed_urls_writes_header_and_dict_rows executes the target flow
-        Then the expected outcome for save failed urls writes header and dict rows is confirmed.
+        Given two dicts each with url/site/error keys
+        When save_failed_urls_to_csv writes the file
+        Then csv.DictReader can read back the correct url/site/error values for each row.
 
     Boundaries:
-        - Focus: save failed urls writes header and dict rows
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - DictWriter-based variant (search.py); the tuple-based scrape_urls variant is separate.
 
     On failure, first check:
-        - Assertion details tied to save failed urls writes header and dict rows
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The fieldnames list and DictWriter.writerow call in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_urls.csv"
     items = [
@@ -91,22 +84,18 @@ def test_save_failed_urls_writes_header_and_dict_rows(tmp_path) -> None:
 
 def test_save_failed_urls_missing_key_uses_restval(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls missing key uses restval.
+    [Local] search: verifies that a dict missing the "error" key is written with an empty string.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls missing key uses restval
-        When test_save_failed_urls_missing_key_uses_restval executes the target flow
-        Then the expected outcome for save failed urls missing key uses restval is confirmed.
+        Given a dict with url and site but no "error" key
+        When save_failed_urls_to_csv writes the file
+        Then the row is written successfully with error == "" (DictWriter restval default).
 
     Boundaries:
-        - Focus: save failed urls missing key uses restval
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Tests the restval="" behavior; extra-key ValueError is a separate test.
 
     On failure, first check:
-        - Assertion details tied to save failed urls missing key uses restval
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The restval parameter on the DictWriter constructor in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_urls.csv"
     # No "error" key => restval="" fills it in, no exception.
@@ -124,22 +113,19 @@ def test_save_failed_urls_missing_key_uses_restval(tmp_path) -> None:
 
 def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls row valueerror is per item and loop continues.
+    [Local] search: verifies that a per-row ValueError skips only that row and the loop continues.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls row valueerror is per item and loop continues
-        When test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues executes the target flow
-        Then the expected outcome for save failed urls row valueerror is per item and loop continues is confirmed.
+        Given three dicts where the middle one has an extra field triggering DictWriter
+        ValueError (extrasaction="raise" default)
+        When save_failed_urls_to_csv is called
+        Then the first and third rows are written; the bad middle row is skipped.
 
     Boundaries:
-        - Focus: save failed urls row valueerror is per item and loop continues
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the per-row ValueError handler; csv.Error is a separate test.
 
     On failure, first check:
-        - Assertion details tied to save failed urls row valueerror is per item and loop continues
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The per-row except ValueError handler inside the writerow loop.
     """
     target = tmp_path / "failed_urls.csv"
     # The middle item has an extra field => DictWriter.writerow raises ValueError
@@ -160,22 +146,18 @@ def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path
 
 def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls row generic exception is per item and loop continues.
+    [Local] search: verifies that a per-row csv.Error skips only that row and the loop continues.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls row generic exception is per item and loop continues
-        When test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues executes the target flow
-        Then the expected outcome for save failed urls row generic exception is per item and loop continues is confirmed.
+        Given three items where writerow for the middle one raises csv.Error
+        When save_failed_urls_to_csv is called
+        Then the first and third rows are written; the bad middle row is skipped.
 
     Boundaries:
-        - Focus: save failed urls row generic exception is per item and loop continues
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the per-row csv.Error handler; ValueError is a separate test.
 
     On failure, first check:
-        - Assertion details tied to save failed urls row generic exception is per item and loop continues
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The per-row except csv.Error / Exception handler inside the writerow loop.
     """
     target = tmp_path / "failed_urls.csv"
     items = [
@@ -213,22 +195,18 @@ def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(t
 
 def test_save_failed_urls_ioerror_is_swallowed(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls ioerror is swallowed.
+    [Local] search: verifies that an IOError on file open is swallowed without propagating.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls ioerror is swallowed
-        When test_save_failed_urls_ioerror_is_swallowed executes the target flow
-        Then the expected outcome for save failed urls ioerror is swallowed is confirmed.
+        Given builtins.open patched to raise IOError("no space left")
+        When save_failed_urls_to_csv is called with a non-empty list
+        Then no exception reaches the caller and no file is created.
 
     Boundaries:
-        - Focus: save failed urls ioerror is swallowed
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Best-effort write contract; csv.Error at construction is a separate test.
 
     On failure, first check:
-        - Assertion details tied to save failed urls ioerror is swallowed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The outer try/except IOError / OSError handler in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_urls.csv"
     with patch("builtins.open", side_effect=IOError("no space left")):
@@ -241,22 +219,19 @@ def test_save_failed_urls_ioerror_is_swallowed(tmp_path) -> None:
 
 def test_save_failed_urls_generic_exception_is_swallowed(tmp_path) -> None:
     """
-    [Local] search: verifies save failed urls generic exception is swallowed.
+    [Local] search: verifies that a csv.Error at DictWriter construction is swallowed.
 
     Scenario:
-        Given test inputs and fixtures for save failed urls generic exception is swallowed
-        When test_save_failed_urls_generic_exception_is_swallowed executes the target flow
-        Then the expected outcome for save failed urls generic exception is swallowed is confirmed.
+        Given csv.DictWriter patched to raise csv.Error("boom") on construction
+        When save_failed_urls_to_csv is called with a non-empty list
+        Then no exception propagates to the caller.
 
     Boundaries:
-        - Focus: save failed urls generic exception is swallowed
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Covers the outer csv.Error / Exception handler at DictWriter construction; the
+          IOError/open path is a separate test.
 
     On failure, first check:
-        - Assertion details tied to save failed urls generic exception is swallowed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The outer try/except around DictWriter construction in save_failed_urls_to_csv.
     """
     target = tmp_path / "failed_urls.csv"
     # DictWriter construction itself raises a csv.Error => the outer guard catches it.
@@ -273,22 +248,20 @@ def test_save_failed_urls_generic_exception_is_swallowed(tmp_path) -> None:
 # --------------------------------------------------------------------------- #
 async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
     """
-    [Local] search: verifies run dedup only new book proceeds to detail scrape.
+    [Local] search: verifies that only non-duplicate books proceed to detail scrape.
 
     Scenario:
-        Given test inputs and fixtures for run dedup only new book proceeds to detail scrape
-        When test_run_dedup_only_new_book_proceeds_to_detail_scrape executes the target flow
-        Then the expected outcome for run dedup only new book proceeds to detail scrape is confirmed.
+        Given search returns two books where leanpub_book_exists is True for the first and
+        False for the second
+        When run() is called
+        Then get_leanpub_book_details is awaited exactly once with the fresh book's URL,
+        and save_books is called with only the fresh book's data.
 
     Boundaries:
-        - Focus: run dedup only new book proceeds to detail scrape
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Pre-scrape dedup only; hash-based dedup at save time is the backend's responsibility.
 
     On failure, first check:
-        - Assertion details tied to run dedup only new book proceeds to detail scrape
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The leanpub_book_exists check and the URL construction for get_leanpub_book_details.
     """
     args = SimpleNamespace(store_backend="json")
 
@@ -332,22 +305,21 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape() -> None:
 
 async def test_run_detail_results_partition_into_saved_and_failed() -> None:
     """
-    [Local] search: verifies run detail results partition into saved and failed.
+    [Local] search: verifies that SUCCESS results are saved and non-success results go to the CSV.
 
     Scenario:
-        Given test inputs and fixtures for run detail results partition into saved and failed
-        When test_run_detail_results_partition_into_saved_and_failed executes the target flow
-        Then the expected outcome for run detail results partition into saved and failed is confirmed.
+        Given three candidates whose detail scrapes return SUCCESS, FAILED, and RuntimeError
+        (the last simulating gather(return_exceptions=True) behaviour)
+        When run() is called
+        Then only the SUCCESS book is passed to save_books, and both the typed FAILED result
+        and the raw RuntimeError appear in the failed-attempts CSV (2 entries).
 
     Boundaries:
-        - Focus: run detail results partition into saved and failed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Tests the partition logic for all three result shapes: SUCCESS, typed non-success,
+          and raw exception.
 
     On failure, first check:
-        - Assertion details tied to run detail results partition into saved and failed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The result-partitioning loop in run() and the fallback branch for raw exceptions.
     """
     args = SimpleNamespace(store_backend="json")
 
@@ -450,22 +422,19 @@ async def test_search_failed_record_uses_real_book_url() -> None:
 
 async def test_run_no_new_books_skips_save_but_closes_backend() -> None:
     """
-    [Local] search: verifies run no new books skips save but closes backend.
+    [Local] search: verifies that empty search results skip detail scraping but still close the backend.
 
     Scenario:
-        Given test inputs and fixtures for run no new books skips save but closes backend
-        When test_run_no_new_books_skips_save_but_closes_backend executes the target flow
-        Then the expected outcome for run no new books skips save but closes backend is confirmed.
+        Given the Leanpub search API returning an empty list
+        When run() is called
+        Then get_leanpub_book_details is never awaited, save_books is never called, and
+        backend.close() is called exactly once.
 
     Boundaries:
-        - Focus: run no new books skips save but closes backend
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the empty-candidate-list fast path; non-empty but all-duplicate is separate.
 
     On failure, first check:
-        - Assertion details tied to run no new books skips save but closes backend
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The "no candidates" guard and the backend.close() in run()'s finally block.
     """
     args = SimpleNamespace(store_backend="json")
 
@@ -489,22 +458,19 @@ async def test_run_no_new_books_skips_save_but_closes_backend() -> None:
 
 async def test_run_keyboard_interrupt_is_caught_and_backend_closed() -> None:
     """
-    [Local] search: verifies run keyboard interrupt is caught and backend closed.
+    [Local] search: verifies that a KeyboardInterrupt is caught and the backend is still closed.
 
     Scenario:
-        Given test inputs and fixtures for run keyboard interrupt is caught and backend closed
-        When test_run_keyboard_interrupt_is_caught_and_backend_closed executes the target flow
-        Then the expected outcome for run keyboard interrupt is caught and backend closed is confirmed.
+        Given the Leanpub search API raising KeyboardInterrupt
+        When run() is called
+        Then run() returns normally (KeyboardInterrupt does not propagate), save_books is
+        never called, and backend.close() is called once.
 
     Boundaries:
-        - Focus: run keyboard interrupt is caught and backend closed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the KeyboardInterrupt catch; generic exceptions are a separate test.
 
     On failure, first check:
-        - Assertion details tied to run keyboard interrupt is caught and backend closed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The except KeyboardInterrupt handler and the backend.close() in run()'s finally block.
     """
     args = SimpleNamespace(store_backend="json")
 
@@ -527,22 +493,19 @@ async def test_run_keyboard_interrupt_is_caught_and_backend_closed() -> None:
 
 async def test_run_generic_exception_is_caught_and_backend_closed() -> None:
     """
-    [Local] search: verifies run generic exception is caught and backend closed.
+    [Local] search: verifies that a RuntimeError from the search API is caught and the backend closed.
 
     Scenario:
-        Given test inputs and fixtures for run generic exception is caught and backend closed
-        When test_run_generic_exception_is_caught_and_backend_closed executes the target flow
-        Then the expected outcome for run generic exception is caught and backend closed is confirmed.
+        Given the Leanpub search API raising RuntimeError("search API exploded")
+        When run() is called
+        Then run() returns normally, save_books is never called, and backend.close()
+        is called once.
 
     Boundaries:
-        - Focus: run generic exception is caught and backend closed
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Covers the broad except Exception handler; KeyboardInterrupt is a separate test.
 
     On failure, first check:
-        - Assertion details tied to run generic exception is caught and backend closed
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - The outer except Exception handler and backend.close() in run()'s finally block.
     """
     args = SimpleNamespace(store_backend="json")
 
@@ -566,21 +529,18 @@ def test_search_module_uses_real_leanpub_only_sites() -> None:
     # Sanity guard: the run() tests monkeypatch SEARCH_QUERIES but rely on the real
     # single-site config; if this changes the run() tests may need revisiting.
     """
-    [Local] search: verifies search module uses real leanpub only sites.
+    [Local] search: verifies that SITES_TO_SCRAPE is exactly ["leanpub"].
 
     Scenario:
-        Given test inputs and fixtures for search module uses real leanpub only sites
-        When test_search_module_uses_real_leanpub_only_sites executes the target flow
-        Then the expected outcome for search module uses real leanpub only sites is confirmed.
+        Given the search module's module-level SITES_TO_SCRAPE constant
+        When its value is read
+        Then it equals ["leanpub"] (the single wired-up site).
 
     Boundaries:
-        - Focus: search module uses real leanpub only sites
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Sanity guard: the run() tests monkeypatch SEARCH_QUERIES but rely on the real
+          single-site config; if SITES_TO_SCRAPE changes, those tests need revisiting.
 
     On failure, first check:
-        - Assertion details tied to search module uses real leanpub only sites
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by search
+        - scraping/parameters.py's SITES_TO_SCRAPE and any test that patches SEARCH_QUERIES.
     """
     assert search.SITES_TO_SCRAPE == ["leanpub"]

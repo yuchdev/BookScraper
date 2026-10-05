@@ -39,22 +39,20 @@ def _args(**overrides) -> SimpleNamespace:
 
 async def test_run_prints_report_and_usage_line(capsys) -> None:
     """
-    [Local] detect schema: verifies run prints report and usage line.
+    [Local] detect-schema command: verifies run() forwards every CLI option to the engine and prints the report plus the usage line.
 
     Scenario:
-        Given test inputs and fixtures for run prints report and usage line
-        When test_run_prints_report_and_usage_line executes the target flow
-        Then the expected outcome for run prints report and usage line is confirmed.
+        Given parsed args with a model and a max-input-tokens override, and detect_schema() mocked to return a report and a usage line
+        When detect_schema.run(args) is awaited
+        Then the engine is called once with the site, URLs, model, budget and default options, and both the report and the usage line reach stdout.
 
     Boundaries:
-        - Focus: run prints report and usage line
-        - Fixtures/params: capsys
-        - Scope: assertions and setup in this test case only
+        - Engine is mocked: no Playwright, no Anthropic call
+        - load_dotenv is patched, so no .env is read
 
     On failure, first check:
-        - Assertion details tied to run prints report and usage line
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by detect schema
+        - Argument mapping between cli.py dests and the detect_schema() keyword arguments
+        - Whether run() still prints the usage line after the report
     """
     args = _args(model="claude-sonnet-5", max_input_tokens=12345)
     with (
@@ -164,22 +162,19 @@ async def test_run_threads_offline_html_file_replay_record(capsys) -> None:
 
 async def test_run_exits_one_on_detection_error() -> None:
     """
-    [Local] detect schema: verifies run exits one on detection error.
+    [Local] detect-schema command: verifies a SchemaDetectionError ends the run with exit code 1.
 
     Scenario:
-        Given test inputs and fixtures for run exits one on detection error
-        When test_run_exits_one_on_detection_error executes the target flow
-        Then the expected outcome for run exits one on detection error is confirmed.
+        Given detect_schema() mocked to raise SchemaDetectionError
+        When detect_schema.run() is awaited with default args
+        Then SystemExit is raised with code 1 (fail loudly, never partial output).
 
     Boundaries:
-        - Focus: run exits one on detection error
-        - Fixtures/params: none
-        - Scope: assertions and setup in this test case only
+        - Only the error-to-exit-code mapping; the error message text is not asserted
 
     On failure, first check:
-        - Assertion details tied to run exits one on detection error
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by detect schema
+        - The except clause around detect_schema() in commands/detect_schema.py
+        - Whether the exit code contract (0/4/1) changed
     """
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
@@ -192,22 +187,19 @@ async def test_run_exits_one_on_detection_error() -> None:
 
 async def test_run_writes_report_to_output_file(tmp_path) -> None:
     """
-    [Local] detect schema: verifies run writes report to output file.
+    [Local] detect-schema command: verifies --output writes the report body to the given file.
 
     Scenario:
-        Given test inputs and fixtures for run writes report to output file
-        When test_run_writes_report_to_output_file executes the target flow
-        Then the expected outcome for run writes report to output file is confirmed.
+        Given a tmp_path output file and detect_schema() mocked to return 'REPORT BODY'
+        When detect_schema.run() is awaited with --site leanpub and --output
+        Then the file contains exactly the report body.
 
     Boundaries:
-        - Focus: run writes report to output file
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - Real file I/O under tmp_path only
+        - The usage line is not part of the written file
 
     On failure, first check:
-        - Assertion details tied to run writes report to output file
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by detect schema
+        - How run() opens and writes --output (encoding, what is written)
     """
     out_path = tmp_path / "report.txt"
     args = _args(site="leanpub", output=str(out_path))
@@ -222,22 +214,18 @@ async def test_run_writes_report_to_output_file(tmp_path) -> None:
 
 async def test_run_exits_one_when_output_write_fails(tmp_path) -> None:
     """
-    [Local] detect schema: verifies run exits one when output write fails.
+    [Local] detect-schema command: verifies a failure writing --output exits with code 1.
 
     Scenario:
-        Given test inputs and fixtures for run exits one when output write fails
-        When test_run_exits_one_when_output_write_fails executes the target flow
-        Then the expected outcome for run exits one when output write fails is confirmed.
+        Given detect_schema() mocked to succeed and builtins.open patched to raise OSError
+        When detect_schema.run() is awaited with --output set
+        Then SystemExit is raised with code 1 instead of an unhandled OSError.
 
     Boundaries:
-        - Focus: run exits one when output write fails
-        - Fixtures/params: tmp_path
-        - Scope: assertions and setup in this test case only
+        - open() is patched globally for the duration of the call
 
     On failure, first check:
-        - Assertion details tied to run exits one when output write fails
-        - Fixture or parameter values used by this test
-        - Recent changes in code paths exercised by detect schema
+        - The OSError handling around the --output write in commands/detect_schema.py
     """
     args = _args(site="leanpub", output=str(tmp_path / "report.txt"))
     with (
