@@ -1,15 +1,22 @@
 {
-  "about_the_book": "",
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Bartlomiej Filipek"
   ],
-  "book_id": "102",
-  "categories": [
+  "description": "",
+  "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
+  "isbn10": null,
+  "isbn13": null,
+  "publication_date": "2020-09-01",
+  "publication_year": 2020,
+  "schema_version": 2,
+  "site": "leanpub",
+  "slug": "cpplambda",
+  "source_id": "102",
+  "tags": [
     "C and C++"
   ],
-  "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
-  "last_published_at": "2020-09-01",
-  "site": "leanpub.com",
-  "slug": "cpplambda",
-  "title": "C++ Lambda Story"
+  "title": "C++ Lambda Story",
+  "url": "https://leanpub.com/cpplambda"
 }

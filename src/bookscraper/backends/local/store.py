@@ -191,7 +191,9 @@ def leanpub_book_exists(book_id: Optional[str], book_slug: Optional[str], path: 
     for book in _load_books(path):
         if not isinstance(book, dict):
             continue
-        if book_id and book.get("book_id") == book_id:
+        # Match both schema shapes by book id: v1 documents store it as ``book_id``, schema-2
+        # (03.1) documents fold it into the shared ``source_id`` field.
+        if book_id and book_id in (book.get("book_id"), book.get("source_id")):
             return True
         if book_slug and book.get("slug") == book_slug:
             return True

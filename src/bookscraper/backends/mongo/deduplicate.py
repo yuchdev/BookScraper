@@ -29,7 +29,11 @@ def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection
     log_messages = []
 
     if book_id:
+        # Match both schema shapes by book id: v1 Leanpub documents store it as ``book_id``,
+        # schema-2 (03.1) documents fold it into the shared ``source_id`` field. Querying both
+        # keeps a book deduped whether it was written before or after the migration (subtask 06).
         query_conditions.append({"book_id": book_id})
+        query_conditions.append({"source_id": book_id})
         log_messages.append(f"Book ID: {book_id}")
     if book_slug:
         query_conditions.append({"slug": book_slug})

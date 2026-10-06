@@ -2,18 +2,25 @@
   "_known_issues": [
     "fixture policy: prose neutralized (tests/fixtures/README.md) (about_the_book equals the neutralization placeholder)"
   ],
-  "about_the_book": "Neutralized prose omitted from the public test corpus.",
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Bartlomiej Filipek"
   ],
-  "book_id": "101",
-  "categories": [
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "f66eca365bbfe24dc594885f29a57efeded4d41abe9ad9748c08f74fe24bd037",
+  "isbn10": null,
+  "isbn13": null,
+  "publication_date": "2019-08-15",
+  "publication_year": 2019,
+  "schema_version": 2,
+  "site": "leanpub",
+  "slug": "cpp17indetail",
+  "source_id": "101",
+  "tags": [
     "Computer Science",
     "C and C++"
   ],
-  "hash": "f66eca365bbfe24dc594885f29a57efeded4d41abe9ad9748c08f74fe24bd037",
-  "last_published_at": "2019-08-15",
-  "site": "leanpub.com",
-  "slug": "cpp17indetail",
-  "title": "C++17 in Detail"
+  "title": "C++17 in Detail",
+  "url": "https://leanpub.com/cpp17indetail"
 }

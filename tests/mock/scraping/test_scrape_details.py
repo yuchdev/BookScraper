@@ -78,8 +78,8 @@ def _amazon_page(title="Great Python Book - Amazon") -> FakePage:
     locators = {
         "#productTitle": FakeLocator("  Great Python Book  "),
         ".author a.a-link-normal": FakeLocator([{"text": "Jane Doe"}, {"text": "John Smith"}]),
-        "#rpi-attribute-book_details-isbn10 .rpi-attribute-value span": FakeLocator("1234567890"),
-        "#rpi-attribute-book_details-isbn13 .rpi-attribute-value span": FakeLocator("978-1234567890"),
+        "#rpi-attribute-book_details-isbn10 .rpi-attribute-value span": FakeLocator("0136816487"),
+        "#rpi-attribute-book_details-isbn13 .rpi-attribute-value span": FakeLocator("978-0136816485"),
         "#bookDescription_feature_div .a-expander-content": FakeLocator("  A great book about Python.  "),
     }
     return FakePage(locators=locators, title=title)
@@ -232,15 +232,17 @@ async def test_get_leanpub_book_details_happy_path():
     Scenario:
         Given a well-formed Leanpub JSON payload served by the mock httpx client
         When get_leanpub_book_details is called
-        Then the result has status SUCCESS and all book fields (title, book_id, slug,
-        authors, categories, last_published_at, site, hash) are correctly populated.
+        Then the result has status SUCCESS and the canonical schema-2 document is correctly
+        populated (title, source_id, slug, authors, tags, publication_date/year, the bare
+        "leanpub" site key, the human-facing url, schema_version and hash).
 
     Boundaries:
-        - httpx is mocked; no network. Error branches are covered by separate tests.
+        - httpx is mocked; no network. Error branches are covered by separate tests. Verifies the
+          03.1/04 v2 renames (book_id->source_id, categories->tags, last_published_at->ISO
+          publication_date, "leanpub.com"->"leanpub", derived url) built by the normalizer.
 
     On failure, first check:
-        - Field extraction logic in get_leanpub_book_details (JSON path, date parsing,
-          hash_book call).
+        - normalize.from_leanpub_api field mapping, or the author/category resolution feeding it.
     """
     response = FakeResponse(json_data=_leanpub_payload())
     with _patch_httpx(responses=[response]):
@@ -248,13 +250,17 @@ async def test_get_leanpub_book_details_happy_path():
 
     assert result.status is ScrapeStatus.SUCCESS
     book = result.book
+    assert book["schema_version"] == 2
     assert book["title"] == "Example Book"
-    assert book["book_id"] == "book-123"
+    assert book["source_id"] == "book-123"
     assert book["slug"] == "example-book"
+    assert book["asin"] is None
     assert book["authors"] == ["Jane Doe"]
-    assert book["categories"] == ["Python"]
-    assert book["last_published_at"] == "2023-05-01"
-    assert book["site"] == "leanpub.com"
+    assert book["tags"] == ["Python"]
+    assert book["publication_date"] == "2023-05-01"
+    assert book["publication_year"] == 2023
+    assert book["site"] == "leanpub"
+    assert book["url"] == "https://leanpub.com/example-book"
     assert isinstance(book["hash"], str) and book["hash"]
 
 
@@ -279,7 +285,7 @@ async def test_get_leanpub_book_details_cleans_html_description():
     with _patch_httpx(responses=[response]):
         result = await get_leanpub_book_details(LEANPUB_URL)
 
-    about = result.book["about_the_book"]
+    about = result.book["description"]
     # All markup tags stripped.
     assert "<" not in about and ">" not in about
     # Paragraph/list breaks collapsed - never three+ consecutive newlines.
@@ -352,7 +358,7 @@ async def test_leanpub_missing_about_the_book_still_succeeds():
         Given a Leanpub payload whose about_the_book is null (the case that used to raise
         TypeError inside unescape(None) and was caught as an "unexpected error", losing the book)
         When get_leanpub_book_details is called
-        Then the result is SUCCESS, about_the_book is an empty string, and the other fields
+        Then the result is SUCCESS, the description is an empty string, and the other fields
         (title, authors, hash) are still populated.
 
     Boundaries:
@@ -369,7 +375,7 @@ async def test_leanpub_missing_about_the_book_still_succeeds():
         result = await get_leanpub_book_details(LEANPUB_URL)
 
     assert result.status is ScrapeStatus.SUCCESS
-    assert result.book["about_the_book"] == ""
+    assert result.book["description"] == ""
     assert result.book["title"] == "Example Book"
     assert result.book["authors"] == ["Jane Doe"]
     assert isinstance(result.book["hash"], str) and result.book["hash"]
@@ -413,14 +419,14 @@ async def test_get_leanpub_book_details_malformed_date_yields_none_date():
     Scenario:
         Given a Leanpub payload with last_published_at set to "not-a-real-date"
         When get_leanpub_book_details is called
-        Then the result status is SUCCESS, last_published_at is None, and hash is still
-        computed (a bad date must not abort hashing).
+        Then the result status is SUCCESS, publication_date and publication_year are None, and
+        hash is still computed (a bad date must not abort hashing).
 
     Boundaries:
         - Covers only the date-parse failure branch; other error paths are separate.
 
     On failure, first check:
-        - The date-parsing and hash_book calls in get_leanpub_book_details.
+        - normalize_date / normalize.from_leanpub_api handling of an unparseable date.
     """
     payload = _leanpub_payload(last_published_at="not-a-real-date")
     response = FakeResponse(json_data=payload)
@@ -428,7 +434,8 @@ async def test_get_leanpub_book_details_malformed_date_yields_none_date():
         result = await get_leanpub_book_details(LEANPUB_URL)
 
     assert result.status is ScrapeStatus.SUCCESS
-    assert result.book["last_published_at"] is None
+    assert result.book["publication_date"] is None
+    assert result.book["publication_year"] is None
     # Bad date must not blow up hashing.
     assert isinstance(result.book["hash"], str) and result.book["hash"]
 
@@ -606,8 +613,8 @@ async def test_missing_base_url_is_no_longer_fatal():
     assert result.status is ScrapeStatus.SUCCESS
     assert result.book["title"] == "Some Packt Book"
     assert result.book["authors"] == ["Adrian Ostrowski"]
-    # packtpub has no ISBN10 selector, so the sentinel survives (03.1 replaces it).
-    assert result.book["isbn10"] == "N/A"
+    # packtpub has no ISBN10 selector, so the raw "N/A" sentinel is normalized to None (03.1/04).
+    assert result.book["isbn10"] is None
     assert result.site == "packtpub"
     assert browser.new_page.await_count == 1
 
@@ -643,14 +650,17 @@ async def test_scrape_book_amazon_happy_path_returns_full_book():
     Scenario:
         Given a FakePage whose locators cover all amazon selectors
         When scrape_book is called
-        Then the result has status SUCCESS and the book dict contains title, authors,
-        isbn10, isbn13, description, asin, site, url, and hash.
+        Then the result has status SUCCESS and the canonical schema-2 document carries title,
+        authors, checksum-validated/hyphen-stripped ISBNs, description, asin (both asin and the
+        shared source_id), the bare site key, url, schema_version and hash.
 
     Boundaries:
-        - No storage backend; duplicate-check behavior is covered by separate tests.
+        - No storage backend; duplicate-check behavior is covered by separate tests. The raw
+          hyphenated ISBN-13 "978-0136816485" is normalized to its canonical 13-digit form by
+          the 03.1/04 normalizer (via isbn.normalize).
 
     On failure, first check:
-        - The field-extraction selectors for amazon in scrape_book and site_constants.
+        - The field-extraction selectors for amazon, or normalize.from_playwright's mapping.
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/ref=sr_1_1"
     page = _amazon_page()
@@ -660,34 +670,37 @@ async def test_scrape_book_amazon_happy_path_returns_full_book():
 
     assert result.status is ScrapeStatus.SUCCESS
     book = result.book
+    assert book["schema_version"] == 2
     assert book["title"] == "Great Python Book"
     assert book["authors"] == ["Jane Doe", "John Smith"]
-    assert book["isbn10"] == "1234567890"
-    assert book["isbn13"] == "978-1234567890"
+    assert book["isbn10"] == "0136816487"
+    assert book["isbn13"] == "9780136816485"
     assert book["description"] == "A great book about Python."
     assert book["asin"] == "B0ABCDEFGH"
+    assert book["source_id"] == "B0ABCDEFGH"
     assert book["site"] == "amazon"
     assert book["url"] == url
     assert isinstance(book["hash"], str) and book["hash"]
 
 
-async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
+async def test_scrape_book_amazon_missing_isbn_is_none():
     """
-    [Local] scrape details: verifies that absent ISBN selectors produce "N/A" defaults.
+    [Local] scrape details: verifies that absent ISBN selectors produce null ISBNs.
 
     Scenario:
         Given a FakePage whose locators include no ISBN selectors
         When scrape_book is called for amazon
-        Then the result is SUCCESS with isbn10 == "N/A" and isbn13 == "N/A".
+        Then the result is SUCCESS with isbn10 and isbn13 both None.
 
     Boundaries:
-        - Covers the ISBN-fallback branch only; other field defaults are not asserted.
+        - Covers the ISBN-fallback branch only; other field defaults are not asserted. The raw
+          "N/A" sentinel that used to survive is now normalized to None by the 03.1/04 normalizer.
 
     On failure, first check:
-        - The isbn10/isbn13 default value logic in scrape_book.
+        - The isbn10/isbn13 fallback in scrape_book, or isbn.normalize's handling of "N/A".
     """
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
-    # No ISBN selectors configured -> empty locators -> "N/A" default.
+    # No ISBN selectors configured -> empty locators -> "N/A" raw sentinel -> normalized to None.
     page = FakePage(
         locators={
             "#productTitle": FakeLocator("Title Only"),
@@ -701,8 +714,8 @@ async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
     result = await scrape_book(url, browser, "amazon")
 
     assert result.status is ScrapeStatus.SUCCESS
-    assert result.book["isbn10"] == "N/A"
-    assert result.book["isbn13"] == "N/A"
+    assert result.book["isbn10"] is None
+    assert result.book["isbn13"] is None
 
 
 async def test_scrape_book_duplicate_hash_returns_duplicate():
@@ -1294,12 +1307,12 @@ async def test_publication_date_text_is_extracted():
         an amazon page whose PUBLICATION_DATE element carries a human date string.
 
     Boundaries:
-        - the non-meta date branch reads the text, stores it verbatim (03.1 normalizes later),
-          and derives the publication year from it.
+        - the non-meta date branch reads the raw text ("August 16, 2012"), which the 03.1/04
+          normalizer turns into the ISO date "2012-08-16" with its year 2012 derived from it.
 
     On failure, first check:
-        - the PUBLICATION_DATE branch stopped reading via ``_text`` or stopped calling
-          ``extract_year_from_date``.
+        - the PUBLICATION_DATE branch stopped reading via ``_text``, or normalize_date stopped
+          converting the month-name date to ISO precision.
     """
     pub_selector = scrape_details.site_constants["amazon"]["PUBLICATION_DATE"]
     locators = {
@@ -1313,7 +1326,7 @@ async def test_publication_date_text_is_extracted():
     result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon")
 
     assert result.status is ScrapeStatus.SUCCESS
-    assert result.book["publication_date"] == "August 16, 2012"
+    assert result.book["publication_date"] == "2012-08-16"
     assert result.book["publication_year"] == 2012
 
 

@@ -93,9 +93,21 @@ class JsonBackend(StorageBackend):
     of the process. Every lookup then hits the index rather than re-reading and re-parsing
     the whole file, so ``search``'s per-candidate ``leanpub_book_exists`` calls cost
     O(candidates) instead of O(candidates x store size).
+
+    The ``book_ids`` bucket is fed from both ``book_id`` (v1 Leanpub documents) and
+    ``source_id`` (schema-2 documents, which fold the Leanpub book id into that shared field),
+    so a Leanpub book stays deduped by id whether it was written before or after the 03.1
+    migration. A schema-2 Amazon ``source_id`` is its ASIN, which cannot collide with a
+    Leanpub book id (short numeric strings), so sharing the bucket is safe.
     """
 
-    _INDEX_FIELDS = (("hashes", "hash"), ("asins", "asin"), ("book_ids", "book_id"), ("slugs", "slug"))
+    _INDEX_FIELDS = (
+        ("hashes", "hash"),
+        ("asins", "asin"),
+        ("book_ids", "book_id"),
+        ("book_ids", "source_id"),
+        ("slugs", "slug"),
+    )
 
     def __init__(self):
         """Create the backend with its in-memory index unbuilt (built lazily on first lookup)."""

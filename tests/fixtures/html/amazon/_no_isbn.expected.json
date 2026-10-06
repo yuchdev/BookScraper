@@ -1,9 +1,8 @@
 {
   "_known_issues": [
-    "03.1/02 ISBN normalization & validation (a Kindle-only edition has no ISBN rows, so both selectors miss and store the sentinel 'N/A'; 03.1/02 would store None instead)",
-    "03.1/03 date normalization (publication_date is the raw site string, not a normalized/ISO date)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
+  "ai_extracted_fields": [],
   "asin": "B00LZW07P0",
   "authors": [
     "Stanley B. Lippman",
@@ -12,11 +11,14 @@
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "f50969001156eb4924ecc68163cb8827a8255b944d5e36119745e7e3e3b24705",
-  "isbn10": "N/A",
-  "isbn13": "N/A",
-  "publication_date": "August 16, 2012",
+  "isbn10": null,
+  "isbn13": null,
+  "publication_date": "2012-08-16",
   "publication_year": 2012,
+  "schema_version": 2,
   "site": "amazon",
+  "slug": null,
+  "source_id": "B00LZW07P0",
   "tags": [
     "C++ Programming",
     "Software Development"

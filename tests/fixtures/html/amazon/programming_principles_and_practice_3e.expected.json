@@ -1,9 +1,8 @@
 {
   "_known_issues": [
-    "03.1/03 date normalization (publication_date is the raw site string 'August 16, 2012' rather than a normalized/ISO date)",
-    "03.1/02 ISBN normalization & validation (isbn10/isbn13 are stored as raw site strings, e.g. '978-0321714114', neither normalized nor validated)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
+  "ai_extracted_fields": [],
   "asin": "0138308683",
   "authors": [
     "Bjarne Stroustrup"
@@ -11,10 +10,13 @@
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "94eb7692b26f84b19c6aef34ce6cd6976f1dded34179e5ea408b7454bdc5fb8b",
   "isbn10": "0138308683",
-  "isbn13": "978-0138308681",
-  "publication_date": "April 23, 2024",
+  "isbn13": "9780138308681",
+  "publication_date": "2024-04-23",
   "publication_year": 2024,
+  "schema_version": 2,
   "site": "amazon",
+  "slug": null,
+  "source_id": "0138308683",
   "tags": [
     "C++ Programming",
     "Software Development"

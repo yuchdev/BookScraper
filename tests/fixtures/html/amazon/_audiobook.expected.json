@@ -1,10 +1,9 @@
 {
   "_known_issues": [
     "positive characterization: the audiobook release-date selector branch of PUBLICATION_DATE resolves (publication_date/year come from #rpi-attribute-audiobook_details-release-date)",
-    "03.1/03 date normalization (publication_date is the raw site string, not a normalized/ISO date)",
-    "03.1/02 ISBN normalization & validation (isbn10/isbn13 are raw site strings, not normalized/validated)",
     "fixture policy: prose neutralized (tests/fixtures/README.md) (description equals the neutralization placeholder)"
   ],
+  "ai_extracted_fields": [],
   "asin": "B07KQT9F1P",
   "authors": [
     "Stanley B. Lippman",
@@ -14,10 +13,13 @@
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "1ce01d7d12484c8a3dd34c7c9d4c280a291e038a9df7eccfb7551af7d2c74f13",
   "isbn10": "0321714113",
-  "isbn13": "978-0321714114",
-  "publication_date": "September 29, 2015",
+  "isbn13": "9780321714114",
+  "publication_date": "2015-09-29",
   "publication_year": 2015,
+  "schema_version": 2,
   "site": "amazon",
+  "slug": null,
+  "source_id": "B07KQT9F1P",
   "tags": [
     "C++ Programming",
     "Software Development"

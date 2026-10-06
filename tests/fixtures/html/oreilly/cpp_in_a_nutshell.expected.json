@@ -1,14 +1,19 @@
 {
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Ray Lischner"
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "f7d3d35ebe2d6d5d3056e6de643ae149352c976f7b6adfd8dad90a42711c8f23",
-  "isbn10": "N/A",
+  "isbn10": null,
   "isbn13": "9780596002985",
-  "publication_date": "May 2003",
+  "publication_date": "2003-05",
   "publication_year": 2003,
+  "schema_version": 2,
   "site": "oreilly",
+  "slug": null,
+  "source_id": null,
   "tags": [
     "C++",
     "Programming"

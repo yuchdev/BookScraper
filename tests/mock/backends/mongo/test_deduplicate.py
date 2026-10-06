@@ -23,10 +23,13 @@ class TestLeanpubPrescrapeDeduplicate:
         Scenario:
             Given a Mock collection whose find_one returns None and a book_id "id-1" with no slug
             When leanpub_prescrape_deduplicate("id-1", None, collection) is called
-            Then find_one is called with {"$or": [{"book_id": "id-1"}]} and the function returns False.
+            Then find_one is called with {"$or": [{"book_id": "id-1"}, {"source_id": "id-1"}]} and
+            the function returns False.
 
         Boundaries:
-            - Only book_id is passed; slug is None so no slug clause should appear
+            - Only book_id is passed; slug is None so no slug clause should appear. The id matches
+              both the v1 key (book_id) and the schema-2 shared field (source_id), so both clauses
+              appear (03.1/04 keeps v1 and v2 documents deduplicable).
             - find_one returning None means "not found" -> False
 
         On failure, first check:
@@ -36,7 +39,7 @@ class TestLeanpubPrescrapeDeduplicate:
         collection.find_one.return_value = None
         result = deduplicate.leanpub_prescrape_deduplicate("id-1", None, collection)
         assert result is False
-        collection.find_one.assert_called_once_with({"$or": [{"book_id": "id-1"}]})
+        collection.find_one.assert_called_once_with({"$or": [{"book_id": "id-1"}, {"source_id": "id-1"}]})
 
     def test_book_slug_only_builds_slug_only_query(self):
         """
@@ -67,11 +70,13 @@ class TestLeanpubPrescrapeDeduplicate:
         Scenario:
             Given a Mock collection and both book_id "id-1" and slug "slug-1"
             When leanpub_prescrape_deduplicate("id-1", "slug-1", collection) is called
-            Then find_one is called with {"$or": [{"book_id": "id-1"}, {"slug": "slug-1"}]}.
+            Then find_one is called with
+            {"$or": [{"book_id": "id-1"}, {"source_id": "id-1"}, {"slug": "slug-1"}]}.
 
         Boundaries:
-            - Both identifiers present; neither is omitted from the query
-            - Order of clauses: book_id before slug
+            - Both identifiers present; neither is omitted from the query. The id yields both a
+              book_id (v1) and a source_id (schema-2) clause.
+            - Order of clauses: book_id then source_id, then slug
 
         On failure, first check:
             - The $or-clause construction logic in leanpub_prescrape_deduplicate
@@ -79,7 +84,9 @@ class TestLeanpubPrescrapeDeduplicate:
         collection = Mock()
         collection.find_one.return_value = None
         deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
-        collection.find_one.assert_called_once_with({"$or": [{"book_id": "id-1"}, {"slug": "slug-1"}]})
+        collection.find_one.assert_called_once_with(
+            {"$or": [{"book_id": "id-1"}, {"source_id": "id-1"}, {"slug": "slug-1"}]}
+        )
 
     def test_no_identifiers_returns_false_without_query(self):
         """

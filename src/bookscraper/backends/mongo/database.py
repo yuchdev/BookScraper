@@ -379,12 +379,15 @@ def update_book_isbn(
 
 
 # Sparse secondary lookup indexes, as (field, index name) pairs. Each accelerates a
-# pre-scrape dedup lookup (asin -> Amazon, book_id/slug -> Leanpub) that would otherwise
-# be a full collection scan. All are sparse (only documents carrying the field are
-# indexed) and none is unique: two editions can legitimately share a slug across sites.
+# pre-scrape dedup lookup (asin -> Amazon, book_id/slug -> Leanpub v1, source_id/slug ->
+# Leanpub schema-2) that would otherwise be a full collection scan. ``source_id`` is the
+# schema-2 (03.1) home of the Leanpub book id - indexed alongside the legacy ``book_id`` so
+# both document shapes stay index-backed. All are sparse (only documents carrying the field
+# are indexed) and none is unique: two editions can legitimately share a slug across sites.
 _SECONDARY_INDEXES: Tuple[Tuple[str, str], ...] = (
     ("asin", "asin_lookup_index"),
     ("book_id", "book_id_lookup_index"),
+    ("source_id", "source_id_lookup_index"),
     ("slug", "slug_lookup_index"),
 )
 

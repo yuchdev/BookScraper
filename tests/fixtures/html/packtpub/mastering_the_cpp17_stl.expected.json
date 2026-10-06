@@ -1,14 +1,19 @@
 {
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Arthur O'Dwyer"
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "0d3ebb02d2681413a5c3acb2a1a1fdf9ce530a11c5b52ec44f269292666256a1",
-  "isbn10": "N/A",
+  "isbn10": null,
   "isbn13": "9781787126824",
-  "publication_date": "September 2017",
+  "publication_date": "2017-09",
   "publication_year": 2017,
+  "schema_version": 2,
   "site": "packtpub",
+  "slug": null,
+  "source_id": null,
   "tags": [
     "C++",
     "Programming"

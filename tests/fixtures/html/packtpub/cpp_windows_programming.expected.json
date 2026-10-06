@@ -1,14 +1,19 @@
 {
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Stefan Bjornander"
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "bfc97faa0f5cdaee735dae7f1109efc10eea27df1f2a0587b12a0d84cd606743",
-  "isbn10": "N/A",
+  "isbn10": null,
   "isbn13": "9781786464224",
-  "publication_date": "September 2016",
+  "publication_date": "2016-09",
   "publication_year": 2016,
+  "schema_version": 2,
   "site": "packtpub",
+  "slug": null,
+  "source_id": null,
   "tags": [
     "C++",
     "Programming"

@@ -417,3 +417,7 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   normalizer-validated, provenance-marked values, plus a Markdown-snapshot measurement spike. The ideas are
   borrowed, not the dependency. 03.1/01 reserves `ai_extracted_fields` now, so 04.1 needs no schema bump. The
   Amazon `DESCRIPTION` empty-match case (follow-up 1 above) is its first golden target. Totals 94 → 99.
+- **2026-10-06 - 03.1/04 hash policy (user-ratified):** `_clean_authors` de-duplicates authors case-insensitively,
+  and the clean list is the `hash_book` input ("Dedup + migrate"). In the corpus only the synthetic `_many_authors`
+  fixtures change hash; every real-book golden hash is unchanged. Stored documents with a repeated author get their
+  hash recomputed by the 03.1/06 migration, which reports every changed hash and any collision (never auto-merged).

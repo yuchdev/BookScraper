@@ -7,7 +7,6 @@ import random
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -15,10 +14,10 @@ import httpx
 from playwright.async_api import Browser, Error as PlaywrightError, Page, Route, TimeoutError
 
 from ..backends import StorageBackend
-from ..book_utils import extract_year_from_date, hash_book, print_log
+from ..book_utils import print_log
+from . import normalize
 from .parameters import USER_AGENTS, site_constants
 from .results import ScrapeResult, ScrapeStatus
-from .text import html_to_text
 
 # The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
 LEANPUB_SITE = "leanpub"
@@ -295,33 +294,9 @@ async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient]
 
         relationships = book_data.get("relationships", {})
         included = response_data.get("included", [])  # Relevant for authors
-        # A missing / null about_the_book is no longer fatal: html_to_text(None) is "".
-        about_the_book = html_to_text(attributes.get("about_the_book"))
 
-        extracted_details = {
-            "site": "leanpub.com",
-            "title": title,
-            "book_id": book_data.get("id"),
-            "slug": attributes.get("slug"),
-            "authors": [],
-            "about_the_book": about_the_book,
-            "categories": [],
-            "last_published_at": None,
-            "hash": "",
-        }
-
-        # Extract last published at.
-        last_published_at_str = attributes.get("last_published_at")
-        if last_published_at_str:
-            try:
-                # 'Z' indicates UTC. datetime.fromisoformat handles '+00:00'.
-                dt_object = datetime.fromisoformat(last_published_at_str.replace("Z", "+00:00"))
-                extracted_details["last_published_at"] = dt_object.strftime("%Y-%m-%d")
-            except ValueError:
-                print_log(f"Warning: Could not parse date string: '{last_published_at_str}'", "warning")
-                extracted_details["last_published_at"] = None
-
-        # Extract authors.
+        # Resolve authors: the accepted_authors relationship references Author resources in
+        # the included[] expansion.
         author_lookup = {}
         for item in included:
             if item.get("type") == "Author":
@@ -330,26 +305,26 @@ async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient]
                 if author_id and author_name:
                     author_lookup[author_id] = author_name
 
+        authors: list[str] = []
         accepted_authors_data = relationships.get("accepted_authors", {}).get("data", [])
         for author_rel in accepted_authors_data:
             author_id = author_rel.get("id")
             if author_id and author_id in author_lookup:
-                extracted_details["authors"].append(author_lookup[author_id])
+                authors.append(author_lookup[author_id])
 
-        # Extract categories from data.attributes.categories.
-        categories_data = attributes.get("categories", [])
-        for category_item in categories_data:
+        # Resolve categories from data.attributes.categories.
+        categories: list[str] = []
+        for category_item in attributes.get("categories", []):
             category_name = category_item.get("name")
             if category_name:
-                extracted_details["categories"].append(category_name)
+                categories.append(category_name)
 
-        extracted_details["hash"] = hash_book(
-            extracted_details["title"],
-            extracted_details["authors"],
-            extract_year_from_date(extracted_details["last_published_at"]),
-        )
+        # Build the canonical record: date normalization, the human-facing URL, the HTML
+        # about_the_book -> plain-text description, and the (unchanged) hash input all live in
+        # the normalizer (see scraping/normalize.py).
+        record = normalize.from_leanpub_api(attributes, book_data.get("id"), authors, categories)
 
-        return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site=LEANPUB_SITE, book=extracted_details)
+        return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site=LEANPUB_SITE, book=record.to_document())
 
     except httpx.HTTPStatusError as exc:
         # Only the status code is surfaced - never exc.response.text (the raw body).
@@ -439,15 +414,14 @@ async def scrape_book(
                             attempts=attempt,
                         )
 
-                # Every output key is initialized up front with a neutral value, so a missing
-                # optional field can never raise a KeyError downstream (e.g. at the hash line).
+                # Every output key is initialized up front with a neutral value, so the
+                # normalizer always sees a well-formed raw dict to canonicalize.
                 book_details: dict = {
                     "url": full_url,
                     "site": site,
                     "title": None,
                     "authors": [],
                     "publication_date": None,
-                    "publication_year": None,
                     "isbn10": "N/A",
                     "isbn13": "N/A",
                     "description": None,
@@ -509,16 +483,15 @@ async def scrape_book(
                     pub_date_text = await _attr(page, meta_date_selector, "content", timeout_ms=FIELD_TIMEOUT_MS)
                     if pub_date_text:
                         book_details["publication_date"] = pub_date_text.split("T")[0]
-                        book_details["publication_year"] = extract_year_from_date(book_details["publication_date"])
                 else:
                     date_selector = _selector(selectors, "PUBLICATION_DATE")
                     if date_selector:
                         pub_date_text = await _text(page, date_selector, timeout_ms=FIELD_TIMEOUT_MS)
                         if pub_date_text:
                             book_details["publication_date"] = pub_date_text
-                            book_details["publication_year"] = extract_year_from_date(pub_date_text)
 
-                # ISBN10 & ISBN13 (optional - keep the "N/A" sentinel when absent; 03.1 replaces it).
+                # ISBN10 & ISBN13 (optional): the raw "N/A" sentinel is left in place here and
+                # normalized to None (or a canonical ISBN) by normalize.from_playwright.
                 isbn10_selector = _selector(selectors, "ISBN10")
                 if isbn10_selector:
                     isbn10 = await _text(page, isbn10_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
@@ -536,7 +509,9 @@ async def scrape_book(
                     asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url)
                     if asin_match:
                         book_details["asin"] = asin_match.group(1)
-                        module_logger.info(f"Extracted ASIN: {book_details['asin']} for {book_details['title']} ({url}).")
+                        module_logger.info(
+                            f"Extracted ASIN: {book_details['asin']} for {book_details['title']} ({url})."
+                        )
 
                 # Description (optionally behind a "Read more" expander, else a fallback selector).
                 description_selector = _selector(selectors, "DESCRIPTION")
@@ -565,24 +540,26 @@ async def scrape_book(
                 if tags_selector:
                     book_details["tags"] = await _texts(page, tags_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
 
-                # Generate hash
-                book_details["hash"] = hash_book(
-                    book_details["title"], book_details["authors"], book_details["publication_year"]
-                )
+                # Build the canonical record from the raw field dict: author cleaning, ISBN
+                # normalization/validation, date normalization, and the (unchanged) hash input
+                # all live in the normalizer (see scraping/normalize.py).
+                record = normalize.from_playwright(book_details, site, full_url)
 
                 # Check for duplicates BEFORE returning, if a storage backend is provided
                 if storage_backend is not None:
-                    is_duplicate = storage_backend.book_exists_by_hash(book_details["hash"])
+                    is_duplicate = storage_backend.book_exists_by_hash(record.hash)
                     if is_duplicate:
                         module_logger.info(
-                            f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
+                            f"Book with hash '{record.hash}' (ISBN10: {record.isbn10}, ISBN13: {record.isbn13}) already exists in DB. Skipping URL: {url}"
                         )
                         print_log(f"Skipping duplicate book for URL: {url}", "warning")
                         return ScrapeResult(ScrapeStatus.DUPLICATE, url=full_url, site=site, attempts=attempt)
 
                 # If all successful and not a duplicate:
-                module_logger.info(f"Successfully scraped details for {book_details['title']} ({url}).")
-                return ScrapeResult(ScrapeStatus.SUCCESS, url=full_url, site=site, book=book_details, attempts=attempt)
+                module_logger.info(f"Successfully scraped details for {record.title} ({url}).")
+                return ScrapeResult(
+                    ScrapeStatus.SUCCESS, url=full_url, site=site, book=record.to_document(), attempts=attempt
+                )
 
         except Exception as exc:  # noqa: X002 - single retry/fail boundary - every per-attempt exception is classified by _is_transient_error and then either retried or converted to a FAILED/TIMEOUT ScrapeResult so one URL can never raise out of scrape_book and abort the asyncio.gather batch
             transient = _is_transient_error(exc)

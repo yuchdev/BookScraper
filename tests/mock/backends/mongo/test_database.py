@@ -1102,7 +1102,12 @@ class TestUpdateBookIsbn:
 # --------------------------------------------------------------------------- #
 # ensure_indexes (and its deprecated ensure_unique_index_on_hash alias)
 # --------------------------------------------------------------------------- #
-_ALL_SECONDARY_NAMES = ("asin_lookup_index", "book_id_lookup_index", "slug_lookup_index")
+_ALL_SECONDARY_NAMES = (
+    "asin_lookup_index",
+    "book_id_lookup_index",
+    "source_id_lookup_index",
+    "slug_lookup_index",
+)
 
 
 class TestEnsureUniqueIndexOnHash:
@@ -1195,15 +1200,15 @@ class TestEnsureUniqueIndexOnHash:
 class TestEnsureIndexes:
     """Tests for database.ensure_indexes."""
 
-    def test_ensure_indexes_creates_all_four_when_absent(self):
+    def test_ensure_indexes_creates_all_five_when_absent(self):
         """
-        [Local] database ensure indexes: verifies ensure indexes creates all four when absent.
+        [Local] database ensure indexes: verifies ensure indexes creates all five when absent.
 
         Scenario:
-            an empty collection gets the unique hash index plus all three sparse secondary lookup indexes created in one call.
+            an empty collection gets the unique hash index plus all four sparse secondary lookup indexes created in one call.
 
         Boundaries:
-            - index_information() reports only the implicit _id_ index.
+            - index_information() reports only the implicit _id_ index. The source_id index is the schema-2 (03.1) home of the Leanpub book id, indexed alongside the legacy book_id.
 
         On failure, first check:
             - a lookup field is left unindexed, so pre-scrape dedup falls back to a full collection scan.
@@ -1214,8 +1219,9 @@ class TestEnsureIndexes:
         collection.create_index.assert_any_call("hash", unique=True, name="hash_unique_index")
         collection.create_index.assert_any_call("asin", sparse=True, name="asin_lookup_index")
         collection.create_index.assert_any_call("book_id", sparse=True, name="book_id_lookup_index")
+        collection.create_index.assert_any_call("source_id", sparse=True, name="source_id_lookup_index")
         collection.create_index.assert_any_call("slug", sparse=True, name="slug_lookup_index")
-        assert collection.create_index.call_count == 4
+        assert collection.create_index.call_count == 5
 
     def test_ensure_indexes_is_idempotent_when_all_present(self):
         """
@@ -1265,7 +1271,7 @@ class TestEnsureIndexes:
             database.ensure_indexes(collection)
 
         attempted = [c.args[0] for c in collection.create_index.call_args_list]
-        assert attempted == ["asin", "book_id", "slug"]
+        assert attempted == ["asin", "book_id", "source_id", "slug"]
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("Warning: Failed to ensure sparse index on 'asin'" in msg for msg in printed)
 

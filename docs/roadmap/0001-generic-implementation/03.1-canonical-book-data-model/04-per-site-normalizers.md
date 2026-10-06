@@ -1,7 +1,7 @@
 # 04 - Per-site normalizers
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-isbn-normalization.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/02-isbn-normalization.md), [03-date-normalization.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/03-date-normalization.md)
 **Role:** Python Expert
 

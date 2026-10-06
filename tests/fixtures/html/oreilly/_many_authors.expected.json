@@ -1,19 +1,26 @@
 {
+  "_known_issues": [
+    "03.1/04 author de-duplication: this synthetic fixture lists 'Ada Lovelace' twice; _clean_authors now drops the case-insensitive duplicate, so authors holds 5 names (was 6) and the hash differs from the v1 golden accordingly (correct dedup, not drift of a real book)."
+  ],
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Ada Lovelace",
     "Grace Hopper",
     "Alan Turing",
     "Edsger Dijkstra",
-    "Donald Knuth",
-    "Ada Lovelace"
+    "Donald Knuth"
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
-  "hash": "3b0a3899b10e6717f1063ee45653e14f47f6e1b1472b1adc0fbefde0179d3038",
-  "isbn10": "N/A",
+  "hash": "934c0fd64b695569dcf0df2e0d6336705e041f85a6f0fd5d3211eac0d0a07893",
+  "isbn10": null,
   "isbn13": "9781491903995",
-  "publication_date": "November 2014",
+  "publication_date": "2014-11",
   "publication_year": 2014,
+  "schema_version": 2,
   "site": "oreilly",
+  "slug": null,
+  "source_id": null,
   "tags": [
     "C++",
     "Programming"

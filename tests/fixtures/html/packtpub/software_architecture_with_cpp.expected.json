@@ -1,15 +1,20 @@
 {
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Adrian Ostrowski",
     "Piotr Gaczkowski"
   ],
   "description": "Neutralized prose omitted from the public test corpus.",
   "hash": "306f9e5287290775bd7ddb8f490c933d7ca9263dfc156a0c162933f37516d2d6",
-  "isbn10": "N/A",
+  "isbn10": null,
   "isbn13": "9781838554590",
-  "publication_date": "April 2021",
+  "publication_date": "2021-04",
   "publication_year": 2021,
+  "schema_version": 2,
   "site": "packtpub",
+  "slug": null,
+  "source_id": null,
   "tags": [
     "C++",
     "Programming"

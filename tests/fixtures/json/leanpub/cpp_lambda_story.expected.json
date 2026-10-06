@@ -2,18 +2,25 @@
   "_known_issues": [
     "fixture policy: prose neutralized (tests/fixtures/README.md) (about_the_book equals the neutralization placeholder)"
   ],
-  "about_the_book": "Neutralized prose omitted from the public test corpus.",
+  "ai_extracted_fields": [],
+  "asin": null,
   "authors": [
     "Bartlomiej Filipek"
   ],
-  "book_id": "102",
-  "categories": [
+  "description": "Neutralized prose omitted from the public test corpus.",
+  "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
+  "isbn10": null,
+  "isbn13": null,
+  "publication_date": "2020-09-01",
+  "publication_year": 2020,
+  "schema_version": 2,
+  "site": "leanpub",
+  "slug": "cpplambda",
+  "source_id": "102",
+  "tags": [
     "Computer Science",
     "C and C++"
   ],
-  "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
-  "last_published_at": "2020-09-01",
-  "site": "leanpub.com",
-  "slug": "cpplambda",
-  "title": "C++ Lambda Story"
+  "title": "C++ Lambda Story",
+  "url": "https://leanpub.com/cpplambda"
 }

@@ -7,6 +7,12 @@
 
 ## Requirements
 
+- **Hash recomputation (user decision 2026-10-06).** 04's `_clean_authors` de-duplicates authors
+  case-insensitively, and the de-duplicated list is the hash input. So any stored document whose author list repeats
+  a name gets a new hash. The migration recomputes `hash_book(title, authors, publication_year)` from the migrated
+  record for **every** document and rewrites the hashes that change. The migration report lists each changed hash
+  (old → new, with the document id), plus any collision with an existing document's hash. On a collision the
+  document is not rewritten and is reported for a human to resolve; it never silently overwrites or merges.
 - `scripts/migrate_books.py` (out of the coverage scope like other `scripts/`, but with its own tests), exposed as
   `bookscraper migrate --store-backend {mongo|json} [--apply]`. It is a new subcommand in `cli.py`, dispatched
   via `commands/migrate.py`, so it reuses `resolve_store_backend`.
