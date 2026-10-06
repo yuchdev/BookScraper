@@ -7,6 +7,7 @@ filesystem access occurs. The assertions pin both the delegated call args and th
 each adapter returns exactly what its collaborator returned.
 """
 
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,45 @@ from bookscraper.backends import storage
 from bookscraper.backends.local import store
 from bookscraper.backends.mongo.config import ConfigError
 from bookscraper.backends.storage import JsonBackend, MongoBackend, SaveSummary, resolve_store_backend
+from bookscraper.models import SCHEMA_VERSION
+
+
+def _hash(seed: str) -> str:
+    """A deterministic 64-char lowercase-hex digest so test documents pass the save boundary."""
+    return hashlib.sha256(seed.encode()).hexdigest()
+
+
+def _doc(**overrides) -> dict:
+    """A minimal but save-boundary-valid schema-2 document, with per-test field overrides.
+
+    The adapters now validate each document via ``models.validate_document`` before delegating,
+    so adapter-level tests must hand them valid canonical documents to reach the delegate.
+
+    :param overrides: Field values to replace on the baseline document.
+    :returns: A valid schema-2 document carrying the overrides.
+    """
+    base = {
+        "schema_version": SCHEMA_VERSION,
+        "site": "leanpub",
+        "url": "https://leanpub.com/book",
+        "source_id": None,
+        "slug": None,
+        "asin": None,
+        "title": "A Book",
+        "authors": [],
+        "isbn10": None,
+        "isbn13": None,
+        "publication_date": None,
+        "publication_year": None,
+        "description": None,
+        "tags": [],
+        "ai_extracted_fields": [],
+        "scraped_at": "2026-10-05T12:00:00Z",
+        "hash": _hash("default"),
+    }
+    base.update(overrides)
+    return base
+
 
 _TEST_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 _TEST_KEY_PEM = _TEST_KEY.private_bytes(
@@ -105,7 +145,7 @@ class TestMongoBackend:
         """
         collection = Mock(name="collection")
         backend = MongoBackend(collection)
-        books = [{"title": "A"}, {"title": "B"}]
+        books = [_doc(hash=_hash("a"), title="A"), _doc(hash=_hash("b"), title="B")]
         expected = SaveSummary(inserted=2, duplicates=0, errors=0)
 
         with patch.object(storage, "database") as mock_db:
@@ -234,7 +274,7 @@ class TestJsonBackend:
             - The delegation call and store-path forwarding in JsonBackend.save_books
         """
         backend = JsonBackend()
-        books = [{"title": "A"}]
+        books = [_doc(hash=_hash("a"), title="A")]
         expected = SaveSummary(inserted=1, duplicates=0, errors=0)
 
         with patch.object(storage, "store") as mock_store:
@@ -314,15 +354,14 @@ class TestJsonBackend:
             - the cache goes stale within a run and a just-saved book is re-scraped or re-inserted as if new.
         """
         backend = JsonBackend()
-        assert backend.book_exists_by_hash("h1") is False  # builds an empty index
+        h1 = _hash("h1")
+        assert backend.book_exists_by_hash(h1) is False  # builds an empty index
 
-        # A non-dict element and a hash-less book are ignored by the cache update, exactly
-        # as store.save_books ignores them on the write side.
-        backend.save_books(
-            ["not-a-dict", {"title": "no hash"}, {"hash": "h1", "asin": "B001", "book_id": "42", "slug": "s"}]
-        )
+        # A non-dict element and a hash-less book are rejected by the save boundary (counted
+        # as errors, never written), so the cache update only ever sees the one valid document.
+        backend.save_books(["not-a-dict", {"title": "no hash"}, _doc(hash=h1, asin="B001", source_id="42", slug="s")])
 
-        assert backend.book_exists_by_hash("h1") is True
+        assert backend.book_exists_by_hash(h1) is True
         assert backend.book_exists_by_asin("B001") is True
         assert backend.leanpub_book_exists("42", None) is True
 
@@ -361,11 +400,11 @@ def test_mongo_and_json_backends_return_save_summary():
 
     with patch.object(storage, "database") as mock_db:
         mock_db.save_books_to_mongodb.return_value = mongo_summary
-        mongo_result = MongoBackend(Mock(name="collection")).save_books([{"hash": "h"}])
+        mongo_result = MongoBackend(Mock(name="collection")).save_books([_doc(hash=_hash("m"))])
 
     with patch.object(storage, "store") as mock_store:
         mock_store.save_books.return_value = json_summary
-        json_result = JsonBackend().save_books([{"hash": "h"}])
+        json_result = JsonBackend().save_books([_doc(hash=_hash("j"))])
 
     assert mongo_result is mongo_summary
     assert json_result is json_summary

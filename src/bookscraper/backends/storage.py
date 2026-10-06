@@ -22,6 +22,7 @@ from typing import Optional
 
 from pymongo.collection import Collection
 
+from .. import models
 from ..book_utils import check_local_write_permission, print_log
 from .local import store
 from .mongo import config, database, deduplicate
@@ -29,6 +30,51 @@ from .mongo.cert_rotation import cert_expiry_warning
 from .save_summary import SaveSummary
 
 logger = logging.getLogger(__name__)
+
+
+def _reject_invalid(books: list[dict]) -> tuple[list[dict], int]:
+    """Split ``books`` into the ones that pass :func:`models.validate_document` and a reject count.
+
+    The single save-boundary gate both backends apply before writing (subtask 05): a document
+    failing validation is never persisted, counts as a :class:`SaveSummary` error, and is logged
+    exactly once with its ``url`` and the problem list - never the document itself, since scraped
+    text is untrusted (03.0 security review).
+
+    :param books: The candidate documents handed to a backend's ``save_books``.
+    :returns: A ``(valid, rejected)`` tuple - the documents that passed, and the count that did not.
+    """
+    valid: list[dict] = []
+    rejected = 0
+    for book in books:
+        problems = models.validate_document(book)
+        if not problems:
+            valid.append(book)
+            continue
+        rejected += 1
+        url = book.get("url", "<no url>") if isinstance(book, dict) else "<non-dict document>"
+        message = f"Rejected invalid document (url={url}): {'; '.join(problems)}"
+        logger.error(message)
+        print_log(f"Error: {message}", "error")
+    return valid, rejected
+
+
+def _with_rejects(summary: SaveSummary, rejected: int) -> SaveSummary:
+    """Fold ``rejected`` save-boundary rejections into ``summary``'s error count.
+
+    Returns ``summary`` unchanged when nothing was rejected, so an all-valid batch keeps the exact
+    object its backend produced (the delegation identity the mock-tier tests rely on).
+
+    :param summary: The :class:`SaveSummary` the underlying store returned for the valid subset.
+    :param rejected: The number of documents rejected by :func:`_reject_invalid`.
+    :returns: A :class:`SaveSummary` whose ``errors`` includes the rejected documents.
+    """
+    if not rejected:
+        return summary
+    return SaveSummary(
+        inserted=summary.inserted,
+        duplicates=summary.duplicates,
+        errors=summary.errors + rejected,
+    )
 
 
 class StorageBackend(ABC):
@@ -64,8 +110,13 @@ class MongoBackend(StorageBackend):
         self._collection = collection
 
     def save_books(self, books: list[dict]) -> SaveSummary:
-        """Delegate to :func:`database.save_books_to_mongodb`."""
-        return database.save_books_to_mongodb(books, self._collection)
+        """Validate each document at the save boundary, then delegate to :func:`database.save_books_to_mongodb`.
+
+        Documents failing :func:`models.validate_document` are never written; they are counted as
+        :class:`SaveSummary` errors and logged once (subtask 05).
+        """
+        valid, rejected = _reject_invalid(books)
+        return _with_rejects(database.save_books_to_mongodb(valid, self._collection), rejected)
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
         """Delegate to :func:`database.check_book_exists_in_db`."""
@@ -134,18 +185,22 @@ class JsonBackend(StorageBackend):
         return self._index
 
     def save_books(self, books: list[dict]) -> SaveSummary:
-        """Persist ``books`` via :func:`store.save_books` and mirror newly written entries into the index."""
-        summary = store.save_books(books, store.LOCAL_STORE_FILE)
-        # Mirror in the cache exactly what store.save_books just persisted: books that
-        # carry a hash not already known (duplicates and hash-less errors are not written).
+        """Validate at the save boundary, persist the valid documents, and mirror them into the index.
+
+        Documents failing :func:`models.validate_document` are never written; they are counted as
+        :class:`SaveSummary` errors and logged once (subtask 05). Only the valid documents reach
+        :func:`store.save_books` and the in-memory index.
+        """
+        valid, rejected = _reject_invalid(books)
+        summary = store.save_books(valid, store.LOCAL_STORE_FILE)
+        # Mirror in the cache exactly what store.save_books just persisted: valid books that
+        # carry a hash not already known (duplicates are not re-added; invalid ones never reach here).
         if self._index is not None:
-            for book in books:
-                if not isinstance(book, dict):
-                    continue
+            for book in valid:
                 book_hash = book.get("hash")
                 if book_hash and book_hash not in self._index["hashes"]:
                     self._add_to_index(self._index, book)
-        return summary
+        return _with_rejects(summary, rejected)
 
     def book_exists_by_hash(self, book_hash: str) -> bool:
         """Report whether ``book_hash`` is present in the in-memory index."""
