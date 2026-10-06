@@ -37,6 +37,11 @@ from .text import html_to_text
 #: unbounded, matching :data:`bookscraper.scraping.scrape_details.TAGS_LIMIT`.
 TAGS_LIMIT = 50
 
+#: ``scraped_at`` for a migrated v1 document (subtask 06). A v1 document never recorded a scrape
+#: time, so a fixed UTC epoch sentinel marks "unknown" uniformly rather than inventing a
+#: plausible-but-false timestamp. Used only by :func:`from_v1_document`.
+SENTINEL_SCRAPED_AT = "1970-01-01T00:00:00Z"
+
 
 def _now_utc_iso() -> str:
     """Return the current UTC time as an ISO-8601 string ending in ``Z``.
@@ -198,3 +203,65 @@ def from_leanpub_api(
         scraped_at=now or _now_utc_iso(),
         hash=hash_book(title, cleaned_authors, publication_year),
     )
+
+
+def _from_v2_passthrough(content: dict) -> dict:
+    """Re-emit an already-schema-2 document, recomputing its hash for idempotency.
+
+    A v2 document is already clean, so :meth:`bookscraper.models.BookRecord.from_document`
+    round-trips it unchanged; the hash is recomputed from the same ``(title, authors,
+    publication_year)`` the live scrapers use, which equals the stored hash for a genuine v2
+    record (so a second migration pass is a no-op) and surfaces any drift for a would-be v2
+    document that is not.
+
+    :param content: A document claiming ``schema_version == 2`` (without any Mongo ``_id``).
+    :returns: The canonical v2 document.
+    :raises KeyError: if ``content`` is missing a schema-2 key.
+    """
+    record = BookRecord.from_document(content)
+    document = record.to_document()
+    document["hash"] = hash_book(record.title, record.authors, record.publication_year)
+    return document
+
+
+def from_v1_document(doc: dict) -> dict:
+    """Normalize a stored v1 (or already-v2) document into a canonical schema-2 document.
+
+    A stored v1 document is just another raw input to normalize: this routes it to the same
+    per-site normalizer a fresh scrape uses - :func:`from_leanpub_api` for a ``"leanpub"`` /
+    ``"leanpub.com"`` record, otherwise :func:`from_playwright` - so the v1-to-v2 mapping
+    (``about_the_book`` to ``description``, ``categories`` to ``tags``, ``last_published_at`` to a
+    normalized ``publication_date``, ``"N/A"`` ISBNs to ``None`` or a validated value, the Leanpub
+    hostname to the bare key, a derived ``https://leanpub.com/<slug>`` URL, ``schema_version: 2``,
+    the :data:`SENTINEL_SCRAPED_AT` scrape-time sentinel, and dropped unknown keys) is applied
+    exactly as a fresh scrape would, with the hash recomputed from the migrated fields. An
+    already-v2 document round-trips unchanged (idempotent), preserving its real ``scraped_at``.
+
+    The migration engine (:mod:`bookscraper.backends.migration`) takes this function as an injected
+    ``transform`` callable, so ``backends`` never imports ``scraping``.
+
+    :param doc: A stored v1 or v2 document (a Mongo ``_id``, if present, is ignored).
+    :returns: The fully-formed, hash-stamped schema-2 document.
+    :raises KeyError: if an already-v2 document is missing a schema-2 key.
+    """
+    content = {key: value for key, value in doc.items() if key != "_id"}
+    if content.get("schema_version") == SCHEMA_VERSION:
+        return _from_v2_passthrough(content)
+
+    site = content.get("site")
+    if site in ("leanpub", "leanpub.com"):
+        record = from_leanpub_api(
+            content,
+            content.get("book_id"),
+            content.get("authors") or [],
+            content.get("categories") or [],
+            now=SENTINEL_SCRAPED_AT,
+        )
+    else:
+        record = from_playwright(
+            content,
+            site,
+            content.get("url") or "",
+            now=SENTINEL_SCRAPED_AT,
+        )
+    return record.to_document()

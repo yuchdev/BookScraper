@@ -1,7 +1,7 @@
 # 06 - Schema version & data migration
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [04-per-site-normalizers.md](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/04-per-site-normalizers.md)
 **Role:** Python Expert → Security Auditor (Mongo write path)
 

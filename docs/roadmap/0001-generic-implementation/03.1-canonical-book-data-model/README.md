@@ -31,7 +31,7 @@ normalizes ISBNs and dates, versions the schema, validates at the save boundary,
 | 03 | [Date normalization](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/03-date-normalization.md)                      | ✅ Complete    | 04         |
 | 04 | [Per-site normalizers](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/04-per-site-normalizers.md)                  | ✅ Complete    | 05, 06     |
 | 05 | [Save-boundary validation](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/05-save-boundary-validation.md)          | ✅ Complete    | -          |
-| 06 | [Schema version & data migration](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/06-schema-version-and-migration.md) | ⬜ Not started | -       |
+| 06 | [Schema version & data migration](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/06-schema-version-and-migration.md) | ✅ Complete    | -       |
 
 ## Key constraints
 

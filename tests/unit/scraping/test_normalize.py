@@ -11,11 +11,44 @@ The ``scraped_at`` clock is injected through each normalizer's ``now`` parameter
 are fully deterministic.
 """
 
-from bookscraper.models import SCHEMA_VERSION
+from bookscraper.models import SCHEMA_VERSION, validate_document
 from bookscraper.scraping import normalize
 
 # A fixed scraped_at so records are deterministic; the real clock is _now_utc_iso().
 _NOW = "2026-01-01T00:00:00Z"
+
+
+def _amazon_v1() -> dict:
+    """A realistic v1 Amazon document (raw date, hyphenated ISBN-13, bare site key)."""
+    return {
+        "asin": "0136816487",
+        "authors": ["Bjarne Stroustrup"],
+        "description": "A concise introduction to C++.",
+        "hash": "1b93bf19f83335db49b6af3fc2700565f80d42e1dabb44834b2c55a9ff4ad648",
+        "isbn10": "0136816487",
+        "isbn13": "978-0136816485",
+        "publication_date": "September 24, 2022",
+        "publication_year": 2022,
+        "site": "amazon",
+        "tags": ["C++ Programming Language", "Object-Oriented Design"],
+        "title": "Tour of C++, A (C++ In-Depth Series)",
+        "url": "https://www.amazon.com/dp/0136816487",
+    }
+
+
+def _leanpub_v1() -> dict:
+    """A realistic v1 Leanpub document (``leanpub.com`` host, API-derived keys, no url)."""
+    return {
+        "about_the_book": "<p>Everything about C++ lambdas.</p>",
+        "authors": ["Bartlomiej Filipek"],
+        "book_id": "102",
+        "categories": ["Computer Science", "C and C++"],
+        "hash": "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5",
+        "last_published_at": "2020-09-01",
+        "site": "leanpub.com",
+        "slug": "cpplambda",
+        "title": "C++ Lambda Story",
+    }
 
 
 def test_from_playwright_maps_all_fields():
@@ -285,3 +318,96 @@ def test_hash_unchanged_for_known_historical_records():
         now=_NOW,
     )
     assert leanpub.hash == "3b1beb4b6d58060b587c648b566e9af155241f7c6405a9bfa8c3249f2cff26c5"
+
+
+def test_from_v1_document_maps_every_legacy_field():
+    """
+    [Unit] normalize from_v1_document: verifies every v1 legacy field maps onto its v2 counterpart.
+
+    Scenario:
+        Given a v1 Leanpub document (``leanpub.com`` host, ``about_the_book`` / ``categories`` /
+            ``last_published_at`` keys, no ``url`` or ``schema_version``)
+        When normalize.from_v1_document is called
+        Then the result is a valid schema-2 document: bare ``leanpub`` site, derived
+            ``https://leanpub.com/<slug>`` url, ``book_id`` folded into ``source_id``,
+            ``about_the_book`` to plain-text ``description``, ``categories`` to ``tags``,
+            ``last_published_at`` to an ISO ``publication_date`` plus derived year,
+            ``schema_version`` 2, and the SENTINEL_SCRAPED_AT scrape-time sentinel
+
+    Boundaries:
+        - Leanpub-specific mapping (the shape that differs most from v2), not the Playwright one
+        - HTML description is converted to plain text (tags stripped)
+
+    On failure, first check:
+        - from_v1_document's leanpub.com routing to from_leanpub_api
+        - The v1 to v2 mapping table in docs/scraping/book-record-schema.md
+    """
+    result = normalize.from_v1_document(_leanpub_v1())
+
+    assert validate_document(result) == []
+    assert result["schema_version"] == SCHEMA_VERSION
+    assert result["site"] == "leanpub"
+    assert result["url"] == "https://leanpub.com/cpplambda"
+    assert result["source_id"] == "102"
+    assert result["slug"] == "cpplambda"
+    assert result["asin"] is None
+    assert result["description"] == "Everything about C++ lambdas."
+    assert result["tags"] == ["Computer Science", "C and C++"]
+    assert result["publication_date"] == "2020-09-01"
+    assert result["publication_year"] == 2020
+    assert result["ai_extracted_fields"] == []
+    assert result["scraped_at"] == normalize.SENTINEL_SCRAPED_AT
+    assert "about_the_book" not in result
+    assert "categories" not in result
+
+
+def test_from_v1_document_normalizes_playwright_na_isbn_and_raw_date():
+    """
+    [Unit] normalize from_v1_document: verifies a Playwright v1 record is normalized without hash drift.
+
+    Scenario:
+        Given a v1 Amazon document with a hyphenated ISBN-13 and a raw "September 24, 2022" date
+        When normalize.from_v1_document is called
+        Then the ISBN-13 is cleaned, the date becomes ISO "2022-09-24", the ASIN also populates
+            ``source_id``, and the recomputed hash equals the stored v1 hash (stable)
+
+    Boundaries:
+        - Hash stability: title/authors/year unchanged so the hash must not drift
+        - ASIN folded into both ``asin`` and ``source_id``
+
+    On failure, first check:
+        - Whether normalize_date or isbn.normalize changed output for these inputs
+        - Whether hash_book's (title, authors, year) inputs drifted
+    """
+    v1 = _amazon_v1()
+    result = normalize.from_v1_document(v1)
+
+    assert validate_document(result) == []
+    assert result["isbn13"] == "9780136816485"
+    assert result["isbn10"] == "0136816487"
+    assert result["publication_date"] == "2022-09-24"
+    assert result["source_id"] == "0136816487"
+    assert result["asin"] == "0136816487"
+    assert result["hash"] == v1["hash"]
+
+
+def test_from_v1_document_is_idempotent_on_v2_documents():
+    """
+    [Unit] normalize from_v1_document: verifies transforming an already-v2 document is a no-op.
+
+    Scenario:
+        Given a document already migrated to v2 (the output of a first from_v1_document call)
+        When normalize.from_v1_document is called on it again
+        Then the result is identical to the input (same fields, same recomputed hash)
+
+    Boundaries:
+        - Idempotency gate: a second migration pass must change nothing
+        - scraped_at is preserved (NOT reset to the sentinel) for an already-v2 record
+
+    On failure, first check:
+        - The v2 passthrough branch (_from_v2_passthrough)
+        - Whether a normalizer step is non-idempotent on already-clean input
+    """
+    once = normalize.from_v1_document(_amazon_v1())
+    twice = normalize.from_v1_document(once)
+    assert twice == once

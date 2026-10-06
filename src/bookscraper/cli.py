@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
     )
     subparsers = parser.add_subparsers(
-        dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema}"
+        dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate}"
     )
 
     scrape_parser = subparsers.add_parser(
@@ -269,6 +269,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path to also write the report to (it is always printed to stdout).",
     )
     detect_schema_parser.add_argument(
+        "--log-severity",
+        dest="log_severity",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
+    )
+
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Rewrite stored v1 book documents to the canonical schema-2 shape (dry-run by default).",
+        description="Migrate every document in the chosen storage backend from the pre-03.1 v1 shape "
+        "to the canonical schema-2 BookRecord shape, recomputing each document's hash. Dry-run by "
+        "default (prints a per-field change summary and writes nothing); pass --apply to write. "
+        "Idempotent and never deletes a document; a recomputed hash that collides with another "
+        "document is left untouched and reported for a human. A migration-report-*.json is written "
+        "to ~/.bookscrapper/logs/.",
+    )
+    migrate_parser.add_argument(
+        "--store-backend",
+        dest="store_backend",
+        choices=["mongo", "json"],
+        required=True,
+        help="Storage backend to migrate: 'mongo' (the configured MongoDB Atlas collection) or "
+        "'json' (the local books.json store).",
+    )
+    migrate_parser.add_argument(
+        "--apply",
+        dest="apply",
+        action="store_true",
+        help="Write the migrated documents to the store. Without it the command is a dry run that "
+        "reports what would change and writes nothing to the store.",
+    )
+    migrate_parser.add_argument(
         "--log-severity",
         dest="log_severity",
         choices=["debug", "info", "warning", "error"],

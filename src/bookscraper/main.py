@@ -5,7 +5,7 @@ import logging
 
 from .book_utils import configure_logging
 from .cli import build_parser
-from .commands import detect_schema, rotate_cert, scrape_urls, search
+from .commands import detect_schema, migrate, rotate_cert, scrape_urls, search
 
 
 async def main():
@@ -22,6 +22,8 @@ async def main():
         await rotate_cert.run(args)
     elif args.command == "detect-schema":
         await detect_schema.run(args)
+    elif args.command == "migrate":
+        await migrate.run(args)
     else:
         # Unreachable: the subparsers are required=True.
         parser.error(f"Unknown command: {args.command}")

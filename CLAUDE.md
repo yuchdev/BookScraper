@@ -262,6 +262,32 @@ unavailable.
   are unrelated to `--store-backend` and are always written as CSV best-effort by both subcommands, since MongoDB
   itself never stores failed/skipped attempts either.
 
+**Migrating a store from v1 to v2 (`bookscraper migrate`).** Documents written before task 03.1 carry the per-site
+*v1* shapes (`about_the_book`/`categories`/`last_published_at`/`leanpub.com`, raw `publication_date`, `"N/A"` ISBN
+sentinels, no `schema_version`); the canonical schema-2 `BookRecord` (`models.py`, `docs/scraping/book-record-schema.md`)
+is what every site now writes. `bookscraper migrate --store-backend {mongo|json} [--apply]` (`commands/migrate.py`,
+backed by `backends/migration.py`) rewrites a store's v1 documents in place to v2. It reuses `resolve_store_backend`,
+so the same pre-flight checks and explicit-backend rule apply, and it never touches book data on the *other* backend.
+The v1→v2 field transform is `scraping/normalize.from_v1_document` — a stored v1 document is just another raw input
+to the same per-site normalizers a fresh scrape uses, so a migrated record is byte-for-byte what a fresh scrape would
+produce. `backends/migration.py` stays within the one-way import direction (`backends` never imports `scraping`) by
+taking that transform as an injected `Callable[[dict], dict]`; `commands/migrate.py` (which may import both layers)
+wires in the concrete function. Key guarantees: **dry-run by default** (prints a per-field change summary and writes
+nothing; `--apply`
+writes); **hash recomputation** — per the 2026-10-06 decision the migration recomputes `hash_book(title, authors,
+publication_year)` for *every* document (author de-duplication is part of the hash input, so a document repeating a
+name case-insensitively earns a new hash), rewrites changed hashes, and reports each one (old → new, with the
+document id); a recomputed hash that **collides** with another document's hash is left untouched and reported for a
+human (never silently overwritten or merged); **idempotent** (re-running `--apply` on v2 documents changes nothing);
+and it **never deletes** a document (invalid-after-migration documents are reported and left verbatim). The `json`
+backend goes through `store`'s atomic write with the one-generation `books.json.bak` backup; the `mongo` backend
+applies guarded `ReplaceOne({"_id": id, "schema_version": {"$ne": 2}}, new_doc)` in `bulk_write` batches of 500,
+never a bulk collection replace. A `migration-report-<timestamp>.json` (counts per change type, `changed_hashes`,
+`hash_collisions`, `invalid_documents`, `field_changes`) is written to `~/.bookscrapper/logs/` in both modes; the
+console/log output carries only ids/hashes/counts (no credential, URI, or document body — a collision's title appears
+only inside the report file). Exit `1` on a corrupt local store; otherwise `0`. It takes no scraping flags and never
+writes `parameters.py`.
+
 ## Running
 
 ```bash
@@ -300,11 +326,21 @@ uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/
 uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
 uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029" --model claude-sonnet-5 --max-input-tokens 30000
 
+# migrate: rewrite stored v1 book documents to the canonical schema-2 shape, recomputing each
+# document's hash. Dry-run by default (prints a per-field change summary and writes NOTHING to the
+# store); pass --apply to write. Idempotent (a second --apply changes nothing) and never deletes a
+# document; a recomputed hash that collides with another document is left untouched and reported for
+# a human. A migration-report-<timestamp>.json is written to ~/.bookscrapper/logs/ either way.
+uv run bookscraper migrate --store-backend json            # dry run (report only)
+uv run bookscraper migrate --store-backend json --apply    # write the migrated books.json
+uv run bookscraper migrate --store-backend mongo --apply   # write the migrated Atlas collection
+
 # Without `uv run` (inside an activated .venv), or via `python -m` directly:
 python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
 python -m bookscraper search --store-backend json
 python -m bookscraper rotate-cert
 python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/x/9780123456789/"
+python -m bookscraper migrate --store-backend json --apply
 ```
 
 `--store-backend` is required — omitting it is an argparse error, not an interactive prompt (there is no more
