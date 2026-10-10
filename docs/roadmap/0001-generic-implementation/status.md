@@ -11,7 +11,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 02.0 | MongoDB auth configuration         | ✅ Complete    | 6 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py`, `tests/mock/backends/mongo/test_client.py` |
 | 02.1 | X.509 certificate rotation         | ✅ Complete (08 blocked) | 9 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ✅ Complete    | 6 / 6         | `tests/mock/scraping/test_scrape_details.py`, `tests/unit/scraping/test_{results,text}.py`, `tests/unit/test_no_bare_print.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
-| 03.1 | Canonical book data model          | ⬜ Not started | 0 / 6         | -                                                                                                      |
+| 03.1 | Canonical book data model          | ✅ Complete    | 6 / 6         | `tests/unit/test_{models,isbn,import_direction}.py`, `tests/unit/scraping/test_normalize.py`, `tests/unit/backends/test_migration.py`, `tests/mock/commands/test_migrate.py`, `tests/mock/backends/test_backend_parity.py` |
 | 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
@@ -25,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 46 / 99 subtasks complete.
+**Totals:** 52 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -176,6 +176,36 @@ the exception class name in run-log lines (→ 07.0/01 secret-redacting log filt
 
 **Coverage:** whole suite 872+ passed, 99% total; `scrape_details.py` 98% (closes the deferred 06.1 item),
 `results.py` / `text.py` / `commands/search.py` 100%.
+
+## Task 03.1 - Canonical book data model
+
+### Task 03.1 - Canonical book data model (✅ 2026-10-11)
+
+**Delivered** (commits `3b1df07`, `8e5050f`, `f9fdbf6`, `a45b983`, `651dc19`, `8771f82`, review fixes `2267004`):
+- **01** `models.py`: `SCHEMA_VERSION = 2`, frozen `BookRecord` (incl. `tags` and the reserved
+  `ai_extracted_fields`), `to_document`/`from_document`; [book-record-schema.md](/docs/scraping/book-record-schema.md).
+- **02** `isbn.py`: cleaning, checksum validation, 10→13 conversion, `normalize`, `extract_first` (stdlib only).
+- **03** `book_utils.normalize_date`: ISO date at its real precision, locale-independent English month table;
+  `extract_year_from_date` keeps every prior result (hash stability).
+- **04** `scraping/normalize.py` is the only builder of book documents; scrapers emit v2. Leanpub `site` →
+  `leanpub`, human-facing `url`, `book_id` → `source_id`; dedup matches `book_id` OR `source_id` in both backends
+  (+ mongo `source_id` index). Every real-book golden hash unchanged.
+- **05** `models.validate_document` gates both backends' `save_books` (rejected docs count as
+  `SaveSummary.errors`), with size caps on page-controlled text (closes the 03.0 LOW item).
+- **06** `bookscraper migrate --store-backend {mongo|json} [--apply]`: dry run by default; guarded per-document
+  `ReplaceOne` batches (`schema_version != 2`) or the atomic JSON write; every hash recomputed, changed hashes and
+  collisions reported (collisions left at v1); idempotent; transform injected by `commands/migrate.py`, so
+  `backends/` never imports `scraping/` (AST guard test).
+
+**Decisions:** hash policy "dedup + migrate" (2026-10-06, user-ratified; see below).
+
+**Review:** `feature-reviewer` LGTM; `security-auditor` PASS_WITH_FOLLOWUP (no CRITICAL/HIGH). Fixed in `2267004`:
+redacted handling of a failed bulk write (report still written, exit 1), non-string dedup identifiers ignored
+(CWE-943) in all three lookup paths, `MAX_AUTHORS = 50`, sanitized migrate summary (`scraping/safe_text.py`),
+report written `0o600`, empty `url` rejected, convergent-hash test. **Open INFO:** `migrate` loads the whole
+collection into memory before planning (operator-run tool, acceptable for now).
+
+**Coverage:** 984 passed, 99% total; `models.py`, `isbn.py`, `migration.py`, `migrate.py` 100%.
 
 ## Task 04.0 - AI-assisted schema detection
 
