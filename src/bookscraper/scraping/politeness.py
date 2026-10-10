@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Optional
+from datetime import UTC, datetime
+from email.utils import mktime_tz, parsedate_tz
+from typing import Optional, TypeVar
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -203,6 +206,114 @@ def default_limiters() -> DomainRateLimiters:
     if _DEFAULT_LIMITERS is None:
         _DEFAULT_LIMITERS = build_default_limiters()
     return _DEFAULT_LIMITERS
+
+
+# Shared backoff / Retry-After primitives (subtask 03.2/03). These stay transport-agnostic like
+# the rest of the module: ``retry_async`` wraps any awaitable and ``parse_retry_after`` takes a
+# plain header string, so the httpx-specific wrappers (``is_transient`` / ``httpx_retry_after``)
+# live in ``scrape_details`` where the transport import already is.
+T = TypeVar("T")
+
+# A mapping from a raised exception to a server-requested delay in seconds (e.g. derived from a
+# ``Retry-After`` header), or ``None`` to fall back to jittered backoff.
+RetryAfter = Callable[[BaseException], Optional[float]]
+
+# The process-wide jitter source used when a caller passes no ``rng`` to :func:`retry_async`. A
+# module-level singleton (rather than a ``random.Random()`` call in the default argument) keeps
+# the default evaluated once and ruff-clean; tests pass a seeded ``random.Random`` for determinism.
+_DEFAULT_RNG = random.Random()
+
+
+def _utcnow() -> datetime:
+    """Return the current time as an aware UTC :class:`datetime`.
+
+    The default clock for :func:`parse_retry_after`'s HTTP-date branch; tests inject their own so
+    no wall-clock time is read.
+
+    :returns: The current UTC time as a timezone-aware datetime.
+    """
+    return datetime.now(UTC)
+
+
+def parse_retry_after(value: Optional[str], *, now: Callable[[], datetime] = _utcnow) -> Optional[float]:
+    """Parse a ``Retry-After`` header value into a non-negative delay in seconds.
+
+    Accepts the two RFC 9110 spellings - a delta-seconds integer (``"120"``) or an HTTP-date
+    (``"Wed, 21 Oct 2026 07:28:00 GMT"``) - and returns how many seconds to wait from now. A
+    missing, blank, or unparseable value yields ``None`` (so the caller falls back to jittered
+    backoff), and a past HTTP-date clamps to ``0.0`` rather than going negative.
+
+    :param value: The raw header value, or ``None`` when the header was absent.
+    :param now: An injectable clock returning an aware UTC datetime (used for the HTTP-date form);
+        defaults to :func:`_utcnow`. Injected in tests so no wall-clock time is read.
+    :returns: The delay in seconds (``>= 0``), or ``None`` when the value cannot be parsed.
+    """
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    # delta-seconds form: a bare non-negative integer. ``isdigit`` (no sign, no decimal point)
+    # keeps this a pure test rather than a try/float that would swallow the HTTP-date case.
+    if text.isdigit():
+        return float(text)
+    # HTTP-date form. ``parsedate_tz`` returns ``None`` (never raises) on an unparseable value, so
+    # a malformed date falls back to jittered backoff without swallowing an exception.
+    parsed = parsedate_tz(text)
+    if parsed is None:
+        return None
+    return max(0.0, mktime_tz(parsed) - now().timestamp())
+
+
+async def retry_async(
+    fn: Callable[[], Awaitable[T]],
+    *,
+    attempts: int = 3,
+    base_delay: float = 2.0,
+    max_delay: float = 60.0,
+    is_retryable: Callable[[BaseException], bool],
+    retry_after: RetryAfter = lambda e: None,
+    sleep: Sleep = asyncio.sleep,
+    rng: random.Random = _DEFAULT_RNG,
+) -> T:
+    """Run ``fn`` with full-jitter exponential backoff, retrying only retryable failures.
+
+    Awaits ``fn()`` up to ``attempts`` times. After a failure that ``is_retryable`` accepts (and
+    when a retry remains) it sleeps before the next try: ``retry_after(exc)`` wins when it returns
+    a value (capped at ``max_delay``), otherwise a full-jitter backoff
+    ``rng.uniform(0, min(max_delay, base_delay * 2**(n-1)))`` where ``n`` is the 1-based number of
+    the attempt that just failed. A non-retryable failure, or the final attempt's failure,
+    re-raises unchanged (never wrapped), so the caller sees the original exception.
+
+    :param fn: The zero-argument coroutine factory to attempt.
+    :param attempts: The maximum number of attempts (``>= 1``); ``1`` disables retrying.
+    :param base_delay: The backoff base in seconds (the first retry's uncapped ceiling).
+    :param max_delay: The hard cap in seconds on any single sleep (jitter or ``Retry-After``).
+    :param is_retryable: Predicate deciding whether a raised exception is worth retrying.
+    :param retry_after: Maps a raised exception to a server-requested delay in seconds, or ``None``
+        to fall back to jittered backoff (e.g. from a ``Retry-After`` header).
+    :param sleep: The awaitable sleep taking a duration in seconds (injected in tests so no real
+        time passes).
+    :param rng: The random source for jitter (seed it in tests for determinism).
+    :returns: Whatever ``fn`` returns on its first successful attempt.
+    :raises Exception: The exception from a non-retryable or final-attempt failure, re-raised
+        unchanged.
+    """
+    for n in range(1, attempts):
+        try:
+            return await fn()
+        except Exception as exc:  # noqa: X002 - retry boundary: a retryable failure is backed off and re-attempted while a non-retryable one re-raises unchanged
+            if not is_retryable(exc):
+                raise
+            override = retry_after(exc)
+            if override is not None:
+                delay = min(max_delay, override)
+            else:
+                delay = rng.uniform(0.0, min(max_delay, base_delay * 2 ** (n - 1)))
+            await sleep(delay)
+    # The final attempt is outside the loop: its exception (if any) propagates unchanged, so there
+    # is no unreachable post-loop branch to leave uncovered.
+    return await fn()
 
 
 @dataclass(frozen=True)

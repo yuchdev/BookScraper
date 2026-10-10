@@ -924,7 +924,7 @@ async def test_keyerror_like_bug_is_not_retried():
 
     On failure, first check:
         - the retry loop again retries non-transient exceptions instead of consulting
-          ``_is_transient_error`` and returning FAILED on the first attempt.
+          ``is_transient`` and returning FAILED on the first attempt.
     """
     page = _amazon_page()
     page.goto = AsyncMock(side_effect=KeyError("boom"))
@@ -953,7 +953,7 @@ async def test_timeout_is_retried_up_to_max_attempts():
           a typed TIMEOUT recording ``attempts == MAX_ATTEMPTS``.
 
     On failure, first check:
-        - ``_is_transient_error`` no longer classifies a Playwright TimeoutError as transient,
+        - ``is_transient`` no longer classifies a Playwright TimeoutError as transient,
           or the retry budget stopped honouring ``MAX_ATTEMPTS``.
     """
     page = _amazon_page()
@@ -1302,6 +1302,17 @@ async def test_close_failure_does_not_mask_original_error():
 # ---------------------------------------------------------------------------
 
 
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    """Build an httpx.HTTPStatusError carrying ``status`` (no body), for classifier tests.
+
+    :param status: The HTTP status code the error should report.
+    :returns: An HTTPStatusError whose ``response.status_code`` is ``status``.
+    """
+    request = httpx.Request("GET", "https://example.test/x")
+    response = httpx.Response(status, request=request)
+    return httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+
+
 @pytest.mark.parametrize(
     ("exc", "expected"),
     [
@@ -1310,28 +1321,138 @@ async def test_close_failure_does_not_mask_original_error():
         (scrape_details.PlaywrightError("net::ERR_NAME_NOT_RESOLVED at x"), True),
         (scrape_details.PlaywrightError("Target closed"), True),
         (scrape_details.PlaywrightError("Navigation failed because page crashed"), True),
+        (_http_status_error(429), True),
+        (_http_status_error(502), True),
+        (_http_status_error(503), True),
+        (_http_status_error(504), True),
+        (_http_status_error(404), False),
+        (_http_status_error(400), False),
         (scrape_details.PlaywrightError("strict mode violation: resolved to 2 elements"), False),
         (KeyError("title"), False),
         (ValueError("boom"), False),
     ],
 )
-def test_is_transient_error_classifies_failures(exc, expected):
+def test_is_transient_classifies_failures(exc, expected):
     """
     [Local] scrape details: verifies the transient/non-transient classifier.
 
     Scenario:
-        a representative exception is handed to ``_is_transient_error``.
+        a representative exception is handed to ``is_transient``.
 
     Boundaries:
-        - a Playwright timeout, an httpx transport error, and a Playwright error naming a
-          navigation/network fault are transient (retry-worthy); a non-navigation Playwright
-          error and plain bugs (KeyError/ValueError) are not.
+        - a Playwright timeout, an httpx transport error, an httpx HTTPStatusError with a
+          retryable status (429/502/503/504), and a Playwright error naming a navigation/network
+          fault are transient (retry-worthy); a non-retryable HTTP status (404/400), a
+          non-navigation Playwright error, and plain bugs (KeyError/ValueError) are not.
 
     On failure, first check:
-        - the marker list ``_TRANSIENT_PLAYWRIGHT_MARKERS`` or the isinstance ladder in
-          ``_is_transient_error`` changed.
+        - the ``_TRANSIENT_HTTP_STATUS`` set, the marker list ``_TRANSIENT_PLAYWRIGHT_MARKERS``,
+          or the isinstance ladder in ``is_transient`` changed.
     """
-    assert scrape_details._is_transient_error(exc) is expected
+    assert scrape_details.is_transient(exc) is expected
+
+
+@pytest.mark.parametrize(
+    ("status", "header", "expected"),
+    [
+        (429, "30", 30.0),
+        (503, "7", 7.0),
+        (429, None, None),
+        (500, "30", None),
+        (503, "not-a-date", None),
+    ],
+)
+def test_httpx_retry_after_reads_only_429_503_header(status, header, expected):
+    """
+    [Local] scrape details: verifies httpx_retry_after reads Retry-After only for 429/503.
+
+    Scenario:
+        an httpx.HTTPStatusError is built with the given status and optional Retry-After header.
+
+    Boundaries:
+        - a 429/503 with a delta-seconds header yields that many seconds; a missing/unparseable
+          header or a non-429/503 status (500) yields None so the caller falls back to jitter. The
+          HTTP-date spelling is exercised by the politeness parser's own unit test.
+
+    On failure, first check:
+        - the ``_RETRY_AFTER_HTTP_STATUS`` membership check in httpx_retry_after, or its delegation
+          to politeness.parse_retry_after.
+    """
+    request = httpx.Request("GET", "https://example.test/x")
+    headers = {} if header is None else {"Retry-After": header}
+    response = httpx.Response(status, request=request, headers=headers)
+    exc = httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+
+    assert scrape_details.httpx_retry_after(exc) == expected
+
+
+def test_httpx_retry_after_ignores_non_http_errors():
+    """
+    [Local] scrape details: verifies httpx_retry_after returns None for a non-HTTP exception.
+
+    Scenario:
+        a plain exception (not an httpx.HTTPStatusError) is handed to httpx_retry_after.
+
+    Boundaries:
+        - only an httpx.HTTPStatusError can carry a Retry-After; anything else yields None.
+
+    On failure, first check:
+        - the ``isinstance(exc, httpx.HTTPStatusError)`` guard in httpx_retry_after.
+    """
+    assert scrape_details.httpx_retry_after(KeyError("x")) is None
+
+
+async def test_get_leanpub_book_details_retries_on_429_then_succeeds():
+    """
+    [Local] scrape details: verifies the Leanpub detail fetch retries a 429 then succeeds.
+
+    Scenario:
+        the first httpx GET's raise_for_status raises HTTP 429 (transient); the second returns a
+        well-formed payload.
+
+    Boundaries:
+        - the single-shot request used to fail on the first 429; it now backs off (sleep patched,
+          no real wait) and re-attempts, so the result is SUCCESS and the client was called twice.
+
+    On failure, first check:
+        - the retry_async wrapper around _fetch in get_leanpub_book_details, or is_transient's
+          HTTPStatusError(429) classification.
+    """
+    responses = [
+        FakeResponse(raise_status_exc=_http_status_error(429)),
+        FakeResponse(json_data=_leanpub_payload()),
+    ]
+    with _patch_httpx(responses=responses), patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["title"] == "Example Book"
+
+
+async def test_get_leanpub_book_details_404_not_retried():
+    """
+    [Local] scrape details: verifies a 404 is a hard failure, not retried.
+
+    Scenario:
+        every httpx GET's raise_for_status raises HTTP 404 (a non-retryable status).
+
+    Boundaries:
+        - a 404 is deterministic: it fails immediately as FAILED carrying only ``HTTP 404`` with no
+          retry (the GET is attempted exactly once and no sleep occurs).
+
+    On failure, first check:
+        - is_transient wrongly classifying 404 as transient, or the except-HTTPStatusError branch.
+    """
+    responses = [FakeResponse(raise_status_exc=_http_status_error(404))]
+    with (
+        _patch_httpx(responses=responses) as _patch,
+        patch.object(scrape_details.asyncio, "sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.FAILED
+    assert result.error == "HTTP 404"
+    assert mock_sleep.await_count == 0
 
 
 async def test_attr_helper_returns_none_on_error():

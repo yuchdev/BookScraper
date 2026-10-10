@@ -1,7 +1,7 @@
 # 03 - Shared backoff & Retry-After
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-per-domain-rate-limiter.md](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/01-per-domain-rate-limiter.md)
 **Role:** Python Expert
 

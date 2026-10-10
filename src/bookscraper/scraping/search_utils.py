@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
@@ -18,8 +19,16 @@ from playwright.async_api import Browser, Error as PlaywrightError
 
 from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
-from .politeness import DomainRateLimiters, RobotsCache, default_limiters
-from .scrape_details import ROBOTS_HTTPX_USER_AGENT, route_handler
+from .politeness import DomainRateLimiters, RobotsCache, default_limiters, retry_async
+from .scrape_details import (
+    MAX_ATTEMPTS,
+    RETRY_BASE_DELAY_S,
+    RETRY_MAX_DELAY_S,
+    ROBOTS_HTTPX_USER_AGENT,
+    httpx_retry_after,
+    is_transient,
+    route_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +66,22 @@ async def get_leanpub_search_results_via_api(
 
     # Use an AsyncClient for efficient session management
     async with httpx.AsyncClient() as client:
+
+        async def _fetch_page(page_params: dict) -> httpx.Response:
+            """Throttle and GET one Leanpub search page, raising on a non-2xx status.
+
+            One :func:`politeness.retry_async` attempt: a transient failure (429/502/503/504 or a
+            transport error) raises so the retry wrapper can back off and re-attempt it, rather
+            than ending pagination on the first rate-limit response.
+
+            :param page_params: The query parameters for this page request.
+            :returns: The successful :class:`httpx.Response` for the page.
+            """
+            await active_limiters.for_url(base_url).acquire()
+            response = await client.get(base_url, params=page_params, timeout=30.0)
+            response.raise_for_status()
+            return response
+
         while True:
             params = {
                 "bookstore": "true",
@@ -75,10 +100,19 @@ async def get_leanpub_search_results_via_api(
             try:
                 print_log(f"Leanpub - Fetching page {current_page}...", "info")
                 logger.info(f"Leanpub - Fetching page {current_page}...")
-                # Throttle per host immediately before each paginated request.
-                await active_limiters.for_url(base_url).acquire()
-                response = await client.get(base_url, params=params, timeout=30.0)
-                response.raise_for_status()
+                # Throttle (inside _fetch_page) and fetch with shared jittered backoff, honoring
+                # any Retry-After on a 429/503 so a single rate-limit response no longer fails the
+                # whole search. A persistent failure re-raises and ends pagination via the
+                # handlers below.
+                response = await retry_async(
+                    lambda page_params=params: _fetch_page(page_params),
+                    attempts=MAX_ATTEMPTS,
+                    base_delay=RETRY_BASE_DELAY_S,
+                    max_delay=RETRY_MAX_DELAY_S,
+                    is_retryable=is_transient,
+                    retry_after=httpx_retry_after,
+                    sleep=asyncio.sleep,
+                )
                 data = response.json()
 
                 # Check if the 'data' array is empty, which indicates no more results

@@ -7,6 +7,9 @@ these assert exact simulated timing of the token bucket and the per-host routing
 
 from __future__ import annotations
 
+import random
+from datetime import UTC, datetime
+from email.utils import formatdate
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,8 @@ from bookscraper.scraping.politeness import (
     RateLimiter,
     RobotsCache,
     RobotsResponse,
+    parse_retry_after,
+    retry_async,
 )
 
 # tests/unit/scraping/test_politeness.py -> parents[2] == tests/
@@ -329,6 +334,236 @@ def test_unknown_domain_uses_default():
 
     assert limiter._rate == 0.5
     assert limiter._capacity == 1.0
+
+
+class RecordingSleep:
+    """An awaitable sleep that records each requested duration instead of waiting.
+
+    Lets the backoff tests assert the exact sequence of sleep durations ``retry_async`` computed
+    without any real time passing.
+    """
+
+    def __init__(self):
+        """Start with an empty list of recorded durations."""
+        self.durations: list[float] = []
+
+    async def __call__(self, duration: float):
+        """Record ``duration`` (the fake ``await asyncio.sleep``) and return immediately."""
+        self.durations.append(duration)
+
+
+class FlakyCallable:
+    """A fake awaitable factory that raises for its first ``failures`` calls, then returns.
+
+    Models the ``fn`` argument of :func:`retry_async`: each call is a fresh attempt, so the call
+    count reveals exactly how many attempts the retry loop made.
+    """
+
+    def __init__(self, failures: int, exc: BaseException, result: str = "ok"):
+        """Store how many leading calls raise ``exc`` before ``result`` is returned."""
+        self.failures = failures
+        self.exc = exc
+        self.result = result
+        self.calls = 0
+
+    async def __call__(self) -> str:
+        """Count the call, raise ``exc`` while still failing, else return ``result``."""
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise self.exc
+        return self.result
+
+
+async def test_retry_async_succeeds_after_transient_failures():
+    """
+    [Unit] politeness: verifies retry_async retries a retryable failure and returns on success.
+
+    Scenario:
+        Given an fn that raises ValueError twice then returns "ok", with attempts=3
+        When retry_async runs it with is_retryable accepting ValueError and a recording sleep
+        Then it returns "ok" after three attempts, having slept twice (once per retry)
+
+    Boundaries:
+        - Fake sleep only; no real time passes and the jitter value itself is not asserted here
+
+    On failure, first check:
+        - The loop bounds in retry_async, or the return-on-success path inside the try
+    """
+    sleep = RecordingSleep()
+    fn = FlakyCallable(failures=2, exc=ValueError("boom"))
+
+    result = await retry_async(
+        fn,
+        attempts=3,
+        is_retryable=lambda e: isinstance(e, ValueError),
+        sleep=sleep,
+    )
+
+    assert result == "ok"
+    assert fn.calls == 3
+    assert len(sleep.durations) == 2
+
+
+async def test_retry_async_does_not_retry_non_retryable():
+    """
+    [Unit] politeness: verifies a non-retryable failure re-raises immediately with no sleep.
+
+    Scenario:
+        Given an fn that always raises KeyError and an is_retryable that accepts only ValueError
+        When retry_async runs it with attempts=3
+        Then the KeyError propagates unchanged after a single attempt and no sleep occurs
+
+    Boundaries:
+        - Classifier gate only; the backoff math is covered separately
+
+    On failure, first check:
+        - The ``if not is_retryable(exc): raise`` guard in retry_async
+    """
+    sleep = RecordingSleep()
+    fn = FlakyCallable(failures=5, exc=KeyError("nope"))
+
+    with pytest.raises(KeyError):
+        await retry_async(
+            fn,
+            attempts=3,
+            is_retryable=lambda e: isinstance(e, ValueError),
+            sleep=sleep,
+        )
+
+    assert fn.calls == 1
+    assert sleep.durations == []
+
+
+async def test_retry_async_backoff_is_capped_and_jittered():
+    """
+    [Unit] politeness: verifies full-jitter backoff is deterministic under a seed and capped.
+
+    Scenario:
+        Given an fn that always raises (always retryable), attempts=8, base_delay=2, max_delay=60
+        When retry_async runs it with a seeded rng and a recording sleep
+        Then the last exception re-raises after 8 attempts, the 7 recorded sleeps match a fresh
+        Random(same seed) drawing uniform(0, min(60, 2*2**(n-1))) per retry, and the late retries
+        are capped at 60 s rather than the uncapped 64/128 s ceilings
+
+    Boundaries:
+        - Fake sleep and a seeded rng only; asserts the exact jitter sequence and the cap
+
+    On failure, first check:
+        - The ``rng.uniform(0, min(max_delay, base_delay * 2 ** (n - 1)))`` expression, or the
+          final-attempt re-raise outside the loop
+    """
+    sleep = RecordingSleep()
+    fn = FlakyCallable(failures=99, exc=RuntimeError("down"))
+
+    with pytest.raises(RuntimeError):
+        await retry_async(
+            fn,
+            attempts=8,
+            base_delay=2.0,
+            max_delay=60.0,
+            is_retryable=lambda e: True,
+            sleep=sleep,
+            rng=random.Random(1234),
+        )
+
+    assert fn.calls == 8
+    reference = random.Random(1234)
+    expected = [reference.uniform(0.0, min(60.0, 2.0 * 2 ** (n - 1))) for n in range(1, 8)]
+    assert sleep.durations == expected
+    # The n=6/n=7 ceilings (64 s / 128 s) are capped to 60 s, so no draw can exceed the cap.
+    assert all(d <= 60.0 for d in sleep.durations)
+
+
+async def test_retry_after_seconds_header_respected():
+    """
+    [Unit] politeness: verifies a delta-seconds Retry-After overrides jitter (capped at max_delay).
+
+    Scenario:
+        Given parse_retry_after on the delta-seconds spelling and some unparseable values
+        When retry_async retries with a retry_after returning that parsed value
+        Then the exact server-requested delay is slept (never the jittered ceiling), and a value
+        above max_delay is clamped to max_delay
+
+    Boundaries:
+        - Pure parsing plus the override branch; HTTP-date form is a separate test
+
+    On failure, first check:
+        - parse_retry_after's isdigit branch, or the ``min(max_delay, override)`` branch in
+          retry_async
+    """
+    assert parse_retry_after("120") == 120.0
+    assert parse_retry_after("  7  ") == 7.0
+    assert parse_retry_after(None) is None
+    assert parse_retry_after("") is None
+    assert parse_retry_after("not-a-date") is None
+
+    # base_delay is huge, so a jittered draw would be far larger than 5 - proving the override won.
+    sleep = RecordingSleep()
+    fn = FlakyCallable(failures=1, exc=ValueError("429"))
+    await retry_async(
+        fn,
+        attempts=2,
+        base_delay=10_000.0,
+        max_delay=60.0,
+        is_retryable=lambda e: True,
+        retry_after=lambda e: parse_retry_after("5"),
+        sleep=sleep,
+    )
+    assert sleep.durations == [5.0]
+
+    # A Retry-After above max_delay is clamped to the cap.
+    capped = RecordingSleep()
+    fn2 = FlakyCallable(failures=1, exc=ValueError("429"))
+    await retry_async(
+        fn2,
+        attempts=2,
+        max_delay=60.0,
+        is_retryable=lambda e: True,
+        retry_after=lambda e: parse_retry_after("1000"),
+        sleep=capped,
+    )
+    assert capped.durations == [60.0]
+
+
+async def test_retry_after_http_date_header_respected():
+    """
+    [Unit] politeness: verifies an HTTP-date Retry-After parses to seconds-from-now and is slept.
+
+    Scenario:
+        Given a fixed clock and an HTTP-date 90 s in its future (and one 50 s in its past)
+        When parse_retry_after parses them against that injected clock
+        Then the future date yields 90.0 s, the past date clamps to 0.0, and retry_async sleeps the
+        parsed 90.0 s exactly
+
+    Boundaries:
+        - Injected clock only; no wall-clock time is read
+
+    On failure, first check:
+        - parse_retry_after's parsedate_tz/mktime_tz branch, or the now()-relative subtraction
+    """
+    fixed_now = datetime(2026, 10, 11, 12, 0, 0, tzinfo=UTC)
+    future_header = formatdate(fixed_now.timestamp() + 90, usegmt=True)
+    past_header = formatdate(fixed_now.timestamp() - 50, usegmt=True)
+
+    assert parse_retry_after(future_header, now=lambda: fixed_now) == 90.0
+    assert parse_retry_after(past_header, now=lambda: fixed_now) == 0.0
+
+    # With the default clock (_utcnow), a date far in the real future is still a positive delay.
+    far_future = formatdate(datetime.now(UTC).timestamp() + 3600, usegmt=True)
+    assert parse_retry_after(far_future) > 0.0
+
+    sleep = RecordingSleep()
+    fn = FlakyCallable(failures=1, exc=ValueError("503"))
+    await retry_async(
+        fn,
+        attempts=2,
+        base_delay=10_000.0,
+        max_delay=1_000.0,
+        is_retryable=lambda e: True,
+        retry_after=lambda e: parse_retry_after(future_header, now=lambda: fixed_now),
+        sleep=sleep,
+    )
+    assert sleep.durations == [90.0]
 
 
 def test_registrable_host_handles_hostless_url():

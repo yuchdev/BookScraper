@@ -727,15 +727,17 @@ async def test_leanpub_search_no_longer_sleeps_randomly():
     Scenario:
         Given a two-page Leanpub search driven through a recording limiter, with random.uniform patched
         When get_leanpub_search_results_via_api runs to completion
-        Then one acquire is recorded per page and random.uniform is never called, and the module no
-        longer imports asyncio (the ad hoc inter-page sleep is gone)
+        Then one acquire is recorded per page and random.uniform is never called (the ad hoc
+        inter-page ``random.uniform`` sleep is gone; inter-page politeness is the limiter now)
 
     Boundaries:
         - Asserts the replacement of the random sleep by the limiter, not per-field extraction
+        - ``asyncio`` is imported again (03.2/03) but only for ``retry_async``'s sleep argument,
+          which never fires on this all-success path, so no asyncio-presence assertion is made
 
     On failure, first check:
-        - The removed ``asyncio.sleep(random.uniform(...))`` was reintroduced, or the per-page
-          ``acquire`` before ``client.get`` was dropped
+        - The removed ``asyncio.sleep(random.uniform(...))`` inter-page sleep was reintroduced, or
+          the per-page ``acquire`` before ``client.get`` was dropped
     """
     events: list[str] = []
 
@@ -766,4 +768,36 @@ async def test_leanpub_search_no_longer_sleeps_randomly():
     assert len(books) == 101
     assert events == ["acquire", "acquire"]
     mock_uniform.assert_not_called()
-    assert not hasattr(search_utils, "asyncio")
+
+
+async def test_leanpub_search_retries_on_429_then_succeeds():
+    """
+    [Local] search utils: verifies a Leanpub search page retries a 429 then succeeds.
+
+    Scenario:
+        Given the first httpx GET's raise_for_status raises HTTP 429 and the second returns a
+        one-book page payload, with asyncio.sleep patched so no real backoff waits
+        When get_leanpub_search_results_via_api runs for the query
+        Then the 429 is retried rather than ending pagination, so the one book is returned and the
+        client was called twice
+
+    Boundaries:
+        - httpx and the backoff sleep are mocked; asserts the retry wrapper, not per-field parsing
+        - The single page returns <100 books, so pagination stops after it (no second page fetch)
+
+    On failure, first check:
+        - The retry_async wrapper around _fetch_page, or is_transient's HTTPStatusError(429) branch
+    """
+    request = httpx.Request("GET", "https://leanpub.com/api/v1/bookstore/search")
+    response_429 = httpx.Response(429, request=request)
+    status_error = httpx.HTTPStatusError("HTTP 429", request=request, response=response_429)
+    responses = [
+        FakeResponse(raise_status_exc=status_error),
+        FakeResponse(json_data=_search_payload([_search_book("b1")])),
+    ]
+
+    with _patch_httpx(responses=responses), patch.object(search_utils.asyncio, "sleep", new=AsyncMock()):
+        books = await get_leanpub_search_results_via_api("python", limiters=_fast_limiters())
+
+    assert len(books) == 1
+    assert books[0]["title"] == "A Book"
