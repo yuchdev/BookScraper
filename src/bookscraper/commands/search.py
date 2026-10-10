@@ -12,6 +12,7 @@ import httpx
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
+from ..scraping.politeness import build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
@@ -78,6 +79,9 @@ async def run(args: argparse.Namespace):
     module_logger.info("Application started.")
 
     storage_backend = resolve_store_backend(args.store_backend)
+    # One per-run, per-host rate limiter registry shared by the search and detail fetches so the
+    # whole run is throttled to each host's configured rate.
+    limiters = build_default_limiters()
 
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
@@ -99,7 +103,7 @@ async def run(args: argparse.Namespace):
                     print_log(f"Leanpub - Searching for '{search_item}' via API...", "info")
 
                     # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
-                    current_search_results = await get_leanpub_search_results_via_api(search_item)
+                    current_search_results = await get_leanpub_search_results_via_api(search_item, limiters=limiters)
 
                     # Pre-scrape deduplication
                     print_log("Leanpub - Deduplicating search results...")
@@ -150,7 +154,8 @@ async def run(args: argparse.Namespace):
             ) as detail_client:
                 print_log(f"--- Scraping {len(leanpub_books)} Leanpub book(s) ---", "step")
                 site_scrape_tasks = [
-                    get_leanpub_book_details(url=book.get("book_url"), client=detail_client) for book in leanpub_books
+                    get_leanpub_book_details(url=book.get("book_url"), client=detail_client, limiters=limiters)
+                    for book in leanpub_books
                 ]
                 current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
 

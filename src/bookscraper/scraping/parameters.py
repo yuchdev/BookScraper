@@ -29,6 +29,23 @@ USER_AGENTS = [
 
 HEADLESS_BROWSER = False
 
+# Per-domain request rate limits consumed by the politeness layer (scraping/politeness.py).
+# Each value is ``(requests_per_second, burst)``: the steady-state per-host request rate and the
+# number of requests allowed back-to-back before throttling kicks in. Keyed on the registrable
+# host with any leading ``www.`` stripped (see ``DomainRateLimiters.for_url``). Conservative by
+# design - being slow is always acceptable, being blocked is not. Edit these (not the limiter
+# code) to re-tune a site's politeness.
+RATE_LIMITS: dict[str, tuple[float, int]] = {
+    "amazon.com": (0.5, 1),
+    "packtpub.com": (1.0, 2),
+    "oreilly.com": (1.0, 2),
+    "leanpub.com": (2.0, 4),
+}
+
+# Fallback rate for any host not listed in ``RATE_LIMITS`` - the most conservative entry, so an
+# unrecognized host is throttled hardest rather than hammered.
+DEFAULT_RATE_LIMIT: tuple[float, int] = (0.5, 1)
+
 # SEARCH_* keys in a ``site_constants`` entry that are NOT CSS selectors: a base search
 # URL / API endpoint, a page-count integer, or an attribute NAME (``data-asin``). Every
 # other ``SEARCH_*`` value is a CSS selector - including ``SEARCH_NO_RESULTS_TEXT`` /

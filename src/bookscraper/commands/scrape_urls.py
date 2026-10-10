@@ -14,13 +14,12 @@ from playwright.async_api import async_playwright
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, logger, print_log
 from ..scraping.parameters import HEADLESS_BROWSER
+from ..scraping.politeness import build_default_limiters
 from ..scraping.results import ScrapeStatus
 from ..scraping.scrape_details import scrape_book
 
 
-def save_failed_urls_to_csv(
-    failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"
-):
+def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"):
     """Save the failed/duplicate URLs with their status and error reason to a CSV file.
 
     :param failed_urls_with_status: A list of ``(url, status, error)`` tuples, where ``status``
@@ -107,6 +106,9 @@ async def run(args: argparse.Namespace):
     start_time = time.time()
 
     storage_backend = resolve_store_backend(args.store_backend)
+    # One per-run, per-host rate limiter registry, threaded down to every scrape_book call so a
+    # whole run (across every batch) is throttled to each host's configured rate.
+    limiters = build_default_limiters()
 
     # Store URLs to scrape within a dictionary
     website_urls = {
@@ -192,7 +194,7 @@ async def run(args: argparse.Namespace):
                 site = identify_website(url)
                 # Pass the storage_backend to scrape_book for immediate duplicate check.
                 # scrape_book always returns a typed ScrapeResult (see scraping/results.py).
-                tasks.append(scrape_book(url, browser, site, storage_backend))
+                tasks.append(scrape_book(url, browser, site, storage_backend, limiters))
 
             results = await asyncio.gather(*tasks)
 

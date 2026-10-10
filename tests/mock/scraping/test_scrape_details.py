@@ -7,13 +7,15 @@ asyncio.sleep. No network, no browser, no disk.
 import json
 from contextlib import AbstractContextManager
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import scrape_details
+from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
+from bookscraper.scraping.politeness import DomainRateLimiters
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 from bookscraper.scraping.scrape_details import (
     get_leanpub_book_details,
@@ -34,6 +36,21 @@ from .playwright_fakes import (
 # ---------------------------------------------------------------------------
 
 LEANPUB_URL = "https://leanpub.com/api/v1/cache/books/example.json"
+
+
+@pytest.fixture(autouse=True)
+def _no_wait_default_limiters():
+    """Replace the shared default rate limiter with a never-throttling one for every test.
+
+    The production default would, across tests sharing one process-wide registry, make a second
+    same-host request wait in real time (amazon is 0.5 req/s, burst 1). An enormous burst means
+    ``acquire`` always has a token and never sleeps, so no test ever waits on the clock while the
+    limiter integration stays exercised. The dedicated rate-limiter tests pass their own limiter
+    with a fake clock and are unaffected.
+    """
+    unbounded = DomainRateLimiters({}, (1_000_000.0, 1_000_000))
+    with patch.object(scrape_details, "default_limiters", return_value=unbounded):
+        yield
 
 
 def _leanpub_payload(
@@ -575,7 +592,8 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
     ) as mock_details:
         result = await scrape_book("https://leanpub.com/x", browser, "leanpub")
 
-    mock_details.assert_awaited_once_with("https://leanpub.com/x")
+    # scrape_book forwards its (defaulted) per-run limiters registry to the API helper.
+    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY)
     assert result is sentinel
     # Leanpub is dispatched before any Playwright page is created.
     browser.new_page.assert_not_awaited()
@@ -1070,7 +1088,7 @@ async def test_leanpub_dispatch_opens_no_playwright_page():
         result = await scrape_book("https://leanpub.com/x", browser, "leanpub")
 
     assert result == {"title": "From API"}
-    mock_details.assert_awaited_once_with("https://leanpub.com/x")
+    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY)
     # No Playwright resource is created for Leanpub, so nothing can leak.
     browser.new_page.assert_not_awaited()
     page.close.assert_not_awaited()
@@ -1640,3 +1658,118 @@ def test_empty_string_selector_treated_as_unconfigured():
     assert scrape_details._selector({"READ_MORE_LINK": None}, "READ_MORE_LINK") is None
     assert scrape_details._selector({}, "READ_MORE_LINK") is None
     assert scrape_details._selector({"DESCRIPTION": ".about"}, "DESCRIPTION") == ".about"
+
+
+# ---------------------------------------------------------------------------
+# Rate-limiter integration (subtask 03.2/01)
+# ---------------------------------------------------------------------------
+
+
+class _RateLimiterFakeClock:
+    """A deterministic clock whose sleep advances virtual time, for rate-limiter integration."""
+
+    def __init__(self):
+        """Start virtual time at zero."""
+        self.now = 0.0
+
+    def time(self) -> float:
+        """Return the current virtual time in seconds."""
+        return self.now
+
+    async def sleep(self, duration: float):
+        """Advance virtual time by duration seconds instead of waiting."""
+        self.now += duration
+
+
+async def test_scrape_book_acquires_before_goto():
+    """
+    [Local] scrape details: verifies the per-host rate limiter is acquired before page.goto.
+
+    Scenario:
+        Given a limiters registry whose acquire records an event and a page whose goto records one
+        When scrape_book runs a single amazon attempt
+        Then "acquire" is recorded strictly before "goto" (throttling gates every navigation)
+
+    Boundaries:
+        - Call-order recording only; timing/spacing is covered by the fake-clock throttle test
+        - Single happy-path attempt; retry/error ordering is out of scope
+
+    On failure, first check:
+        - The ``await active_limiters.for_url(full_url).acquire()`` line sits immediately before
+          ``page.goto`` in scrape_book
+    """
+    events: list[str] = []
+
+    class _RecordingLimiter:
+        """A limiter whose acquire records the call order instead of throttling."""
+
+        async def acquire(self):
+            """Record that a token was acquired."""
+            events.append("acquire")
+
+    class _RecordingLimiters:
+        """A registry handing out the recording limiter for any URL."""
+
+        def for_url(self, url: str) -> "_RecordingLimiter":
+            """Return the recording limiter regardless of host."""
+            return _RecordingLimiter()
+
+    page = _amazon_page()
+
+    async def _record_goto(*args: Any, **kwargs: Any):
+        """Record that navigation happened, for call-order assertion."""
+        events.append("goto")
+
+    page.goto.side_effect = _record_goto
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/1098131029", browser, "amazon", None, _RecordingLimiters())
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert events == ["acquire", "goto"]
+
+
+async def test_amazon_run_throttled_to_configured_rate():
+    """
+    [Local] scrape details: verifies a 20-URL amazon run navigates no faster than 0.5/s.
+
+    Scenario:
+        Given a DomainRateLimiters on the real RATE_LIMITS (amazon = 0.5 req/s, burst 1) driven by
+        a fake clock, and 20 amazon detail scrapes run sequentially through it
+        When each scrape records the simulated time of its page.goto
+        Then navigations are spaced at least 2 s apart (the 20th lands at t=38), i.e. no faster
+        than the configured 0.5 requests/second (success criterion of the subtask)
+
+    Boundaries:
+        - Fake clock only; no real time passes and no browser is launched
+        - Exercises amazon's configured rate specifically, not the default fallback
+
+    On failure, first check:
+        - The amazon entry in parameters.RATE_LIMITS, or the token-bucket refill in acquire
+    """
+    clock = _RateLimiterFakeClock()
+    limiters = DomainRateLimiters(RATE_LIMITS, DEFAULT_RATE_LIMIT, clock=clock.time, sleep=clock.sleep)
+
+    goto_times: list[float] = []
+
+    def _make_page() -> FakePage:
+        """Build a fresh amazon page whose goto records the simulated navigation time."""
+        page = _amazon_page()
+
+        async def _record_goto(*args: Any, **kwargs: Any):
+            """Record the fake-clock time at which this navigation occurred."""
+            goto_times.append(clock.now)
+
+        page.goto.side_effect = _record_goto
+        return page
+
+    browser = FakeBrowser(page_factory=lambda *a, **k: _make_page())
+
+    for i in range(20):
+        result = await scrape_book(f"https://www.amazon.com/dp/109813{i:04d}", browser, "amazon", None, limiters)
+        assert result.status is ScrapeStatus.SUCCESS
+
+    assert goto_times == [2.0 * i for i in range(20)]
+    # Spacing is >= 2 s everywhere (0.5 req/s), i.e. no navigation is faster than the configured rate.
+    for earlier, later in zip(goto_times, goto_times[1:], strict=False):
+        assert later - earlier >= 2.0

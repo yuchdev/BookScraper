@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import random
 import re
+from typing import Optional
 from urllib.parse import (
     parse_qs,
     quote_plus,
@@ -18,20 +18,24 @@ from playwright.async_api import Browser, Error as PlaywrightError
 
 from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
+from .politeness import DomainRateLimiters, default_limiters
 from .scrape_details import route_handler
 
 logger = logging.getLogger(__name__)
 
 
-async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
+async def get_leanpub_search_results_via_api(query: str, limiters: Optional[DomainRateLimiters] = None) -> list[dict]:
     """
     Fetch Leanpub search-result candidates for ``query`` via Leanpub's paginated JSON API.
 
     :param query: The search query to run against the Leanpub bookstore API.
+    :param limiters: The per-run :class:`DomainRateLimiters` to throttle each page request
+        against, or ``None`` to use the shared module-level instance.
     :returns: A list of candidate book dictionaries collected across all result pages.
     """
     print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
     logger.info(f"Leanpub - Fetching search results from Leanpub.com for {query}.")
+    active_limiters = limiters if limiters is not None else default_limiters()
     base_url = site_constants["leanpub"]["SEARCH_BASE_API"]
 
     all_extracted_books = []
@@ -58,6 +62,8 @@ async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
             try:
                 print_log(f"Leanpub - Fetching page {current_page}...", "info")
                 logger.info(f"Leanpub - Fetching page {current_page}...")
+                # Throttle per host immediately before each paginated request.
+                await active_limiters.for_url(base_url).acquire()
                 response = await client.get(base_url, params=params, timeout=30.0)
                 response.raise_for_status()
                 data = response.json()
@@ -117,11 +123,9 @@ async def get_leanpub_search_results_via_api(query: str) -> list[dict]:
                 if len(books_on_current_page) < 100:
                     break
 
-                # Increment page number for the next iteration
+                # Increment page number for the next iteration. Inter-page politeness is now
+                # handled by the per-host rate limiter acquired above, so no ad hoc sleep here.
                 current_page += 1
-
-                # Add a small, random delay to be polite and avoid rate limits
-                await asyncio.sleep(random.uniform(0.5, 1.5))
 
             except httpx.RequestError as exc:
                 print_log(
@@ -159,6 +163,7 @@ async def get_search_results_via_playwright(
     browser: Browser,
     site_name: str,
     query: str,
+    limiters: Optional[DomainRateLimiters] = None,
     # filters: dict = None
 ) -> list[dict]:
     """
@@ -211,6 +216,7 @@ async def get_search_results_via_playwright(
     books_from_search_results = []
     current_page_num = 0
     page = None
+    active_limiters = limiters if limiters is not None else default_limiters()
 
     try:
         site_config = site_constants.get(site_name)
@@ -243,6 +249,8 @@ async def get_search_results_via_playwright(
                     await page.route("**/*", route_handler)
 
                     try:
+                        # Throttle per host immediately before navigating to each search page.
+                        await active_limiters.for_url(search_result_page).acquire()
                         await page.goto(
                             search_result_page,
                             wait_until="domcontentloaded",

@@ -13,9 +13,12 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import search_utils
+from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
+from bookscraper.scraping.politeness import DomainRateLimiters
 from bookscraper.scraping.search_utils import (
     get_leanpub_search_results_via_api,
     get_search_results_via_playwright,
@@ -59,9 +62,28 @@ def _patch_httpx(responses=None, get_side_effect=None) -> AbstractContextManager
     return patch.object(search_utils.httpx, "AsyncClient", factory)
 
 
-def _no_sleep() -> AbstractContextManager[Any]:
-    """Context manager: patch asyncio.sleep to a no-op for speed."""
-    return patch.object(search_utils.asyncio, "sleep", new=AsyncMock())
+def _fast_limiters() -> DomainRateLimiters:
+    """Build a per-call DomainRateLimiters whose sleep is a no-op so throttling never waits.
+
+    The random inter-page sleep was removed in favour of the per-host rate limiter; injecting a
+    no-op sleep keeps the pagination tests from ever waiting in real time and isolates them from
+    the shared module-level limiter's state.
+    """
+    sleep = AsyncMock()
+    return DomainRateLimiters(RATE_LIMITS, DEFAULT_RATE_LIMIT, sleep=sleep)
+
+
+@pytest.fixture(autouse=True)
+def _no_wait_default_limiters():
+    """Replace the shared default rate limiter with a never-throttling one for every test.
+
+    The Playwright search path uses the module-level default when no limiter is passed; an
+    enormous burst means ``acquire`` always has a token and never sleeps, so no test waits on the
+    real clock while the limiter integration stays exercised.
+    """
+    unbounded = DomainRateLimiters({}, (1_000_000.0, 1_000_000))
+    with patch.object(search_utils, "default_limiters", return_value=unbounded):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +142,8 @@ async def test_leanpub_api_full_page_then_short_page_combines_results():
         FakeResponse(json_data=_search_payload(page1_books)),
         FakeResponse(json_data=_search_payload(page2_books)),
     ]
-    with _patch_httpx(responses=responses), _no_sleep():
-        books = await get_leanpub_search_results_via_api("python")
+    with _patch_httpx(responses=responses):
+        books = await get_leanpub_search_results_via_api("python", limiters=_fast_limiters())
 
     assert len(books) == 102
 
@@ -190,8 +212,8 @@ async def test_leanpub_api_request_error_on_second_page_keeps_first_page():
     request = httpx.Request("GET", "https://leanpub.com/api")
     exc = httpx.RequestError("boom", request=request)
     responses = [FakeResponse(json_data=_search_payload(page1_books)), exc]
-    with _patch_httpx(get_side_effect=responses), _no_sleep():
-        books = await get_leanpub_search_results_via_api("python")
+    with _patch_httpx(get_side_effect=responses):
+        books = await get_leanpub_search_results_via_api("python", limiters=_fast_limiters())
 
     assert len(books) == 100
 
@@ -660,3 +682,52 @@ async def test_playwright_amazon_card_error_is_isolated_and_skips_only_that_card
 
     assert len(result) == 1
     assert result[0]["title"] == "Survivor Book"
+
+
+async def test_leanpub_search_no_longer_sleeps_randomly():
+    """
+    [Local] search utils: verifies the Leanpub API loop throttles via the limiter, not a random sleep.
+
+    Scenario:
+        Given a two-page Leanpub search driven through a recording limiter, with random.uniform patched
+        When get_leanpub_search_results_via_api runs to completion
+        Then one acquire is recorded per page and random.uniform is never called, and the module no
+        longer imports asyncio (the ad hoc inter-page sleep is gone)
+
+    Boundaries:
+        - Asserts the replacement of the random sleep by the limiter, not per-field extraction
+
+    On failure, first check:
+        - The removed ``asyncio.sleep(random.uniform(...))`` was reintroduced, or the per-page
+          ``acquire`` before ``client.get`` was dropped
+    """
+    events: list[str] = []
+
+    class _RecordingLimiter:
+        """A limiter whose acquire records each per-page call instead of throttling."""
+
+        async def acquire(self):
+            """Record that a token was acquired for this page request."""
+            events.append("acquire")
+
+    class _RecordingLimiters:
+        """A registry handing out the recording limiter for any URL."""
+
+        def for_url(self, url: str) -> "_RecordingLimiter":
+            """Return the recording limiter regardless of host."""
+            return _RecordingLimiter()
+
+    page1_books = [_search_book(f"b{i}") for i in range(100)]
+    page2_books = [_search_book("x1")]
+    responses = [
+        FakeResponse(json_data=_search_payload(page1_books)),
+        FakeResponse(json_data=_search_payload(page2_books)),
+    ]
+
+    with _patch_httpx(responses=responses), patch.object(search_utils.random, "uniform") as mock_uniform:
+        books = await get_leanpub_search_results_via_api("python", limiters=_RecordingLimiters())
+
+    assert len(books) == 101
+    assert events == ["acquire", "acquire"]
+    mock_uniform.assert_not_called()
+    assert not hasattr(search_utils, "asyncio")

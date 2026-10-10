@@ -1,7 +1,7 @@
 # Task 03.2 - Politeness & Anti-Bot Resilience
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress
 **Category:** feature | **Priority:** P1
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
 
@@ -17,7 +17,7 @@ blocked and storing a bot-wall page as a "book".
 
 | #  | Document                                                                  | Status         | Blocks |
 |----|---------------------------------------------------------------------------|----------------|--------|
-| 01 | [Per-domain rate limiter](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/01-per-domain-rate-limiter.md)            | ⬜ Not started | 03, 06 |
+| 01 | [Per-domain rate limiter](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/01-per-domain-rate-limiter.md)            | ✅ Complete    | 03, 06 |
 | 02 | [robots.txt compliance](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/02-robots-txt-compliance.md)                | ⬜ Not started | -      |
 | 03 | [Shared backoff & Retry-After](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/03-shared-backoff-and-retry-after.md) | ⬜ Not started | 04    |
 | 04 | [Bot-wall detection & circuit breaker](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/04-bot-wall-detection.md)    | ⬜ Not started | -      |

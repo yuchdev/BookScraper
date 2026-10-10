@@ -17,6 +17,7 @@ from ..backends import StorageBackend
 from ..book_utils import print_log
 from . import normalize
 from .parameters import USER_AGENTS, site_constants
+from .politeness import DomainRateLimiters, default_limiters
 from .results import ScrapeResult, ScrapeStatus
 
 # The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
@@ -246,7 +247,11 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
             module_logger.debug(f"Ignoring page-close failure: {exc}")
 
 
-async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient] = None) -> ScrapeResult:
+async def get_leanpub_book_details(
+    url: str,
+    client: Optional[httpx.AsyncClient] = None,
+    limiters: Optional[DomainRateLimiters] = None,
+) -> ScrapeResult:
     """Fetch detailed information for a single Leanpub book from its JSON:API endpoint.
 
     Every path returns a :class:`ScrapeResult`: a :attr:`ScrapeStatus.SUCCESS` carrying the
@@ -264,8 +269,11 @@ async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient]
         ``https://leanpub.com/api/v1/cache/books/quickguidetodatasciencewithpython.json``).
     :param client: An existing :class:`httpx.AsyncClient` to reuse, or ``None`` to create and
         close a dedicated one for this call.
+    :param limiters: The per-run :class:`DomainRateLimiters` to throttle against, or ``None`` to
+        use the shared module-level instance.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
+    active_limiters = limiters if limiters is not None else default_limiters()
     params = {"include": "accepted_authors"}  # 'included' authors are resolved from this expansion.
     owns_client = client is None
     active_client = (
@@ -275,6 +283,8 @@ async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient]
     )
 
     try:
+        # Throttle per host immediately before the request (the limiter's only side effect).
+        await active_limiters.for_url(url).acquire()
         response = await active_client.get(url, params=params)
         response.raise_for_status()
         response_data = response.json()
@@ -355,7 +365,11 @@ async def get_leanpub_book_details(url: str, client: Optional[httpx.AsyncClient]
 
 
 async def scrape_book(
-    url: str, browser: Browser, site: str, storage_backend: Optional[StorageBackend] = None
+    url: str,
+    browser: Browser,
+    site: str,
+    storage_backend: Optional[StorageBackend] = None,
+    limiters: Optional[DomainRateLimiters] = None,
 ) -> ScrapeResult:
     """Scrape book details from a URL, handle retries, and check for duplicates.
 
@@ -369,13 +383,17 @@ async def scrape_book(
     :param site: The identifier for the website (e.g. ``"amazon"``, ``"leanpub"``).
     :param storage_backend: The :class:`StorageBackend` (mongo or json) to check duplicates
         against, or ``None`` to skip the inline duplicate check.
+    :param limiters: The per-run :class:`DomainRateLimiters` to throttle against, or ``None`` to
+        use the shared module-level instance.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
+    active_limiters = limiters if limiters is not None else default_limiters()
+
     # Leanpub is a pure httpx/JSON path - dispatch it before any Playwright page is created,
     # so it never opens (and therefore never leaks) a browser page.
     if site == "leanpub":
         module_logger.debug(f"Leanpub book; using the JSON API for {url}.")
-        return await get_leanpub_book_details(url)
+        return await get_leanpub_book_details(url, limiters=active_limiters)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         module_logger.debug(f"Scrape attempt {attempt} of {MAX_ATTEMPTS} for {url}.")
@@ -397,6 +415,8 @@ async def scrape_book(
                 module_logger.info(f"Navigating to {full_url} for detailed scraping.")
                 print_log(f"Navigating to {full_url} for detailed scraping.", "info")
 
+                # Throttle per host immediately before navigating.
+                await active_limiters.for_url(full_url).acquire()
                 await page.goto(full_url, timeout=NAVIGATION_TIMEOUT_MS)
 
                 # Check for 404 page (if site_constants provides a 404 selector)
