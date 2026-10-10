@@ -17,11 +17,42 @@ from ..backends import StorageBackend
 from ..book_utils import print_log
 from . import normalize
 from .parameters import USER_AGENTS, site_constants
-from .politeness import DomainRateLimiters, default_limiters
+from .politeness import DomainRateLimiters, RobotsCache, RobotsFetcher, RobotsResponse, default_limiters
 from .results import ScrapeResult, ScrapeStatus
 
 # The site identifier carried on every Leanpub ScrapeResult (the httpx/JSON path).
 LEANPUB_SITE = "leanpub"
+
+# Wall-clock budget for a single robots.txt fetch (seconds), per the subtask spec.
+ROBOTS_FETCH_TIMEOUT_S = 10.0
+
+# User-agent presented to the robots.txt check on the httpx/JSON Leanpub paths, which send no
+# custom browser user-agent. "*" matches the robots.txt catch-all group - the conservative default.
+ROBOTS_HTTPX_USER_AGENT = "*"
+
+
+def build_robots_fetcher(client: httpx.AsyncClient) -> RobotsFetcher:
+    """Return a :data:`RobotsFetcher` bound to the shared ``client`` for a :class:`RobotsCache`.
+
+    The returned coroutine GETs a ``robots.txt`` URL with a 10 s timeout and hands back only its
+    status code and body as a transport-agnostic :class:`RobotsResponse`, keeping every httpx
+    detail out of :mod:`politeness` (which must carry no transport import).
+
+    :param client: The run's shared :class:`httpx.AsyncClient` to fetch ``robots.txt`` through.
+    :returns: A coroutine suitable as the ``fetcher`` argument of :class:`RobotsCache`.
+    """
+
+    async def _fetch(robots_url: str) -> RobotsResponse:
+        """GET ``robots_url`` and return its status and body as a :class:`RobotsResponse`.
+
+        :param robots_url: The absolute ``robots.txt`` URL to fetch.
+        :returns: The fetched status code and decoded body.
+        """
+        response = await client.get(robots_url, timeout=httpx.Timeout(ROBOTS_FETCH_TIMEOUT_S))
+        return RobotsResponse(status_code=response.status_code, text=response.text)
+
+    return _fetch
+
 
 # Per-read / per-attempt timeout budgets (milliseconds) and the retry cap. These are module
 # constants so a later CLI (subtask 05.0) can override them; required fields get the longer
@@ -251,6 +282,7 @@ async def get_leanpub_book_details(
     url: str,
     client: Optional[httpx.AsyncClient] = None,
     limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
 ) -> ScrapeResult:
     """Fetch detailed information for a single Leanpub book from its JSON:API endpoint.
 
@@ -271,9 +303,19 @@ async def get_leanpub_book_details(
         close a dedicated one for this call.
     :param limiters: The per-run :class:`DomainRateLimiters` to throttle against, or ``None`` to
         use the shared module-level instance.
+    :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to
+        skip the robots.txt check (e.g. under ``--ignore-robots``).
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     active_limiters = limiters if limiters is not None else default_limiters()
+
+    # robots.txt gate (fetched once per host per run). The Leanpub JSON:API paths go through the
+    # same check as every other URL; if robots.txt disallows them, the check wins.
+    if robots is not None and not await robots.allowed(url, ROBOTS_HTTPX_USER_AGENT):
+        module_logger.info(f"Skipping Leanpub {url}: disallowed by robots.txt.")
+        print_log(f"Skipping {url}: disallowed by robots.txt.", "warning")
+        return ScrapeResult(ScrapeStatus.SKIPPED_ROBOTS, url=url, site=LEANPUB_SITE, error="disallowed by robots.txt")
+
     params = {"include": "accepted_authors"}  # 'included' authors are resolved from this expansion.
     owns_client = client is None
     active_client = (
@@ -370,6 +412,7 @@ async def scrape_book(
     site: str,
     storage_backend: Optional[StorageBackend] = None,
     limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
 ) -> ScrapeResult:
     """Scrape book details from a URL, handle retries, and check for duplicates.
 
@@ -385,6 +428,8 @@ async def scrape_book(
         against, or ``None`` to skip the inline duplicate check.
     :param limiters: The per-run :class:`DomainRateLimiters` to throttle against, or ``None`` to
         use the shared module-level instance.
+    :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to
+        skip the robots.txt check (e.g. under ``--ignore-robots``).
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     active_limiters = limiters if limiters is not None else default_limiters()
@@ -393,7 +438,7 @@ async def scrape_book(
     # so it never opens (and therefore never leaks) a browser page.
     if site == "leanpub":
         module_logger.debug(f"Leanpub book; using the JSON API for {url}.")
-        return await get_leanpub_book_details(url, limiters=active_limiters)
+        return await get_leanpub_book_details(url, limiters=active_limiters, robots=robots)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         module_logger.debug(f"Scrape attempt {attempt} of {MAX_ATTEMPTS} for {url}.")
@@ -414,6 +459,20 @@ async def scrape_book(
                 full_url = urljoin(base_url, url)
                 module_logger.info(f"Navigating to {full_url} for detailed scraping.")
                 print_log(f"Navigating to {full_url} for detailed scraping.", "info")
+
+                # robots.txt gate (fetched once per host per run), BEFORE any request to the
+                # target path: a disallowed URL is never fetched and yields SKIPPED_ROBOTS with
+                # no retry (a policy decision, not a transient fault).
+                if robots is not None and not await robots.allowed(full_url, user_agent):
+                    module_logger.info(f"Skipping {full_url}: disallowed by robots.txt.")
+                    print_log(f"Skipping {full_url}: disallowed by robots.txt.", "warning")
+                    return ScrapeResult(
+                        ScrapeStatus.SKIPPED_ROBOTS,
+                        url=full_url,
+                        site=site,
+                        error="disallowed by robots.txt",
+                        attempts=attempt,
+                    )
 
                 # Throttle per host immediately before navigating.
                 await active_limiters.for_url(full_url).acquire()

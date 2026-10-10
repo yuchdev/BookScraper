@@ -15,7 +15,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import scrape_details
 from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
-from bookscraper.scraping.politeness import DomainRateLimiters
+from bookscraper.scraping.politeness import DomainRateLimiters, RobotsCache, RobotsResponse
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 from bookscraper.scraping.scrape_details import (
     get_leanpub_book_details,
@@ -593,7 +593,7 @@ async def test_scrape_book_leanpub_short_circuits_to_api_helper():
         result = await scrape_book("https://leanpub.com/x", browser, "leanpub")
 
     # scrape_book forwards its (defaulted) per-run limiters registry to the API helper.
-    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY)
+    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY, robots=None)
     assert result is sentinel
     # Leanpub is dispatched before any Playwright page is created.
     browser.new_page.assert_not_awaited()
@@ -659,6 +659,87 @@ async def test_scrape_book_404_returns_not_found():
     assert result.book is None
     assert result.error is not None
     page.close.assert_awaited()
+
+
+def _disallowing_robots(site: str = "amazon") -> RobotsCache:
+    """Build a RobotsCache whose canned robots.txt disallows /gp/cart on the host.
+
+    The fetcher returns a fixed body (no network); the cache is wired to a never-throttling
+    limiter registry so the crawl-delay path is a no-op here.
+    """
+
+    async def _fetch(robots_url: str) -> RobotsResponse:
+        """Return a canned robots.txt disallowing the cart path."""
+        return RobotsResponse(status_code=200, text="User-agent: *\nDisallow: /gp/cart\n")
+
+    return RobotsCache(_fetch, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+
+async def test_disallowed_url_yields_skipped_robots_result():
+    """
+    [Local] scrape details: verifies a robots.txt-disallowed URL is never fetched (SKIPPED_ROBOTS).
+
+    Scenario:
+        Given a RobotsCache that disallows /gp/cart and an amazon URL on that path
+        When scrape_book is called with that cache
+        Then the result is SKIPPED_ROBOTS carrying no book, and page.goto is never awaited
+        (no request reaches the disallowed path).
+
+    Boundaries:
+        - The page is opened before the robots check (to know the UA/full URL), but goto - the
+          only network fetch of the target path - must not fire; a single attempt, no retry.
+
+    On failure, first check:
+        - The robots.allowed gate placed before the rate-limiter acquire and goto in scrape_book.
+    """
+    page = _amazon_page()
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(
+        "https://www.amazon.com/gp/cart",
+        browser,
+        "amazon",
+        None,
+        None,
+        _disallowing_robots(),
+    )
+
+    assert result.status is ScrapeStatus.SKIPPED_ROBOTS
+    assert result.book is None
+    assert result.error == "disallowed by robots.txt"
+    page.goto.assert_not_awaited()
+
+
+async def test_build_robots_fetcher_returns_status_and_body():
+    """
+    [Local] scrape details: verifies build_robots_fetcher GETs and maps status + body.
+
+    Scenario:
+        Given a fake httpx client whose get() returns a 200 response with a robots.txt body
+        When the fetcher built by build_robots_fetcher is awaited for a robots.txt URL
+        Then it returns a RobotsResponse carrying that status code and text, and the client is
+        called with the 10 s robots timeout.
+
+    Boundaries:
+        - Only the thin httpx->RobotsResponse adapter; parsing/policy live in RobotsCache.
+
+    On failure, first check:
+        - The get() call and RobotsResponse construction in build_robots_fetcher._fetch.
+    """
+    response = MagicMock()
+    response.status_code = 200
+    response.text = "User-agent: *\nDisallow: /secret\n"
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+
+    fetcher = scrape_details.build_robots_fetcher(client)
+    result = await fetcher("https://example.test/robots.txt")
+
+    assert isinstance(result, RobotsResponse)
+    assert result.status_code == 200
+    assert result.text == "User-agent: *\nDisallow: /secret\n"
+    client.get.assert_awaited_once()
+    assert client.get.await_args.args[0] == "https://example.test/robots.txt"
 
 
 async def test_scrape_book_amazon_happy_path_returns_full_book():
@@ -1088,7 +1169,7 @@ async def test_leanpub_dispatch_opens_no_playwright_page():
         result = await scrape_book("https://leanpub.com/x", browser, "leanpub")
 
     assert result == {"title": "From API"}
-    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY)
+    mock_details.assert_awaited_once_with("https://leanpub.com/x", limiters=ANY, robots=None)
     # No Playwright resource is created for Leanpub, so nothing can leak.
     browser.new_page.assert_not_awaited()
     page.close.assert_not_awaited()

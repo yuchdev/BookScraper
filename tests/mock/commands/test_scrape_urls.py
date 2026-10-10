@@ -255,7 +255,7 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
         - The "no valid URLs" early-exit branch in run() and the other-links routing.
     """
     csv_path = _write_csv(tmp_path, ["https://example.com/book"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     pw_factory, _browser = _make_playwright_factory()
@@ -295,7 +295,7 @@ async def test_run_missing_input_file_exits_one(tmp_path):
         - The file-existence check at the start of run().
     """
     missing = tmp_path / "does_not_exist.csv"
-    args = SimpleNamespace(input_file=str(missing), store_backend="json")
+    args = SimpleNamespace(input_file=str(missing), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     with (
@@ -324,7 +324,7 @@ async def test_run_missing_url_column_exits_one(tmp_path):
         - The column-name check after pd.read_csv in run().
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"], header="link")
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     with (
@@ -353,7 +353,7 @@ async def test_run_unparseable_csv_exits_one(tmp_path):
         - The try/except around pd.read_csv in run().
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     with (
@@ -387,7 +387,7 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
         - The save_books call, browser.close, and backend.close in run()'s finally block.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/good"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
@@ -458,7 +458,7 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
         - The match/case result-type dispatch in run() and the (url, status, error) row assembly.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/x"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     pw_factory, browser = _make_playwright_factory()
@@ -500,7 +500,7 @@ async def test_run_summary_counts_each_status(tmp_path):
     """
     urls = [f"https://leanpub.com/book-{i}" for i in range(3)]
     csv_path = _write_csv(tmp_path, urls)
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
@@ -556,7 +556,7 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path):
     """
     urls = [f"https://leanpub.com/book-{i}" for i in range(11)]
     csv_path = _write_csv(tmp_path, urls)
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     backend.save_books.return_value = SaveSummary(inserted=11, duplicates=0, errors=0)
@@ -613,3 +613,57 @@ def test_failed_and_other_link_csvs_neutralize_formula_cells(tmp_path):
     with open(other, encoding="utf-8", newline="") as fh:
         assert [row[0] for row in csv.reader(fh)][1:] == ["'@SUM(1)", "https://example.com/ok"]
 
+
+
+async def test_ignore_robots_flag_bypasses_check_and_warns_once(tmp_path):
+    """
+    [Local] scrape urls: verifies --ignore-robots passes robots=None and warns exactly once.
+
+    Scenario:
+        Given a CSV with two leanpub URLs and args.ignore_robots=True
+        When run() is called
+        Then every scrape_book call receives robots=None (the robots gate is bypassed), and a
+        single one-time "--ignore-robots" warning is printed.
+
+    Boundaries:
+        - Opt-out wiring only; the enforced-path behavior is covered by the scrape_details test
+          test_disallowed_url_yields_skipped_robots_result.
+
+    On failure, first check:
+        - The ``None if args.ignore_robots else RobotsCache(...)`` wiring and the one-time
+          warning in scrape_urls.run().
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/a", "https://leanpub.com/b"])
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=True)
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=2, duplicates=0, errors=0)
+    pw_factory, _browser = _make_playwright_factory()
+    results = [
+        ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/a", site="leanpub", book={"title": "A", "hash": "a"}),
+        ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/b", site="leanpub", book={"title": "B", "hash": "b"}),
+    ]
+    scrape_book = AsyncMock(side_effect=results)
+    printed: list[tuple[str, str]] = []
+
+    def _record_print(message, severity="info", *args, **kwargs):
+        """Capture (message, severity) for every print_log call."""
+        printed.append((message, severity))
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.print_log", _record_print),
+    ):
+        await run(args)
+
+    # Every scrape_book call is handed robots=None (the 6th positional arg).
+    assert scrape_book.await_count == 2
+    for call in scrape_book.await_args_list:
+        assert call.args[5] is None
+
+    warnings = [msg for msg, sev in printed if sev == "warning" and "--ignore-robots" in msg]
+    assert len(warnings) == 1

@@ -55,6 +55,14 @@ def build_parser() -> argparse.ArgumentParser:
         "schema as the MongoDB documents).",
     )
     scrape_parser.add_argument(
+        "--ignore-robots",
+        dest="ignore_robots",
+        action="store_true",
+        help="Do NOT consult robots.txt before fetching (off by default). Only for a target you "
+        "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
+        "the run report.",
+    )
+    scrape_parser.add_argument(
         "--log-severity",
         dest="log_severity",
         choices=["debug", "info", "warning", "error"],
@@ -83,6 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Maximum number of search-result pages to fetch per query per site (default: 3).",
+    )
+    search_parser.add_argument(
+        "--ignore-robots",
+        dest="ignore_robots",
+        action="store_true",
+        help="Do NOT consult robots.txt before fetching (off by default). Only for a target you "
+        "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
+        "the run report.",
     )
     search_parser.add_argument(
         "--log-severity",

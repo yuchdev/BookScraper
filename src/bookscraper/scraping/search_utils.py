@@ -18,25 +18,38 @@ from playwright.async_api import Browser, Error as PlaywrightError
 
 from ..book_utils import print_log
 from .parameters import USER_AGENTS, site_constants
-from .politeness import DomainRateLimiters, default_limiters
-from .scrape_details import route_handler
+from .politeness import DomainRateLimiters, RobotsCache, default_limiters
+from .scrape_details import ROBOTS_HTTPX_USER_AGENT, route_handler
 
 logger = logging.getLogger(__name__)
 
 
-async def get_leanpub_search_results_via_api(query: str, limiters: Optional[DomainRateLimiters] = None) -> list[dict]:
+async def get_leanpub_search_results_via_api(
+    query: str,
+    limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
+) -> list[dict]:
     """
     Fetch Leanpub search-result candidates for ``query`` via Leanpub's paginated JSON API.
 
     :param query: The search query to run against the Leanpub bookstore API.
     :param limiters: The per-run :class:`DomainRateLimiters` to throttle each page request
         against, or ``None`` to use the shared module-level instance.
+    :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to
+        skip the robots.txt check (e.g. under ``--ignore-robots``).
     :returns: A list of candidate book dictionaries collected across all result pages.
     """
     print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
     logger.info(f"Leanpub - Fetching search results from Leanpub.com for {query}.")
     active_limiters = limiters if limiters is not None else default_limiters()
     base_url = site_constants["leanpub"]["SEARCH_BASE_API"]
+
+    # robots.txt gate (fetched once per host per run): the Leanpub JSON:API search path goes
+    # through the same check as every other URL. If robots.txt disallows it, fetch nothing.
+    if robots is not None and not await robots.allowed(base_url, ROBOTS_HTTPX_USER_AGENT):
+        print_log(f"Leanpub - Skipping search for '{query}': {base_url} disallowed by robots.txt.", "warning")
+        logger.info(f"Leanpub - Skipping search for '{query}': {base_url} disallowed by robots.txt.")
+        return []
 
     all_extracted_books = []
     current_page = 1
@@ -164,6 +177,7 @@ async def get_search_results_via_playwright(
     site_name: str,
     query: str,
     limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
     # filters: dict = None
 ) -> list[dict]:
     """
@@ -247,6 +261,15 @@ async def get_search_results_via_playwright(
                     user_agent = random.choice(USER_AGENTS)
                     await page.set_extra_http_headers({"User-Agent": user_agent})
                     await page.route("**/*", route_handler)
+
+                    # robots.txt gate (fetched once per host per run), BEFORE navigating: a
+                    # disallowed search page is skipped and never fetched.
+                    if robots is not None and not await robots.allowed(search_result_page, user_agent):
+                        logger.info(f"Skipping search page {search_result_page}: disallowed by robots.txt.")
+                        print_log(f"Skipping search page {search_result_page}: disallowed by robots.txt.", "warning")
+                        await page.close()
+                        page = None
+                        continue
 
                     try:
                         # Throttle per host immediately before navigating to each search page.

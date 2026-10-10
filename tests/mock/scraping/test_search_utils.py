@@ -10,7 +10,7 @@ import copy
 import json
 from contextlib import AbstractContextManager
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -18,7 +18,7 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from bookscraper.scraping import search_utils
 from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
-from bookscraper.scraping.politeness import DomainRateLimiters
+from bookscraper.scraping.politeness import DomainRateLimiters, RobotsCache, RobotsResponse
 from bookscraper.scraping.search_utils import (
     get_leanpub_search_results_via_api,
     get_search_results_via_playwright,
@@ -86,9 +86,45 @@ def _no_wait_default_limiters():
         yield
 
 
+def _disallow_all_robots() -> RobotsCache:
+    """Build a RobotsCache whose canned robots.txt disallows every path on the host."""
+
+    async def _fetch(robots_url: str) -> RobotsResponse:
+        """Return a robots.txt that disallows everything."""
+        return RobotsResponse(status_code=200, text="User-agent: *\nDisallow: /\n")
+
+    return RobotsCache(_fetch, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+
 # ---------------------------------------------------------------------------
 # get_leanpub_search_results_via_api
 # ---------------------------------------------------------------------------
+
+
+async def test_leanpub_api_search_skipped_when_robots_disallows():
+    """
+    [Local] search utils: verifies a robots.txt-disallowed Leanpub API is never fetched.
+
+    Scenario:
+        Given a RobotsCache that disallows the Leanpub search API path
+        When get_leanpub_search_results_via_api is called with that cache
+        Then it returns an empty list and httpx.AsyncClient is never constructed (no request).
+
+    Boundaries:
+        - The Leanpub JSON:API path goes through the same robots check as every other URL; the
+          check wins over fetching.
+
+    On failure, first check:
+        - The robots.allowed gate at the top of get_leanpub_search_results_via_api.
+    """
+    client_factory = MagicMock()
+    with patch.object(search_utils.httpx, "AsyncClient", client_factory):
+        books = await get_leanpub_search_results_via_api(
+            "python", limiters=_fast_limiters(), robots=_disallow_all_robots()
+        )
+
+    assert books == []
+    client_factory.assert_not_called()
 
 
 async def test_leanpub_api_single_short_page_stops_after_page_one():

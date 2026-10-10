@@ -12,9 +12,9 @@ import httpx
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
-from ..scraping.politeness import build_default_limiters
+from ..scraping.politeness import RobotsCache, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
-from ..scraping.scrape_details import get_leanpub_book_details
+from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
 
 module_logger = logging.getLogger(__name__)
@@ -83,6 +83,14 @@ async def run(args: argparse.Namespace):
     # whole run is throttled to each host's configured rate.
     limiters = build_default_limiters()
 
+    # robots.txt compliance is on by default; --ignore-robots disables it with a one-time warning.
+    if args.ignore_robots:
+        print_log(
+            "robots.txt checking is DISABLED via --ignore-robots; scraping without robots compliance.",
+            "warning",
+        )
+        module_logger.warning("robots.txt checking disabled via --ignore-robots for this run.")
+
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
     failed_scrape_attempts = []  # List to store book data that failed detailed scraping
@@ -92,118 +100,124 @@ async def run(args: argparse.Namespace):
     status_counts: Counter[ScrapeStatus] = Counter()
 
     try:
-        # --- Iterate through SITES_TO_SCRAPE and perform search + scrape ---
-        for site_name in SITES_TO_SCRAPE:
-            print_log(f"\n--- Processing {site_name.title()} ---", "step")
+        # One AsyncClient is created per run and reused for BOTH the robots.txt checks and every
+        # Leanpub detail fetch (robots overrides to a 10 s per-request timeout), so hundreds of
+        # concurrent calls share one bounded connection pool instead of each opening its own.
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0), limits=httpx.Limits(max_connections=10)
+        ) as http_client:
+            robots = None if args.ignore_robots else RobotsCache(build_robots_fetcher(http_client), limiters)
 
-            for search_item in SEARCH_QUERIES:
-                current_search_results = []
-                # Leanpub-Specific
-                if site_name.lower() == "leanpub":
-                    print_log(f"Leanpub - Searching for '{search_item}' via API...", "info")
+            # --- Iterate through SITES_TO_SCRAPE and perform search + scrape ---
+            for site_name in SITES_TO_SCRAPE:
+                print_log(f"\n--- Processing {site_name.title()} ---", "step")
 
-                    # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
-                    current_search_results = await get_leanpub_search_results_via_api(search_item, limiters=limiters)
+                for search_item in SEARCH_QUERIES:
+                    current_search_results = []
+                    # Leanpub-Specific
+                    if site_name.lower() == "leanpub":
+                        print_log(f"Leanpub - Searching for '{search_item}' via API...", "info")
 
-                    # Pre-scrape deduplication
-                    print_log("Leanpub - Deduplicating search results...")
-                    for book in current_search_results:
-                        book_title = book.get("title")
-                        book_id = book.get("book_id")
-                        book_slug = book.get("slug")
-                        if not book_slug:
-                            module_logger.warning(f"Skipping Leanpub search result without a slug (id {book_id}).")
-                            continue
-                        book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
-                        book["book_url"] = book_url
-                        exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
+                        # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
+                        current_search_results = await get_leanpub_search_results_via_api(
+                            search_item, limiters=limiters, robots=robots
+                        )
 
-                        if not exists:
-                            # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
-                            books_from_search.append(book)
-                            print_log(
-                                f"{site_name.title()} - New book found: {book_title}",
-                                "success",
-                            )
-                        else:
-                            total_duplicates_skipped += 1
-                            print_log(
-                                f"{site_name.title()} - Book already in database: {book_title}",
-                                "warning",
-                            )
+                        # Pre-scrape deduplication
+                        print_log("Leanpub - Deduplicating search results...")
+                        for book in current_search_results:
+                            book_title = book.get("title")
+                            book_id = book.get("book_id")
+                            book_slug = book.get("slug")
+                            if not book_slug:
+                                module_logger.warning(f"Skipping Leanpub search result without a slug (id {book_id}).")
+                                continue
+                            book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
+                            book["book_url"] = book_url
+                            exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
 
-                print_log(
-                    f"Found {len(current_search_results)} potential new books for '{search_item}'.",
-                    "success",
-                )
-                module_logger.info(f"Found {len(current_search_results)} potential new books for '{search_item}'.")
+                            if not exists:
+                                # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
+                                books_from_search.append(book)
+                                print_log(
+                                    f"{site_name.title()} - New book found: {book_title}",
+                                    "success",
+                                )
+                            else:
+                                total_duplicates_skipped += 1
+                                print_log(
+                                    f"{site_name.title()} - Book already in database: {book_title}",
+                                    "warning",
+                                )
 
-        # --- Deduplicate Cross-Site using ISBN / Fuzzy search / Hash ---
-        new_books_for_detailed_scrape = books_from_search
+                    print_log(
+                        f"Found {len(current_search_results)} potential new books for '{search_item}'.",
+                        "success",
+                    )
+                    module_logger.info(f"Found {len(current_search_results)} potential new books for '{search_item}'.")
 
-        # --- Queue Detailed Scraping Tasks for current site ---
-        leanpub_books = [book for book in new_books_for_detailed_scrape if book["site"].lower() == "leanpub"]
+            # --- Deduplicate Cross-Site using ISBN / Fuzzy search / Hash ---
+            new_books_for_detailed_scrape = books_from_search
 
-        # Run detailed scraping tasks for the current site concurrently
-        if leanpub_books:
-            # One AsyncClient is created per run and reused across every Leanpub detail fetch,
-            # so hundreds of concurrent calls share a bounded connection pool instead of each
-            # opening (and leaking) its own.
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0), limits=httpx.Limits(max_connections=10)
-            ) as detail_client:
+            # --- Queue Detailed Scraping Tasks for current site ---
+            leanpub_books = [book for book in new_books_for_detailed_scrape if book["site"].lower() == "leanpub"]
+
+            # Run detailed scraping tasks for the current site concurrently
+            if leanpub_books:
                 print_log(f"--- Scraping {len(leanpub_books)} Leanpub book(s) ---", "step")
                 site_scrape_tasks = [
-                    get_leanpub_book_details(url=book.get("book_url"), client=detail_client, limiters=limiters)
+                    get_leanpub_book_details(
+                        url=book.get("book_url"), client=http_client, limiters=limiters, robots=robots
+                    )
                     for book in leanpub_books
                 ]
                 current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
 
-            # Process results from detailed scraping for the current site
-            for original_book_data, result in zip(leanpub_books, current_site_scraped_results, strict=True):
-                if isinstance(result, ScrapeResult):
-                    status_counts[result.status] += 1
-                    if result.status is ScrapeStatus.SUCCESS:
-                        scraped_books_data.append(result.book)
-                        print_log(
-                            f"Successfully scraped details for: "
-                            f"{result.book.get('title', 'Unknown Title')} from {site_name}",
-                            "info",
-                        )
+                # Process results from detailed scraping for the current site
+                for original_book_data, result in zip(leanpub_books, current_site_scraped_results, strict=True):
+                    if isinstance(result, ScrapeResult):
+                        status_counts[result.status] += 1
+                        if result.status is ScrapeStatus.SUCCESS:
+                            scraped_books_data.append(result.book)
+                            print_log(
+                                f"Successfully scraped details for: "
+                                f"{result.book.get('title', 'Unknown Title')} from {site_name}",
+                                "info",
+                            )
+                        else:
+                            # result.url is the real book_url (fixes the old "url": "N/A"), and
+                            # result.error is the typed, secret-free failure reason.
+                            failed_scrape_attempts.append(
+                                {
+                                    "url": result.url,
+                                    "site": original_book_data.get("site", "N/A"),
+                                    "title": original_book_data.get("title", "N/A"),
+                                    "error": result.error or result.status.value,
+                                }
+                            )
+                            print_log(
+                                f"Failed to scrape details for {result.url} from {site_name}: "
+                                f"{result.status.value} - {result.error}",
+                                "error",
+                            )
                     else:
-                        # result.url is the real book_url (fixes the old "url": "N/A"), and
-                        # result.error is the typed, secret-free failure reason.
+                        # gather(return_exceptions=True) surfaced an exception the detail scraper
+                        # did not convert into a ScrapeResult; record it as a raw failure.
                         failed_scrape_attempts.append(
                             {
-                                "url": result.url,
+                                "url": original_book_data.get("book_url", original_book_data.get("url", "N/A")),
                                 "site": original_book_data.get("site", "N/A"),
                                 "title": original_book_data.get("title", "N/A"),
-                                "error": result.error or result.status.value,
+                                "error": str(result),
                             }
                         )
                         print_log(
-                            f"Failed to scrape details for {result.url} from {site_name}: "
-                            f"{result.status.value} - {result.error}",
+                            f"Failed to scrape details for "
+                            f"{original_book_data.get('book_url', 'N/A')} from {site_name}: {str(result)}",
                             "error",
                         )
-                else:
-                    # gather(return_exceptions=True) surfaced an exception the detail scraper
-                    # did not convert into a ScrapeResult; record it as a raw failure.
-                    failed_scrape_attempts.append(
-                        {
-                            "url": original_book_data.get("book_url", original_book_data.get("url", "N/A")),
-                            "site": original_book_data.get("site", "N/A"),
-                            "title": original_book_data.get("title", "N/A"),
-                            "error": str(result),
-                        }
-                    )
-                    print_log(
-                        f"Failed to scrape details for "
-                        f"{original_book_data.get('book_url', 'N/A')} from {site_name}: {str(result)}",
-                        "error",
-                    )
-        else:
-            print_log(f"No new books identified for detailed scraping on {site_name}.", "info")
+            else:
+                print_log(f"No new books identified for detailed scraping on {site_name}.", "info")
 
     except KeyboardInterrupt:
         print_log("Scraping interrupted by user.", "warning")

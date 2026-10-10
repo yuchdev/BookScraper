@@ -7,9 +7,166 @@ these assert exact simulated timing of the token bucket and the per-host routing
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from bookscraper.scraping.politeness import DomainRateLimiters, RateLimiter
+from bookscraper.scraping.politeness import (
+    DomainRateLimiters,
+    RateLimiter,
+    RobotsCache,
+    RobotsResponse,
+)
+
+# tests/unit/scraping/test_politeness.py -> parents[2] == tests/
+_ROBOTS_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "robots"
+
+# A representative browser user-agent for robots matching (never matches a named spider block,
+# so it falls to the catch-all ``*`` group - the realistic case for this scraper).
+_UA = "Mozilla/5.0 (compatible; bookscraper-tests)"
+
+
+def _robots_text(site: str) -> str:
+    """Return the captured ``robots.txt`` body for ``site`` from the offline fixture corpus."""
+    return (_ROBOTS_DIR / f"{site}.txt").read_text(encoding="utf-8")
+
+
+class CountingFetcher:
+    """A fake :data:`RobotsFetcher` that returns a fixed response and counts its invocations.
+
+    Used to assert both the fail-closed/404/parse behaviour (via the canned response) and the
+    once-per-host fetch contract (via ``calls``) without any real network.
+    """
+
+    def __init__(self, response: RobotsResponse):
+        """Store the canned response and start the call counter at zero."""
+        self.response = response
+        self.calls = 0
+
+    async def __call__(self, robots_url: str) -> RobotsResponse:
+        """Record the call and return the canned response (ignoring ``robots_url``)."""
+        self.calls += 1
+        return self.response
+
+
+class RaisingFetcher:
+    """A fake :data:`RobotsFetcher` that always raises, simulating a transport/fetch failure."""
+
+    async def __call__(self, robots_url: str) -> RobotsResponse:
+        """Raise to exercise the cache's fail-closed branch."""
+        raise RuntimeError("boom")
+
+
+async def test_robots_disallowed_path_returns_false():
+    """
+    [Unit] politeness: verifies a robots.txt-disallowed path is refused and an allowed one passes.
+
+    Scenario:
+        Given a RobotsCache fed Amazon's captured robots.txt
+        When allowed() is checked for a disallowed /gp/cart path and an allowed /dp/ path
+        Then the disallowed path returns False and the allowed path returns True
+
+    Boundaries:
+        - Offline: the body comes from the committed fixture, never a live fetch
+        - Pure rule evaluation; crawl-delay and fetch-failure are separate tests
+
+    On failure, first check:
+        - The can_fetch delegation in RobotsCache.allowed, or the fixture's Disallow lines
+    """
+    fetcher = CountingFetcher(RobotsResponse(status_code=200, text=_robots_text("amazon")))
+    cache = RobotsCache(fetcher, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+    assert await cache.allowed("https://www.amazon.com/gp/cart", _UA) is False
+    assert await cache.allowed("https://www.amazon.com/dp/B0ABCDEFGH/", _UA) is True
+
+
+async def test_robots_fetched_once_per_host():
+    """
+    [Unit] politeness: verifies robots.txt is fetched at most once per host per run.
+
+    Scenario:
+        Given a RobotsCache with a call-counting fetcher
+        When allowed() is checked three times for the same host
+        Then the fetcher is invoked exactly once (the parsed rules are cached)
+
+    Boundaries:
+        - Single host; per-host isolation is covered by the rate-limiter routing tests
+
+    On failure, first check:
+        - The ``host not in self._parsers`` guard (and the lock) in RobotsCache.allowed
+    """
+    fetcher = CountingFetcher(RobotsResponse(status_code=200, text=_robots_text("leanpub")))
+    cache = RobotsCache(fetcher, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+    for _ in range(3):
+        await cache.allowed("https://leanpub.com/api/v1/cache/books/x.json", _UA)
+
+    assert fetcher.calls == 1
+
+
+async def test_robots_fetch_error_fails_closed():
+    """
+    [Unit] politeness: verifies a robots.txt fetch failure disallows the whole host (fail closed).
+
+    Scenario:
+        Given a RobotsCache whose fetcher raises
+        When allowed() is checked for any path on that host
+        Then it returns False (never scrape blind on an inconclusive robots.txt)
+
+    Boundaries:
+        - Transport failure only; a 5xx is classified the same way via the status branch
+
+    On failure, first check:
+        - The ``except Exception`` fail-closed branch in RobotsCache._load
+    """
+    cache = RobotsCache(RaisingFetcher(), DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+    assert await cache.allowed("https://www.packtpub.com/product/x", _UA) is False
+
+
+async def test_robots_404_allows_all():
+    """
+    [Unit] politeness: verifies a 404 robots.txt allows every path (RFC 9309 convention).
+
+    Scenario:
+        Given a RobotsCache whose fetcher returns HTTP 404
+        When allowed() is checked for an arbitrary path
+        Then it returns True (no robots.txt means no restrictions)
+
+    Boundaries:
+        - Status classification only; the body is irrelevant on a 404
+
+    On failure, first check:
+        - The ``status == 404`` branch in RobotsCache._load
+    """
+    fetcher = CountingFetcher(RobotsResponse(status_code=404, text="not found"))
+    cache = RobotsCache(fetcher, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+
+    assert await cache.allowed("https://example.test/anything", _UA) is True
+
+
+async def test_crawl_delay_lowers_rate_limit():
+    """
+    [Unit] politeness: verifies a robots.txt Crawl-delay lowers the host's rate limiter.
+
+    Scenario:
+        Given a host configured at 2.0 req/s and a robots.txt declaring Crawl-delay: 2
+        When allowed() loads those rules
+        Then that host's limiter rate is lowered to 1/2 = 0.5 req/s (slower than configured)
+
+    Boundaries:
+        - Only a delay slower than configured lowers the rate; a faster one is ignored
+
+    On failure, first check:
+        - The crawl_delay/restrict_rate call in RobotsCache._load, or RateLimiter.restrict_rate
+    """
+    robots_text = "User-agent: *\nCrawl-delay: 2\nDisallow: /private\n"
+    limiters = DomainRateLimiters({"leanpub.com": (2.0, 4)}, (0.5, 1))
+    cache = RobotsCache(CountingFetcher(RobotsResponse(status_code=200, text=robots_text)), limiters)
+    url = "https://leanpub.com/api/v1/cache/books/x.json"
+
+    assert await cache.allowed(url, _UA) is True
+    assert limiters.for_url(url)._rate == 0.5
 
 
 class FakeClock:

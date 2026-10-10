@@ -265,7 +265,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
     On failure, first check:
         - The leanpub_book_exists check and the URL construction for get_leanpub_book_details.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     existing = _leanpub_book("existing-book", "Existing Book")
     fresh = _leanpub_book("fresh-book", "Fresh Book")
@@ -323,7 +323,7 @@ async def test_run_detail_results_partition_into_saved_and_failed():
     On failure, first check:
         - The result-partitioning loop in run() and the fallback branch for raw exceptions.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     good = _leanpub_book("good", "Good Book")
     boom = _leanpub_book("boom", "Boom Book")
@@ -391,7 +391,7 @@ async def test_search_failed_record_uses_real_book_url():
     On failure, first check:
         - the diagnostic CSV again records ``N/A`` for every Leanpub failure, erasing the URL an operator needs to retry it.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     candidate = _leanpub_book("broken-book", "Broken Book")
 
@@ -438,7 +438,7 @@ async def test_run_no_new_books_skips_save_but_closes_backend():
     On failure, first check:
         - The "no candidates" guard and the backend.close() in run()'s finally block.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     search_api = AsyncMock(return_value=[])
@@ -474,7 +474,7 @@ async def test_run_keyboard_interrupt_is_caught_and_backend_closed():
     On failure, first check:
         - The except KeyboardInterrupt handler and the backend.close() in run()'s finally block.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     search_api = AsyncMock(side_effect=KeyboardInterrupt())
@@ -509,7 +509,7 @@ async def test_run_generic_exception_is_caught_and_backend_closed():
     On failure, first check:
         - The outer except Exception handler and backend.close() in run()'s finally block.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
     search_api = AsyncMock(side_effect=RuntimeError("search API exploded"))
@@ -546,7 +546,7 @@ async def test_search_reuses_single_async_client():
         - run() builds a new httpx.AsyncClient per book, or stops passing the shared client into
           get_leanpub_book_details.
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
     books = [_leanpub_book(f"book-{i}", f"Book {i}") for i in range(3)]
 
@@ -658,7 +658,7 @@ async def test_run_saves_books_off_the_event_loop_thread():
     On failure, first check:
         - The asyncio.to_thread(storage_backend.save_books, ...) call near the end of run() in commands/search.py
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
     loop_thread = threading.get_ident()
     save_threads = []
 
@@ -704,7 +704,7 @@ async def test_run_skips_search_result_without_slug():
     On failure, first check:
         - The empty-slug guard before the SINGLE_BOOK_API URL is built in commands/search.py
     """
-    args = SimpleNamespace(store_backend="json")
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
     no_slug = _leanpub_book("ignored", "No Slug")
     no_slug["slug"] = None
     good = _leanpub_book("good-book", "Good Book")

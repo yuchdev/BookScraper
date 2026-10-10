@@ -28,6 +28,7 @@ class ScrapeStatus(str, Enum):
     NOT_FOUND = "NOT_FOUND"  # 404 / page-not-found title
     TIMEOUT = "TIMEOUT"  # all attempts timed out
     BLOCKED = "BLOCKED"  # bot wall detected (populated by task 03.2 subtask 04)
+    SKIPPED_ROBOTS = "SKIPPED_ROBOTS"  # disallowed by robots.txt (task 03.2 subtask 02)
     PARSE_ERROR = "PARSE_ERROR"  # page loaded, required field missing
     FAILED = "FAILED"  # anything else
 

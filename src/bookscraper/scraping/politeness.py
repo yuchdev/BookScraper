@@ -15,12 +15,19 @@ acceptable, being blocked is not.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
 
+from ..book_utils import print_log
 from .parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
+
+# Dedicated logger so robots.txt decisions land in the run log alongside everything else.
+_robots_logger = logging.getLogger("robots")
 
 # Injectable collaborators, aliased so signatures stay readable and later subtasks can reuse them:
 # a monotonic time source and an awaitable sleep. The production defaults are
@@ -91,6 +98,19 @@ class RateLimiter:
                     return
                 shortfall = 1.0 - self._tokens
                 await self._sleep(shortfall / self._rate)
+
+    def restrict_rate(self, max_rate_per_sec: float):
+        """Lower the steady-state refill rate to ``max_rate_per_sec`` iff that is slower.
+
+        Used to honor a robots.txt ``Crawl-delay``: the directive can only ever make this
+        limiter *more* conservative, never faster, so a value that is non-positive or at least as
+        fast as the current rate is ignored. The bucket capacity and current token count are left
+        untouched; only the future refill rate changes.
+
+        :param max_rate_per_sec: The slowest rate the directive permits, in tokens per second.
+        """
+        if 0 < max_rate_per_sec < self._rate:
+            self._rate = float(max_rate_per_sec)
 
 
 class DomainRateLimiters:
@@ -183,3 +203,132 @@ def default_limiters() -> DomainRateLimiters:
     if _DEFAULT_LIMITERS is None:
         _DEFAULT_LIMITERS = build_default_limiters()
     return _DEFAULT_LIMITERS
+
+
+@dataclass(frozen=True)
+class RobotsResponse:
+    """A transport-agnostic robots.txt fetch result handed to :class:`RobotsCache`.
+
+    The cache never imports a transport: a caller's injected fetcher does the actual HTTP and
+    hands back just the status code and body as this small record, so :mod:`politeness` stays
+    unit-testable with a plain fake fetcher and carries no Playwright/httpx import.
+
+    :ivar status_code: The HTTP status of the ``robots.txt`` response.
+    :ivar text: The decoded ``robots.txt`` body (empty string is fine).
+    """
+
+    status_code: int
+    text: str
+
+
+# A ``robots.txt`` fetcher: given the absolute ``robots.txt`` URL it returns a RobotsResponse (or
+# raises, which the cache treats as a fetch failure and fails closed). The production fetcher wraps
+# the shared httpx client in scrape_details; tests pass a fake coroutine.
+RobotsFetcher = Callable[[str], Awaitable[RobotsResponse]]
+
+
+class RobotsCache:
+    """Per-run robots.txt gate: fetches each host's rules once, then answers :meth:`allowed`.
+
+    The rules for a host are fetched (via the injected :data:`RobotsFetcher`) and parsed with the
+    stdlib :class:`urllib.robotparser.RobotFileParser` the first time any URL on that host is
+    checked, then cached for the rest of the run. Concurrent first-checks for the same host are
+    serialized by a lock so the fetch really happens only once.
+
+    The failure policy is deliberately conservative (*identify and back off*, never scrape blind):
+
+    - A fetch that raises, or any non-2xx status other than 404 (including every 5xx), **fails
+      closed** - the host is disallowed for the rest of the run, with a warning.
+    - A 404 means "no robots.txt", so everything on that host is allowed (RFC 9309).
+    - On a 2xx the rules are parsed and honored; a ``Crawl-delay`` lowers that host's
+      :class:`RateLimiter` rate to ``1 / crawl_delay`` when that is slower than configured.
+    """
+
+    def __init__(self, fetcher: RobotsFetcher, limiters: DomainRateLimiters):
+        """Wire the cache to its robots.txt fetcher and the per-run rate-limiter registry.
+
+        :param fetcher: The injected coroutine that fetches a ``robots.txt`` URL (see
+            :data:`RobotsFetcher`); the cache never performs I/O itself.
+        :param limiters: The run's :class:`DomainRateLimiters`, so a parsed ``Crawl-delay`` can
+            throttle the very limiter the scrapers acquire for that host.
+        """
+        self._fetcher = fetcher
+        self._limiters = limiters
+        # host -> parser (2xx) or None (404 / allow-all). A host in _denied is fail-closed.
+        self._parsers: dict[str, Optional[RobotFileParser]] = {}
+        self._denied: set[str] = set()
+        self._lock = asyncio.Lock()
+
+    async def allowed(self, url: str, user_agent: str) -> bool:
+        """Return whether ``robots.txt`` permits ``user_agent`` to fetch ``url``.
+
+        Loads and caches the host's rules on first use (fetched at most once per host per run).
+
+        :param url: The absolute URL about to be fetched.
+        :param user_agent: The user-agent the request will present (matched against the rules).
+        :returns: ``True`` if the fetch is permitted; ``False`` if disallowed or fail-closed.
+        """
+        host = DomainRateLimiters.registrable_host(url)
+        if host not in self._parsers and host not in self._denied:
+            async with self._lock:
+                if host not in self._parsers and host not in self._denied:
+                    await self._load(url, host, user_agent)
+        if host in self._denied:
+            return False
+        parser = self._parsers.get(host)
+        if parser is None:
+            return True
+        return parser.can_fetch(user_agent, url)
+
+    async def _load(self, url: str, host: str, user_agent: str):
+        """Fetch, classify, and cache ``robots.txt`` for ``host`` (applying any ``Crawl-delay``).
+
+        :param url: A sample URL on the host, used to derive the ``robots.txt`` URL and to key the
+            host's rate limiter for a ``Crawl-delay`` adjustment.
+        :param host: The registrable-host cache key.
+        :param user_agent: The user-agent whose ``Crawl-delay`` (if any) is applied.
+        """
+        robots_url = self._robots_url(url)
+        try:
+            response = await self._fetcher(robots_url)
+        except Exception as exc:  # noqa: X002 - fail-closed boundary: any robots.txt fetch failure disallows the host for the rest of the run rather than scraping blind
+            self._deny(host, robots_url, f"fetch failed ({type(exc).__name__})")
+            return
+        status = response.status_code
+        if status == 404:
+            self._parsers[host] = None  # No robots.txt -> allow everything (RFC 9309).
+            return
+        if not 200 <= status < 300:
+            self._deny(host, robots_url, f"HTTP {status}")
+            return
+        parser = RobotFileParser()
+        parser.parse(response.text.splitlines())
+        self._parsers[host] = parser
+        delay = parser.crawl_delay(user_agent)
+        if delay:
+            self._limiters.for_url(url).restrict_rate(1.0 / float(delay))
+
+    def _deny(self, host: str, robots_url: str, reason: str):
+        """Mark ``host`` fail-closed for the run and warn (console + run log).
+
+        :param host: The registrable host to disallow.
+        :param robots_url: The ``robots.txt`` URL whose fetch was inconclusive.
+        :param reason: A short secret-free reason (status code or exception class).
+        """
+        self._denied.add(host)
+        _robots_logger.warning(f"robots.txt unavailable for {robots_url} ({reason}); disallowing host (fail closed).")
+        print_log(
+            f"robots.txt unavailable for {robots_url} ({reason}); disallowing this host for the run.",
+            "warning",
+        )
+
+    @staticmethod
+    def _robots_url(url: str) -> str:
+        """Return the ``https://<host>/robots.txt`` URL for ``url``'s host.
+
+        :param url: The absolute URL whose host's ``robots.txt`` to locate.
+        :returns: The ``robots.txt`` URL (always ``https``, per the subtask spec).
+        """
+        parts = urlparse(url)
+        netloc = parts.netloc or parts.path
+        return f"https://{netloc}/robots.txt"
