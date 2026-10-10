@@ -21,6 +21,7 @@ from ..backends import MongoBackend, migration, resolve_store_backend
 from ..backends.local import store
 from ..book_utils import print_log
 from ..scraping import normalize
+from ..scraping.safe_text import sanitize_untrusted
 
 
 def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
@@ -28,7 +29,10 @@ def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
 
     Emits the counts, the per-field change summary, each changed hash (old to new), and each
     collision by id/hash only (no document body), then where the report was written and whether the
-    store was touched.
+    store was touched. Every printed id/hash is run through
+    :func:`bookscraper.scraping.safe_text.sanitize_untrusted` first, because a JSON-backend id can
+    be a page-derived URL carrying terminal escape/control characters that would otherwise spoof
+    console output.
 
     :param report: The migration report to summarize.
     :param report_path: Where the full JSON report was written.
@@ -48,17 +52,27 @@ def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
             print_log(f"    {field_name}: {report.field_changes[field_name]}", "info")
 
     for entry in report.changed_hashes:
-        print_log(f"  hash changed: {entry['id']} {entry['old']} -> {entry['new']}", "info")
+        entry_id = sanitize_untrusted(str(entry["id"]))
+        print_log(f"  hash changed: {entry_id} {entry['old']} -> {entry['new']}", "info")
 
     for entry in report.hash_collisions:
+        entry_id = sanitize_untrusted(str(entry["_id"]))
         print_log(
-            f"  Warning: hash collision (NOT rewritten, resolve manually): id={entry['_id']} "
+            f"  Warning: hash collision (NOT rewritten, resolve manually): id={entry_id} "
             f"hash={entry['hash']} collides_with={entry['collides_with']}",
             "warning",
         )
 
     for entry in report.invalid_documents:
-        print_log(f"  Warning: document invalid after migration (left untouched): id={entry['id']}", "warning")
+        entry_id = sanitize_untrusted(str(entry["id"]))
+        print_log(f"  Warning: document invalid after migration (left untouched): id={entry_id}", "warning")
+
+    if report.apply_failed:
+        print_log(
+            f"  Error: apply failed part-way ({report.apply_error}); {report.applied_count} written, "
+            f"{report.failed_count} not written. Re-run --apply to resume.",
+            "error",
+        )
 
     print_log(f"  Report written to {report_path}", "info")
 
@@ -68,8 +82,8 @@ async def run(args: argparse.Namespace):
 
     Resolves the backend, migrates it (mongo via guarded per-document ``ReplaceOne`` batches, json
     via the atomic store write with a ``books.json.bak`` backup), writes the report, and prints the
-    summary. Exits ``1`` on a corrupt local store; otherwise ``0``. The resolved backend connection
-    is always closed.
+    summary. Exits ``1`` on a corrupt local store, or after writing the report when the mongo apply
+    failed part-way; otherwise ``0``. The resolved backend connection is always closed.
 
     :param args: Parsed CLI arguments (``store_backend`` and ``apply``).
     """
@@ -91,3 +105,5 @@ async def run(args: argparse.Namespace):
 
     report_path = migration.write_report(report, book_utils.LOG_DIR)
     _print_summary(report, report_path, args.apply)
+    if report.apply_failed:
+        sys.exit(1)

@@ -232,6 +232,29 @@ def test_leanpub_lookup_by_id_or_slug(backend: Backend):
     assert backend.leanpub_book_exists(None, None) is False
 
 
+def test_leanpub_lookup_ignores_non_string_identifiers(backend: Backend):
+    """
+    [Local] storage backend parity: verifies both backends ignore dict-valued Leanpub identifiers identically.
+
+    Scenario:
+        Given one stored Leanpub book in either backend
+        When leanpub_book_exists is called with dicts such as {"$ne": None} as id and slug
+        Then both backends return False without raising and never treat the dict as a query.
+
+    Boundaries:
+        - CWE-943 guard; json goes through the in-memory index and mongo through deduplicate
+
+    On failure, first check:
+        - The isinstance(str) guard in JsonBackend.leanpub_book_exists and in deduplicate.leanpub_prescrape_deduplicate
+    """
+    backend.save_books(
+        [_doc(hash=_hash("lp"), source_id="42", slug="the-book", url="https://leanpub.com/the-book")]
+    )
+
+    assert backend.leanpub_book_exists({"$ne": None}, {"$gt": ""}) is False
+    assert backend.leanpub_book_exists({"$ne": None}, "the-book") is True
+
+
 def test_stored_documents_identical_across_backends(isolated_local_store):
     """
     [Local] storage backend parity: verifies stored documents identical across backends.

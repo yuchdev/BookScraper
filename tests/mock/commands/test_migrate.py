@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import mongomock
 import pytest
+from pymongo.errors import BulkWriteError
 
 from bookscraper import book_utils
 from bookscraper.backends import migration
@@ -159,6 +160,52 @@ class TestMongoApply:
         assert report.migrated == 1
         assert "schema_version" not in collection.find_one({})
 
+    def test_apply_mongo_bulk_write_error_is_caught_and_reported_redacted(self):
+        """
+        [Unit] migration mongo apply: verifies a mid-run BulkWriteError is caught, counted, redacted.
+
+        Scenario:
+            Given a mongomock collection with three v1 documents and batch_size=2, where the first
+                bulk_write batch applies but the second raises a BulkWriteError whose message embeds
+                a document value
+            When migrate_mongo_collection runs with apply=True
+            Then it does not propagate the traceback; the report flags apply_failed, records
+                applied_count=2 / failed_count=1, and apply_error carries only the redacted class +
+                pymongo code (never the embedded document value)
+
+        Boundaries:
+            - Invalid/failure path: a pymongo error mid-run must not abort before the report
+            - Redaction: raw pymongo text (which can carry key values) never reaches the report
+
+        On failure, first check:
+            - The ``except (BulkWriteError, PyMongoError)`` guard and applied_count math in
+              migrate_mongo_collection
+            - That apply_error comes from client._redact_pymongo_error (class + code only)
+        """
+        collection = _mongo_collection()
+        collection.insert_many(
+            [_amazon_v1("A0000000001", "One"), _amazon_v1("A0000000002", "Two"), _amazon_v1("A0000000003", "Three")]
+        )
+        calls = {"n": 0}
+
+        def _fail_on_second(requests, *args, **kwargs) -> SimpleNamespace:
+            """Apply the first batch, then raise a BulkWriteError carrying a secret-looking value."""
+            calls["n"] += 1
+            if calls["n"] == 1:
+                for op in requests:
+                    collection.replace_one(op._filter, op._doc)
+                return SimpleNamespace(modified_count=len(requests))
+            raise BulkWriteError({"writeErrors": [{"errmsg": "super-secret-key-value"}], "nInserted": 0})
+
+        with patch.object(collection, "bulk_write", side_effect=_fail_on_second):
+            report = migration.migrate_mongo_collection(collection, apply=True, transform=_TRANSFORM, batch_size=2)
+
+        assert report.apply_failed is True
+        assert report.applied_count == 2
+        assert report.failed_count == 1
+        assert "super-secret-key-value" not in (report.apply_error or "")
+        assert report.apply_error.startswith("BulkWriteError")
+
     def test_apply_mongo_twice_is_a_no_op(self):
         """
         [Unit] migration mongo apply: verifies the second apply rewrites nothing (idempotent).
@@ -266,6 +313,87 @@ class TestRunCommand:
         report = json.loads(next((tmp_path / "logs").glob("migration-report-*.json")).read_text(encoding="utf-8"))
         assert report["counts"]["collisions"] == 1
         assert report["counts"]["invalid"] == 1
+
+    @pytest.mark.asyncio
+    async def test_run_mongo_apply_failure_writes_report_then_exits_one(self, tmp_path, monkeypatch):
+        """
+        [Unit] migrate run mongo: verifies an apply failure still writes the report, then exits 1.
+
+        Scenario:
+            Given a MongoBackend over a mongomock collection whose bulk_write raises a
+                BulkWriteError, and the log dir redirected to tmp_path
+            When migrate.run is awaited with apply=True
+            Then it raises SystemExit(1) AFTER writing a migration-report-*.json whose apply block
+                records failed=true - never a raw traceback and never a skipped report
+
+        Boundaries:
+            - Partial-failure path: the audit artifact is written before the non-zero exit
+            - The run exits non-zero so a CI/cron job notices the incomplete migration
+
+        On failure, first check:
+            - The ``if report.apply_failed: sys.exit(1)`` tail of migrate.run (after write_report)
+            - That write_report runs before the exit
+        """
+        collection = _mongo_collection()
+        collection.insert_one(_amazon_v1("A0000000001", "One"))
+        monkeypatch.setattr(book_utils, "LOG_DIR", tmp_path / "logs")
+
+        def _raise(requests, *args, **kwargs):
+            """Raise a BulkWriteError to simulate an Atlas write failure mid-run."""
+            raise BulkWriteError({"writeErrors": [{"errmsg": "boom"}], "nInserted": 0})
+
+        with patch.object(collection, "bulk_write", side_effect=_raise):
+            with patch(f"{MODULE}.resolve_store_backend", return_value=MongoBackend(collection)):
+                with pytest.raises(SystemExit) as excinfo:
+                    await migrate.run(_args("mongo", apply=True))
+
+        assert excinfo.value.code == 1
+        report = json.loads(next((tmp_path / "logs").glob("migration-report-*.json")).read_text(encoding="utf-8"))
+        assert report["apply"]["failed"] is True
+        assert report["apply"]["error"].startswith("BulkWriteError")
+
+    @pytest.mark.asyncio
+    async def test_run_json_summary_strips_control_chars_from_page_derived_id(
+        self, isolated_local_store, tmp_path, monkeypatch, capsys
+    ):
+        """
+        [Local] migrate run json: verifies a page-derived id with ANSI/control chars is sanitized on print.
+
+        Scenario:
+            Given a json store whose document url (the report id for the json backend) carries an
+                ESC/ANSI escape and a C1 control byte, and a second document whose de-duplicated
+                hash collides with it so the id reaches the collision summary line
+            When migrate.run is awaited with apply=True
+            Then the printed summary contains neither the raw ESC byte nor the C1 byte (spoofing is
+                prevented), while the printable remainder of the url survives
+
+        Boundaries:
+            - Security: a hostile page-derived id must not emit terminal escapes into the console
+            - Reuses scraping.safe_text.sanitize_untrusted via migrate._print_summary
+
+        On failure, first check:
+            - The sanitize_untrusted wrapping of entry ids in migrate._print_summary
+        """
+        shared_hash = hash_book("Shared Title", ["Jane Doe"], 2016)
+        colliding = _amazon_v1("A0000000009", "Shared Title")
+        colliding["authors"] = ["Jane Doe", "jane doe"]
+        colliding["url"] = "https://evil.example/\x1b[31m\x85book"
+        canonical = _amazon_v1("A0000000010", "Shared Title")
+        canonical["authors"] = ["Jane Doe"]
+        canonical["hash"] = shared_hash
+        monkeypatch.setattr(book_utils, "LOG_DIR", tmp_path / "logs")
+        isolated_local_store.write_text(json.dumps([colliding, canonical]), encoding="utf-8")
+
+        with patch(f"{MODULE}.resolve_store_backend", return_value=JsonBackend()):
+            await migrate.run(_args("json", apply=True))
+
+        out = capsys.readouterr().out
+        assert "hash collision" in out
+        # print_log adds its own ANSI colour codes around each line, so assert on the injected
+        # sequence itself: the ESC before "[31m" and the C1 NEL must be gone, the text kept.
+        assert "\x1b[31m" not in out
+        assert "\x85" not in out
+        assert "evil.example/[31mbook" in out
 
     @pytest.mark.asyncio
     async def test_run_mongo_dry_run_leaves_collection_untouched(self, tmp_path, monkeypatch):

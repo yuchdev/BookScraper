@@ -368,13 +368,13 @@ def hash_book(title: str = "", authors: Optional[list] = None, year: Optional[in
     """
     Calculates a SHA-256 hash for a book based on its title, authors, and year.
 
-    Args:
-            title: The title of the book (required).
-            authors: The authors of the book, separated by commas (required).
-            year: The publication year of the book (optional, default is 0).
-
-    Returns:
-            A hexadecimal string representing the SHA-256 hash of the combined fields.
+    :param title: The title of the book; hashed lower-cased and stripped (an empty title is
+        allowed but warned about).
+    :param authors: The author names; normalized (stripped, lower-cased) and sorted before
+        hashing so order and case never change the digest. ``None`` is treated as no authors.
+    :param year: The publication year, or ``None`` when unknown (contributes an empty segment).
+    :returns: The lowercase-hexadecimal SHA-256 digest of the combined fields, or ``""`` when a
+        non-string title makes hashing impossible.
     """
 
     # Normalize and sort authors for consistent hashing

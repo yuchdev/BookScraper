@@ -16,6 +16,7 @@ from typing import get_args
 import pytest
 
 from bookscraper.models import (
+    MAX_AUTHORS,
     MAX_DESCRIPTION_LEN,
     MAX_TAG_LEN,
     MAX_TAGS,
@@ -314,6 +315,7 @@ def test_validate_document_rejects_wrong_schema_version_and_hostname_site():
         ("tags", ["t" * (MAX_TAG_LEN + 1)], f"tags entry exceeds {MAX_TAG_LEN} characters"),
         ("tags", [f"tag-{i}" for i in range(MAX_TAGS + 1)], f"tags exceeds {MAX_TAGS} entries"),
         ("url", "https://example.com/" + "p" * 2000, "url exceeds 2000 characters"),
+        ("authors", [f"Author {i}" for i in range(MAX_AUTHORS + 1)], f"authors exceeds {MAX_AUTHORS} entries"),
     ],
 )
 def test_validate_document_rejects_oversized_text(field: str, value: object, fragment: str):
@@ -336,6 +338,32 @@ def test_validate_document_rejects_oversized_text(field: str, value: object, fra
     document = _full_record().to_document()
     document[field] = value
     assert fragment in validate_document(document)
+
+
+def test_validate_document_rejects_empty_url():
+    """
+    [Unit] validate_document: an empty url string is rejected ("url must not be empty").
+
+    Scenario:
+        Given a canonical document whose url is the empty string (a normalizer that produced no
+            usable URL)
+        When validate_document is called
+        Then "url must not be empty" is reported and no spurious length/type problem is raised.
+
+    Boundaries:
+        - Normal-vs-invalid: a present-but-empty url is distinct from a missing key or an oversized one
+        - url is a required, non-empty field at the save boundary
+
+    On failure, first check:
+        - The ``elif not url`` branch in validate_document's url check
+    """
+    document = _full_record().to_document()
+    document["url"] = ""
+
+    problems = validate_document(document)
+
+    assert "url must not be empty" in problems
+    assert "url must be a string" not in problems
 
 
 def test_validate_document_rejects_non_mapping():

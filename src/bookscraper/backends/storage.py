@@ -216,6 +216,10 @@ class JsonBackend(StorageBackend):
 
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Report whether ``book_id`` or ``book_slug`` is present in the in-memory index."""
+        # Same guard as the mongo backend and store.leanpub_book_exists: only a plain string is a
+        # lookup key (a dict smuggled in from scraped data would otherwise raise on the set lookup).
+        book_id = book_id if isinstance(book_id, str) else None
+        book_slug = book_slug if isinstance(book_slug, str) else None
         if not book_id and not book_slug:
             return False
         index = self._ensure_index()

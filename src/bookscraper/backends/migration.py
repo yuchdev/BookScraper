@@ -34,14 +34,16 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from pymongo import ReplaceOne
 from pymongo.collection import Collection
+from pymongo.errors import BulkWriteError, PyMongoError
 
 from ..book_utils import atomic_write_bytes
 from ..models import SCHEMA_VERSION, validate_document
 from .local import store
+from .mongo.client import _redact_pymongo_error
 
 #: The v1-to-v2 field transform signature callers inject (normally
 #: :func:`bookscraper.scraping.normalize.from_v1_document`). Keeping it a parameter is what lets
@@ -92,6 +94,13 @@ class MigrationReport:
         (the document NOT rewritten), for a human to resolve.
     :ivar invalid_documents: One ``{"id", ...}`` entry per document invalid after transformation.
     :ivar field_changes: Per schema field, how many migrated documents changed that field.
+    :ivar apply_failed: ``True`` when the apply step raised a pymongo error part-way through, so
+        the store is only partially migrated and the run must exit non-zero.
+    :ivar apply_error: A redacted summary of that failure (exception class plus pymongo
+        ``code``/``codeName`` only, never raw pymongo text that could embed a key value), or
+        ``None`` on success / dry run.
+    :ivar applied_count: How many planned rewrites were actually written before any failure.
+    :ivar failed_count: How many planned rewrites were NOT written (``migrated - applied_count``).
     """
 
     store_backend: str
@@ -107,12 +116,17 @@ class MigrationReport:
     hash_collisions: list[dict]
     invalid_documents: list[dict]
     field_changes: dict[str, int]
+    apply_failed: bool = False
+    apply_error: Optional[str] = None
+    applied_count: int = 0
+    failed_count: int = 0
 
     def to_dict(self) -> dict:
         """Return the JSON-serializable report document written to the run log directory.
 
-        :returns: A dict with a ``counts`` block plus the ``changed_hashes`` / ``hash_collisions``
-            / ``invalid_documents`` / ``field_changes`` detail lists.
+        :returns: A dict with a ``counts`` block, an ``apply`` block (applied/failed counts and a
+            redacted error) plus the ``changed_hashes`` / ``hash_collisions`` / ``invalid_documents``
+            / ``field_changes`` detail lists.
         """
         return {
             "schema_migration": "v1->v2",
@@ -126,6 +140,12 @@ class MigrationReport:
                 "collisions": self.collisions,
                 "invalid": self.invalid,
                 "unchanged": self.unchanged,
+            },
+            "apply": {
+                "applied_count": self.applied_count,
+                "failed_count": self.failed_count,
+                "failed": self.apply_failed,
+                "error": self.apply_error,
             },
             "field_changes": dict(self.field_changes),
             "changed_hashes": list(self.changed_hashes),
@@ -248,6 +268,9 @@ def _build_plan(documents: list, transform: Transform) -> _Plan:
             invalid_documents.append({"id": doc_id, "problems": problems})
             continue
 
+        # Deep ``==`` is reliable here: both sides are plain JSON-ish dicts (str/int/None keys and
+        # scalar/list/dict values, no NaN, no custom __eq__), so equality means every nested value
+        # matches - a document already in canonical v2 shape needs no rewrite.
         if transformed == content:
             unchanged += 1
             continue
@@ -286,12 +309,25 @@ def _build_plan(documents: list, transform: Transform) -> _Plan:
     )
 
 
-def _report_from_plan(store_backend: str, applied: bool, plan: _Plan) -> MigrationReport:
+def _report_from_plan(
+    store_backend: str,
+    applied: bool,
+    plan: _Plan,
+    *,
+    apply_failed: bool = False,
+    apply_error: Optional[str] = None,
+    applied_count: int = 0,
+    failed_count: int = 0,
+) -> MigrationReport:
     """Assemble a :class:`MigrationReport` from a planned migration.
 
     :param store_backend: The backend that was migrated.
-    :param applied: Whether the store was actually written.
+    :param applied: Whether the store was (at least partially) written.
     :param plan: The plan produced by :func:`_build_plan`.
+    :param apply_failed: ``True`` when the apply step raised part-way through.
+    :param apply_error: Redacted summary of the apply failure, or ``None``.
+    :param applied_count: Planned rewrites actually written.
+    :param failed_count: Planned rewrites not written.
     :returns: The finished report.
     """
     return MigrationReport(
@@ -308,6 +344,10 @@ def _report_from_plan(store_backend: str, applied: bool, plan: _Plan) -> Migrati
         hash_collisions=plan.hash_collisions,
         invalid_documents=plan.invalid_documents,
         field_changes=plan.field_changes,
+        apply_failed=apply_failed,
+        apply_error=apply_error,
+        applied_count=applied_count,
+        failed_count=failed_count,
     )
 
 
@@ -328,12 +368,13 @@ def migrate_json_store(path: Path, *, apply: bool, transform: Transform) -> Migr
     """
     documents = store._load_books(path, raise_on_corrupt=True)
     plan = _build_plan(documents, transform)
-    if apply and plan.rewrites:
+    written = apply and bool(plan.rewrites)
+    if written:
         new_books = list(documents)
         for index, new_document in plan.rewrites:
             new_books[index] = new_document
         store._write_books(new_books, path)
-    return _report_from_plan("json", apply and bool(plan.rewrites), plan)
+    return _report_from_plan("json", written, plan, applied_count=len(plan.rewrites) if written else 0)
 
 
 def migrate_mongo_collection(
@@ -352,25 +393,57 @@ def migrate_mongo_collection(
     nothing), the per-document replace never touches an un-migrated document, and collisions are
     excluded from the plan so the unique ``hash`` index can never reject a write.
 
+    A :class:`pymongo.errors.BulkWriteError` / :class:`pymongo.errors.PyMongoError` raised mid-run
+    is caught rather than propagated: the report records ``applied_count`` / ``failed_count`` and a
+    redacted ``apply_error`` (exception class plus pymongo ``code``/``codeName`` only), so the
+    caller can still write the audit artifact and exit non-zero instead of crashing with a raw
+    traceback that could embed document key values.
+
     :param collection: The MongoDB books collection.
     :param apply: ``True`` to write the migrated documents; ``False`` for a dry run.
     :param transform: The injected v1-to-v2 field transform (keyword-only, required).
     :param batch_size: Maximum operations per ``bulk_write`` call.
-    :returns: The :class:`MigrationReport` describing what changed (or would change).
+    :returns: The :class:`MigrationReport` describing what changed (or would change), including the
+        apply-failure fields when a batch raised.
     """
     documents = list(collection.find({}))
     plan = _build_plan(documents, transform)
-    if apply and plan.rewrites:
-        operations = [
-            ReplaceOne(
-                {"_id": documents[index]["_id"], "schema_version": {"$ne": SCHEMA_VERSION}},
-                new_document,
-            )
-            for index, new_document in plan.rewrites
-        ]
+    if not (apply and plan.rewrites):
+        return _report_from_plan("mongo", False, plan)
+
+    operations = [
+        ReplaceOne(
+            {"_id": documents[index]["_id"], "schema_version": {"$ne": SCHEMA_VERSION}},
+            new_document,
+        )
+        for index, new_document in plan.rewrites
+    ]
+    applied_count = 0
+    apply_failed = False
+    apply_error: Optional[str] = None
+    try:
         for start in range(0, len(operations), batch_size):
-            collection.bulk_write(operations[start : start + batch_size], ordered=False)
-    return _report_from_plan("mongo", apply and bool(plan.rewrites), plan)
+            batch = operations[start : start + batch_size]
+            collection.bulk_write(batch, ordered=False)
+            applied_count += len(batch)
+    except (BulkWriteError, PyMongoError) as exc:
+        # A mid-run bulk_write failure must not abort with a raw traceback: pymongo text can carry
+        # document key values and the audit report would never be written. Record how far we got
+        # and surface only the redacted exception class + pymongo code/codeName (same contract as
+        # backends/mongo/client.py's MongoConnectionError), so the caller can still write the
+        # report and exit non-zero. Earlier batches already applied are left in place (each
+        # ReplaceOne is guarded + idempotent, so a later re-run resumes cleanly).
+        apply_failed = True
+        apply_error = _redact_pymongo_error(exc)
+    return _report_from_plan(
+        "mongo",
+        applied_count > 0,
+        plan,
+        apply_failed=apply_failed,
+        apply_error=apply_error,
+        applied_count=applied_count,
+        failed_count=len(operations) - applied_count,
+    )
 
 
 def write_report(report: MigrationReport, directory: Path) -> Path:
@@ -388,5 +461,7 @@ def write_report(report: MigrationReport, directory: Path) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = directory / f"migration-report-{timestamp}.json"
     payload = json.dumps(report.to_dict(), indent=2, default=str).encode("utf-8")
-    atomic_write_bytes(path, payload)
+    # 0o600: the report names document ids/hashes and is never pruned, so keep it owner-only
+    # rather than the default world-readable 0o644.
+    atomic_write_bytes(path, payload, mode=0o600)
     return path

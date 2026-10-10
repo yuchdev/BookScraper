@@ -88,6 +88,11 @@ MAX_DESCRIPTION_LEN = 100_000
 MAX_URL_LEN = 2000
 #: Maximum number of :attr:`BookRecord.tags` entries (matches the scrapers' write-time cap).
 MAX_TAGS = 50
+#: Maximum number of :attr:`BookRecord.authors` entries. A page controls the author list, so the
+#: save boundary rejects an over-long one (counted as an error, never truncated); mirrored by
+#: :func:`bookscraper.scraping.normalize._clean_authors`. Set far above any real book (max
+#: observed is 6) so no golden or real fixture is affected.
+MAX_AUTHORS = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +291,8 @@ def validate_document(doc: dict) -> list[str]:
         url = doc["url"]
         if not isinstance(url, str):
             problems.append("url must be a string")
+        elif not url:
+            problems.append("url must not be empty")
         elif len(url) > MAX_URL_LEN:
             problems.append(f"url exceeds {MAX_URL_LEN} characters")
 
@@ -331,7 +338,7 @@ def validate_document(doc: dict) -> list[str]:
         elif isinstance(description, str) and len(description) > MAX_DESCRIPTION_LEN:
             problems.append(f"description exceeds {MAX_DESCRIPTION_LEN} characters")
 
-    problems.extend(_validate_str_list(doc, "authors", max_len=MAX_AUTHOR_LEN))
+    problems.extend(_validate_str_list(doc, "authors", max_len=MAX_AUTHOR_LEN, max_items=MAX_AUTHORS))
     problems.extend(_validate_str_list(doc, "tags", max_len=MAX_TAG_LEN, max_items=MAX_TAGS))
     problems.extend(_validate_str_list(doc, "ai_extracted_fields"))
 

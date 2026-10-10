@@ -189,3 +189,28 @@ class TestLeanpubPrescrapeDeduplicate:
         collection.find_one.side_effect = PyMongoError("boom")
         result = deduplicate.leanpub_prescrape_deduplicate("id-1", "slug-1", collection)
         assert result is False
+
+    def test_non_string_identifiers_are_never_used_as_query_operators(self):
+        """
+        [Local] leanpub prescrape deduplicate: verifies dict-valued identifiers cannot become a Mongo operator query.
+
+        Scenario:
+            Given a Mock collection and a book_id/slug that are dicts such as {"$ne": None}
+            When leanpub_prescrape_deduplicate is called with them
+            Then no query is sent and the function returns False (nothing to look up).
+
+        Boundaries:
+            - CWE-943 guard: only str identifiers become filter values
+            - A str slug alongside a dict book_id still queries by slug only
+
+        On failure, first check:
+            - The isinstance(str) guards at the top of leanpub_prescrape_deduplicate
+        """
+        collection = Mock()
+        collection.find_one.return_value = None
+        assert deduplicate.leanpub_prescrape_deduplicate({"$ne": None}, {"$gt": ""}, collection) is False
+        collection.find_one.assert_not_called()
+
+        deduplicate.leanpub_prescrape_deduplicate({"$ne": None}, "real-slug", collection)
+        collection.find_one.assert_called_once_with({"$or": [{"slug": "real-slug"}]})
+

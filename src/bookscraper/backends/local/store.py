@@ -185,6 +185,16 @@ def leanpub_book_exists(book_id: Optional[str], book_slug: Optional[str], path: 
     :returns: ``True`` if a stored document matches ``book_id`` or ``book_slug``; ``False``
         when neither identifier is provided.
     """
+    # Only a plain string is a valid lookup key; a non-string id/slug (e.g. a dict smuggled in
+    # from scraped data) is ignored and logged, mirroring the mongo backend's guard so both
+    # behave identically on bad input.
+    if book_id is not None and not isinstance(book_id, str):
+        module_logger.warning("Ignoring non-string book_id of type %s for Leanpub dedup.", type(book_id).__name__)
+        book_id = None
+    if book_slug is not None and not isinstance(book_slug, str):
+        module_logger.warning("Ignoring non-string book_slug of type %s for Leanpub dedup.", type(book_slug).__name__)
+        book_slug = None
+
     if not book_id and not book_slug:
         module_logger.warning("No book_id or book_slug provided for Leanpub book existence check.")
         return False

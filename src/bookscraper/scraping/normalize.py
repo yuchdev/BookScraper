@@ -28,7 +28,7 @@ from typing import Optional
 
 from .. import isbn
 from ..book_utils import hash_book, normalize_date
-from ..models import SCHEMA_VERSION, BookRecord
+from ..models import MAX_AUTHORS, SCHEMA_VERSION, BookRecord
 from .parameters import site_constants
 from .text import html_to_text
 
@@ -64,7 +64,9 @@ def _clean_authors(authors: Optional[list]) -> list[str]:
 
     :param authors: The raw author list (any element may be ``None`` or surrounding-whitespace),
         or ``None``.
-    :returns: The cleaned, de-duplicated author names, order preserved (possibly empty).
+    :returns: The cleaned, de-duplicated author names, order preserved, at most
+        :data:`bookscraper.models.MAX_AUTHORS` (a page controls the count, so it is capped after
+        de-duplication to match the save-boundary cap rather than stored unbounded).
     """
     seen: set[str] = set()
     cleaned: list[str] = []
@@ -79,6 +81,8 @@ def _clean_authors(authors: Optional[list]) -> list[str]:
             continue
         seen.add(key)
         cleaned.append(name)
+        if len(cleaned) >= MAX_AUTHORS:
+            break
     return cleaned
 
 

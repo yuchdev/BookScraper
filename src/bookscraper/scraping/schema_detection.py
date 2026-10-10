@@ -67,7 +67,13 @@ from .parameters import (
     USER_AGENTS,
     site_constants,
 )
+from .safe_text import sanitize_untrusted
 from .scrape_details import route_handler
+
+# ``sanitize_untrusted`` moved to the stdlib-only :mod:`bookscraper.scraping.safe_text` module so
+# lightweight callers can reuse it without importing this heavy (anthropic/Playwright) module;
+# re-exported here under its original name so existing imports keep working.
+__all__ = ["sanitize_untrusted"]
 
 module_logger = logging.getLogger("schema_detection")
 
@@ -147,15 +153,6 @@ MAX_CARDS_PER_SAMPLE = 50
 # DOM snippets are bounded to 80 characters at capture (``.strip()[:80]``), matching the text
 # report that already does so.
 RATIONALE_MAX_CHARS = 200
-
-# AIS-13: strip ESC (``\x1b``) and every C0 (``\x00``-``\x1f``) / C1 (``\x80``-``\x9f``, which already
-# covers U+0085 NEL) / DEL (``\x7f``) control character - plus the Unicode line/paragraph separators
-# U+2028 / U+2029 (PI-3) - from EVERY untrusted string placed in a report (rationale, proposed
-# selector, DOM text snippets, sample identifiers), so a hostile page/model string can neither emit
-# terminal escape/ANSI sequences nor a line-break that spoofs a new report line into stdout/
-# ``--output`` nor corrupt a JSON CI artifact. Printable bytes (including the leftover ``[31m`` of a
-# stripped ``\x1b[31m``) are kept verbatim; only the dangerous control/separator bytes are removed.
-_UNTRUSTED_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 # AIS-1: the pruned page snapshot is spliced into the prompt fenced in ``<page_html>...</page_html>``
 # and the instruction block (below) declares everything inside that fence to be untrusted DATA whose
@@ -475,20 +472,6 @@ def validate_ai_response(raw_text: str, field_names: list[str]) -> dict[str, dic
     if not proposals:
         raise SchemaDetectionError("AI response contained no usable proposals for the requested fields.")
     return proposals
-
-
-def sanitize_untrusted(value: Optional[str]) -> Optional[str]:
-    """Strip ESC and C0/C1/DEL control characters from one untrusted report string (AIS-13).
-
-    The single place control-char/ANSI stripping is applied, so the text report, the JSON
-    report, and every untrusted field (rationale, proposed selector, DOM snippet, sample
-    identifier) are sanitized identically. ``None`` passes through unchanged; all other
-    values are returned with only their control bytes removed - printable content, including
-    the leftover ``[31m`` of a neutered ``\\x1b[31m`` sequence, is preserved verbatim.
-    """
-    if value is None:
-        return None
-    return _UNTRUSTED_CONTROL_RE.sub("", value)
 
 
 def _clean_rationale(value: Optional[str]) -> str:

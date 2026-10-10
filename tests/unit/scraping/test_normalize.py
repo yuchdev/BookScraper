@@ -11,7 +11,7 @@ The ``scraped_at`` clock is injected through each normalizer's ``now`` parameter
 are fully deterministic.
 """
 
-from bookscraper.models import SCHEMA_VERSION, validate_document
+from bookscraper.models import MAX_AUTHORS, SCHEMA_VERSION, validate_document
 from bookscraper.scraping import normalize
 
 # A fixed scraped_at so records are deterministic; the real clock is _now_utc_iso().
@@ -230,6 +230,30 @@ def test_authors_deduplicated_case_insensitively():
     record = normalize.from_playwright(raw, "amazon", "https://www.amazon.com/dp/X", now=_NOW)
 
     assert record.authors == ["Ada Lovelace", "Grace Hopper"]
+
+
+def test_clean_authors_caps_at_max_authors():
+    """
+    [Unit] normalize: verifies _clean_authors caps the list at MAX_AUTHORS, mirroring the save boundary.
+
+    Scenario:
+        Given an author list with more than MAX_AUTHORS distinct names
+        When normalize._clean_authors cleans it
+        Then at most MAX_AUTHORS names are returned, keeping the first ones in order, so a
+        page-controlled author list can never be stored unbounded (or rejected by the save boundary).
+
+    Boundaries:
+        - Edge case: the cap branch the field-level tests (max 6 authors) never reach
+        - The cap must equal models.MAX_AUTHORS so normalizer output always passes validate_document
+
+    On failure, first check:
+        - The ``len(cleaned) >= MAX_AUTHORS`` break in normalize._clean_authors
+        - Whether MAX_AUTHORS drifted between models and normalize
+    """
+    overflow = [f"Author {i}" for i in range(MAX_AUTHORS + 10)]
+    capped = normalize._clean_authors(overflow)
+    assert len(capped) == MAX_AUTHORS
+    assert capped == overflow[:MAX_AUTHORS]
 
 
 def test_clean_tags_strips_dedups_and_caps():

@@ -413,6 +413,24 @@ class TestLeanpubBookExists:
         store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
         assert store.leanpub_book_exists("42", None, isolated_local_store) is True
 
+    def test_non_string_identifiers_never_match(self, isolated_local_store):
+        """
+        [Unit] leanpub book exists: verifies dict-valued identifiers are ignored instead of matching.
+
+        Scenario:
+            Given a store with a book having book_id "42" and slug "some-book"
+            When leanpub_book_exists is called with dicts in place of the id and slug
+            Then False is returned without raising.
+
+        Boundaries:
+            - Mirrors the mongo backend's CWE-943 guard so both backends treat bad input alike
+
+        On failure, first check:
+            - The isinstance(str) guards at the top of store.leanpub_book_exists
+        """
+        store.save_books([{"hash": "h1", "book_id": "42", "slug": "some-book"}], isolated_local_store)
+        assert store.leanpub_book_exists({"$ne": None}, {"$gt": ""}, isolated_local_store) is False
+
     def test_match_by_slug_alone(self, isolated_local_store):
         """
         [Unit] leanpub book exists: verifies True is returned when only slug matches (book_id is None).

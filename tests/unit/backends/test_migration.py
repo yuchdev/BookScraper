@@ -191,6 +191,51 @@ class TestBuildPlanAndJsonApply:
         # The canonical document still migrates (index 1 rewritten).
         assert any(rewrite[0] == 1 for rewrite in plan.rewrites)
 
+    def test_two_documents_converging_on_one_hash_collide_via_assigned_new(self):
+        """
+        [Unit] migration planner: verifies two docs that recompute to the SAME new hash don't both write.
+
+        Scenario:
+            Given two v1 Leanpub documents with distinct old hashes but the same title/year/author
+                identity (each repeats its author case-insensitively, so both recompute to one
+                identical new hash that equals neither old hash)
+            When _build_plan runs over both
+            Then the first is migrated (its new hash assigned) and the second is reported as a hash
+                collision against that just-assigned hash and left at v1 - exercising the
+                ``assigned_new`` branch, distinct from the pre-existing-hash collision path
+
+        Boundaries:
+            - Collision path: a recomputed hash duplicates one assigned earlier in the SAME pass
+            - Exactly one of the two converging documents is written; neither is dropped
+
+        On failure, first check:
+            - The ``new_hash in assigned_new`` disjunct of the collision branch in _build_plan
+            - Whether assigned_new is populated when a hash is first assigned
+        """
+        new_hash = hash_book("C++ Lambda Story", ["Bartlomiej Filipek"], 2020)
+
+        first = _leanpub_v1()
+        first["authors"] = ["Bartlomiej Filipek", "bartlomiej filipek"]
+        first["hash"] = "a" * 64
+        second = _leanpub_v1()
+        second["authors"] = ["Bartlomiej Filipek", "BARTLOMIEJ FILIPEK"]
+        second["slug"] = "cpplambda-2"
+        second["book_id"] = "777"
+        second["hash"] = "b" * 64
+
+        plan = migration._build_plan([first, second], _TRANSFORM)
+
+        # The first converges onto new_hash and is written; it must not be flagged as changed
+        # against a pre-existing hash - the collision here is purely intra-pass.
+        assert any(rewrite[0] == 0 for rewrite in plan.rewrites)
+        assert any(entry["new"] == new_hash for entry in plan.changed_hashes)
+        # The second collides against the just-assigned hash and stays at v1.
+        assert len(plan.hash_collisions) == 1
+        collision = plan.hash_collisions[0]
+        assert collision["collides_with"] == new_hash
+        assert collision["hash"] == "b" * 64
+        assert all(rewrite[0] != 1 for rewrite in plan.rewrites)
+
     def test_invalid_after_migration_is_left_untouched(self, isolated_local_store):
         """
         [Local] migration json apply: verifies a document invalid after transform is not written.
@@ -287,6 +332,31 @@ def test_write_report_contains_counts_and_detail(tmp_path):
     assert "changed_hashes" in payload
     assert "hash_collisions" in payload
     assert "invalid_documents" in payload
+
+
+def test_write_report_is_owner_only_0600(tmp_path):
+    """
+    [Local] migration report: verifies the report file is written owner-only (0o600), never pruned.
+
+    Scenario:
+        Given a planned single-document migration report
+        When write_report serializes it to a tmp_path directory
+        Then the resulting file's permission bits are exactly 0o600
+
+    Boundaries:
+        - Security: the report names document ids/hashes and is retained indefinitely, so it must
+          not be world/group readable like a default 0o644 artifact
+        - POSIX permission bits (the suite runs on darwin)
+
+    On failure, first check:
+        - The ``mode=0o600`` argument to atomic_write_bytes in write_report
+    """
+    plan = migration._build_plan([_amazon_v1()], _TRANSFORM)
+    report = migration._report_from_plan("json", False, plan)
+
+    path = migration.write_report(report, tmp_path)
+
+    assert (path.stat().st_mode & 0o777) == 0o600
 
 
 if __name__ == "__main__":

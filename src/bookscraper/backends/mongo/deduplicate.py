@@ -28,6 +28,16 @@ def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection
     query_conditions = []
     log_messages = []
 
+    # Only a plain string is a valid lookup key. A non-string book_id/slug (e.g. a dict like
+    # ``{"$ne": None}`` smuggled in from scraped data) would otherwise become a Mongo operator
+    # query matching far more than intended, so it is ignored and logged rather than used.
+    if book_id is not None and not isinstance(book_id, str):
+        module_logger.warning("Ignoring non-string book_id of type %s for Leanpub dedup.", type(book_id).__name__)
+        book_id = None
+    if book_slug is not None and not isinstance(book_slug, str):
+        module_logger.warning("Ignoring non-string book_slug of type %s for Leanpub dedup.", type(book_slug).__name__)
+        book_slug = None
+
     if book_id:
         # Match both schema shapes by book id: v1 Leanpub documents store it as ``book_id``,
         # schema-2 (03.1) documents fold it into the shared ``source_id`` field. Querying both
