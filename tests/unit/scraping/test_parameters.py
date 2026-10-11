@@ -1,8 +1,9 @@
 """Sanity/regression guards for bookscraper.scraping.parameters (pure data).
 
 Not deep testing - just a tripwire against accidental corruption of the data that
-drives every scrape: a truncated site_constants, an emptied USER_AGENTS, or a
-flipped HEADLESS_BROWSER all silently change scraper behavior with no crash.
+drives every scrape: a truncated site_constants, an emptied USER_AGENT_TEMPLATES, a
+flipped USER_AGENT_MODE, or a flipped HEADLESS_BROWSER all silently change scraper
+behavior with no crash.
 """
 
 from bookscraper.scraping import parameters, schema_detection, scrape_details
@@ -80,24 +81,50 @@ def test_site_constants_has_all_four_sites():
     assert set(parameters.site_constants) == {"amazon", "leanpub", "packtpub", "oreilly"}
 
 
-def test_user_agents_non_empty_strings():
+def test_user_agent_mode_defaults_to_native():
     """
-    [Unit] parameters: verifies USER_AGENTS is a non-empty list of non-empty strings.
+    [Unit] parameters: verifies USER_AGENT_MODE defaults to the honest "native" value.
 
     Scenario:
         Given the parameters module is imported
-        When USER_AGENTS is inspected
-        Then the list is non-empty and every element is a non-empty str
+        When USER_AGENT_MODE is read
+        Then it equals "native" (no UA override - the no-evasion default)
 
     Boundaries:
-        - Shape check only; does not validate that strings are valid HTTP User-Agent headers
+        - Single string constant; no browser-context logic exercised
+        - Tripwire: silently flipping to "rotate" would change the presented identity on every scrape
+
+    On failure, first check:
+        - parameters.USER_AGENT_MODE was changed away from "native"
+    """
+    assert parameters.USER_AGENT_MODE == "native"
+
+
+def test_user_agent_templates_are_chromium_with_major_placeholder():
+    """
+    [Unit] parameters: verifies USER_AGENT_TEMPLATES are non-empty Chromium strings with {major}.
+
+    Scenario:
+        Given the parameters module is imported
+        When USER_AGENT_TEMPLATES is inspected
+        Then the list is non-empty and every entry is a non-empty str carrying a single "{major}"
+        placeholder inside a Chrome/Chromium user-agent
+
+    Boundaries:
+        - Shape check only; does not validate the filled string is a valid HTTP User-Agent header
         - No network or browser call
 
     On failure, first check:
-        - USER_AGENTS was emptied or a blank/non-string value was appended
+        - A template dropped its {major} placeholder (rotate mode would claim a wrong Chrome version)
+          or a non-Chromium (Firefox/Safari) string was added (it would contradict the engine)
     """
-    assert len(parameters.USER_AGENTS) > 0
-    assert all(isinstance(ua, str) and ua for ua in parameters.USER_AGENTS)
+    assert len(parameters.USER_AGENT_TEMPLATES) > 0
+    for template in parameters.USER_AGENT_TEMPLATES:
+        assert isinstance(template, str) and template
+        assert template.count("{major}") == 1
+        assert "Chrome/{major}" in template
+    assert isinstance(parameters.DEFAULT_CHROMIUM_MAJOR, int)
+    assert parameters.DEFAULT_CHROMIUM_MAJOR > 0
 
 
 def test_min_rating_is_float():

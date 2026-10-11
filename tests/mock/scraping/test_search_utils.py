@@ -725,10 +725,11 @@ async def test_leanpub_search_no_longer_sleeps_randomly():
     [Local] search utils: verifies the Leanpub API loop throttles via the limiter, not a random sleep.
 
     Scenario:
-        Given a two-page Leanpub search driven through a recording limiter, with random.uniform patched
+        Given a two-page Leanpub search driven through a recording limiter
         When get_leanpub_search_results_via_api runs to completion
-        Then one acquire is recorded per page and random.uniform is never called (the ad hoc
-        inter-page ``random.uniform`` sleep is gone; inter-page politeness is the limiter now)
+        Then one acquire is recorded per page and the module no longer imports ``random`` at all
+        (the ad hoc inter-page ``random.uniform`` sleep is gone; inter-page politeness is the
+        limiter now, and the UA rotation that was the other ``random`` use moved to browser.py)
 
     Boundaries:
         - Asserts the replacement of the random sleep by the limiter, not per-field extraction
@@ -762,12 +763,13 @@ async def test_leanpub_search_no_longer_sleeps_randomly():
         FakeResponse(json_data=_search_payload(page2_books)),
     ]
 
-    with _patch_httpx(responses=responses), patch.object(search_utils.random, "uniform") as mock_uniform:
+    with _patch_httpx(responses=responses):
         books = await get_leanpub_search_results_via_api("python", limiters=_RecordingLimiters())
 
     assert len(books) == 101
     assert events == ["acquire", "acquire"]
-    mock_uniform.assert_not_called()
+    # The module no longer imports ``random`` at all - stronger proof the ad hoc random sleep is gone.
+    assert not hasattr(search_utils, "random")
 
 
 async def test_leanpub_search_retries_on_429_then_succeeds():

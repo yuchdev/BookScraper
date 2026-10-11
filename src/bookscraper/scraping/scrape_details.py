@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import random
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -16,7 +15,8 @@ from playwright.async_api import Browser, Error as PlaywrightError, Page, Route,
 from ..backends import StorageBackend
 from ..book_utils import print_log
 from . import normalize
-from .parameters import USER_AGENTS, site_constants
+from .browser import new_scrape_context
+from .parameters import site_constants
 from .politeness import (
     CircuitBreaker,
     DomainCircuitBreakers,
@@ -372,17 +372,21 @@ def _note_circuit_result(breaker: CircuitBreaker, result: ScrapeResult, url: str
 
 @asynccontextmanager
 async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
-    """Yield a fresh page for a single scrape attempt, closing it exactly once on exit.
+    """Yield a fresh page on its own context for a single scrape attempt, closing both on exit.
 
-    The page is closed on **every** exit path - normal return, duplicate/404 short-circuit,
-    timeout, or any other exception - so an attempt can never leak a page. A failure to
-    close (for example when the browser has already crashed) is logged at debug level and
-    swallowed so it never masks the original exception that is unwinding the ``with`` block.
+    Each attempt gets its own :class:`BrowserContext` (via :func:`browser.new_scrape_context`, so
+    the UA/identity matches what schema-detection sees) and one page on it. Isolating the context
+    per attempt means concurrent scrapes never share a cookie jar. The page and then the context
+    are closed on **every** exit path - normal return, duplicate/404 short-circuit, timeout, or any
+    other exception - so an attempt can never leak either. A failure to close (for example when the
+    browser has already crashed) is logged at debug level and swallowed so it never masks the
+    original exception that is unwinding the ``with`` block.
 
-    :param browser: The Playwright browser to open the page on.
+    :param browser: The Playwright browser to open the context and page on.
     :returns: An async context manager yielding the attempt's :class:`Page`.
     """
-    page = await browser.new_page()
+    context = await new_scrape_context(browser)
+    page = await context.new_page()
     try:
         yield page
     finally:
@@ -390,6 +394,10 @@ async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
             await page.close()
         except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a page-close failure (any type; e.g. "browser already closed") must never mask the original error unwinding the with-block
             module_logger.debug(f"Ignoring page-close failure: {exc}")
+        try:
+            await context.close()
+        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a context-close failure (any type; e.g. "browser already closed") must never mask the original error unwinding the with-block
+            module_logger.debug(f"Ignoring context-close failure: {exc}")
 
 
 async def get_leanpub_book_details(
@@ -603,8 +611,6 @@ async def scrape_book(
         # Each attempt owns exactly one page; the context manager closes it on every exit path
         # (success, duplicate, 404, parse error, timeout, or any other exception).
         async with _attempt_page(browser) as page:
-            user_agent = random.choice(USER_AGENTS)
-            await page.set_extra_http_headers({"User-Agent": user_agent})
             await page.route("**/*", route_handler)
 
             selectors = site_constants[site]
@@ -618,8 +624,13 @@ async def scrape_book(
 
             # robots.txt gate (fetched once per host per run), BEFORE any request to the
             # target path: a disallowed URL is never fetched and yields SKIPPED_ROBOTS with
-            # no retry (a policy decision, not a transient fault).
-            if robots is not None and not await robots.allowed(full_url, user_agent):
+            # no retry (a policy decision, not a transient fault). The user-agent matched against
+            # robots.txt is the one the context actually presents (read from the live page), so a
+            # native-mode run matches on its real Chromium identity and a rotate-mode run on the
+            # string it set - never a stale hard-coded value.
+            if robots is not None and not await robots.allowed(
+                full_url, await page.evaluate("() => navigator.userAgent")
+            ):
                 module_logger.info(f"Skipping {full_url}: disallowed by robots.txt.")
                 print_log(f"Skipping {full_url}: disallowed by robots.txt.", "warning")
                 return ScrapeResult(

@@ -144,6 +144,12 @@ class FakePage:
         self.close = AsyncMock()
         self.route = AsyncMock()
         self.set_extra_http_headers = AsyncMock()
+        # navigator.userAgent read for the robots-UA check; a representative Chromium string.
+        self.evaluate = AsyncMock(
+            return_value=(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+        )
         self.wait_for_selector = AsyncMock()
         self.wait_for_load_state = AsyncMock()
         self.wait_for_timeout = AsyncMock()
@@ -190,8 +196,15 @@ class FakeBrowser:
 
     Pass a single ``page`` (returned every call) or a ``page_factory`` callable
     (invoked per call, e.g. to hand out a fresh page per attempt / per URL). ``close()``
-    is an ``AsyncMock`` so ``await browser.close()`` works. ``context`` (a
-    ``FakeContext``) is what ``new_context()`` returns for the capture path.
+    is an ``AsyncMock`` so ``await browser.close()`` works. ``version`` is what the
+    ``browser.version`` property returns (used by ``browser.new_scrape_context`` in rotate mode).
+
+    ``new_context()`` is an ``AsyncMock``. When an explicit ``context`` (a ``FakeContext``) is
+    given it is returned verbatim (the capture path). Otherwise a default ``FakeContext`` is
+    returned whose ``new_page`` **delegates to this browser's ``new_page`` mock**, so a test can
+    still assert on ``browser.new_page`` even though the scraper now opens pages via
+    ``context.new_page()`` - the single shared mock honours the ``page`` / ``page_factory`` given
+    here and keeps ``browser.new_page.await_count`` meaningful.
     """
 
     def __init__(
@@ -199,15 +212,21 @@ class FakeBrowser:
         page: Optional[FakePage] = None,
         page_factory: Optional[Any] = None,
         context: Optional[FakeContext] = None,
+        version: str = "chromium-test",
     ):
         """Configure new_page/new_context stubs from a fixed page or factory callable."""
         if page_factory is not None:
             self.new_page = AsyncMock(side_effect=page_factory)
         else:
             self.new_page = AsyncMock(return_value=page if page is not None else FakePage())
-        self.new_context = AsyncMock(return_value=context if context is not None else FakeContext())
-        self.version = "chromium-test"
+        self.version = version
         self.close = AsyncMock()
+        if context is not None:
+            self.new_context = AsyncMock(return_value=context)
+        else:
+            default_context = FakeContext()
+            default_context.new_page = self.new_page
+            self.new_context = AsyncMock(return_value=default_context)
 
 
 def build_playwright_factory(browser: FakeBrowser) -> MagicMock:

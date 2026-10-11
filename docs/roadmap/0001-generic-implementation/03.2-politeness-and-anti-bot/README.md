@@ -21,7 +21,7 @@ blocked and storing a bot-wall page as a "book".
 | 02 | [robots.txt compliance](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/02-robots-txt-compliance.md)                | ✅ Complete    | -      |
 | 03 | [Shared backoff & Retry-After](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/03-shared-backoff-and-retry-after.md) | ✅ Complete    | 04    |
 | 04 | [Bot-wall detection & circuit breaker](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/04-bot-wall-detection.md)    | ✅ Complete    | -      |
-| 05 | [Browser context & user-agent hygiene](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/05-browser-context-and-user-agents.md) | ⬜ Not started | - |
+| 05 | [Browser context & user-agent hygiene](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/05-browser-context-and-user-agents.md) | ✅ Complete    | - |
 | 06 | [Bounded concurrency](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/06-bounded-concurrency.md)                    | ⬜ Not started | -      |
 
 ## Key constraints

@@ -196,23 +196,31 @@ async def test_detail_golden(
     """
     label = f"{case.site}/{case.name}"
     browser = corpus_router(chromium_browser, corpus_mapping("html"))
-    # Zero the inter-retry backoff (output-neutral) so the deterministically-FAILED
-    # Playwright fixtures (packtpub/oreilly, missing BASE_URL) don't each sleep 2-4 s per retry.
-    monkeypatch.setattr(scrape_details.random, "uniform", lambda _a, _b: 0)
+
+    async def _no_sleep(_seconds: float):
+        """No-op sleep so the deterministically-FAILED fixtures don't wait between retries."""
+
+    # Zero the inter-retry backoff (output-neutral): scrape_book sleeps via scrape_details.asyncio
+    # .sleep between retries, so stubbing it keeps the retried Playwright fixtures fast.
+    monkeypatch.setattr(scrape_details.asyncio, "sleep", _no_sleep)
     # Every scrape_book read is now explicitly bounded (03.0/03), so an explicit field timeout
     # overrides the page default; shrink the module constants too to keep title-less fixtures
     # fast. Output-neutral on static fixtures (present elements resolve immediately).
     monkeypatch.setattr(scrape_details, "FIELD_TIMEOUT_MS", DETAIL_TIMEOUT_MS)
     monkeypatch.setattr(scrape_details, "OPTIONAL_FIELD_TIMEOUT_MS", DETAIL_TIMEOUT_MS)
-    original_new_page = browser.new_page
 
-    async def _timed_new_page(*args: Any, **kwargs: Any) -> Any:
-        """Open a new page and apply the reduced DETAIL_TIMEOUT_MS timeout."""
-        page = await original_new_page(*args, **kwargs)
-        page.set_default_timeout(DETAIL_TIMEOUT_MS)
-        return page
+    # scrape_book now opens each page on its own BrowserContext from new_scrape_context (03.2/05),
+    # so reduce that context's default timeout (rather than the old per-page wrapper) to keep
+    # title-less fixtures fast. Output-neutral on static fixtures.
+    original_new_context = scrape_details.new_scrape_context
 
-    browser.new_page = _timed_new_page  # type: ignore[method-assign]
+    async def _timed_new_context(browser_arg: Any) -> Any:
+        """Open a scrape context and apply the reduced DETAIL_TIMEOUT_MS default timeout."""
+        context = await original_new_context(browser_arg)
+        context.set_default_timeout(DETAIL_TIMEOUT_MS)
+        return context
+
+    monkeypatch.setattr(scrape_details, "new_scrape_context", _timed_new_context)
     result = await scrape_book(case.url, browser, case.site, storage_backend=None)
 
     actual = normalize_result(result)

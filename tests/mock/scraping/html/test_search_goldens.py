@@ -81,19 +81,20 @@ async def _run_amazon_search(
     """Drive the unmodified amazon search path offline against ``mapping``.
 
     ``max_pages`` overrides ``SEARCH_MAXIMUM_PAGES`` (the amazon branch scrapes
-    ``range(1, SEARCH_MAXIMUM_PAGES)``), and every ``new_page`` gets the low default timeout.
+    ``range(1, SEARCH_MAXIMUM_PAGES)``), and each per-page context (opened via
+    ``new_scrape_context``, 03.2/05) gets the low default timeout.
     """
     monkeypatch.setitem(search_utils.site_constants["amazon"], "SEARCH_MAXIMUM_PAGES", max_pages)
     browser = corpus_router(chromium_browser, mapping)
-    original_new_page = browser.new_page
+    original_new_context = search_utils.new_scrape_context
 
-    async def _timed_new_page(*args: Any, **kwargs: Any) -> Any:
-        """Wrap new_page to set a reduced default timeout for golden tests."""
-        page = await original_new_page(*args, **kwargs)
-        page.set_default_timeout(SEARCH_TIMEOUT_MS)
-        return page
+    async def _timed_new_context(browser_arg: Any) -> Any:
+        """Open a scrape context and set a reduced default timeout for golden tests."""
+        context = await original_new_context(browser_arg)
+        context.set_default_timeout(SEARCH_TIMEOUT_MS)
+        return context
 
-    browser.new_page = _timed_new_page  # type: ignore[method-assign]
+    monkeypatch.setattr(search_utils, "new_scrape_context", _timed_new_context)
     return await get_search_results_via_playwright(browser, "amazon", "python")
 
 
@@ -238,7 +239,6 @@ async def test_amazon_sponsored_card_unwrapped(
 async def test_leanpub_search_api_golden_paginates_until_short_page(
     httpx_corpus: Any,
     update_goldens: bool,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     """
     [Local] search goldens: verifies leanpub search api golden paginates until short page.
@@ -252,7 +252,9 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
     On failure, first check:
         - pagination that stopped early loses page 2, or over-ran into an unmapped page 3 (default-denied); an author-lookup regression blanks the authors that feed ``hash_book``.
     """
-    monkeypatch.setattr(search_utils.random, "uniform", lambda _a, _b: 0)
+    # The Leanpub JSON:API search path throttles via the per-host limiter and never sleeps
+    # randomly (the ad hoc random inter-page sleep was removed in 03.2/01), so there is no
+    # backoff to zero here.
     p1 = LEANPUB_DIR / "search_python_p1.json"
     last = LEANPUB_DIR / "search_python_last.json"
     httpx_corpus({_meta_url(p1): p1, _meta_url(last): last})
@@ -274,13 +276,13 @@ async def test_leanpub_search_api_golden_paginates_until_short_page(
 async def test_leanpub_search_api_empty_result(httpx_corpus: Any):
     """
     [Local] search goldens: verifies leanpub search api empty result.
-    
+
     Scenario:
         a search whose first page has an empty ``data`` array returns no candidates.
-    
+
     Boundaries:
         - the single served page's empty ``data`` triggers the immediate break before any pagination; the result is an empty list.
-    
+
     On failure, first check:
         - an empty API page that returned non-empty results would fabricate books with no identity, corrupting dedup downstream.
     """

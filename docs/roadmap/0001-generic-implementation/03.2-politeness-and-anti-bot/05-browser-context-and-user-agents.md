@@ -1,7 +1,7 @@
 # 05 - Browser context & user-agent hygiene
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Scraping Expert
 
 ## Context

@@ -1,31 +1,34 @@
 from __future__ import annotations
 
-USER_AGENTS = [
-    # Chrome (Windows)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
-    # Firefox (Windows)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0",
-    # Edge (Windows)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.44",
-    # Safari (macOS)
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
-    # Chrome (macOS)
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    # Linux (Chrome/Firefox)
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+# User-agent policy for Playwright browser contexts (see scraping/browser.py). Two honest modes
+# only - no spoofed browser string is used to evade blocking (the task 03.2 "identify and back
+# off, never disguise" rule):
+#   "native" (default) - DO NOT override the user-agent at all. Playwright's bundled Chromium
+#                         advertises an internally consistent identity (navigator.userAgent, the
+#                         Sec-CH-UA client hints, and the request header all agree). This is the
+#                         honest default and what the scraper uses unless explicitly changed.
+#   "rotate"           - pick a user-agent from ``USER_AGENT_TEMPLATES`` filled with the INSTALLED
+#                         Chromium major version (derived at runtime from ``browser.version``), so
+#                         the header still matches the real engine. Used only when a run must vary
+#                         the presented UA; it never advertises a different browser than the one
+#                         actually driving the page.
+USER_AGENT_MODE = "native"
+
+# Rotate-mode user-agent templates. Each carries a single ``{major}`` placeholder filled at runtime
+# with the installed Chromium major version (``scraping/browser.build_user_agents``), so a rotated
+# header never claims a Chrome version the bundled engine is not. Chromium-family strings only -
+# a Firefox/Safari string would contradict the Chromium engine actually rendering the page. The
+# minor/build/patch segments are reduced to ``0.0.0`` (the modern reduced-UA convention).
+USER_AGENT_TEMPLATES = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36",
 ]
+
+# Fallback Chromium major used to fill a rotate-mode template when ``browser.version`` cannot be
+# parsed into a leading integer. A conservative recent major; the engine still agrees in practice
+# because rotate-mode UAs are Chromium-family regardless of the exact number.
+DEFAULT_CHROMIUM_MAJOR = 120
 
 HEADLESS_BROWSER = False
 

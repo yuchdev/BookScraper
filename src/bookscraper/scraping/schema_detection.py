@@ -44,7 +44,6 @@ import hashlib
 import json
 import logging
 import os
-import random
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -60,11 +59,11 @@ from playwright.async_api import (
 )
 
 from ..book_utils import print_log
+from .browser import new_scrape_context
 from .parameters import (
     HEADLESS_BROWSER,
     NON_SELECTOR_SEARCH_KEYS,
     OPTIONAL_SELECTOR_KEYS,
-    USER_AGENTS,
     site_constants,
 )
 from .safe_text import sanitize_untrusted
@@ -1069,12 +1068,13 @@ def call_anthropic(
 async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
     """Navigate ``page`` to ``url`` and return a pruned HTML snapshot.
 
-    Applies a rotated User-Agent and the shared ``route_handler`` (document-only)
-    resource blocking, exactly like ``scrape_details.scrape_book``. Raises
-    ``SchemaDetectionError`` on any navigation/load failure.
+    ``page`` is created on a context from the shared ``browser.new_scrape_context`` factory (see
+    ``detect_schema``), so its user-agent/identity matches exactly what the scraper presents - the
+    snapshot reflects what ``scrape_details.scrape_book`` would see. This helper only applies the
+    shared ``route_handler`` (document-only) resource blocking and navigates; it no longer sets a
+    User-Agent header of its own. Raises ``SchemaDetectionError`` on any navigation/load failure.
     """
     try:
-        await page.set_extra_http_headers({"User-Agent": random.choice(USER_AGENTS)})
         await page.route("**/*", route_handler)
         await page.goto(url, timeout=60000)
         html = await page.content()
@@ -1495,7 +1495,11 @@ async def detect_schema(
                     # AIS-9/AIS-11: size-capped read, loaded with every request aborted.
                     page, pruned_html = await load_html_file_page(browser, label)
                 else:
-                    page = await browser.new_page()
+                    # Open the sample page on a context from the SHARED scrape-context factory, so
+                    # the snapshot's UA/identity matches exactly what scrape_details.scrape_book
+                    # sees. The context is torn down with the browser in the finally below.
+                    context = await new_scrape_context(browser)
+                    page = await context.new_page()
                     pruned_html = await fetch_pruned_html(label, page)
                 # Never send a bot-wall / CAPTCHA page to the model (its markup is useless for
                 # selector detection and the request would waste tokens on an interstitial).

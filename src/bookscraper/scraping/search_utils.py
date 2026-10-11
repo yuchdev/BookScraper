@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import random
 import re
 from typing import Optional
 from urllib.parse import (
@@ -18,7 +17,8 @@ import httpx
 from playwright.async_api import Browser, Error as PlaywrightError
 
 from ..book_utils import print_log
-from .parameters import USER_AGENTS, site_constants
+from .browser import new_scrape_context
+from .parameters import site_constants
 from .politeness import DomainRateLimiters, RobotsCache, default_limiters, retry_async
 from .scrape_details import (
     MAX_ATTEMPTS,
@@ -264,6 +264,7 @@ async def get_search_results_via_playwright(
     books_from_search_results = []
     current_page_num = 0
     page = None
+    context = None
     active_limiters = limiters if limiters is not None else default_limiters()
 
     try:
@@ -291,18 +292,26 @@ async def get_search_results_via_playwright(
 
                 for search_result_page in search_urls:
                     current_page_num += 1
-                    page = await browser.new_page()
-                    user_agent = random.choice(USER_AGENTS)
-                    await page.set_extra_http_headers({"User-Agent": user_agent})
+                    # Each search page gets its own isolated context (own cookie jar, UA/identity
+                    # matching what the detail scraper and schema-detection see) via the shared
+                    # factory - no more hard-coded User-Agent header on the shared default context.
+                    context = await new_scrape_context(browser)
+                    page = await context.new_page()
                     await page.route("**/*", route_handler)
 
                     # robots.txt gate (fetched once per host per run), BEFORE navigating: a
-                    # disallowed search page is skipped and never fetched.
-                    if robots is not None and not await robots.allowed(search_result_page, user_agent):
+                    # disallowed search page is skipped and never fetched. The user-agent matched
+                    # against robots.txt is the one the context actually presents (read from the
+                    # live page), never a stale hard-coded value.
+                    if robots is not None and not await robots.allowed(
+                        search_result_page, await page.evaluate("() => navigator.userAgent")
+                    ):
                         logger.info(f"Skipping search page {search_result_page}: disallowed by robots.txt.")
                         print_log(f"Skipping search page {search_result_page}: disallowed by robots.txt.", "warning")
                         await page.close()
+                        await context.close()
                         page = None
+                        context = None
                         continue
 
                     try:
@@ -486,6 +495,9 @@ async def get_search_results_via_playwright(
         if page:
             await page.close()
             logger.info(f"Page for {site_name} search closed.")
+        if context:
+            await context.close()
+            logger.info(f"Context for {site_name} search closed.")
 
     print_log(
         f"Finished search for '{query}' on {site_name}. Found {len(books_from_search_results)} preliminary books.",

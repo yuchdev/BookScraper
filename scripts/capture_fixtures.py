@@ -53,10 +53,10 @@ from playwright.async_api import async_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from bookscraper.scraping import sanitize  # noqa: E402
+from bookscraper.scraping.browser import new_scrape_context  # noqa: E402
 from bookscraper.scraping.parameters import (  # noqa: E402
     HEADLESS_BROWSER,
     NON_SELECTOR_SEARCH_KEYS,
-    USER_AGENTS,
     site_constants,
 )
 from bookscraper.scraping.scrape_details import route_handler  # noqa: E402
@@ -168,11 +168,10 @@ async def capture_document(browser: Any, url: str, site: str) -> str:
     A new ``browser.new_context()`` is created with NO ``storage_state`` /
     ``user_data_dir`` (FIX-1). Cookies are asserted empty right before the snapshot.
     """
-    context = await browser.new_context()
+    context = await new_scrape_context(browser)
     try:
         await _assert_logged_out(context)
         page = await context.new_page()
-        await page.set_extra_http_headers({"User-Agent": USER_AGENTS[0]})
         await page.route("**/*", route_handler)
         await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         title_selector = site_constants.get(site, {}).get("BOOK_TITLE")
@@ -205,7 +204,9 @@ async def _capture_html(url: str, site: str) -> str:
 def _fetch_body(url: str) -> str:
     """FIX-7: unauthenticated httpx GET with no cookies and a bounded body read."""
     with httpx.Client(follow_redirects=True, timeout=30.0, trust_env=False) as client:
-        with client.stream("GET", url, headers={"User-Agent": USER_AGENTS[0]}) as response:
+        # No spoofed browser User-Agent header: the production Leanpub httpx path sends httpx's
+        # own default UA too, so the capture matches what the scraper actually presents.
+        with client.stream("GET", url) as response:
             response.raise_for_status()
             chunks: list[bytes] = []
             total = 0
