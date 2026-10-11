@@ -18,11 +18,11 @@ import asyncio
 import logging
 import random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import mktime_tz, parsedate_tz
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, Union
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -468,6 +468,55 @@ async def retry_async(
     # The final attempt is outside the loop: its exception (if any) propagates unchanged, so there
     # is no unreachable post-loop branch to leave uncovered.
     return await fn()
+
+
+async def bounded_gather(
+    coros_or_factories: Sequence[Union[Awaitable[T], Callable[[], Awaitable[T]]]],
+    *,
+    limit: int,
+    on_result: Optional[Callable[[Union[T, BaseException]], None]] = None,
+) -> list[Union[T, BaseException]]:
+    """Await every item with at most ``limit`` in flight, preserving input order in the results.
+
+    A sliding window built on a single :class:`asyncio.Semaphore`: each item acquires a slot before
+    it runs and releases it on completion, so a slow item never blocks the whole run and a freed
+    slot is immediately reused by the next queued item (unlike fixed ``gather`` batches, which pay
+    for the slowest item in every batch). Each entry is either a coroutine/awaitable (awaited
+    directly) or a zero-argument factory (called inside its slot to build the awaitable, so the
+    awaitable is not even created until a slot is free).
+
+    Exceptions are captured per item exactly like ``asyncio.gather(..., return_exceptions=True)``:
+    a failing item's slot in the returned list holds the raised exception instead of a value, and
+    one failure never cancels its siblings. The result list is index-aligned with the input no
+    matter what order the items actually finished in.
+
+    :param coros_or_factories: The awaitables (or zero-argument awaitable factories) to run.
+    :param limit: The maximum number of items in flight at once; must be at least 1.
+    :param on_result: An optional callback invoked with each item's result (value or captured
+        exception) as it completes, in completion order - used for live progress reporting. It
+        must not raise.
+    :returns: A list of each item's result (or captured exception), index-aligned with the input.
+    :raises ValueError: If ``limit`` is less than 1.
+    """
+    if limit < 1:
+        raise ValueError(f"limit must be at least 1, got {limit!r}")
+    semaphore = asyncio.Semaphore(limit)
+    results: list[Union[T, BaseException]] = [None] * len(coros_or_factories)  # type: ignore[list-item]
+
+    async def _run(index: int, item: Union[Awaitable[T], Callable[[], Awaitable[T]]]):
+        """Acquire a slot then await (or build-then-await) ``item``, storing its result at ``index``."""
+        async with semaphore:
+            try:
+                awaitable = item() if callable(item) else item
+                result: Union[T, BaseException] = await awaitable
+            except Exception as exc:  # noqa: X002 - per-item capture boundary: a failing item's exception is stored in its result slot like gather return_exceptions rather than cancelling its siblings
+                result = exc
+            results[index] = result
+            if on_result is not None:
+                on_result(result)
+
+    await asyncio.gather(*(_run(i, item) for i, item in enumerate(coros_or_factories)))
+    return results
 
 
 @dataclass(frozen=True)

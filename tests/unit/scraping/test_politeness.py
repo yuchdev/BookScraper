@@ -7,6 +7,7 @@ these assert exact simulated timing of the token bucket and the per-host routing
 
 from __future__ import annotations
 
+import asyncio
 import random
 from datetime import UTC, datetime
 from email.utils import formatdate
@@ -21,6 +22,7 @@ from bookscraper.scraping.politeness import (
     RateLimiter,
     RobotsCache,
     RobotsResponse,
+    bounded_gather,
     parse_retry_after,
     retry_async,
 )
@@ -747,3 +749,135 @@ def test_circuit_breaker_rejects_bad_configuration():
         CircuitBreaker(threshold=0)
     with pytest.raises(ValueError):
         CircuitBreaker(threshold=3, cooldown_s=0)
+
+
+async def test_bounded_gather_never_exceeds_limit():
+    """
+    [Unit] politeness: verifies bounded_gather never runs more than `limit` coroutines at once.
+
+    Scenario:
+        Given 20 instrumented coroutines that each record the live in-flight count on entry,
+        bump it, yield control, then decrement on exit
+        When bounded_gather runs them with limit=4
+        Then the peak observed concurrency is exactly 4 (the window is honored) and all 20
+        results come back.
+
+    Boundaries:
+        - Concurrency ceiling only; order and exception capture are separate tests.
+
+    On failure, first check:
+        - The asyncio.Semaphore(limit) acquire/release around each item in bounded_gather._run.
+    """
+    in_flight = 0
+    peak = 0
+
+    async def worker(index: int) -> int:
+        """Record peak concurrency while occupying a slot, yielding once so siblings can overlap."""
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return index
+
+    results = await bounded_gather([worker(i) for i in range(20)], limit=4)
+
+    assert peak == 4
+    assert results == list(range(20))
+
+
+async def test_bounded_gather_preserves_order():
+    """
+    [Unit] politeness: verifies bounded_gather returns results in input order, not completion order.
+
+    Scenario:
+        Given coroutines whose sleep durations are inverted relative to their index (earlier items
+        finish last), run through bounded_gather with a limit that lets them overlap
+        When bounded_gather returns
+        Then the result list is index-aligned with the input despite the reversed finish order.
+
+    Boundaries:
+        - Ordering guarantee only; uses real (tiny) sleeps to force out-of-order completion.
+
+    On failure, first check:
+        - The per-index result slot assignment (results[index] = ...) in bounded_gather._run.
+    """
+
+    async def worker(index: int, delay: float) -> int:
+        """Sleep ``delay`` seconds then return ``index`` so finish order differs from input order."""
+        await asyncio.sleep(delay)
+        return index
+
+    # index 0 sleeps longest, index 4 shortest -> completion order is the reverse of input order.
+    items = [worker(i, delay=(5 - i) * 0.01) for i in range(5)]
+    results = await bounded_gather(items, limit=5)
+
+    assert results == [0, 1, 2, 3, 4]
+
+
+async def test_bounded_gather_captures_exceptions_per_item():
+    """
+    [Unit] politeness: verifies bounded_gather captures each item's exception in its own slot.
+
+    Scenario:
+        Given three items where the middle one raises and a zero-argument factory supplies the
+        last (exercising the factory branch too)
+        When bounded_gather runs them
+        Then the returned list holds the two successful values and the raised exception in the
+        failing item's slot (like gather(return_exceptions=True)), and one failure never cancels
+        its siblings.
+
+    Boundaries:
+        - Exception capture plus the callable-factory input shape; limit is large enough not to
+          throttle.
+
+    On failure, first check:
+        - The try/except per-item boundary and the callable() factory branch in bounded_gather._run.
+    """
+
+    async def ok(value: int) -> int:
+        """Return ``value`` unchanged (a trivially successful item)."""
+        return value
+
+    async def boom() -> int:
+        """Raise a ValueError to exercise the per-item exception-capture path."""
+        raise ValueError("kaboom")
+
+    def factory() -> object:
+        """Zero-argument factory building its awaitable only when its slot is free."""
+        return ok(99)
+
+    results = await bounded_gather([ok(1), boom(), factory], limit=10)
+
+    assert results[0] == 1
+    assert isinstance(results[1], ValueError)
+    assert str(results[1]) == "kaboom"
+    assert results[2] == 99
+
+
+async def test_bounded_gather_rejects_bad_limit():
+    """
+    [Unit] politeness: verifies bounded_gather rejects a non-positive concurrency limit.
+
+    Scenario:
+        Given limit=0
+        When bounded_gather is called
+        Then it raises ValueError (a misconfiguration fails loudly rather than silently running
+        unbounded or deadlocking).
+
+    Boundaries:
+        - Constructor-style validation only; no items are awaited.
+
+    On failure, first check:
+        - The `if limit < 1` guard at the top of bounded_gather.
+    """
+
+    async def noop() -> int:
+        """Never actually awaited in this test; present only to supply one input item."""
+        return 0
+
+    coro = noop()
+    with pytest.raises(ValueError):
+        await bounded_gather([coro], limit=0)
+    # Close the un-awaited coroutine so the test leaves no "never awaited" warning behind.
+    coro.close()

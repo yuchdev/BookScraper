@@ -537,22 +537,23 @@ async def test_run_summary_counts_each_status(tmp_path):
     assert "FAILED" not in line
 
 
-async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path):
-    # 11 recognized URLs => two batches (batch_size hardcoded at 10) => one pause.
+async def test_scrape_urls_no_longer_sleeps_between_batches(tmp_path):
     """
-    [Local] scrape urls: verifies that 11 URLs produce two batches and exactly one inter-batch pause.
+    [Local] scrape urls: verifies the run scrapes every URL with no inter-batch sleep.
 
     Scenario:
-        Given 11 leanpub URLs (batch_size is hardcoded at 10) each returning SUCCESS
-        When run() is called
-        Then scrape_book is awaited 11 times, asyncio.sleep is awaited exactly once
-        (between batch 1 and batch 2), and all books are saved together.
+        Given 11 leanpub URLs each returning SUCCESS
+        When run() is called (bounded_gather has replaced the fixed batches + inter-batch sleep)
+        Then scrape_book is awaited 11 times, asyncio.sleep is never awaited (the 3-5 s pause is
+        gone - per-host pacing is the rate limiter's job now), and all books are saved together
+        in input order.
 
     Boundaries:
-        - Tests the batch-boundary sleep; exactly 10 URLs (one batch) would not sleep.
+        - Asserts the removal of the batch-boundary sleep; per-host pacing is tested separately
+          in the rate-limiter unit tests.
 
     On failure, first check:
-        - The inter-batch sleep condition in run()'s batch loop.
+        - That run() uses bounded_gather(..., limit=concurrency) with no asyncio.sleep in the loop.
     """
     urls = [f"https://leanpub.com/book-{i}" for i in range(11)]
     csv_path = _write_csv(tmp_path, urls)
@@ -579,10 +580,10 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path):
     ):
         await run(args)
 
-    # All 11 scraped once each, across two batches.
+    # All 11 scraped once each, through the bounded-concurrency window.
     assert scrape_book.await_count == 11
-    # Exactly one inter-batch pause (between batch 1 and batch 2).
-    sleep.assert_awaited_once()
+    # No inter-batch pause remains.
+    sleep.assert_not_awaited()
     backend.save_books.assert_called_once_with(books)
     backend.close.assert_called_once_with()
     browser.close.assert_awaited_once()
@@ -614,7 +615,6 @@ def test_failed_and_other_link_csvs_neutralize_formula_cells(tmp_path):
         assert [row[0] for row in csv.reader(fh)][1:] == ["'@SUM(1)", "https://example.com/ok"]
 
 
-
 async def test_ignore_robots_flag_bypasses_check_and_warns_once(tmp_path):
     """
     [Local] scrape urls: verifies --ignore-robots passes robots=None and warns exactly once.
@@ -640,8 +640,12 @@ async def test_ignore_robots_flag_bypasses_check_and_warns_once(tmp_path):
     backend.save_books.return_value = SaveSummary(inserted=2, duplicates=0, errors=0)
     pw_factory, _browser = _make_playwright_factory()
     results = [
-        ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/a", site="leanpub", book={"title": "A", "hash": "a"}),
-        ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/b", site="leanpub", book={"title": "B", "hash": "b"}),
+        ScrapeResult(
+            ScrapeStatus.SUCCESS, url="https://leanpub.com/a", site="leanpub", book={"title": "A", "hash": "a"}
+        ),
+        ScrapeResult(
+            ScrapeStatus.SUCCESS, url="https://leanpub.com/b", site="leanpub", book={"title": "B", "hash": "b"}
+        ),
     ]
     scrape_book = AsyncMock(side_effect=results)
     printed: list[tuple[str, str]] = []

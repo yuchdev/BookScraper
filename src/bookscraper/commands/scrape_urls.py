@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
-import random
 import sys
 import time
 from collections import Counter
@@ -15,9 +14,13 @@ from playwright.async_api import async_playwright
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, logger, print_log
 from ..scraping.parameters import HEADLESS_BROWSER
-from ..scraping.politeness import RobotsCache, build_default_limiters
-from ..scraping.results import ScrapeStatus
+from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
+from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import ROBOTS_FETCH_TIMEOUT_S, build_robots_fetcher, scrape_book
+
+# Default number of detail scrapes in flight at once (CLI --concurrency arrives in task 05.0).
+# Per-host pacing is the rate limiter's job, so this only bounds total concurrent page loads.
+DEFAULT_CONCURRENCY = 4
 
 
 def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"):
@@ -99,8 +102,9 @@ async def run(args: argparse.Namespace):
     """
     The "I already have URLs" workflow: scrape a CSV of book URLs into the chosen store.
 
-    Resolves the storage backend, buckets the input URLs by site, scrapes each in
-    batches of concurrent Playwright tasks, and writes the run's diagnostic CSVs.
+    Resolves the storage backend, buckets the input URLs by site, scrapes them through a
+    bounded-concurrency sliding window (at most ``concurrency`` Playwright tasks in flight, with
+    per-host pacing left to the rate limiter), and writes the run's diagnostic CSVs.
 
     :param args: Parsed ``scrape-urls`` arguments (input file, ``--store-backend``, etc.).
     """
@@ -162,7 +166,6 @@ async def run(args: argparse.Namespace):
         sys.exit(1)
 
     all_urls_to_scrape = []
-    batch_size = 10
 
     for website, urls in website_urls.items():
         if website not in ["other"]:
@@ -196,41 +199,54 @@ async def run(args: argparse.Namespace):
 
             books = []  # Stores successfully scraped book details (non-duplicates)
 
-            for i in range(0, total_urls_to_scrape, batch_size):
-                batch_urls = all_urls_to_scrape[i : i + batch_size]
-                current_batch_num = i // batch_size + 1
-                total_batches = (total_urls_to_scrape + batch_size - 1) // batch_size  # Ceiling division
-                print_log(f"Starting batch {current_batch_num} of {total_batches}", "info")
+            # A bounded-concurrency sliding window replaces the old fixed batches + inter-batch
+            # sleep: at most `concurrency` scrapes run at once and a finished slot is reused
+            # immediately, while per-host pacing is the rate limiter's job. scrape_book always
+            # returns a typed ScrapeResult (see scraping/results.py), passing the storage_backend
+            # for an immediate duplicate check.
+            concurrency = getattr(args, "concurrency", DEFAULT_CONCURRENCY)
+            # Print a progress line every ~10% of the run (at least every completion for a tiny
+            # run, at most every 10 completions), plus a final line when the last task lands.
+            progress_interval = max(1, min(10, total_urls_to_scrape // 10))
+            progress = Counter()  # keys: "done" / "ok" / "dup" / "fail"
 
-                tasks = []
-                for url in batch_urls:
-                    site = identify_website(url)
-                    # Pass the storage_backend to scrape_book for immediate duplicate check.
-                    # scrape_book always returns a typed ScrapeResult (see scraping/results.py).
-                    tasks.append(scrape_book(url, browser, site, storage_backend, limiters, robots))
+            def report_progress(result: ScrapeResult):
+                """Tally one completed scrape and emit a progress line at each interval."""
+                progress["done"] += 1
+                match result.status:
+                    case ScrapeStatus.SUCCESS:
+                        progress["ok"] += 1
+                    case ScrapeStatus.DUPLICATE:
+                        progress["dup"] += 1
+                    case _:
+                        progress["fail"] += 1
+                if progress["done"] % progress_interval == 0 or progress["done"] == total_urls_to_scrape:
+                    print_log(
+                        f"{progress['done']}/{total_urls_to_scrape} done "
+                        f"(ok={progress['ok']} dup={progress['dup']} fail={progress['fail']})",
+                        "info",
+                    )
 
-                results = await asyncio.gather(*tasks)
+            scrapes = [
+                scrape_book(url, browser, identify_website(url), storage_backend, limiters, robots)
+                for url in all_urls_to_scrape
+            ]
+            results = await bounded_gather(scrapes, limit=concurrency, on_result=report_progress)
 
-                for result in results:
-                    status_counts[result.status] += 1
-                    match result.status:
-                        case ScrapeStatus.SUCCESS:
-                            # book is guaranteed non-None on SUCCESS by ScrapeResult.__post_init__.
-                            books.append(result.book)
-                        case ScrapeStatus.DUPLICATE:
-                            failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
-                            logger.info(f"Book from URL: {result.url} detected as duplicate and skipped from saving.")
-                        case _:
-                            # Every other status is a failed scrape; the enum value is the CSV
-                            # status and the typed error distinguishes 404 / timeout / parse error.
-                            failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
-                            logger.error(
-                                f"Scraping failed for URL: {result.url} ({result.status.value}): {result.error}"
-                            )
-
-                if current_batch_num < total_batches:  # Only pause if there are more batches
-                    print_log("Pausing between batches...", "info")
-                    await asyncio.sleep(random.uniform(3, 5))
+            for result in results:
+                status_counts[result.status] += 1
+                match result.status:
+                    case ScrapeStatus.SUCCESS:
+                        # book is guaranteed non-None on SUCCESS by ScrapeResult.__post_init__.
+                        books.append(result.book)
+                    case ScrapeStatus.DUPLICATE:
+                        failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
+                        logger.info(f"Book from URL: {result.url} detected as duplicate and skipped from saving.")
+                    case _:
+                        # Every other status is a failed scrape; the enum value is the CSV
+                        # status and the typed error distinguishes 404 / timeout / parse error.
+                        failed_urls_with_status.append((result.url, result.status.value, result.error or ""))
+                        logger.error(f"Scraping failed for URL: {result.url} ({result.status.value}): {result.error}")
 
             total_scraped_books = len(books)  # Only counts successfully scraped books
             total_time_taken = time.time() - start_time

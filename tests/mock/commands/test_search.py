@@ -5,6 +5,7 @@ all mocked, so no network and no real ~/.bookscrapper or books.json is touched. 
 CSV helper here is the DictWriter-based one (distinct from scrape_urls.py's).
 """
 
+import asyncio
 import csv
 import threading
 from types import SimpleNamespace
@@ -731,3 +732,58 @@ async def test_run_skips_search_result_without_slug():
     detail.assert_awaited_once()
     assert detail.call_args.kwargs["url"].endswith("/good-book.json")
 
+
+async def test_search_detail_scrape_is_bounded():
+    """
+    [Local] search: verifies detail scraping runs through the bounded-concurrency window.
+
+    Scenario:
+        Given 12 new Leanpub candidates and a detail scraper instrumented to record the live
+        in-flight count (default concurrency is 4)
+        When run() is called
+        Then every candidate is scraped once, the peak observed concurrency never exceeds 4 (the
+        old unbounded gather(*all) is gone), and all 12 books are saved.
+
+    Boundaries:
+        - Exercises the bounded_gather wiring in search.run; the primitive itself is unit-tested
+          in test_politeness.
+
+    On failure, first check:
+        - That run() scrapes details via bounded_gather(..., limit=concurrency) rather than a
+          bare asyncio.gather over every task at once.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+    candidates = [_leanpub_book(f"book-{i}", f"Book {i}") for i in range(12)]
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.save_books.return_value = SaveSummary(inserted=12, duplicates=0, errors=0)
+
+    in_flight = 0
+    peak = 0
+    scraped = 0
+
+    async def fake_detail(*, url, client, limiters, robots) -> ScrapeResult:
+        """Record peak detail-scrape concurrency while occupying a slot then return SUCCESS."""
+        nonlocal in_flight, peak, scraped
+        in_flight += 1
+        peak = max(peak, in_flight)
+        scraped += 1
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site="leanpub", book={"title": url, "hash": url})
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=candidates)),
+        patch(f"{MODULE}.get_leanpub_book_details", fake_detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    assert scraped == 12
+    assert peak == 4
+    backend.save_books.assert_called_once()
+    (saved_arg,), _ = backend.save_books.call_args
+    assert len(saved_arg) == 12

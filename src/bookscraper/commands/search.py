@@ -12,12 +12,16 @@ import httpx
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
-from ..scraping.politeness import RobotsCache, build_default_limiters
+from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
 
 module_logger = logging.getLogger(__name__)
+
+# Default number of detail scrapes in flight at once (CLI --concurrency arrives in task 05.0).
+# Per-host pacing is the rate limiter's job, so this only bounds total concurrent detail fetches.
+DEFAULT_CONCURRENCY = 4
 
 
 def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv"):
@@ -165,13 +169,40 @@ async def run(args: argparse.Namespace):
             # Run detailed scraping tasks for the current site concurrently
             if leanpub_books:
                 print_log(f"--- Scraping {len(leanpub_books)} Leanpub book(s) ---", "step")
+                # Detail scraping runs through a bounded-concurrency sliding window instead of an
+                # unbounded gather: at most `concurrency` fetches are in flight at once and a
+                # finished slot is reused immediately, with per-host pacing left to the rate
+                # limiter. Exceptions are still captured per item like gather(return_exceptions).
+                concurrency = getattr(args, "concurrency", DEFAULT_CONCURRENCY)
+                total_detail = len(leanpub_books)
+                # Progress line every ~10% (at least each completion for a tiny run, at most every
+                # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.
+                progress_interval = max(1, min(10, total_detail // 10))
+                progress = Counter()  # keys: "done" / "ok" / "fail"
+
+                def report_progress(result):
+                    """Tally one completed detail scrape and emit a progress line at each interval."""
+                    progress["done"] += 1
+                    if isinstance(result, ScrapeResult) and result.status is ScrapeStatus.SUCCESS:
+                        progress["ok"] += 1
+                    else:
+                        progress["fail"] += 1
+                    if progress["done"] % progress_interval == 0 or progress["done"] == total_detail:
+                        print_log(
+                            f"{progress['done']}/{total_detail} done "
+                            f"(ok={progress['ok']} dup=0 fail={progress['fail']})",
+                            "info",
+                        )
+
                 site_scrape_tasks = [
                     get_leanpub_book_details(
                         url=book.get("book_url"), client=http_client, limiters=limiters, robots=robots
                     )
                     for book in leanpub_books
                 ]
-                current_site_scraped_results = await asyncio.gather(*site_scrape_tasks, return_exceptions=True)
+                current_site_scraped_results = await bounded_gather(
+                    site_scrape_tasks, limit=concurrency, on_result=report_progress
+                )
 
                 # Process results from detailed scraping for the current site
                 for original_book_data, result in zip(leanpub_books, current_site_scraped_results, strict=True):

@@ -1,7 +1,7 @@
 # Task 03.2 - Politeness & Anti-Bot Resilience
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** 🔶 In progress
+**Status:** ✅ Complete
 **Category:** feature | **Priority:** P1
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
 
@@ -22,7 +22,7 @@ blocked and storing a bot-wall page as a "book".
 | 03 | [Shared backoff & Retry-After](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/03-shared-backoff-and-retry-after.md) | ✅ Complete    | 04    |
 | 04 | [Bot-wall detection & circuit breaker](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/04-bot-wall-detection.md)    | ✅ Complete    | -      |
 | 05 | [Browser context & user-agent hygiene](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/05-browser-context-and-user-agents.md) | ✅ Complete    | - |
-| 06 | [Bounded concurrency](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/06-bounded-concurrency.md)                    | ⬜ Not started | -      |
+| 06 | [Bounded concurrency](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/06-bounded-concurrency.md)                    | ✅ Complete    | -      |
 
 ## Key constraints
 
