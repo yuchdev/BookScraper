@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 
 from bookscraper.scraping.politeness import (
+    CircuitBreaker,
+    DomainCircuitBreakers,
     DomainRateLimiters,
     RateLimiter,
     RobotsCache,
@@ -582,3 +584,166 @@ def test_registrable_host_handles_hostless_url():
         - The ``urlparse(url).hostname or ""`` guard in registrable_host
     """
     assert DomainRateLimiters.registrable_host("/just/a/path") == ""
+
+
+class MutableClock:
+    """A hand-advanced monotonic clock for the circuit-breaker tests.
+
+    ``time()`` returns the current virtual seconds and ``advance(d)`` moves it forward; unlike
+    ``FakeClock`` nothing advances it implicitly, so a test controls exactly when a breaker's
+    cooldown elapses without any real time passing.
+    """
+
+    def __init__(self):
+        """Start virtual time at zero."""
+        self.now = 0.0
+
+    def time(self) -> float:
+        """Return the current virtual time in seconds."""
+        return self.now
+
+    def advance(self, duration: float):
+        """Move virtual time forward by ``duration`` seconds."""
+        self.now += duration
+
+
+def test_circuit_opens_after_three_consecutive_blocks():
+    """
+    [Unit] politeness: verifies a CircuitBreaker opens on the threshold-th consecutive block.
+
+    Scenario:
+        Given a CircuitBreaker(threshold=3) that starts closed
+        When record_blocked is called three times in a row
+        Then the first two keep it closed (record_blocked returns False), the third opens it
+        (returns True exactly once) and is_open becomes True
+
+    Boundaries:
+        - Pure state machine with an injected clock; no network, no sleep, no logging
+        - The "just opened" signal fires on exactly one call (the warning is emitted once)
+
+    On failure, first check:
+        - The >= threshold comparison and the already-open guard in CircuitBreaker.record_blocked
+    """
+    clock = MutableClock()
+    breaker = CircuitBreaker(threshold=3, cooldown_s=900, clock=clock.time)
+
+    assert breaker.is_open() is False
+    assert breaker.record_blocked() is False
+    assert breaker.record_blocked() is False
+    assert breaker.is_open() is False
+    assert breaker.record_blocked() is True
+    assert breaker.is_open() is True
+
+
+def test_circuit_open_skips_requests_entirely():
+    """
+    [Unit] politeness: verifies an open breaker stays open across the run and half-opens post-cooldown.
+
+    Scenario:
+        Given a CircuitBreaker opened by three blocks with a 900 s cooldown
+        When is_open is polled repeatedly within the cooldown, and a further block is recorded
+        Then is_open stays True and the extra record_blocked returns False (no re-opening); only
+        after advancing past the cooldown does is_open reset to False (the domain may be retried)
+
+    Boundaries:
+        - Injected MutableClock only; the cooldown elapses solely because the test advances it
+        - Models "every further URL is skipped for the rest of the run" (cooldown > any run)
+
+    On failure, first check:
+        - The cooldown comparison and the half-open reset in CircuitBreaker.is_open
+    """
+    clock = MutableClock()
+    breaker = CircuitBreaker(threshold=3, cooldown_s=900, clock=clock.time)
+    for _ in range(3):
+        breaker.record_blocked()
+    assert breaker.is_open() is True
+
+    # Still open a long way into the cooldown; an extra block does not re-open (returns False).
+    clock.advance(800)
+    assert breaker.is_open() is True
+    assert breaker.record_blocked() is False
+    assert breaker.is_open() is True
+
+    # Past the cooldown it half-opens: the domain may be retried again.
+    clock.advance(200)
+    assert breaker.is_open() is False
+
+
+def test_success_resets_block_counter():
+    """
+    [Unit] politeness: verifies a success resets the consecutive-block counter before opening.
+
+    Scenario:
+        Given a CircuitBreaker(threshold=3) fed two blocks then a success
+        When two more blocks are recorded
+        Then the breaker is still closed (the success zeroed the counter), and only a third
+        consecutive block after the reset opens it
+
+    Boundaries:
+        - Pure state machine; record_success has no I/O and only touches the counter
+        - Proves a block-success-block pattern never trips the breaker
+
+    On failure, first check:
+        - CircuitBreaker.record_success zeroing _consecutive_blocks
+    """
+    clock = MutableClock()
+    breaker = CircuitBreaker(threshold=3, cooldown_s=900, clock=clock.time)
+
+    breaker.record_blocked()
+    breaker.record_blocked()
+    breaker.record_success()
+
+    assert breaker.record_blocked() is False
+    assert breaker.record_blocked() is False
+    assert breaker.is_open() is False
+    assert breaker.record_blocked() is True
+    assert breaker.is_open() is True
+
+
+def test_domain_circuit_breakers_are_per_host():
+    """
+    [Unit] politeness: verifies DomainCircuitBreakers isolates one host's breaker from another.
+
+    Scenario:
+        Given a DomainCircuitBreakers registry
+        When one host's breaker is opened by three blocks
+        Then that host's breaker is open while a different host's breaker is independent and
+        closed, and the www/bare spellings of the opened host share the one breaker
+
+    Boundaries:
+        - Registry routing only; reuses registrable_host (leading www. stripped)
+        - No real clock needed - the default monotonic clock is never read while closed
+
+    On failure, first check:
+        - DomainCircuitBreakers.for_url's host keying and lazy per-host creation
+    """
+    clock = MutableClock()
+    registry = DomainCircuitBreakers(threshold=3, cooldown_s=900, clock=clock.time)
+
+    amazon = registry.for_url("https://www.amazon.com/dp/123")
+    for _ in range(3):
+        amazon.record_blocked()
+
+    assert registry.for_url("https://amazon.com/dp/999").is_open() is True
+    assert registry.for_url("https://leanpub.com/x").is_open() is False
+
+
+def test_circuit_breaker_rejects_bad_configuration():
+    """
+    [Unit] politeness: verifies CircuitBreaker validates its threshold and cooldown.
+
+    Scenario:
+        Given constructor arguments below the allowed range
+        When a CircuitBreaker is built with threshold 0 or a non-positive cooldown
+        Then each raises ValueError (a misconfiguration fails loudly, not silently)
+
+    Boundaries:
+        - Constructor validation only; no state transitions exercised
+
+    On failure, first check:
+        - The threshold < 1 and cooldown_s <= 0 guards in CircuitBreaker.__init__
+    """
+    with pytest.raises(ValueError):
+        CircuitBreaker(threshold=0)
+    with pytest.raises(ValueError):
+        CircuitBreaker(threshold=3, cooldown_s=0)

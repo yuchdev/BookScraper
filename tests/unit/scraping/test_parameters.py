@@ -150,3 +150,39 @@ def test_every_detail_selector_key_is_consumed():
     assert unconsumed == set(_CONSUMED_ALLOW_LIST)
     # Each allow-list entry carries a one-line reason.
     assert all(reason for reason in _CONSUMED_ALLOW_LIST.values())
+
+
+def test_every_site_has_bot_wall_rules():
+    """
+    [Unit] parameters: verifies every site defines non-empty BOT_WALL detection rules.
+
+    Scenario:
+        Given the site_constants entries and the shared GENERIC_BOT_WALL_RULES
+        When each site's BOT_WALL list is inspected
+        Then every site has at least one rule, each rule is a {"title_contains"} or {"selector"}
+        shape, the generic Cloudflare rule is present on every site, and amazon additionally carries
+        its "Robot Check" title and validateCaptcha form rules
+
+    Boundaries:
+        - Pure data inspection over static config; no scrape, browser, or network
+        - Tripwire: a new site must declare BOT_WALL so a CAPTCHA page returns BLOCKED, not PARSE_ERROR
+
+    On failure, first check:
+        - A site_constants entry was added without a BOT_WALL list, or a rule used an unknown key
+    """
+    generic = parameters.GENERIC_BOT_WALL_RULES
+    assert generic, "GENERIC_BOT_WALL_RULES must be non-empty"
+
+    for site, entry in parameters.site_constants.items():
+        rules = entry.get("BOT_WALL")
+        assert rules, f"site '{site}' has no BOT_WALL rules"
+        for rule in rules:
+            keys = set(rule)
+            assert keys in ({"title_contains"}, {"selector"}), f"site '{site}' has a malformed BOT_WALL rule {rule!r}"
+        # The shared Cloudflare rule is applied to every site.
+        for generic_rule in generic:
+            assert generic_rule in rules, f"site '{site}' is missing the generic rule {generic_rule!r}"
+
+    amazon_rules = parameters.site_constants["amazon"]["BOT_WALL"]
+    assert {"title_contains": "Robot Check"} in amazon_rules
+    assert any("validateCaptcha" in rule.get("selector", "") for rule in amazon_rules)

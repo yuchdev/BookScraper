@@ -18,10 +18,13 @@ from ..book_utils import print_log
 from . import normalize
 from .parameters import USER_AGENTS, site_constants
 from .politeness import (
+    CircuitBreaker,
+    DomainCircuitBreakers,
     DomainRateLimiters,
     RobotsCache,
     RobotsFetcher,
     RobotsResponse,
+    default_breakers,
     default_limiters,
     parse_retry_after,
     retry_async,
@@ -298,6 +301,75 @@ async def route_handler(route: Route):
         await route.abort()
 
 
+async def _detect_bot_wall(page: Page, site: str) -> bool:
+    """Return whether the loaded ``page`` is ``site``'s bot-wall / anti-bot interstitial.
+
+    Evaluates the site's ``BOT_WALL`` rules (``parameters.site_constants[site]["BOT_WALL"]``, which
+    already includes the shared :data:`parameters.GENERIC_BOT_WALL_RULES` Cloudflare rule): a
+    ``{"title_contains": str}`` rule matches when that substring is in the page title
+    (case-insensitively), a ``{"selector": str}`` rule matches when the selector resolves to at
+    least one element. The first matching rule wins. A page-read failure (a dead page, a malformed
+    selector) is swallowed as a non-match - detection is best-effort and must never raise into the
+    scrape - so an inconclusive check lets the normal title/404 path run and surface its own result.
+
+    This is checked right after navigation and BEFORE the 404 check, so a 200 CAPTCHA page (which
+    has none of the real fields) is reported as :attr:`ScrapeStatus.BLOCKED` rather than being
+    misread as a parse error. Reused by :mod:`.schema_detection` to refuse a bot-wall sample page.
+
+    :param page: The freshly-navigated Playwright page to inspect.
+    :param site: The site identifier whose ``BOT_WALL`` rules to apply.
+    :returns: ``True`` iff a bot-wall rule matched; ``False`` otherwise (including on read errors).
+    """
+    rules = site_constants.get(site, {}).get("BOT_WALL", [])
+    if not rules:
+        return False
+    title_needles = [rule["title_contains"] for rule in rules if "title_contains" in rule]
+    if title_needles:
+        try:
+            page_title = (await page.title() or "").lower()
+        except PlaywrightError as exc:
+            module_logger.debug(f"Bot-wall title read failed on {page.url}: {exc}")
+            page_title = ""
+        if any(needle.lower() in page_title for needle in title_needles):
+            return True
+    for rule in rules:
+        selector = rule.get("selector")
+        if not selector:
+            continue
+        try:
+            if await page.locator(selector).count() > 0:
+                return True
+        except PlaywrightError as exc:
+            module_logger.debug(f"Bot-wall selector {selector!r} failed on {page.url}: {exc}")
+    return False
+
+
+def _note_circuit_result(breaker: CircuitBreaker, result: ScrapeResult, url: str):
+    """Feed one scrape outcome to ``url``'s :class:`CircuitBreaker` and warn if it just opened.
+
+    A :attr:`ScrapeStatus.BLOCKED` result (a detected bot wall) is recorded as a block; if that
+    pushes the domain's breaker over its threshold this emits the single ``print_log`` warning the
+    subtask requires, naming the domain. A :attr:`ScrapeStatus.SUCCESS` resets the block counter.
+    Every other status leaves the breaker untouched. The "circuit open" skip result is produced by
+    the caller's pre-request gate and never reaches here, so an open breaker is not re-recorded.
+
+    :param breaker: The domain's circuit breaker.
+    :param result: The terminal :class:`ScrapeResult` of this scrape attempt.
+    :param url: The scraped URL, used only to name the domain in the warning.
+    """
+    if result.status is ScrapeStatus.BLOCKED:
+        if breaker.record_blocked():
+            domain = DomainRateLimiters.registrable_host(url) or url
+            module_logger.warning(f"Circuit breaker opened for {domain} after repeated bot-wall blocks.")
+            print_log(
+                f"Bot-wall circuit opened for '{domain}'; all further URLs for this domain will be "
+                "skipped (returned BLOCKED without a request) for the rest of the run.",
+                "warning",
+            )
+    elif result.status is ScrapeStatus.SUCCESS:
+        breaker.record_success()
+
+
 @asynccontextmanager
 async def _attempt_page(browser: Browser) -> AsyncIterator[Page]:
     """Yield a fresh page for a single scrape attempt, closing it exactly once on exit.
@@ -473,6 +545,7 @@ async def scrape_book(
     storage_backend: Optional[StorageBackend] = None,
     limiters: Optional[DomainRateLimiters] = None,
     robots: Optional[RobotsCache] = None,
+    breakers: Optional[DomainCircuitBreakers] = None,
 ) -> ScrapeResult:
     """Scrape book details from a URL, handle retries, and check for duplicates.
 
@@ -490,9 +563,20 @@ async def scrape_book(
         use the shared module-level instance.
     :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to
         skip the robots.txt check (e.g. under ``--ignore-robots``).
+    :param breakers: The per-run :class:`DomainCircuitBreakers` tracking repeated bot-wall blocks,
+        or ``None`` to use the shared module-level instance. When a domain's breaker is open, this
+        returns :attr:`ScrapeStatus.BLOCKED` (``error="circuit open"``) with no request.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     active_limiters = limiters if limiters is not None else default_limiters()
+    active_breakers = breakers if breakers is not None else default_breakers()
+
+    # Circuit-breaker gate: once a domain's breaker has opened (threshold consecutive bot-wall
+    # blocks), every further URL for it is skipped WITHOUT a request for the rest of the run.
+    breaker = active_breakers.for_url(url)
+    if breaker.is_open():
+        module_logger.info(f"Circuit open for {url}; skipping without a request.")
+        return ScrapeResult(ScrapeStatus.BLOCKED, url=url, site=site, error="circuit open")
 
     # Leanpub is a pure httpx/JSON path - dispatch it before any Playwright page is created,
     # so it never opens (and therefore never leaks) a browser page.
@@ -549,6 +633,21 @@ async def scrape_book(
             # Throttle per host immediately before navigating.
             await active_limiters.for_url(full_url).acquire()
             await page.goto(full_url, timeout=NAVIGATION_TIMEOUT_MS)
+
+            # Bot-wall detection BEFORE the 404 check: a 200 CAPTCHA interstitial has none of the
+            # real fields, so without this it would be misread as a PARSE_ERROR. A positive match
+            # is a policy decision (identify and back off), never a transient fault - return
+            # BLOCKED with no retry; the per-domain circuit breaker (in scrape_book) counts it.
+            if await _detect_bot_wall(page, site):
+                module_logger.warning(f"Bot wall detected for {full_url}; returning BLOCKED (no retry).")
+                print_log(f"Bot wall detected for {full_url}; skipping (no retry).", "warning")
+                return ScrapeResult(
+                    ScrapeStatus.BLOCKED,
+                    url=full_url,
+                    site=site,
+                    error="bot wall detected",
+                    attempts=attempt,
+                )
 
             # Check for 404 page (if site_constants provides a 404 selector)
             not_found_title = selectors.get("404_PAGE_TITLE")
@@ -714,7 +813,7 @@ async def scrape_book(
         # Retry only transient faults (navigation/network errors, timeouts, 429/502/503/504)
         # with shared jittered backoff, honoring any Retry-After on a 429/503. A deterministic
         # bug or a non-retryable status re-raises on the first attempt and wastes no retries.
-        return await retry_async(
+        result = await retry_async(
             _attempt,
             attempts=MAX_ATTEMPTS,
             base_delay=RETRY_BASE_DELAY_S,
@@ -734,15 +833,20 @@ async def scrape_book(
             )
             module_logger.error(f"Failed to scrape {url} after {attempts_made} attempts: {exc}")
             print_log(f"Failed to scrape {url} after {attempts_made} attempts.", "error")
-            return ScrapeResult(status, url=url, site=site, error=error_text, attempts=attempts_made)
-        # Deterministic bug (KeyError / AttributeError / ValueError / TypeError) or any
-        # unexpected error: never retried - it would fail identically on every attempt.
-        module_logger.error(f"Non-transient error scraping {url} on attempt {attempts_made}: {exc}", exc_info=True)
-        print_log(f"Error scraping {url}.", "error")
-        return ScrapeResult(
-            ScrapeStatus.FAILED,
-            url=url,
-            site=site,
-            error=f"{type(exc).__name__}: {exc}",
-            attempts=attempts_made,
-        )
+            result = ScrapeResult(status, url=url, site=site, error=error_text, attempts=attempts_made)
+        else:
+            # Deterministic bug (KeyError / AttributeError / ValueError / TypeError) or any
+            # unexpected error: never retried - it would fail identically on every attempt.
+            module_logger.error(f"Non-transient error scraping {url} on attempt {attempts_made}: {exc}", exc_info=True)
+            print_log(f"Error scraping {url}.", "error")
+            result = ScrapeResult(
+                ScrapeStatus.FAILED,
+                url=url,
+                site=site,
+                error=f"{type(exc).__name__}: {exc}",
+                attempts=attempts_made,
+            )
+    # Feed the outcome to the domain's circuit breaker (a detected bot wall counts as a block, a
+    # success resets the counter) and warn once if this result just opened the breaker.
+    _note_circuit_result(breaker, result, url)
+    return result

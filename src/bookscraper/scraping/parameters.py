@@ -109,10 +109,29 @@ SCRAPE_FILTERS = {
     "min_isbns_required": 1,  # Minimum number of ISBNs to consider a book's ISBNs "complete"
 }
 
+# Generic bot-wall / anti-bot interstitial detection rules applied to EVERY site (subtask
+# 03.2/04). Each rule is either ``{"title_contains": str}`` (a case-insensitive page-title
+# substring) or ``{"selector": str}`` (a CSS selector that matches an element only on the
+# interstitial). This generic set catches the Cloudflare "challenge" page every host can serve;
+# per-site ``BOT_WALL`` lists below extend it with that site's own CAPTCHA markers. A positive
+# match makes ``scrape_details.scrape_book`` return ``ScrapeStatus.BLOCKED`` with no retry - the
+# project's "identify and back off, never disguise or bypass" rule - and trips the per-domain
+# circuit breaker. Edit these (not the detection code) to tune bot-wall recognition.
+GENERIC_BOT_WALL_RULES: list[dict[str, str]] = [
+    {"selector": "#challenge-form, #cf-challenge-running"},
+]
+
 # Selectors and constants for each site
 site_constants = {
     "amazon": {
         "BASE_URL": "https://www.amazon.com",
+        # Amazon's "Robot Check" CAPTCHA interstitial: a 200 page with no #productTitle. Matched
+        # by its title and its captcha form, plus the shared Cloudflare rule.
+        "BOT_WALL": [
+            {"title_contains": "Robot Check"},
+            {"selector": 'form[action*="validateCaptcha"]'},
+            *GENERIC_BOT_WALL_RULES,
+        ],
         ### SEARCH SELECTORS
         "SEARCH_BASE_URL": "https://www.amazon.com/s?i=stripbooks-intl-ship&k=[k]&page=[p]",
         "SEARCH_BOOK_CARD": '[data-component-type="s-search-result"]',
@@ -143,6 +162,8 @@ site_constants = {
     },
     "leanpub": {
         "BASE_URL": "https://leanpub.com",
+        # Leanpub has no site-specific CAPTCHA marker; only the shared Cloudflare rule applies.
+        "BOT_WALL": [*GENERIC_BOT_WALL_RULES],
         ### SEARCH SELECTORS
         "SEARCH_BASE_API": "https://leanpub.com/api/v1/cache/simple_books.json",
         "SEARCH_BASE_URL": "https://leanpub.com/bookstore?search=",
@@ -168,6 +189,8 @@ site_constants = {
         "TAGS": ".tag-list a",  # Or similar for topics/tags
     },
     "packtpub": {
+        # No site-specific CAPTCHA marker captured yet; only the shared Cloudflare rule applies.
+        "BOT_WALL": [*GENERIC_BOT_WALL_RULES],
         "SEARCH_BASE_URL": "https://www.packtpub.com/search?query=",
         "SEARCH_RESULT_ITEM_SELECTOR": ".product-result-item",  # Each product in search results
         "SEARCH_BOOK_LINK_SELECTOR": "a.product-result-info-link",
@@ -187,6 +210,8 @@ site_constants = {
         "READ_MORE_LINK": "",  # Usually no expander
     },
     "oreilly": {
+        # No site-specific CAPTCHA marker captured yet; only the shared Cloudflare rule applies.
+        "BOT_WALL": [*GENERIC_BOT_WALL_RULES],
         "SEARCH_BASE_URL": "https://www.oreilly.com/search/?q=",
         "SEARCH_RESULT_ITEM_SELECTOR": "article.product-card",  # Each product card
         "SEARCH_BOOK_LINK_SELECTOR": "a.product-card__content-link",

@@ -63,8 +63,8 @@ normalize_result = _load_capture_module()._normalize_scrape_result
 # OPTIONAL_FIELD_TIMEOUT_MS), so the test shrinks those module constants (and the page default)
 # down to this value. On static local fixtures a present element resolves in <100 ms, so this
 # never flips a passing fixture - it only shortens the deterministic timeout the title-less
-# Amazon fixtures (_missing_title / _bot_wall) now hit once each on their PARSE_ERROR path. The
-# recorded golden is identical either way.
+# Amazon _missing_title fixture hits once on its PARSE_ERROR path (_bot_wall is now detected as
+# BLOCKED right after navigation, before any field read). The recorded golden is identical either way.
 DETAIL_TIMEOUT_MS = 2000
 
 

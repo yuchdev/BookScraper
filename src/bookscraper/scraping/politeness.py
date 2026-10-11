@@ -208,6 +208,160 @@ def default_limiters() -> DomainRateLimiters:
     return _DEFAULT_LIMITERS
 
 
+# Circuit-breaker defaults (subtask 03.2/04): open after this many consecutive BLOCKED results
+# for a domain, and stay open for this cooldown. The cooldown is deliberately longer than any
+# realistic single run, so a tripped breaker effectively skips that domain for the rest of the run.
+CIRCUIT_BREAKER_THRESHOLD = 3
+CIRCUIT_BREAKER_COOLDOWN_S = 900.0
+
+
+class CircuitBreaker:
+    """A transport-free per-domain circuit breaker for repeated bot-wall blocks (subtask 03.2/04).
+
+    This is a pure state machine with an injectable clock - no network, no Playwright/httpx, no
+    logging. A caller feeds it the outcome of each scrape (:meth:`record_blocked` /
+    :meth:`record_success`) and asks :meth:`is_open` before issuing a request; deciding *what* to
+    do when the breaker is open (skip the request, log a warning) is the caller's job, keeping this
+    class side-effect-free and unit-testable against a fake clock.
+
+    After ``threshold`` **consecutive** :attr:`record_blocked` calls the breaker opens and stays
+    open for ``cooldown_s`` seconds; while open, :meth:`is_open` is ``True`` so the caller skips
+    every further request to that domain. A :meth:`record_success` resets the consecutive-block
+    counter (a single block followed by a success never trips it). Once the cooldown elapses the
+    breaker half-opens (resets), letting a later request retry the domain.
+    """
+
+    def __init__(
+        self,
+        threshold: int = CIRCUIT_BREAKER_THRESHOLD,
+        cooldown_s: float = CIRCUIT_BREAKER_COOLDOWN_S,
+        *,
+        clock: Clock = time.monotonic,
+    ):
+        """Configure the open threshold, cooldown, and (injectable) time source.
+
+        :param threshold: Consecutive BLOCKED results that open the breaker; must be at least 1.
+        :param cooldown_s: Seconds the breaker stays open once tripped; must be positive.
+        :param clock: A monotonic time source returning seconds (injected in tests).
+        :raises ValueError: If ``threshold`` is less than 1 or ``cooldown_s`` is not positive.
+        """
+        if threshold < 1:
+            raise ValueError(f"threshold must be at least 1, got {threshold!r}")
+        if cooldown_s <= 0:
+            raise ValueError(f"cooldown_s must be positive, got {cooldown_s!r}")
+        self._threshold = threshold
+        self._cooldown_s = float(cooldown_s)
+        self._clock = clock
+        self._consecutive_blocks = 0
+        self._opened_at: Optional[float] = None
+
+    def is_open(self) -> bool:
+        """Return whether the breaker is currently open (so the caller should skip the request).
+
+        A breaker that was opened more than ``cooldown_s`` ago half-opens here: its state is reset
+        and ``False`` is returned, letting the next request retry the domain.
+
+        :returns: ``True`` while the breaker is open and within its cooldown, else ``False``.
+        """
+        if self._opened_at is None:
+            return False
+        if self._clock() - self._opened_at >= self._cooldown_s:
+            # Cooldown elapsed: half-open by resetting, so a later request may retry the domain.
+            self._opened_at = None
+            self._consecutive_blocks = 0
+            return False
+        return True
+
+    def record_blocked(self) -> bool:
+        """Record one BLOCKED result; return whether this call just opened the breaker.
+
+        A no-op (returning ``False``) once already open. Otherwise it increments the consecutive
+        count and, on reaching ``threshold``, opens the breaker and returns ``True`` so the caller
+        can emit the single "circuit opened" warning exactly once.
+
+        :returns: ``True`` iff this call transitioned the breaker from closed to open.
+        """
+        if self._opened_at is not None:
+            return False
+        self._consecutive_blocks += 1
+        if self._consecutive_blocks >= self._threshold:
+            self._opened_at = self._clock()
+            return True
+        return False
+
+    def record_success(self):
+        """Reset the consecutive-block counter after a successful scrape of the domain."""
+        self._consecutive_blocks = 0
+
+
+class DomainCircuitBreakers:
+    """A per-host registry of :class:`CircuitBreaker` instances (subtask 03.2/04).
+
+    Mirrors :class:`DomainRateLimiters`: each registrable host (leading ``www.`` stripped) gets its
+    own breaker, created lazily on first use, so one blocked domain never short-circuits another.
+    One instance is created per run in the command and threaded down to the scrapers; a shared
+    module-level instance (:func:`default_breakers`) backs call sites given no explicit registry.
+    """
+
+    def __init__(
+        self,
+        threshold: int = CIRCUIT_BREAKER_THRESHOLD,
+        cooldown_s: float = CIRCUIT_BREAKER_COOLDOWN_S,
+        *,
+        clock: Clock = time.monotonic,
+    ):
+        """Store the per-breaker threshold/cooldown and the (injectable) time source.
+
+        :param threshold: Consecutive BLOCKED results that open each host's breaker.
+        :param cooldown_s: Seconds each host's breaker stays open once tripped.
+        :param clock: A monotonic time source passed through to every created breaker.
+        """
+        self._threshold = threshold
+        self._cooldown_s = cooldown_s
+        self._clock = clock
+        self._breakers: dict[str, CircuitBreaker] = {}
+
+    def for_url(self, url: str) -> CircuitBreaker:
+        """Return (creating on first use) the :class:`CircuitBreaker` for ``url``'s host.
+
+        :param url: The URL about to be requested.
+        :returns: The host's circuit breaker.
+        """
+        host = DomainRateLimiters.registrable_host(url)
+        breaker = self._breakers.get(host)
+        if breaker is None:
+            breaker = CircuitBreaker(self._threshold, self._cooldown_s, clock=self._clock)
+            self._breakers[host] = breaker
+        return breaker
+
+
+def build_default_breakers() -> DomainCircuitBreakers:
+    """Construct a :class:`DomainCircuitBreakers` with the configured threshold/cooldown defaults.
+
+    Used both to seed the module-level shared instance and by each command to create its own
+    per-run registry, so a breaker's state never leaks across runs in a long-lived process.
+
+    :returns: A registry wired to ``CIRCUIT_BREAKER_THRESHOLD`` / ``CIRCUIT_BREAKER_COOLDOWN_S``.
+    """
+    return DomainCircuitBreakers(CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_COOLDOWN_S)
+
+
+# Shared fallback instance for call sites that do not (yet) receive a per-run registry. Built once
+# on first use; its lazily-created breakers live for the process, which is correct for a single run.
+_DEFAULT_BREAKERS: Optional[DomainCircuitBreakers] = None
+
+
+def default_breakers() -> DomainCircuitBreakers:
+    """Return the process-wide shared :class:`DomainCircuitBreakers`, creating it on first use.
+
+    :returns: The module-level fallback registry used when no per-run instance is passed in.
+    """
+    global _DEFAULT_BREAKERS
+    if _DEFAULT_BREAKERS is None:
+        _DEFAULT_BREAKERS = build_default_breakers()
+    return _DEFAULT_BREAKERS
+
+
 # Shared backoff / Retry-After primitives (subtask 03.2/03). These stay transport-agnostic like
 # the rest of the module: ``retry_async`` wraps any awaitable and ``parse_retry_after`` takes a
 # plain header string, so the httpx-specific wrappers (``is_transient`` / ``httpx_retry_after``)

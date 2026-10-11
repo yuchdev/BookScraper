@@ -1836,3 +1836,28 @@ async def test_detect_schema_json_format_offline_replay(monkeypatch, tmp_path):
     assert exit_code in (0, 4)
     assert "replayed=1" in usage_line
     browser.close.assert_awaited_once()
+
+
+async def test_detect_schema_refuses_bot_wall_page(monkeypatch):
+    """
+    [Local] schema detection: verifies a bot-wall sample page is refused before any model call.
+
+    Scenario:
+        a sample amazon page is a "Robot Check" CAPTCHA interstitial, with ANTHROPIC_API_KEY set.
+    Boundaries:
+        - detect_schema raises SchemaDetectionError "bot wall detected" during sample loading,
+          before building any prompt or constructing/calling the Anthropic client (anthropic is
+          left unpatched, so a real call would error differently); the browser is still closed.
+
+    On failure, first check:
+        - the _detect_bot_wall guard in detect_schema's sample-loading loop.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    page = FakePage(title="Robot Check", content="<html><title>Robot Check</title></html>")
+    browser = FakeBrowser(page_factory=lambda *a, **k: page)
+
+    with patch.object(sd, "async_playwright", build_playwright_factory(browser)):
+        with pytest.raises(sd.SchemaDetectionError, match="bot wall detected"):
+            await sd.detect_schema("amazon", urls=["u0"])
+
+    browser.close.assert_awaited_once()

@@ -68,7 +68,7 @@ from .parameters import (
     site_constants,
 )
 from .safe_text import sanitize_untrusted
-from .scrape_details import route_handler
+from .scrape_details import _detect_bot_wall, route_handler
 
 # ``sanitize_untrusted`` moved to the stdlib-only :mod:`bookscraper.scraping.safe_text` module so
 # lightweight callers can reuse it without importing this heavy (anthropic/Playwright) module;
@@ -122,8 +122,9 @@ SELECTOR_EVAL_TIMEOUT_S = 10.0
 HTML_FILE_MAX_BYTES = 400 * 1024
 
 # Keys in a site_constants entry that are NOT detail-page CSS selectors and so should
-# never be proposed/validated as such: the site base URL and the 404-title sentinel.
-_NON_SELECTOR_KEYS = frozenset({"BASE_URL", "404_PAGE_TITLE"})
+# never be proposed/validated as such: the site base URL, the 404-title sentinel, and the
+# ``BOT_WALL`` detection-rule list (a list of dicts, not a selector - see parameters.py).
+_NON_SELECTOR_KEYS = frozenset({"BASE_URL", "404_PAGE_TITLE", "BOT_WALL"})
 
 # Search-page selector classification (used only by ``--page-type search``).
 #
@@ -1496,6 +1497,12 @@ async def detect_schema(
                 else:
                     page = await browser.new_page()
                     pruned_html = await fetch_pruned_html(label, page)
+                # Never send a bot-wall / CAPTCHA page to the model (its markup is useless for
+                # selector detection and the request would waste tokens on an interstitial).
+                if await _detect_bot_wall(page, site):
+                    raise SchemaDetectionError(
+                        f"bot wall detected on sample '{label}' for site '{site}'; refusing to send it to the model."
+                    )
                 samples.append({"url": label, "page": page, "pruned_html": pruned_html})
 
             if not check_current_only:

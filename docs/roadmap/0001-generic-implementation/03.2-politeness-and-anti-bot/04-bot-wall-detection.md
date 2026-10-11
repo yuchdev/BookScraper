@@ -1,7 +1,7 @@
 # 04 - Bot-wall detection & circuit breaker
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [03-shared-backoff-and-retry-after.md](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/03-shared-backoff-and-retry-after.md)
 **Role:** Scraping Expert
 

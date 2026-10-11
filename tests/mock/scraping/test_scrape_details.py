@@ -15,7 +15,12 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.scraping import scrape_details
 from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
-from bookscraper.scraping.politeness import DomainRateLimiters, RobotsCache, RobotsResponse
+from bookscraper.scraping.politeness import (
+    DomainCircuitBreakers,
+    DomainRateLimiters,
+    RobotsCache,
+    RobotsResponse,
+)
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 from bookscraper.scraping.scrape_details import (
     get_leanpub_book_details,
@@ -1975,3 +1980,84 @@ async def test_amazon_run_throttled_to_configured_rate():
     # Spacing is >= 2 s everywhere (0.5 req/s), i.e. no navigation is faster than the configured rate.
     for earlier, later in zip(goto_times, goto_times[1:], strict=False):
         assert later - earlier >= 2.0
+
+
+async def test_amazon_robot_check_page_returns_blocked_without_retry():
+    """
+    [Local] scrape details: verifies an Amazon "Robot Check" CAPTCHA returns BLOCKED with no retry.
+
+    Scenario:
+        amazon serves a 200 interstitial whose title is "Robot Check" (no #productTitle).
+    Boundaries:
+        - _detect_bot_wall fires right after navigation, before the 404/title reads, so the result
+          is BLOCKED (error "bot wall detected") not PARSE_ERROR; exactly one page is opened and
+          navigated (no retry burns the budget on a deterministic wall), attempts == 1.
+        - An injected per-run circuit-breaker registry keeps the module-level default untouched.
+
+    On failure, first check:
+        - _detect_bot_wall's title_contains branch, or the BLOCKED early-return in _attempt before
+          the 404 check.
+    """
+    url = "https://www.amazon.com/dp/1484293428"
+    page = FakePage(title="Robot Check")
+    browser = FakeBrowser(page=page)
+    breakers = DomainCircuitBreakers()
+
+    result = await scrape_book(url, browser, "amazon", breakers=breakers)
+
+    assert result.status is ScrapeStatus.BLOCKED
+    assert result.error == "bot wall detected"
+    assert result.attempts == 1
+    assert browser.new_page.await_count == 1
+    page.goto.assert_awaited_once()
+
+
+async def test_cloudflare_challenge_detected_on_any_site():
+    """
+    [Local] scrape details: verifies the generic Cloudflare challenge is detected on a non-Amazon site.
+
+    Scenario:
+        oreilly serves a page containing the shared Cloudflare "#challenge-form" element.
+    Boundaries:
+        - oreilly's BOT_WALL is only the generic rule (a selector, no title), so detection comes
+          from the selector-count branch; the result is BLOCKED with no retry (attempts == 1).
+
+    On failure, first check:
+        - GENERIC_BOT_WALL_RULES being spread into every site's BOT_WALL, or _detect_bot_wall's
+          selector-count branch.
+    """
+    url = "https://www.oreilly.com/library/view/x/9780000000000/"
+    page = FakePage(locators={"#challenge-form, #cf-challenge-running": FakeLocator("challenge")})
+    browser = FakeBrowser(page=page)
+    breakers = DomainCircuitBreakers()
+
+    result = await scrape_book(url, browser, "oreilly", breakers=breakers)
+
+    assert result.status is ScrapeStatus.BLOCKED
+    assert result.error == "bot wall detected"
+    assert result.attempts == 1
+
+
+async def test_open_circuit_skips_request_and_returns_blocked():
+    """
+    [Local] scrape details: verifies an already-open domain breaker short-circuits before any request.
+
+    Scenario:
+        an Amazon URL whose domain breaker has already opened (threshold 1, one prior block).
+    Boundaries:
+        - scrape_book's pre-request gate returns BLOCKED (error "circuit open") WITHOUT opening a
+          page or navigating, so no request is made; new_page is never awaited.
+
+    On failure, first check:
+        - The breaker.is_open() gate at the top of scrape_book, before the Leanpub/Playwright split.
+    """
+    url = "https://www.amazon.com/dp/1484293428"
+    browser = FakeBrowser(page=FakePage())
+    breakers = DomainCircuitBreakers(threshold=1)
+    breakers.for_url(url).record_blocked()  # Opens the breaker (threshold 1).
+
+    result = await scrape_book(url, browser, "amazon", breakers=breakers)
+
+    assert result.status is ScrapeStatus.BLOCKED
+    assert result.error == "circuit open"
+    browser.new_page.assert_not_awaited()
