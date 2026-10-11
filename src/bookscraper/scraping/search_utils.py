@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Optional
 from urllib.parse import (
     parse_qs,
@@ -14,7 +16,7 @@ from urllib.parse import (
 )  # Added for URL parsing
 
 import httpx
-from playwright.async_api import Browser, Error as PlaywrightError
+from playwright.async_api import Browser, Error as PlaywrightError, Page
 
 from ..book_utils import print_log
 from .browser import new_scrape_context
@@ -206,6 +208,36 @@ async def get_leanpub_search_results_via_api(
     return all_extracted_books
 
 
+@asynccontextmanager
+async def _search_page(browser: Browser) -> AsyncIterator[Page]:
+    """Yield a fresh page on its own context for one search-result page, closing both on exit.
+
+    Each search-page iteration gets its own :class:`BrowserContext` (via
+    :func:`browser.new_scrape_context`, so the UA/identity matches what the detail scraper and
+    schema-detection see) and one page on it. The page and then the context are closed on **every**
+    exit path of the ``async with`` block - normal completion, ``break``, ``continue``, a navigation
+    error, or any other exception - so an iteration can never leak either. A failure to close (for
+    example when the browser has already crashed) is logged at debug level and swallowed so it never
+    masks the original exception that is unwinding the block.
+
+    :param browser: The Playwright browser to open the context and page on.
+    :returns: An async context manager yielding this search page's :class:`Page`.
+    """
+    context = await new_scrape_context(browser)
+    page = await context.new_page()
+    try:
+        yield page
+    finally:
+        try:
+            await page.close()
+        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a page-close failure (any type; e.g. "browser already closed") must never mask the original error unwinding the with-block
+            logger.debug(f"Ignoring page-close failure: {exc}")
+        try:
+            await context.close()
+        except Exception as exc:  # noqa: X002 - cleanup isolation boundary: a context-close failure (any type; e.g. "browser already closed") must never mask the original error unwinding the with-block
+            logger.debug(f"Ignoring context-close failure: {exc}")
+
+
 async def get_search_results_via_playwright(
     browser: Browser,
     site_name: str,
@@ -215,56 +247,41 @@ async def get_search_results_via_playwright(
     # filters: dict = None
 ) -> list[dict]:
     """
-    Performs a search on a given site for a specific query and scrapes preliminary book data.
+    Perform a search on a given site for a specific query and scrape preliminary book data.
 
     This function navigates to the search results page, extracts initial book information
     (title, authors, publication date, URL, and ASIN for Amazon), and handles pagination
-    to scrape multiple search result pages up to a specified maximum.
+    to scrape multiple search result pages up to a specified maximum. Each search page gets its
+    own isolated :class:`BrowserContext`/page, closed on every exit path of the iteration (normal
+    completion, break, a navigation error, or any exception) before moving to the next page URL.
 
     It also includes logic to:
     - Set a random user agent for the Playwright page.
-    - Route network requests to potentially block unnecessary resources (via `route_handler`).
+    - Route network requests to potentially block unnecessary resources (via ``route_handler``).
     - Handle navigation timeouts.
     - Gracefully manage scenarios where no book cards are found on a page.
     - Determine the next page URL based on the current page's URL and the next page button's href.
     - Detect and stop pagination when no active "next page" button is found (either disabled or absent).
-    - **Added handling for Amazon sponsored book links to extract the true product URL.**
+    - Handle Amazon sponsored book links to extract the true product URL.
 
-    Args:
-            browser (Browser): The Playwright browser instance to use for navigation and scraping.
-            site_name (str): The name of the site to search (e.g., "amazon", "leanpub", "packtpub", "oreilly").
-                                             This name is used to look up site-specific selectors and configurations.
-            query (str): The search query string (e.g., "Playwright Python", "Data Science with Python").
-            max_pages_to_search (int, optional): The maximum number of search result pages to scrape.
-                                                                                     Defaults to 1.
-            # filters (dict, optional): Dictionary of filters (e.g., min_rating). This parameter
-            #                           is currently commented out in the function signature and
-            #                           not actively used in the provided code snippet for filtering
-            #                           at the search page level.
-
-    Returns:
-            list[dict]: A list of dictionaries, where each dictionary represents a preliminary
-                                    book record found on the search results pages. Each dictionary typically
-                                    contains:
-                                    - 'site' (str): The name of the site.
-                                    - 'query' (str): The original search query.
-                                    - 'search_page_number' (int): The page number where the book was found.
-                                    - 'search_result_index' (int): The index of the book on that search page.
-                                    - 'title' (str): The book's title.
-                                    - 'authors_from_search' (str): Authors as found on the search page (comma-separated).
-                                    - 'publication_date' (str): Publication date as found on the search page.
-                                    - 'url' (str): The URL to the book's detailed product page.
-                                    - 'asin' (str, optional): The ASIN for Amazon books, if available.
-
-    Raises:
-            Exception: Catches and logs any unhandled exceptions that occur during the search
-                               process, printing a critical error message to the console.
+    :param browser: The Playwright browser instance to use for navigation and scraping.
+    :param site_name: The name of the site to search (e.g. ``"amazon"``, ``"leanpub"``,
+        ``"packtpub"``, ``"oreilly"``); used to look up site-specific selectors and configurations.
+    :param query: The search query string (e.g. ``"Playwright Python"``).
+    :param limiters: The per-run :class:`DomainRateLimiters` to throttle each page request against,
+        or ``None`` to use the shared module-level instance.
+    :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to skip
+        the robots.txt check (e.g. under ``--ignore-robots``).
+    :returns: A list of dictionaries, each a preliminary book record found on the search results
+        pages, typically carrying ``site``, ``query``, ``search_page_number``,
+        ``search_result_index``, ``title``, ``authors_from_search``, ``publication_date``, ``url``
+        and (for Amazon) ``asin``.
+    :raises Exception: Catches and logs any unhandled exceptions that occur during the search
+        process, printing a critical error message to the console.
     """
 
     books_from_search_results = []
     current_page_num = 0
-    page = None
-    context = None
     active_limiters = limiters if limiters is not None else default_limiters()
 
     try:
@@ -294,187 +311,186 @@ async def get_search_results_via_playwright(
                     current_page_num += 1
                     # Each search page gets its own isolated context (own cookie jar, UA/identity
                     # matching what the detail scraper and schema-detection see) via the shared
-                    # factory - no more hard-coded User-Agent header on the shared default context.
-                    context = await new_scrape_context(browser)
-                    page = await context.new_page()
-                    await page.route("**/*", route_handler)
+                    # factory, closed on every exit path of this iteration by _search_page.
+                    async with _search_page(browser) as page:
+                        await page.route("**/*", route_handler)
 
-                    # robots.txt gate (fetched once per host per run), BEFORE navigating: a
-                    # disallowed search page is skipped and never fetched. The user-agent matched
-                    # against robots.txt is the one the context actually presents (read from the
-                    # live page), never a stale hard-coded value.
-                    if robots is not None and not await robots.allowed(
-                        search_result_page, await page.evaluate("() => navigator.userAgent")
-                    ):
-                        logger.info(f"Skipping search page {search_result_page}: disallowed by robots.txt.")
-                        print_log(f"Skipping search page {search_result_page}: disallowed by robots.txt.", "warning")
-                        await page.close()
-                        await context.close()
-                        page = None
-                        context = None
-                        continue
-
-                    try:
-                        # Throttle per host immediately before navigating to each search page.
-                        await active_limiters.for_url(search_result_page).acquire()
-                        await page.goto(
-                            search_result_page,
-                            wait_until="domcontentloaded",
-                            timeout=60000,
-                        )
-                        await page.wait_for_load_state("networkidle", timeout=60000)
-                        actual_url_after_goto = page.url
-                        logger.info(f"Actual URL after navigation for page {current_page_num}: {actual_url_after_goto}")
-                    except PlaywrightError as e:
-                        logger.error(
-                            f"Failed to navigate to page {current_page_num}: {e}",
-                            "error",
-                        )
-
-                    # Find all book cards on the current page
-                    # Case where no books are found, but might have book cards
-                    if selectors.get("SEARCH_NO_BOOKS_FOUND") and (
-                        await page.locator(selectors["SEARCH_NO_BOOKS_FOUND"]).count() > 0
-                    ):
-                        print_log(
-                            f"No book cards found on page {current_page_num} for {site_name}.",
-                            "warning",
-                        )
-                        logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
-                        break  # No books to scrape, exit the while loop
-
-                    # If book cards are found
-                    await page.wait_for_selector(selectors["SEARCH_BOOK_CARD"])
-                    book_cards = await page.locator(selectors["SEARCH_BOOK_CARD"]).all()
-                    if not book_cards:
-                        print_log(
-                            f"No book cards found on page {current_page_num} for {site_name}.",
-                            "warning",
-                        )
-                        logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
-                        break  # No books to scrape, exit the while loop
-
-                    #                    print_log(f"Found {len(book_cards)} book cards on page {current_page_num} for {site_name}.", "info")
-                    print_log(
-                        f"Found {len(book_cards)} books on page {search_result_page}.",
-                        "info",
-                    )
-
-                    # Scrape Book card data
-                    for i, card in enumerate(book_cards):
-                        book_data = {
-                            "site": site_name,
-                            "query": query,
-                            "search_page_number": current_page_num,
-                            "search_result_index": i + 1,
-                        }
-                        try:
-                            link_element = card.locator(selectors["SEARCH_BOOK_DETAIL_LINK"])
-                            raw_href = (
-                                await link_element.get_attribute("href") if await link_element.count() > 0 else None
+                        # robots.txt gate (fetched once per host per run), BEFORE navigating: a
+                        # disallowed search page is skipped and never fetched. The user-agent matched
+                        # against robots.txt is the one the context actually presents (read from the
+                        # live page), never a stale hard-coded value.
+                        if robots is not None and not await robots.allowed(
+                            search_result_page, await page.evaluate("() => navigator.userAgent")
+                        ):
+                            logger.info(f"Skipping search page {search_result_page}: disallowed by robots.txt.")
+                            print_log(
+                                f"Skipping search page {search_result_page}: disallowed by robots.txt.", "warning"
                             )
+                            continue
 
-                            book_url = None
-                            asin = None  # Initialize ASIN for Amazon
+                        try:
+                            # Throttle per host immediately before navigating to each search page.
+                            await active_limiters.for_url(search_result_page).acquire()
+                            await page.goto(
+                                search_result_page,
+                                wait_until="domcontentloaded",
+                                timeout=60000,
+                            )
+                            await page.wait_for_load_state("networkidle", timeout=60000)
+                            actual_url_after_goto = page.url
+                            logger.info(
+                                f"Actual URL after navigation for page {current_page_num}: {actual_url_after_goto}"
+                            )
+                        except PlaywrightError as e:
+                            logger.error(f"Failed to navigate to page {current_page_num}: {e}")
+                            continue
 
-                            if raw_href:
-                                if site_name == "amazon":
-                                    # Handles Amazon's sponsored items, extracting the actual URL from the 'url' parameter
-                                    if "/sspa/click" in raw_href:
-                                        parsed_href = urlparse(raw_href)
-                                        query_params = parse_qs(parsed_href.query)
+                        # Find all book cards on the current page
+                        # Case where no books are found, but might have book cards
+                        if selectors.get("SEARCH_NO_BOOKS_FOUND") and (
+                            await page.locator(selectors["SEARCH_NO_BOOKS_FOUND"]).count() > 0
+                        ):
+                            print_log(
+                                f"No book cards found on page {current_page_num} for {site_name}.",
+                                "warning",
+                            )
+                            logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
+                            break  # No books to scrape, exit the while loop
 
-                                        if "url" in query_params:
-                                            embedded_path = unquote(query_params["url"][0])
+                        # If book cards are found
+                        await page.wait_for_selector(selectors["SEARCH_BOOK_CARD"])
+                        book_cards = await page.locator(selectors["SEARCH_BOOK_CARD"]).all()
+                        if not book_cards:
+                            print_log(
+                                f"No book cards found on page {current_page_num} for {site_name}.",
+                                "warning",
+                            )
+                            logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
+                            break  # No books to scrape, exit the while loop
+
+                        #                    print_log(f"Found {len(book_cards)} book cards on page {current_page_num} for {site_name}.", "info")
+                        print_log(
+                            f"Found {len(book_cards)} books on page {search_result_page}.",
+                            "info",
+                        )
+
+                        # Scrape Book card data
+                        for i, card in enumerate(book_cards):
+                            book_data = {
+                                "site": site_name,
+                                "query": query,
+                                "search_page_number": current_page_num,
+                                "search_result_index": i + 1,
+                            }
+                            try:
+                                link_element = card.locator(selectors["SEARCH_BOOK_DETAIL_LINK"])
+                                raw_href = (
+                                    await link_element.get_attribute("href") if await link_element.count() > 0 else None
+                                )
+
+                                book_url = None
+                                asin = None  # Initialize ASIN for Amazon
+
+                                if raw_href:
+                                    if site_name == "amazon":
+                                        # Handles Amazon's sponsored items, extracting the actual URL from the 'url' parameter
+                                        if "/sspa/click" in raw_href:
+                                            parsed_href = urlparse(raw_href)
+                                            query_params = parse_qs(parsed_href.query)
+
+                                            if "url" in query_params:
+                                                embedded_path = unquote(query_params["url"][0])
+                                                book_url = urljoin(
+                                                    site_constants["amazon"]["BASE_URL"],
+                                                    embedded_path,
+                                                )
+                                                logger.debug(f"Extracted and decoded sponsored URL: {book_url}")
+
+                                                # Attempt to extract ASIN from the final book_url (if available)
+                                                asin_match = re.search(
+                                                    r"/(?:dp|gp/product)/([A-Z0-9]{10})",
+                                                    book_url,
+                                                )
+                                                if asin_match:
+                                                    asin = asin_match.group(1)
+                                            else:
+                                                logger.warning(f"Sponsored link without 'url' parameter: {raw_href}")
+                                                continue  # Skip this card if we can't get a valid URL
+
+                                        # Non-sponsored Amazon link
+                                        else:
                                             book_url = urljoin(
                                                 site_constants["amazon"]["BASE_URL"],
-                                                embedded_path,
+                                                raw_href,
                                             )
-                                            logger.debug(f"Extracted and decoded sponsored URL: {book_url}")
+                                            if selectors.get("SEARCH_ASIN_ATTRIBUTE"):
+                                                asin = await card.get_attribute(selectors["SEARCH_ASIN_ATTRIBUTE"])
+                                            else:
+                                                logger.warning(
+                                                    "Check Amazon parameter SEARCH_ASIN_ATTRIBUTE to locate ASIN in book cards."
+                                                )
 
-                                            # Attempt to extract ASIN from the final book_url (if available)
-                                            asin_match = re.search(
-                                                r"/(?:dp|gp/product)/([A-Z0-9]{10})",
-                                                book_url,
-                                            )
-                                            if asin_match:
-                                                asin = asin_match.group(1)
-                                        else:
-                                            logger.warning(f"Sponsored link without 'url' parameter: {raw_href}")
-                                            continue  # Skip this card if we can't get a valid URL
-
-                                    # Non-sponsored Amazon link
                                     else:
-                                        book_url = urljoin(
-                                            site_constants["amazon"]["BASE_URL"],
-                                            raw_href,
-                                        )
-                                        if selectors.get("SEARCH_ASIN_ATTRIBUTE"):
-                                            asin = await card.get_attribute(selectors["SEARCH_ASIN_ATTRIBUTE"])
-                                        else:
-                                            logger.warning(
-                                                "Check Amazon parameter SEARCH_ASIN_ATTRIBUTE to locate ASIN in book cards."
-                                            )
+                                        # For non-Amazon sites, just join the URL
+                                        book_url = urljoin(site_constants[site_name]["BASE_URL"], raw_href)
 
+                                book_data["url"] = book_url if book_url else None
+                                # Amazon ASIN
+                                if site_name == "amazon":
+                                    book_data["asin"] = asin if asin else None
+
+                                # Extract Title
+                                title_element = card.locator(selectors["SEARCH_TITLE"])
+                                book_data["title"] = (
+                                    await title_element.text_content() if await title_element.count() > 0 else None
+                                )
+
+                                # Extract Authors
+                                authors_elements = card.locator(selectors["SEARCH_AUTHORS"])
+                                authors = []
+                                if await authors_elements.count() > 0:
+                                    authors = await authors_elements.all_text_contents()
+                                if site_name == "leanpub":
+                                    names_list = authors[0].split(" and ")
+                                    book_data["authors_from_search"] = names_list if authors else None
                                 else:
-                                    # For non-Amazon sites, just join the URL
-                                    book_url = urljoin(site_constants[site_name]["BASE_URL"], raw_href)
+                                    book_data["authors_from_search"] = ", ".join(authors) if authors else None
 
-                            book_data["url"] = book_url if book_url else None
-                            # Amazon ASIN
-                            if site_name == "amazon":
-                                book_data["asin"] = asin if asin else None
-
-                            # Extract Title
-                            title_element = card.locator(selectors["SEARCH_TITLE"])
-                            book_data["title"] = (
-                                await title_element.text_content() if await title_element.count() > 0 else None
-                            )
-
-                            # Extract Authors
-                            authors_elements = card.locator(selectors["SEARCH_AUTHORS"])
-                            authors = []
-                            if await authors_elements.count() > 0:
-                                authors = await authors_elements.all_text_contents()
-                            if site_name == "leanpub":
-                                names_list = authors[0].split(" and ")
-                                book_data["authors_from_search"] = names_list if authors else None
-                            else:
-                                book_data["authors_from_search"] = ", ".join(authors) if authors else None
-
-                            # Extract Publication Date
-                            publication_date_selector = selectors.get("SEARCH_PUBLICATION_DATE")
-                            if publication_date_selector:
-                                try:
-                                    date_element = card.locator(publication_date_selector)
-                                    book_data["publication_date"] = (
-                                        await date_element.text_content() if await date_element.count() > 0 else None
-                                    )
-                                except PlaywrightError as e:
-                                    logger.warning(
-                                        f"Could not extract publication date for a book on {site_name} using selector '{publication_date_selector}'. Error: {e}"
-                                    )
+                                # Extract Publication Date
+                                publication_date_selector = selectors.get("SEARCH_PUBLICATION_DATE")
+                                if publication_date_selector:
+                                    try:
+                                        date_element = card.locator(publication_date_selector)
+                                        book_data["publication_date"] = (
+                                            await date_element.text_content()
+                                            if await date_element.count() > 0
+                                            else None
+                                        )
+                                    except PlaywrightError as e:
+                                        logger.warning(
+                                            f"Could not extract publication date for a book on {site_name} using selector '{publication_date_selector}'. Error: {e}"
+                                        )
+                                        book_data["publication_date"] = None
+                                else:
+                                    # logger.info(f"No SEARCH_PUBLICATION_DATE selector defined for {site_name}.")
                                     book_data["publication_date"] = None
-                            else:
-                                # logger.info(f"No SEARCH_PUBLICATION_DATE selector defined for {site_name}.")
-                                book_data["publication_date"] = None
 
-                            books_from_search_results.append(book_data)
-                            logger.debug(
-                                f"Extracted: {book_data.get('title')} by {book_data.get('authors_from_search')} ({site_name}) (URL: {book_data.get('url')}, ASIN: {book_data.get('asin')})"
-                            )
+                                books_from_search_results.append(book_data)
+                                logger.debug(
+                                    f"Extracted: {book_data.get('title')} by {book_data.get('authors_from_search')} ({site_name}) (URL: {book_data.get('url')}, ASIN: {book_data.get('asin')})"
+                                )
 
-                        except Exception as e:  # noqa: X002 - per-card isolation boundary: one malformed card (Playwright; URL-parse; indexing; or missing-attribute error) must skip only that card; not abort the page
-                            logger.error(
-                                f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}): {e}",
-                                exc_info=True,
-                            )
-                            print_log(
-                                f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}).",
-                                "error",
-                            )
-                            # Continue to the next card if an error occurs during extraction of this card
-                            continue
+                            except Exception as e:  # noqa: X002 - per-card isolation boundary: one malformed card (Playwright; URL-parse; indexing; or missing-attribute error) must skip only that card; not abort the page
+                                logger.error(
+                                    f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}): {e}",
+                                    exc_info=True,
+                                )
+                                print_log(
+                                    f"Error scraping book card on {site_name} (page {current_page_num}, card {i + 1}).",
+                                    "error",
+                                )
+                                # Continue to the next card if an error occurs during extraction of this card
+                                continue
 
             case _:
                 # For other sites, simply encode the query and append.
@@ -491,13 +507,6 @@ async def get_search_results_via_playwright(
             f"Critical error during search on {site_name} for '{query}'. Check logs.",
             "error",
         )
-    finally:
-        if page:
-            await page.close()
-            logger.info(f"Page for {site_name} search closed.")
-        if context:
-            await context.close()
-            logger.info(f"Context for {site_name} search closed.")
 
     print_log(
         f"Finished search for '{query}' on {site_name}. Found {len(books_from_search_results)} preliminary books.",

@@ -37,6 +37,11 @@ LEANPUB_SITE = "leanpub"
 # Wall-clock budget for a single robots.txt fetch (seconds), per the subtask spec.
 ROBOTS_FETCH_TIMEOUT_S = 10.0
 
+# Hard cap on the robots.txt body we will buffer (bytes). A real robots.txt is a few KB; 512 KB is
+# already pathological, and a hostile or compression-bombed response could otherwise expand without
+# bound in memory. Exceeding this is treated as a fetch failure (fail-closed, like any fetch error).
+ROBOTS_MAX_BYTES = 512 * 1024
+
 # User-agent presented to the robots.txt check on the httpx/JSON Leanpub paths, which send no
 # custom browser user-agent. "*" matches the robots.txt catch-all group - the conservative default.
 ROBOTS_HTTPX_USER_AGENT = "*"
@@ -56,11 +61,25 @@ def build_robots_fetcher(client: httpx.AsyncClient) -> RobotsFetcher:
     async def _fetch(robots_url: str) -> RobotsResponse:
         """GET ``robots_url`` and return its status and body as a :class:`RobotsResponse`.
 
+        The body is streamed and buffered only up to :data:`ROBOTS_MAX_BYTES`; a response that
+        exceeds that cap raises :class:`ValueError`, which :class:`RobotsCache` treats as a fetch
+        failure and fails closed - a hostile or compression-bombed robots.txt can never expand
+        without bound in memory.
+
         :param robots_url: The absolute ``robots.txt`` URL to fetch.
         :returns: The fetched status code and decoded body.
+        :raises ValueError: If the (decoded) body exceeds :data:`ROBOTS_MAX_BYTES`.
         """
-        response = await client.get(robots_url, timeout=httpx.Timeout(ROBOTS_FETCH_TIMEOUT_S))
-        return RobotsResponse(status_code=response.status_code, text=response.text)
+        async with client.stream("GET", robots_url, timeout=httpx.Timeout(ROBOTS_FETCH_TIMEOUT_S)) as response:
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > ROBOTS_MAX_BYTES:
+                    raise ValueError(f"robots.txt at {robots_url} exceeds {ROBOTS_MAX_BYTES} bytes; refusing to buffer")
+                chunks.append(chunk)
+        body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+        return RobotsResponse(status_code=response.status_code, text=body)
 
     return _fetch
 

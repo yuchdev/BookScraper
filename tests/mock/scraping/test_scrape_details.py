@@ -715,36 +715,121 @@ async def test_disallowed_url_yields_skipped_robots_result():
     page.goto.assert_not_awaited()
 
 
+class _FakeStreamResponse:
+    """A minimal stand-in for the httpx streaming response used by build_robots_fetcher."""
+
+    def __init__(self, status_code: int, chunks: list[bytes], encoding: str = "utf-8"):
+        """Record the status, body chunks, and declared encoding to replay via aiter_bytes()."""
+        self.status_code = status_code
+        self.encoding = encoding
+        self._chunks = chunks
+
+    async def aiter_bytes(self) -> Any:
+        """Yield each recorded body chunk in order, like httpx's streaming byte iterator."""
+        for chunk in self._chunks:
+            yield chunk
+
+
+class _FakeStreamCM:
+    """An async context manager returning a fixed :class:`_FakeStreamResponse`."""
+
+    def __init__(self, response: _FakeStreamResponse):
+        """Store the response handed out on __aenter__."""
+        self._response = response
+
+    async def __aenter__(self) -> _FakeStreamResponse:
+        """Enter the context, returning the canned streaming response."""
+        return self._response
+
+    async def __aexit__(self, *exc_info: Any) -> bool:
+        """Exit the context without suppressing any exception."""
+        return False
+
+
+def _stream_client(response: _FakeStreamResponse, calls: list) -> Any:
+    """Build a MagicMock httpx client whose stream() yields ``response`` and records its args.
+
+    :param response: The canned streaming response every ``client.stream(...)`` returns.
+    :param calls: A list appended with ``(method, url, kwargs)`` for each ``stream`` invocation.
+    :returns: The configured mock client.
+    """
+    client = MagicMock()
+
+    def _stream(method: str, url: str, **kwargs: Any) -> _FakeStreamCM:
+        """Record the call and return the context manager wrapping the canned response."""
+        calls.append((method, url, kwargs))
+        return _FakeStreamCM(response)
+
+    client.stream = MagicMock(side_effect=_stream)
+    return client
+
+
 async def test_build_robots_fetcher_returns_status_and_body():
     """
-    [Local] scrape details: verifies build_robots_fetcher GETs and maps status + body.
+    [Local] scrape details: verifies build_robots_fetcher streams and maps status + body.
 
     Scenario:
-        Given a fake httpx client whose get() returns a 200 response with a robots.txt body
+        Given a fake httpx client whose stream() yields a 200 response with a robots.txt body
         When the fetcher built by build_robots_fetcher is awaited for a robots.txt URL
-        Then it returns a RobotsResponse carrying that status code and text, and the client is
-        called with the 10 s robots timeout.
+        Then it returns a RobotsResponse carrying that status code and decoded text, and the client
+        is streamed with the GET method, the robots.txt URL, and the 10 s robots timeout.
 
     Boundaries:
         - Only the thin httpx->RobotsResponse adapter; parsing/policy live in RobotsCache.
 
     On failure, first check:
-        - The get() call and RobotsResponse construction in build_robots_fetcher._fetch.
+        - The stream() call and RobotsResponse construction in build_robots_fetcher._fetch.
     """
-    response = MagicMock()
-    response.status_code = 200
-    response.text = "User-agent: *\nDisallow: /secret\n"
-    client = MagicMock()
-    client.get = AsyncMock(return_value=response)
+    body = "User-agent: *\nDisallow: /secret\n"
+    response = _FakeStreamResponse(200, [body.encode("utf-8")])
+    calls: list = []
+    client = _stream_client(response, calls)
 
     fetcher = scrape_details.build_robots_fetcher(client)
     result = await fetcher("https://example.test/robots.txt")
 
     assert isinstance(result, RobotsResponse)
     assert result.status_code == 200
-    assert result.text == "User-agent: *\nDisallow: /secret\n"
-    client.get.assert_awaited_once()
-    assert client.get.await_args.args[0] == "https://example.test/robots.txt"
+    assert result.text == body
+    assert len(calls) == 1
+    method, url, kwargs = calls[0]
+    assert method == "GET"
+    assert url == "https://example.test/robots.txt"
+    assert "timeout" in kwargs
+
+
+async def test_build_robots_fetcher_rejects_oversized_body():
+    """
+    [Local] scrape details: verifies an oversized robots.txt body is refused (fail-closed).
+
+    Scenario:
+        Given a fake httpx client that streams more than ROBOTS_MAX_BYTES of body,
+        When the fetcher built by build_robots_fetcher is awaited,
+        Then it raises ValueError (never buffering the whole body), and when that fetcher backs a
+        RobotsCache the host is disallowed for the run (the same fail-closed path as any fetch
+        failure), so a hostile/compression-bombed response can neither exhaust memory nor open the
+        host up.
+
+    Boundaries:
+        - Exercises the streaming size cap; a normal small body is the adjacent test.
+
+    On failure, first check:
+        - The ROBOTS_MAX_BYTES cap in build_robots_fetcher._fetch and RobotsCache fail-closed path.
+    """
+    oversized = scrape_details.ROBOTS_MAX_BYTES + 1
+    # Two chunks so the cap trips mid-stream, not only on a single giant read.
+    chunks = [b"x" * (oversized // 2 + 1), b"x" * (oversized // 2 + 1)]
+    response = _FakeStreamResponse(200, chunks)
+    calls: list = []
+    client = _stream_client(response, calls)
+
+    fetcher = scrape_details.build_robots_fetcher(client)
+    with pytest.raises(ValueError):
+        await fetcher("https://example.test/robots.txt")
+
+    # The raise is the fetch-failure signal RobotsCache fails closed on.
+    cache = RobotsCache(fetcher, DomainRateLimiters({}, (1_000_000.0, 1_000_000)))
+    assert await cache.allowed("https://example.test/page", "*") is False
 
 
 async def test_scrape_book_amazon_happy_path_returns_full_book():

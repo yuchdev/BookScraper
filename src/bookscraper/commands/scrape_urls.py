@@ -14,7 +14,7 @@ from playwright.async_api import async_playwright
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, logger, print_log
 from ..scraping.parameters import HEADLESS_BROWSER
-from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
+from ..scraping.politeness import RobotsCache, bounded_gather, build_default_breakers, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import ROBOTS_FETCH_TIMEOUT_S, build_robots_fetcher, scrape_book
 
@@ -114,6 +114,9 @@ async def run(args: argparse.Namespace):
     # One per-run, per-host rate limiter registry, threaded down to every scrape_book call so a
     # whole run (across every batch) is throttled to each host's configured rate.
     limiters = build_default_limiters()
+    # One per-run, per-host circuit-breaker registry, threaded down the same way so repeated
+    # bot-wall blocks on a host short-circuit the rest of that host's URLs for the run.
+    breakers = build_default_breakers()
 
     # robots.txt compliance is on by default; --ignore-robots disables it with a one-time warning.
     if args.ignore_robots:
@@ -210,16 +213,21 @@ async def run(args: argparse.Namespace):
             progress_interval = max(1, min(10, total_urls_to_scrape // 10))
             progress = Counter()  # keys: "done" / "ok" / "dup" / "fail"
 
-            def report_progress(result: ScrapeResult):
+            def report_progress(result):
                 """Tally one completed scrape and emit a progress line at each interval."""
                 progress["done"] += 1
-                match result.status:
-                    case ScrapeStatus.SUCCESS:
-                        progress["ok"] += 1
-                    case ScrapeStatus.DUPLICATE:
-                        progress["dup"] += 1
-                    case _:
-                        progress["fail"] += 1
+                if not isinstance(result, ScrapeResult):
+                    # bounded_gather surfaced a raw exception (not a typed ScrapeResult); count it
+                    # as a failure rather than dereferencing result.status.
+                    progress["fail"] += 1
+                else:
+                    match result.status:
+                        case ScrapeStatus.SUCCESS:
+                            progress["ok"] += 1
+                        case ScrapeStatus.DUPLICATE:
+                            progress["dup"] += 1
+                        case _:
+                            progress["fail"] += 1
                 if progress["done"] % progress_interval == 0 or progress["done"] == total_urls_to_scrape:
                     print_log(
                         f"{progress['done']}/{total_urls_to_scrape} done "
@@ -228,12 +236,19 @@ async def run(args: argparse.Namespace):
                     )
 
             scrapes = [
-                scrape_book(url, browser, identify_website(url), storage_backend, limiters, robots)
+                scrape_book(url, browser, identify_website(url), storage_backend, limiters, robots, breakers)
                 for url in all_urls_to_scrape
             ]
             results = await bounded_gather(scrapes, limit=concurrency, on_result=report_progress)
 
-            for result in results:
+            for url, result in zip(all_urls_to_scrape, results, strict=True):
+                if not isinstance(result, ScrapeResult):
+                    # bounded_gather surfaced an exception scrape_book did not convert into a typed
+                    # ScrapeResult; record it as a raw failure instead of dereferencing .status.
+                    status_counts[ScrapeStatus.FAILED] += 1
+                    failed_urls_with_status.append((url, ScrapeStatus.FAILED.value, str(result)))
+                    logger.error(f"Scraping raised for URL: {url}: {result}")
+                    continue
                 status_counts[result.status] += 1
                 match result.status:
                     case ScrapeStatus.SUCCESS:

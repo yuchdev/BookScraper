@@ -26,6 +26,7 @@ from bookscraper.scraping.search_utils import (
 
 from .playwright_fakes import (
     FakeBrowser,
+    FakeContext,
     FakeLocator,
     FakePage,
     FakeResponse,
@@ -407,6 +408,54 @@ async def test_playwright_amazon_happy_path_extracts_one_book():
     assert book["authors_from_search"] == "Jane Doe, John Smith"
 
 
+async def test_playwright_amazon_multipage_closes_each_context_exactly_once(monkeypatch):
+    """
+    [Local] search utils: verifies each per-page BrowserContext is closed exactly once.
+
+    Scenario:
+        Given amazon SEARCH_MAXIMUM_PAGES patched so the loop fetches two search pages, each
+        served by its own FakeContext/FakePage, When get_search_results_via_playwright runs,
+        Then two books are returned and every per-iteration context.close() was awaited exactly
+        once (count == number of pages fetched), proving no earlier iteration's context leaks.
+
+    Boundaries:
+        - Exercises the per-iteration try/finally (via _search_page); the single-page close is
+          covered by the happy-path test.
+
+    On failure, first check:
+        - The ``async with _search_page(browser)`` wrapper around each amazon search-page iteration.
+    """
+    sc = copy.deepcopy(search_utils.site_constants)
+    sc["amazon"]["SEARCH_MAXIMUM_PAGES"] = 3  # range(1, 3) -> two search-page URLs
+    monkeypatch.setattr(search_utils, "site_constants", sc)
+
+    def _page_with_card(asin: str) -> FakePage:
+        """Build a FakePage serving one amazon card with the given ASIN."""
+        card = {
+            "text": "",
+            "attrs": {"data-asin": asin},
+            "sub": {
+                AMAZON_LINK: FakeLocator([{"attrs": {"href": f"/dp/{asin}/ref=sr"}}]),
+                AMAZON_TITLE: FakeLocator(f"Book {asin}"),
+                AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+            },
+        }
+        return FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+
+    contexts = [FakeContext(page=_page_with_card("B0PAGE0001")), FakeContext(page=_page_with_card("B0PAGE0002"))]
+    context_iter = iter(contexts)
+
+    browser = FakeBrowser()
+    browser.new_context = AsyncMock(side_effect=lambda **kwargs: next(context_iter))
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 2
+    assert browser.new_context.await_count == 2
+    for context in contexts:
+        assert context.close.await_count == 1
+
+
 async def test_playwright_amazon_no_books_found_short_circuits(monkeypatch):
     # amazon has no SEARCH_NO_BOOKS_FOUND in real config; inject one for this case.
     """
@@ -531,13 +580,17 @@ async def test_playwright_amazon_navigation_failure_returns_empty():
     [Local] search utils: verifies playwright amazon navigation failure returns empty.
 
     Scenario:
-        Characterization: a goto() failure aborts the amazon search and returns []. The inner handler for a navigation error calls ``logger.error(msg, "error")`` (search_utils line 249) with a stray positional ``"error"`` - a real product bug (subtask 03.3): the logging layer rejects the extra arg, the exception escapes the inner ``except`` into the function's outer handler, and the run ends with whatever was collected so far (nothing, since the failure is on page 1). This locks in that a failed navigation degrades to an empty result rather than crashing the caller; a 03.3 fix (drop the stray arg) would surface as a diff here.
+        A goto() failure raises PlaywrightError, which the inner navigation handler now logs
+        cleanly (no stray positional logging arg - subtask 03.3) and then ``continue``s to the next
+        search-page URL instead of touching the dead page. With a single search page the loop then
+        ends and the search returns []. This locks in that a failed navigation skips that page and
+        degrades to an empty result rather than crashing the caller or scraping a dead page.
 
     Boundaries:
-        - see test body
+        - Single page; the multi-page close-on-every-exit behaviour is a separate test.
 
     On failure, first check:
-        - see test body
+        - The ``except PlaywrightError`` handler in the amazon search loop (clean log + continue).
     """
     card = {
         "attrs": {"data-asin": "B0ABCDEFGH"},
