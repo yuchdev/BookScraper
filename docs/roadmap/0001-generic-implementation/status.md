@@ -12,7 +12,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 02.1 | X.509 certificate rotation         | ✅ Complete (08 blocked) | 9 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ✅ Complete    | 6 / 6         | `tests/mock/scraping/test_scrape_details.py`, `tests/unit/scraping/test_{results,text}.py`, `tests/unit/test_no_bare_print.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
 | 03.1 | Canonical book data model          | ✅ Complete    | 6 / 6         | `tests/unit/test_{models,isbn,import_direction}.py`, `tests/unit/scraping/test_normalize.py`, `tests/unit/backends/test_migration.py`, `tests/mock/commands/test_migrate.py`, `tests/mock/backends/test_backend_parity.py` |
-| 03.2 | Politeness & anti-bot resilience   | ⬜ Not started | 0 / 6         | -                                                                                                      |
+| 03.2 | Politeness & anti-bot resilience   | ✅ Complete    | 6 / 6         | `tests/unit/scraping/test_politeness.py`, `tests/mock/scraping/test_browser.py`, `tests/mock/scraping/test_{scrape_details,search_utils}.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 04.1 | LLM extraction fallback            | ⬜ Not started | 0 / 5         | -                                                                                                      |
@@ -25,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 52 / 99 subtasks complete.
+**Totals:** 58 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -206,6 +206,38 @@ report written `0o600`, empty `url` rejected, convergent-hash test. **Open INFO:
 collection into memory before planning (operator-run tool, acceptable for now).
 
 **Coverage:** 984 passed, 99% total; `models.py`, `isbn.py`, `migration.py`, `migrate.py` 100%.
+
+## Task 03.2 - Politeness & anti-bot resilience
+
+### Task 03.2 - Politeness & anti-bot resilience (✅ 2026-10-11)
+
+**Delivered** (commits `209fb65`, `f4e0b21`, `b8731b2`, `38b8d79`, `0d0097d`, `0da464c`, review fixes `c4276ca`):
+- **01** `scraping/politeness.py` (no Playwright/httpx imports, injectable clock): `RateLimiter` token bucket,
+  `DomainRateLimiters` keyed by registrable host; per-site `RATE_LIMITS` in `parameters.py`.
+- **02** `RobotsCache` fetches each host's robots.txt once per run via an injected fetcher, fails closed on an
+  error/5xx, treats 404 as allow-all, honors `Crawl-delay`; disallowed URLs become `SKIPPED_ROBOTS` and are never
+  fetched. New `--ignore-robots` flag (warns once).
+- **03** `politeness.retry_async` (full-jitter exponential backoff, `Retry-After` override capped at `max_delay`)
+  replaces the hand-rolled retry loop and random sleep; HTTP 429/502/503/504 now retried.
+- **04** `BOT_WALL` detection rules per site (+ a generic Cloudflare rule) → `ScrapeStatus.BLOCKED`, never retried;
+  `politeness.CircuitBreaker` opens per domain after 3 consecutive blocks for 900s; `detect-schema` refuses a
+  bot-wall sample page.
+- **05** `scraping/browser.py`: one `BrowserContext` per scrape attempt, closed with its page; `USER_AGENT_MODE`
+  defaults to `"native"` (no identity override - the honest default); `"rotate"` matches the installed Chromium's
+  major version. `set_extra_http_headers("User-Agent")` removed everywhere.
+- **06** `politeness.bounded_gather` (order-preserving, per-item exception capture) replaces fixed-size batching
+  and the inter-batch sleep in both `scrape-urls` and `search`; default concurrency 4 (05.0 wires a CLI flag).
+
+**Review:** `feature-reviewer` REQUEST_CHANGES → fixed; `security-auditor` PASS_WITH_FOLLOWUP (no CRITICAL/HIGH).
+Fixed in `c4276ca`: a per-iteration BrowserContext/Page leak in the Amazon multi-page search loop (05/06
+interaction - only the last page's context was closed); `scrape_urls` now builds its own `DomainCircuitBreakers`
+per run instead of the module singleton; `result.status` access guarded by `isinstance(ScrapeResult)`; a dead page
+after a navigation error is skipped; the robots.txt fetch is now capped at 512 KB, streamed (security LOW). Both
+reviews confirmed the "identify and back off, never disguise" boundary holds: UA rotation (opt-in) only ever
+matches the real installed browser, the circuit breaker cannot be bypassed by page content, and no response body
+or header reaches a log.
+
+**Coverage:** 1048 passed, 99% total; `politeness.py` and `browser.py` fully covered by their dedicated test files.
 
 ## Task 04.0 - AI-assisted schema detection
 
