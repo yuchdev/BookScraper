@@ -6,9 +6,13 @@ silently-dropped required flag reroutes a whole run, so every dest and every
 required/choice/default is asserted explicitly here.
 """
 
+import pathlib
+
 import pytest
 
-from bookscraper.cli import build_parser
+from bookscraper import cli
+from bookscraper.backends import storage
+from bookscraper.cli import STORE_BACKENDS, build_parser
 
 
 def test_scrape_urls_parses_full_valid_arg_set():
@@ -998,3 +1002,53 @@ def test_detect_schema_check_current_only_flag_sets_true():
         ["detect-schema", "--site", "amazon", "--html-file", "a.html", "--check-current-only"]
     )
     assert args.check_current_only is True
+
+
+# --------------------------------------------------------------------------- #
+# shared parent parsers (subtask 05.0/01)
+# --------------------------------------------------------------------------- #
+def test_log_severity_defined_once_in_source():
+    """
+    [Unit] cli: the "--log-severity" flag literal appears exactly once in cli.py.
+
+    Scenario:
+        Given the cli.py source file on disk
+        When the "--log-severity" string literal is counted
+        Then it appears exactly once (only in the shared _logging_parent parent parser).
+
+    Boundaries:
+        - Reads the cli.py source text directly; no argparse, no network
+        - Guards the de-duplication: the flag was copy-pasted onto four subparsers before 05.0/01
+
+    On failure, first check:
+        - Whether a subparser re-declared --log-severity inline instead of using parents=[_logging_parent()]
+        - Whether _logging_parent() still owns the single definition in cli.py
+    """
+    source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    assert source.count('"--log-severity"') == 1
+
+
+def test_store_backend_choices_match_resolver():
+    """
+    [Unit] cli: --store-backend choices come from the same STORE_BACKENDS tuple the resolver uses.
+
+    Scenario:
+        Given cli.STORE_BACKENDS and backends.storage's imported copy of it
+        When each is compared and each listed backend is parsed as a --store-backend value
+        Then both names refer to the identical tuple object, every listed backend is an accepted
+             choice, and a backend outside the tuple is rejected.
+
+    Boundaries:
+        - Pure argparse plus an identity check; no MongoDB connection, no filesystem, no network
+        - storage.py imports STORE_BACKENDS from cli.py, so the two lists cannot drift
+
+    On failure, first check:
+        - Whether backends/storage.py still imports STORE_BACKENDS from cli.py (not a local copy)
+        - Whether _store_parent() still builds its choices from list(STORE_BACKENDS) in cli.py
+    """
+    assert storage.STORE_BACKENDS is STORE_BACKENDS
+    for backend in STORE_BACKENDS:
+        args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", backend])
+        assert args.store_backend == backend
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "sqlite"])

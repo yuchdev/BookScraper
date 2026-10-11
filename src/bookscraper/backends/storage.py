@@ -24,6 +24,7 @@ from pymongo.collection import Collection
 
 from .. import models
 from ..book_utils import check_local_write_permission, print_log
+from ..cli import STORE_BACKENDS
 from .local import store
 from .mongo import config, database, deduplicate
 from .mongo.cert_rotation import cert_expiry_warning
@@ -258,6 +259,10 @@ def resolve_store_backend(backend_name: str) -> StorageBackend:
     interactive fallback: --store-backend is required, so the choice is always
     explicit (see cli.py).
     """
+    if backend_name not in STORE_BACKENDS:
+        print_log(f"Unknown storage backend: {backend_name!r}", "error")
+        sys.exit(1)
+
     print_log(f"\nRunning pre-flight checks for '{backend_name}' storage backend...", "info")
 
     if backend_name == "mongo":
@@ -284,6 +289,3 @@ def resolve_store_backend(backend_name: str) -> StorageBackend:
             sys.exit(1)
         print_log("  Local store: OK", "info")
         return JsonBackend()
-
-    print_log(f"Unknown storage backend: {backend_name!r}", "error")
-    sys.exit(1)

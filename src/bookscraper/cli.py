@@ -2,6 +2,15 @@ from __future__ import annotations
 
 import argparse
 
+#: The storage backends the ``--store-backend`` flag accepts, in the order they
+#: appear in ``--help``. This is the single source of truth shared with
+#: ``backends/storage.py``'s ``resolve_store_backend`` (which imports it from
+#: here), so the CLI's accepted choices and the resolver's handled backends can
+#: never drift apart. It lives in ``cli.py`` rather than ``storage.py`` so that
+#: importing it does not pull ``cli.py`` into ``storage.py``'s heavy dependency
+#: graph (``pymongo`` and the rest); ``cli.py`` itself imports only ``argparse``.
+STORE_BACKENDS = ("mongo", "json")
+
 
 def _positive_int(value: str) -> int:
     """
@@ -23,8 +32,69 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _logging_parent() -> argparse.ArgumentParser:
+    """
+    Builds the reusable ``add_help=False`` parent parser that contributes ``--log-severity``.
+
+    Every subcommand shares this parent instead of redeclaring the flag, so the choices, default,
+    help and ``dest`` are defined exactly once (see ``test_log_severity_defined_once_in_source``).
+
+    :returns: A parent parser carrying only the ``--log-severity`` argument.
+    """
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument(
+        "--log-severity",
+        dest="log_severity",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
+    )
+    return parent
+
+
+def _store_parent() -> argparse.ArgumentParser:
+    """
+    Builds the reusable ``add_help=False`` parent parser that contributes ``--store-backend``.
+
+    The flag is required with no implicit default and its choices come from :data:`STORE_BACKENDS`,
+    the single constant also used by ``backends/storage.py``'s resolver, so the two cannot drift.
+
+    :returns: A parent parser carrying only the required ``--store-backend`` argument.
+    """
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument(
+        "--store-backend",
+        dest="store_backend",
+        choices=list(STORE_BACKENDS),
+        required=True,
+        help="Storage backend used for both duplicate-check reads and writes: 'mongo' (the "
+        "configured MongoDB Atlas collection) or 'json' (the local books.json store, schema-identical "
+        "to the MongoDB documents).",
+    )
+    return parent
+
+
+def _scrape_runtime_parent() -> argparse.ArgumentParser:
+    """
+    Builds the reusable ``add_help=False`` parent parser for scrape-time runtime flags.
+
+    This is the shared extension point that subtasks 03-04 fill with the browser, concurrency,
+    dry-run and output-location flags common to ``scrape-urls`` and ``search``. It is intentionally
+    empty for now: both scraping subcommands already declare ``parents=[...]`` with it, so a later
+    subtask only has to add arguments to this function's body - no subparser wiring changes. An empty
+    parent adds no arguments, so parse behaviour is unaffected today.
+
+    :returns: A parent parser with no arguments yet.
+    """
+    return argparse.ArgumentParser(add_help=False)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    """Builds the `bookscraper` CLI's argument parser."""
+    """
+    Builds the ``bookscraper`` CLI's argument parser.
+
+    :returns: The top-level parser with every subcommand wired to its shared parent parsers.
+    """
     parser = argparse.ArgumentParser(
         prog="bookscraper",
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
@@ -33,10 +103,15 @@ def build_parser() -> argparse.ArgumentParser:
         dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate}"
     )
 
+    logging_parent = _logging_parent()
+    store_parent = _store_parent()
+    scrape_runtime_parent = _scrape_runtime_parent()
+
     scrape_parser = subparsers.add_parser(
         "scrape-urls",
         help="Scrape book details from a CSV of known URLs.",
         description="Scrape book details from URLs listed in a CSV file (via Playwright).",
+        parents=[store_parent, scrape_runtime_parent, logging_parent],
     )
     scrape_parser.add_argument(
         "-f",
@@ -46,15 +121,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the CSV file containing URLs to scrape (must have a 'url' column).",
     )
     scrape_parser.add_argument(
-        "--store-backend",
-        dest="store_backend",
-        choices=["mongo", "json"],
-        required=True,
-        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
-        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
-        "schema as the MongoDB documents).",
-    )
-    scrape_parser.add_argument(
         "--ignore-robots",
         dest="ignore_robots",
         action="store_true",
@@ -62,28 +128,13 @@ def build_parser() -> argparse.ArgumentParser:
         "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
         "the run report.",
     )
-    scrape_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
-    )
 
     search_parser = subparsers.add_parser(
         "search",
         help="Search sites for new books matching configured queries, then scrape their details.",
         description="Search configured sites for books matching SEARCH_QUERIES, deduplicate "
         "against MongoDB, and scrape details for new results.",
-    )
-    search_parser.add_argument(
-        "--store-backend",
-        dest="store_backend",
-        choices=["mongo", "json"],
-        required=True,
-        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
-        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
-        "schema as the MongoDB documents).",
+        parents=[store_parent, scrape_runtime_parent, logging_parent],
     )
     search_parser.add_argument(
         "--max-search-pages",
@@ -100,13 +151,6 @@ def build_parser() -> argparse.ArgumentParser:
         "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
         "the run report.",
     )
-    search_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
-    )
 
     rotate_parser = subparsers.add_parser(
         "rotate-cert",
@@ -115,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Atlas Admin API (credentials come from ATLAS_CLIENT_ID / ATLAS_CLIENT_SECRET / ATLAS_PROJECT_ID / "
         "ATLAS_DB_USER in .env or the environment), write it under ~/.bookscrapper/, and update "
         "settings.json if it references the cert by filename.",
+        parents=[logging_parent],
     )
     rotate_parser.add_argument(
         "--months",
@@ -177,13 +222,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not delete superseded X509-cert-*.pem files after a successful rotation; keep "
         "every certificate on disk.",
     )
-    rotate_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
-    )
 
     detect_schema_parser = subparsers.add_parser(
         "detect-schema",
@@ -194,6 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
         "needs ANTHROPIC_API_KEY (not with --replay/--check-current-only). Exit codes: 0 all "
         "current selectors matched; 4 at least one current selector matched on no sample (drift); "
         "1 any error.",
+        parents=[logging_parent],
     )
     detect_schema_parser.add_argument(
         "--site",
@@ -284,13 +323,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to also write the report to (it is always printed to stdout).",
     )
-    detect_schema_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
-    )
 
     migrate_parser = subparsers.add_parser(
         "migrate",
@@ -301,14 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Idempotent and never deletes a document; a recomputed hash that collides with another "
         "document is left untouched and reported for a human. A migration-report-*.json is written "
         "to ~/.bookscrapper/logs/.",
-    )
-    migrate_parser.add_argument(
-        "--store-backend",
-        dest="store_backend",
-        choices=["mongo", "json"],
-        required=True,
-        help="Storage backend to migrate: 'mongo' (the configured MongoDB Atlas collection) or "
-        "'json' (the local books.json store).",
+        parents=[store_parent, logging_parent],
     )
     migrate_parser.add_argument(
         "--apply",
@@ -316,13 +341,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the migrated documents to the store. Without it the command is a dry run that "
         "reports what would change and writes nothing to the store.",
-    )
-    migrate_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
     )
 
     return parser

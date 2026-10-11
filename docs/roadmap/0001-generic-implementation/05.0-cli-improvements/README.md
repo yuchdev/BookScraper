@@ -1,7 +1,7 @@
 # Task 05.0 - CLI Improvements
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress
 **Category:** feature | **Priority:** P1
 
 ## Scope
@@ -21,7 +21,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 
 | #  | Document                                                             | Status         | Blocks |
 |----|----------------------------------------------------------------------|----------------|--------|
-| 01 | [Shared parent parsers](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/01-shared-parent-parsers.md)          | ⬜ Not started | 02-07  |
+| 01 | [Shared parent parsers](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/01-shared-parent-parsers.md)          | ✅ Complete    | 02-07  |
 | 02 | [Search targeting flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/02-search-targeting-flags.md)        | ⬜ Not started | -      |
 | 03 | [Browser & concurrency flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/03-browser-and-concurrency-flags.md) | ⬜ Not started | - |
 | 04 | [Dry run & output locations](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/04-dry-run-and-output-locations.md) | ⬜ Not started | -   |
