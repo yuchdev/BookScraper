@@ -39,6 +39,61 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _bounded_concurrency(value: str) -> int:
+    """
+    ``argparse`` type for the ``--concurrency`` flag: an integer in the inclusive range 1-32.
+
+    Bounds the number of detail scrapes in flight at once - ``0``/negatives would stall the run and
+    an unbounded value would defeat the politeness layer, so both are rejected at parse time.
+
+    :param value: The raw command-line token.
+    :returns: The parsed integer.
+    :raises argparse.ArgumentTypeError: If ``value`` is not an integer or is outside 1-32.
+    """
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be an integer, got {value!r}") from None
+    if not 1 <= parsed <= 32:
+        raise argparse.ArgumentTypeError(f"must be between 1 and 32, got {parsed}")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    """
+    ``argparse`` type for a strictly positive float (> 0), used by ``--nav-timeout`` (seconds).
+
+    :param value: The raw command-line token.
+    :returns: The parsed float.
+    :raises argparse.ArgumentTypeError: If ``value`` is not a number or is not greater than 0.
+    """
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be a number, got {value!r}") from None
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"must be greater than 0, got {parsed}")
+    return parsed
+
+
+#: Help text shared verbatim by the ``--headless`` / ``--no-headless`` flag wherever it is declared
+#: (the scrape-runtime parent and detect-schema), so the documented precedence is stated once.
+_HEADLESS_HELP = (
+    "Run the browser headless (--headless) or headed (--no-headless). Default: unset, which falls "
+    "back to the BOOKSCRAPER_HEADLESS env var (1/0/true/false) then HEADLESS_BROWSER in "
+    "parameters.py (headless)."
+)
+
+#: Help text shared verbatim by the ``--nav-timeout`` flag wherever it is declared.
+_NAV_TIMEOUT_HELP = "Per-page navigation timeout in seconds, must be > 0 (default: 60)."
+
+#: Help text shared verbatim by the ``--ignore-robots`` flag.
+_IGNORE_ROBOTS_HELP = (
+    "Do NOT consult robots.txt before fetching (off by default). Only for a target you own or are "
+    "explicitly permitted to crawl; prints a one-time warning and is recorded in the run report."
+)
+
+
 def _logging_parent() -> argparse.ArgumentParser:
     """
     Builds the reusable ``add_help=False`` parent parser that contributes ``--log-severity``.
@@ -85,15 +140,45 @@ def _scrape_runtime_parent() -> argparse.ArgumentParser:
     """
     Builds the reusable ``add_help=False`` parent parser for scrape-time runtime flags.
 
-    This is the shared extension point that subtasks 03-04 fill with the browser, concurrency,
-    dry-run and output-location flags common to ``scrape-urls`` and ``search``. It is intentionally
-    empty for now: both scraping subcommands already declare ``parents=[...]`` with it, so a later
-    subtask only has to add arguments to this function's body - no subparser wiring changes. An empty
-    parent adds no arguments, so parse behaviour is unaffected today.
+    This is the shared browser/concurrency/robots extension point used by ``scrape-urls`` and
+    ``search``. It carries ``--headless`` / ``--no-headless``, ``--concurrency``, ``--nav-timeout``
+    and ``--ignore-robots``; :func:`~bookscraper.runtime.runtime_options` resolves them into a
+    ``RuntimeOptions`` the commands pass down. ``detect-schema`` does not use this parent (it has no
+    concurrency or robots step), so it declares the applicable ``--headless`` / ``--nav-timeout``
+    flags individually.
 
-    :returns: A parent parser with no arguments yet.
+    :returns: A parent parser carrying the shared scrape-time runtime flags.
     """
-    return argparse.ArgumentParser(add_help=False)
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument(
+        "--headless",
+        dest="headless",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=_HEADLESS_HELP,
+    )
+    parent.add_argument(
+        "--concurrency",
+        dest="concurrency",
+        type=_bounded_concurrency,
+        default=4,
+        help="Maximum number of detail scrapes in flight at once, 1-32 (default: 4). Per-host "
+        "pacing remains the rate limiter's job.",
+    )
+    parent.add_argument(
+        "--nav-timeout",
+        dest="nav_timeout_s",
+        type=_positive_float,
+        default=60.0,
+        help=_NAV_TIMEOUT_HELP,
+    )
+    parent.add_argument(
+        "--ignore-robots",
+        dest="ignore_robots",
+        action="store_true",
+        help=_IGNORE_ROBOTS_HELP,
+    )
+    return parent
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -126,14 +211,6 @@ def build_parser() -> argparse.ArgumentParser:
         dest="input_file",
         required=True,
         help="Path to the CSV file containing URLs to scrape (must have a 'url' column).",
-    )
-    scrape_parser.add_argument(
-        "--ignore-robots",
-        dest="ignore_robots",
-        action="store_true",
-        help="Do NOT consult robots.txt before fetching (off by default). Only for a target you "
-        "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
-        "the run report.",
     )
 
     search_parser = subparsers.add_parser(
@@ -183,14 +260,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not apply the SCRAPE_FILTERS rating thresholds to search results; keep every "
         "candidate. Off by default.",
-    )
-    search_parser.add_argument(
-        "--ignore-robots",
-        dest="ignore_robots",
-        action="store_true",
-        help="Do NOT consult robots.txt before fetching (off by default). Only for a target you "
-        "own or are explicitly permitted to crawl; prints a one-time warning and is recorded in "
-        "the run report.",
     )
 
     rotate_parser = subparsers.add_parser(
@@ -310,6 +379,23 @@ def build_parser() -> argparse.ArgumentParser:
         default="detail",
         help="Which page kind to propose selectors for: the book 'detail' page (default) or a "
         "'search'-results listing page (the card-container and card-relative SEARCH_* selectors).",
+    )
+    # detect-schema does not use _scrape_runtime_parent (it has no concurrency or robots step), so
+    # the two runtime flags that DO apply to its Playwright page loads are declared individually and
+    # resolved through the same runtime.runtime_options() precedence.
+    detect_schema_parser.add_argument(
+        "--headless",
+        dest="headless",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=_HEADLESS_HELP,
+    )
+    detect_schema_parser.add_argument(
+        "--nav-timeout",
+        dest="nav_timeout_s",
+        type=_positive_float,
+        default=60.0,
+        help=_NAV_TIMEOUT_HELP,
     )
     detect_schema_parser.add_argument(
         "--model",

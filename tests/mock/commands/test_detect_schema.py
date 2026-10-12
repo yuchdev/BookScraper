@@ -33,6 +33,8 @@ def _args(**overrides) -> SimpleNamespace:
         "record": None,
         "format": "text",
         "check_current_only": False,
+        "headless": None,
+        "nav_timeout_s": 60.0,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -77,6 +79,8 @@ async def test_run_prints_report_and_usage_line(capsys):
         record=None,
         report_format="text",
         check_current_only=False,
+        headless=True,
+        nav_timeout_ms=60000,
     )
     out = capsys.readouterr().out
     assert "THE REPORT" in out
@@ -86,13 +90,13 @@ async def test_run_prints_report_and_usage_line(capsys):
 async def test_run_threads_search_page_type(capsys):
     """
     [Local] detect schema: verifies run threads search page type.
-    
+
     Scenario:
         --page-type search is forwarded verbatim to detect_schema.
-    
+
     Boundaries:
         - detect_schema is mocked; only the wiring of page_type is asserted.
-    
+
     On failure, first check:
         - a search run would silently fall back to detail-page selectors.
     """
@@ -118,6 +122,8 @@ async def test_run_threads_search_page_type(capsys):
         record=None,
         report_format="text",
         check_current_only=False,
+        headless=True,
+        nav_timeout_ms=60000,
     )
     assert "SEARCH REPORT" in capsys.readouterr().out
 
@@ -125,13 +131,13 @@ async def test_run_threads_search_page_type(capsys):
 async def test_run_threads_offline_html_file_replay_record(capsys):
     """
     [Local] detect schema: verifies run threads offline html file replay record.
-    
+
     Scenario:
         --html-file / --replay / --record are forwarded verbatim to detect_schema.
-    
+
     Boundaries:
         - detect_schema is mocked; only the offline-mode wiring is asserted.
-    
+
     On failure, first check:
         - an offline run could silently fetch live URLs or require an API key.
     """
@@ -157,6 +163,8 @@ async def test_run_threads_offline_html_file_replay_record(capsys):
         record="rec.json",
         report_format="text",
         check_current_only=False,
+        headless=True,
+        nav_timeout_ms=60000,
     )
     assert "OFFLINE REPORT" in capsys.readouterr().out
 
@@ -242,13 +250,13 @@ async def test_run_exits_one_when_output_write_fails(tmp_path):
 async def test_run_threads_format_and_check_current_only(capsys):
     """
     [Local] detect schema: verifies run threads format and check current only.
-    
+
     Scenario:
         --format and --check-current-only are forwarded verbatim to detect_schema.
-    
+
     Boundaries:
         - detect_schema is mocked; only the new-flag wiring is asserted.
-    
+
     On failure, first check:
         - a JSON/drift-check run would silently fall back to a text AI run.
     """
@@ -274,19 +282,21 @@ async def test_run_threads_format_and_check_current_only(capsys):
         record=None,
         report_format="json",
         check_current_only=True,
+        headless=True,
+        nav_timeout_ms=60000,
     )
 
 
 async def test_run_json_format_stdout_is_pure_json(capsys):
     """
     [Local] detect schema: verifies run json format stdout is pure json.
-    
+
     Scenario:
         --format json keeps stdout a single parseable JSON document (status to stderr).
-    
+
     Boundaries:
         - detect_schema is mocked to return a JSON body; capsys captures both streams.
-    
+
     On failure, first check:
         - human status lines in stdout would break a CI drift job's json.loads.
     """
@@ -309,13 +319,13 @@ async def test_run_json_format_stdout_is_pure_json(capsys):
 async def test_run_exits_four_on_drift():
     """
     [Local] detect schema: verifies run exits four on drift.
-    
+
     Scenario:
         detect_schema reporting drift (exit 4) propagates as SystemExit(4).
-    
+
     Boundaries:
         - detect_schema is mocked to return exit_code 4; text format.
-    
+
     On failure, first check:
         - a scheduled drift job could not gate on the exit status.
     """
@@ -332,13 +342,13 @@ async def test_run_exits_four_on_drift():
 async def test_run_exits_four_on_drift_json_format(capsys):
     """
     [Local] detect schema: verifies run exits four on drift json format.
-    
+
     Scenario:
         drift (exit 4) propagates in JSON mode with the drift notice on stderr.
-    
+
     Boundaries:
         - detect_schema mocked to return exit 4 with a JSON body; format json.
-    
+
     On failure, first check:
         - a JSON drift artifact would be corrupted by the drift notice, or exit 4 lost.
     """

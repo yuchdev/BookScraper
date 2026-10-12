@@ -657,8 +657,9 @@ up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
 **`scraping/`** — everything about talking to the four book sites:
 - **`parameters.py`** — `site_constants`: per-site CSS selectors and API URLs (this is what to edit when a site
   changes its markup or a new site is added). Also `SEARCH_QUERIES`, `SITES_TO_SCRAPE`, `SCRAPE_FILTERS`
-  (rating thresholds), `USER_AGENTS` for rotation, and `HEADLESS_BROWSER` (currently `False`, i.e. Playwright runs
-  headed by default).
+  (rating thresholds), `RATE_LIMITS`/`BOT_WALL` (task 03.2), `USER_AGENT_MODE`/`USER_AGENT_TEMPLATES` (05's native
+  default vs. version-matched rotation), and `HEADLESS_BROWSER` (default `True` as of task 05.0/03 — headed mode
+  is now an explicit `--no-headless` debugging choice; a scheduled/CI run must never try to open a window).
 - **`scrape_details.py`** — per-site Playwright detail scraping (`scrape_book`) plus Leanpub's `httpx`-based
   `get_leanpub_book_details`. `route_handler` aborts all non-document requests (images/fonts/css) to speed up page
   loads.

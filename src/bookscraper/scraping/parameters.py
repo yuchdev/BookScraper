@@ -30,7 +30,11 @@ USER_AGENT_TEMPLATES = [
 # because rotate-mode UAs are Chromium-family regardless of the exact number.
 DEFAULT_CHROMIUM_MAJOR = 120
 
-HEADLESS_BROWSER = False
+# Default to headless: headed mode is a debugging choice (opt in with --no-headless or
+# BOOKSCRAPER_HEADLESS=0), and a scheduled or CI run must never try to open a window. The CLI's
+# --headless/--no-headless flag and the BOOKSCRAPER_HEADLESS env var both override this default via
+# runtime.runtime_options().
+HEADLESS_BROWSER = True
 
 # Per-domain request rate limits consumed by the politeness layer (scraping/politeness.py).
 # Each value is ``(requests_per_second, burst)``: the steady-state per-host request rate and the

@@ -1183,3 +1183,192 @@ def test_store_backend_choices_match_resolver():
         assert args.store_backend == backend
     with pytest.raises(SystemExit):
         build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "sqlite"])
+
+
+def test_scrape_runtime_flags_defaults_and_dests():
+    """
+    [Unit] cli scrape-urls: the shared runtime flags default to their documented values and dests.
+
+    Scenario:
+        Given a minimal scrape-urls invocation with no runtime flags
+        When build_parser().parse_args() processes it
+        Then args.headless is None (unset), args.concurrency is 4, args.nav_timeout_s is 60.0, and
+             args.ignore_robots is False.
+
+    Boundaries:
+        - Pure argparse; no filesystem, no network
+        - Covers the _scrape_runtime_parent defaults consumed by runtime.runtime_options
+
+    On failure, first check:
+        - The default= values on --headless/--concurrency/--nav-timeout/--ignore-robots in _scrape_runtime_parent
+        - Whether the dest= names still match (headless/concurrency/nav_timeout_s/ignore_robots)
+    """
+    args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "json"])
+    assert args.headless is None
+    assert args.concurrency == 4
+    assert args.nav_timeout_s == 60.0
+    assert args.ignore_robots is False
+
+
+def test_scrape_runtime_flags_parse_explicit_values():
+    """
+    [Unit] cli scrape-urls: --no-headless, --concurrency, --nav-timeout and --ignore-robots parse into their dests.
+
+    Scenario:
+        Given a scrape-urls invocation setting every runtime flag explicitly (--no-headless)
+        When build_parser().parse_args() processes it
+        Then args.headless is False, args.concurrency is 8, args.nav_timeout_s is 12.5 and
+             args.ignore_robots is True; and --headless (the positive form) yields True.
+
+    Boundaries:
+        - Pure argparse; exercises BooleanOptionalAction's paired --headless/--no-headless
+        - Covers the float --nav-timeout and the int --concurrency
+
+    On failure, first check:
+        - That --headless uses argparse.BooleanOptionalAction in _scrape_runtime_parent
+        - The type= converters _bounded_concurrency / _positive_float
+    """
+    args = build_parser().parse_args(
+        [
+            "scrape-urls",
+            "-f",
+            "x.csv",
+            "--store-backend",
+            "json",
+            "--no-headless",
+            "--concurrency",
+            "8",
+            "--nav-timeout",
+            "12.5",
+            "--ignore-robots",
+        ]
+    )
+    assert args.headless is False
+    assert args.concurrency == 8
+    assert args.nav_timeout_s == 12.5
+    assert args.ignore_robots is True
+
+    headless_args = build_parser().parse_args(
+        ["search", "--store-backend", "json", "--site", "leanpub", "-q", "python", "--headless"]
+    )
+    assert headless_args.headless is True
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "33", "100", "abc"])
+def test_concurrency_bounds_enforced(value):
+    """
+    [Unit] cli scrape-urls: --concurrency rejects values outside the inclusive 1-32 range.
+
+    Scenario:
+        Given a scrape-urls invocation whose --concurrency is 0, negative, above 32, or non-numeric
+        When build_parser().parse_args() processes it
+        Then argparse exits (SystemExit) rather than accepting an out-of-range or invalid count.
+
+    Boundaries:
+        - Pure argparse type validation; no scraping is run
+        - 1 and 32 (the inclusive bounds) are accepted and checked separately
+
+    On failure, first check:
+        - The range check in cli._bounded_concurrency
+        - That --concurrency still uses type=_bounded_concurrency
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "json", "--concurrency", value])
+
+
+def test_concurrency_accepts_inclusive_bounds():
+    """
+    [Unit] cli scrape-urls: --concurrency accepts both 1 and 32 (the inclusive bounds).
+
+    Scenario:
+        Given scrape-urls invocations with --concurrency 1 and --concurrency 32
+        When build_parser().parse_args() processes each
+        Then both parse successfully into args.concurrency.
+
+    Boundaries:
+        - Pure argparse; complements test_concurrency_bounds_enforced's rejection cases
+        - Asserts the boundaries are inclusive, not off-by-one
+
+    On failure, first check:
+        - The ``1 <= parsed <= 32`` comparison in cli._bounded_concurrency
+    """
+    for value, expected in [("1", 1), ("32", 32)]:
+        args = build_parser().parse_args(
+            ["scrape-urls", "-f", "x.csv", "--store-backend", "json", "--concurrency", value]
+        )
+        assert args.concurrency == expected
+
+
+def test_nav_timeout_rejects_non_positive():
+    """
+    [Unit] cli scrape-urls: --nav-timeout rejects zero and negative seconds.
+
+    Scenario:
+        Given a scrape-urls invocation whose --nav-timeout is 0 or negative
+        When build_parser().parse_args() processes it
+        Then argparse exits (SystemExit) because the timeout must be strictly positive.
+
+    Boundaries:
+        - Pure argparse type validation
+        - A valid fractional value is covered by test_scrape_runtime_flags_parse_explicit_values
+
+    On failure, first check:
+        - The ``parsed <= 0`` check in cli._positive_float
+        - That --nav-timeout still uses type=_positive_float
+    """
+    for value in ["0", "-5"]:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "json", "--nav-timeout", value])
+
+
+def test_detect_schema_has_headless_and_nav_timeout():
+    """
+    [Unit] cli detect-schema: carries the applicable --headless and --nav-timeout runtime flags.
+
+    Scenario:
+        Given a detect-schema invocation with --no-headless and --nav-timeout set, and one with neither
+        When build_parser().parse_args() processes each
+        Then the explicit run resolves args.headless False and args.nav_timeout_s to the given value,
+             and the default run leaves args.headless None and args.nav_timeout_s 60.0.
+
+    Boundaries:
+        - Pure argparse; detect-schema declares these two flags individually (no _scrape_runtime_parent)
+        - detect-schema intentionally has no --concurrency or --ignore-robots
+
+    On failure, first check:
+        - The individual --headless/--nav-timeout declarations on the detect-schema subparser
+        - That detect-schema was not accidentally given --concurrency/--ignore-robots
+    """
+    args = build_parser().parse_args(
+        ["detect-schema", "--site", "amazon", "--url", "https://x/1", "--no-headless", "--nav-timeout", "15"]
+    )
+    assert args.headless is False
+    assert args.nav_timeout_s == 15.0
+    assert not hasattr(args, "concurrency")
+    assert not hasattr(args, "ignore_robots")
+
+    defaults = build_parser().parse_args(["detect-schema", "--site", "amazon", "--url", "https://x/1"])
+    assert defaults.headless is None
+    assert defaults.nav_timeout_s == 60.0
+
+
+def test_ignore_robots_defined_once_in_source():
+    """
+    [Unit] cli: --ignore-robots is declared exactly once, in the shared _scrape_runtime_parent.
+
+    Scenario:
+        Given the full text of cli.py
+        When occurrences of the "--ignore-robots" flag string are counted
+        Then exactly one appears (the 05.0/03 consolidation folded the per-subparser copies into
+             the shared scrape-runtime parent).
+
+    Boundaries:
+        - Reads the cli.py source text directly; no argparse, no network
+        - Guards against re-introducing the 03.2/02 per-subparser duplicates
+
+    On failure, first check:
+        - Whether scrape-urls or search re-declared --ignore-robots inline instead of via the parent
+        - Whether _scrape_runtime_parent() still owns the single definition
+    """
+    source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    assert source.count('"--ignore-robots"') == 1

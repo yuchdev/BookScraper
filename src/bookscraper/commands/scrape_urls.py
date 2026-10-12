@@ -13,14 +13,10 @@ from playwright.async_api import async_playwright
 
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, logger, print_log
-from ..scraping.parameters import HEADLESS_BROWSER
+from ..runtime import runtime_options
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_breakers, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import ROBOTS_FETCH_TIMEOUT_S, build_robots_fetcher, scrape_book
-
-# Default number of detail scrapes in flight at once (CLI --concurrency arrives in task 05.0).
-# Per-host pacing is the rate limiter's job, so this only bounds total concurrent page loads.
-DEFAULT_CONCURRENCY = 4
 
 
 def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"):
@@ -110,6 +106,10 @@ async def run(args: argparse.Namespace):
     """
     start_time = time.time()
 
+    # Resolve the run-wide runtime knobs once (flag -> env -> parameters.py precedence) and thread
+    # the resolved values down instead of importing the headless default / a module concurrency one.
+    runtime = runtime_options(args)
+
     storage_backend = resolve_store_backend(args.store_backend)
     # One per-run, per-host rate limiter registry, threaded down to every scrape_book call so a
     # whole run (across every batch) is throttled to each host's configured rate.
@@ -119,7 +119,7 @@ async def run(args: argparse.Namespace):
     breakers = build_default_breakers()
 
     # robots.txt compliance is on by default; --ignore-robots disables it with a one-time warning.
-    if args.ignore_robots:
+    if runtime.ignore_robots:
         print_log(
             "robots.txt checking is DISABLED via --ignore-robots; scraping without robots compliance.",
             "warning",
@@ -195,10 +195,10 @@ async def run(args: argparse.Namespace):
     # A single shared httpx client backs the per-run robots.txt cache (one robots fetch per host).
     # It stays open for the whole scraping phase and is closed when the block exits.
     async with httpx.AsyncClient(timeout=httpx.Timeout(ROBOTS_FETCH_TIMEOUT_S)) as robots_client:
-        robots = None if args.ignore_robots else RobotsCache(build_robots_fetcher(robots_client), limiters)
+        robots = None if runtime.ignore_robots else RobotsCache(build_robots_fetcher(robots_client), limiters)
         async with async_playwright() as p:
             print_log("Opening browser...", "info")
-            browser = await p.chromium.launch(headless=HEADLESS_BROWSER)
+            browser = await p.chromium.launch(headless=runtime.headless)
 
             books = []  # Stores successfully scraped book details (non-duplicates)
 
@@ -207,7 +207,7 @@ async def run(args: argparse.Namespace):
             # immediately, while per-host pacing is the rate limiter's job. scrape_book always
             # returns a typed ScrapeResult (see scraping/results.py), passing the storage_backend
             # for an immediate duplicate check.
-            concurrency = getattr(args, "concurrency", DEFAULT_CONCURRENCY)
+            concurrency = runtime.concurrency
             # Print a progress line every ~10% of the run (at least every completion for a tiny
             # run, at most every 10 completions), plus a final line when the last task lands.
             progress_interval = max(1, min(10, total_urls_to_scrape // 10))
@@ -236,7 +236,16 @@ async def run(args: argparse.Namespace):
                     )
 
             scrapes = [
-                scrape_book(url, browser, identify_website(url), storage_backend, limiters, robots, breakers)
+                scrape_book(
+                    url,
+                    browser,
+                    identify_website(url),
+                    storage_backend,
+                    limiters,
+                    robots,
+                    breakers,
+                    nav_timeout_ms=runtime.nav_timeout_ms,
+                )
                 for url in all_urls_to_scrape
             ]
             results = await bounded_gather(scrapes, limit=concurrency, on_result=report_progress)

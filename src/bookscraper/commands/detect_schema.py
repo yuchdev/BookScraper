@@ -26,6 +26,7 @@ import sys
 from dotenv import load_dotenv
 
 from ..book_utils import print_log
+from ..runtime import runtime_options
 from ..scraping.schema_detection import SchemaDetectionError, detect_schema
 
 
@@ -43,6 +44,11 @@ async def run(args: argparse.Namespace):
     # the same lightweight way commands/rotate_cert.py picks up its ATLAS_* vars.
     load_dotenv()
 
+    # Resolve the two runtime knobs that apply to detect-schema's Playwright page loads (headless
+    # and the navigation timeout) via the same flag -> env -> parameters.py precedence the scraping
+    # commands use; concurrency / ignore-robots do not apply here.
+    runtime = runtime_options(args)
+
     try:
         report, usage_line, exit_code = await detect_schema(
             args.site,
@@ -55,6 +61,8 @@ async def run(args: argparse.Namespace):
             record=args.record,
             report_format=args.format,
             check_current_only=args.check_current_only,
+            headless=runtime.headless,
+            nav_timeout_ms=runtime.nav_timeout_ms,
         )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")

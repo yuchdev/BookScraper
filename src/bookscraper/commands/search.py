@@ -13,6 +13,7 @@ import httpx
 
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
+from ..runtime import runtime_options
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
@@ -20,10 +21,6 @@ from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_det
 from ..scraping.search_utils import get_leanpub_search_results_via_api
 
 module_logger = logging.getLogger(__name__)
-
-# Default number of detail scrapes in flight at once (CLI --concurrency arrives in task 05.0).
-# Per-host pacing is the rate limiter's job, so this only bounds total concurrent detail fetches.
-DEFAULT_CONCURRENCY = 4
 
 # Sites with a search provider wired end-to-end today. Only Leanpub is implemented (its JSON API);
 # task 03.3 adds the Playwright-backed providers for the other site keys. Selecting a site outside
@@ -185,6 +182,10 @@ async def run(args: argparse.Namespace):
     start_time = time.time()
     module_logger.info("Application started.")
 
+    # Resolve the run-wide runtime knobs once (concurrency / ignore-robots apply to the search
+    # path; headless / nav-timeout are no-ops for today's httpx-only Leanpub provider).
+    runtime = runtime_options(args)
+
     # Resolve sites/queries/page cap before anything is opened, so a bad targeting selection
     # (exit 2) fails fast without spinning up a storage backend or HTTP client.
     sites, queries, max_search_pages = resolve_search_targets(args)
@@ -195,7 +196,7 @@ async def run(args: argparse.Namespace):
     limiters = build_default_limiters()
 
     # robots.txt compliance is on by default; --ignore-robots disables it with a one-time warning.
-    if args.ignore_robots:
+    if runtime.ignore_robots:
         print_log(
             "robots.txt checking is DISABLED via --ignore-robots; scraping without robots compliance.",
             "warning",
@@ -217,7 +218,7 @@ async def run(args: argparse.Namespace):
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(30.0), limits=httpx.Limits(max_connections=10)
         ) as http_client:
-            robots = None if args.ignore_robots else RobotsCache(build_robots_fetcher(http_client), limiters)
+            robots = None if runtime.ignore_robots else RobotsCache(build_robots_fetcher(http_client), limiters)
 
             # --- Iterate through the resolved sites and perform search + scrape ---
             for site_name in sites:
@@ -280,7 +281,7 @@ async def run(args: argparse.Namespace):
                 # unbounded gather: at most `concurrency` fetches are in flight at once and a
                 # finished slot is reused immediately, with per-host pacing left to the rate
                 # limiter. Exceptions are still captured per item like gather(return_exceptions).
-                concurrency = getattr(args, "concurrency", DEFAULT_CONCURRENCY)
+                concurrency = runtime.concurrency
                 total_detail = len(leanpub_books)
                 # Progress line every ~10% (at least each completion for a tiny run, at most every
                 # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.

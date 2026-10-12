@@ -24,23 +24,24 @@ _CONSUMED_ALLOW_LIST = {
 }
 
 
-def test_headless_browser_is_false():
+def test_headless_browser_is_true():
     """
-    [Unit] parameters: verifies HEADLESS_BROWSER is False (headed mode).
+    [Unit] parameters: verifies HEADLESS_BROWSER is True (headless by default).
 
     Scenario:
         Given the parameters module is imported
         When HEADLESS_BROWSER is read
-        Then its value is exactly False (Playwright runs headed by default)
+        Then its value is exactly True (05.0/03: a scheduled/CI run must never try to open a
+            window; headed mode is now an explicit --no-headless debugging choice)
 
     Boundaries:
         - Single boolean constant; no scraper or browser logic exercised
         - Does not assert anything about Playwright launch behaviour
 
     On failure, first check:
-        - parameters.HEADLESS_BROWSER was accidentally changed to True
+        - parameters.HEADLESS_BROWSER was accidentally changed to False
     """
-    assert parameters.HEADLESS_BROWSER is False
+    assert parameters.HEADLESS_BROWSER is True
 
 
 def test_sites_to_scrape_is_leanpub_only():

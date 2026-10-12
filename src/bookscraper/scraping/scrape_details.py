@@ -573,6 +573,7 @@ async def scrape_book(
     limiters: Optional[DomainRateLimiters] = None,
     robots: Optional[RobotsCache] = None,
     breakers: Optional[DomainCircuitBreakers] = None,
+    nav_timeout_ms: Optional[int] = None,
 ) -> ScrapeResult:
     """Scrape book details from a URL, handle retries, and check for duplicates.
 
@@ -593,10 +594,13 @@ async def scrape_book(
     :param breakers: The per-run :class:`DomainCircuitBreakers` tracking repeated bot-wall blocks,
         or ``None`` to use the shared module-level instance. When a domain's breaker is open, this
         returns :attr:`ScrapeStatus.BLOCKED` (``error="circuit open"``) with no request.
+    :param nav_timeout_ms: Per-page navigation timeout in milliseconds (the resolved
+        ``--nav-timeout``), or ``None`` to use the :data:`NAVIGATION_TIMEOUT_MS` default.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     active_limiters = limiters if limiters is not None else default_limiters()
     active_breakers = breakers if breakers is not None else default_breakers()
+    active_nav_timeout_ms = nav_timeout_ms if nav_timeout_ms is not None else NAVIGATION_TIMEOUT_MS
 
     # Circuit-breaker gate: once a domain's breaker has opened (threshold consecutive bot-wall
     # blocks), every further URL for it is skipped WITHOUT a request for the rest of the run.
@@ -662,7 +666,7 @@ async def scrape_book(
 
             # Throttle per host immediately before navigating.
             await active_limiters.for_url(full_url).acquire()
-            await page.goto(full_url, timeout=NAVIGATION_TIMEOUT_MS)
+            await page.goto(full_url, timeout=active_nav_timeout_ms)
 
             # Bot-wall detection BEFORE the 404 check: a 200 CAPTCHA interstitial has none of the
             # real fields, so without this it would be misread as a PARSE_ERROR. A positive match

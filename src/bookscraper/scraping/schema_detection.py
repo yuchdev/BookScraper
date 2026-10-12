@@ -61,7 +61,6 @@ from playwright.async_api import (
 from ..book_utils import print_log
 from .browser import new_scrape_context
 from .parameters import (
-    HEADLESS_BROWSER,
     NON_SELECTOR_SEARCH_KEYS,
     OPTIONAL_SELECTOR_KEYS,
     site_constants,
@@ -91,6 +90,10 @@ DEFAULT_MAX_TOKENS = 16000
 # Upper bound on the pruned-HTML payload handed to the LLM. Kept well under the model's
 # context window while leaving room for the prompt scaffolding and the response.
 DEFAULT_HTML_BUDGET = 60000
+
+# Default per-page navigation timeout in ms when no resolved ``--nav-timeout`` is threaded in
+# (matches ``runtime.DEFAULT_NAV_TIMEOUT_S`` of 60 s). The CLI path always passes an explicit value.
+DEFAULT_NAV_TIMEOUT_MS = 60000
 
 # Pre-flight input-token budget per request (overridable via ``--max-input-tokens``). If a built
 # prompt exceeds it, the HTML snapshot is re-pruned toward ``MIN_HTML_BUDGET`` characters; if it
@@ -1065,18 +1068,24 @@ def call_anthropic(
     return _extract_text(message), getattr(message, "usage", None)
 
 
-async def fetch_pruned_html(url: str, page: Page, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
+async def fetch_pruned_html(
+    url: str,
+    page: Page,
+    max_chars: int = DEFAULT_HTML_BUDGET,
+    nav_timeout_ms: int = DEFAULT_NAV_TIMEOUT_MS,
+) -> str:
     """Navigate ``page`` to ``url`` and return a pruned HTML snapshot.
 
     ``page`` is created on a context from the shared ``browser.new_scrape_context`` factory (see
     ``detect_schema``), so its user-agent/identity matches exactly what the scraper presents - the
     snapshot reflects what ``scrape_details.scrape_book`` would see. This helper only applies the
     shared ``route_handler`` (document-only) resource blocking and navigates; it no longer sets a
-    User-Agent header of its own. Raises ``SchemaDetectionError`` on any navigation/load failure.
+    User-Agent header of its own. ``nav_timeout_ms`` is the resolved ``--nav-timeout`` in ms. Raises
+    ``SchemaDetectionError`` on any navigation/load failure.
     """
     try:
         await page.route("**/*", route_handler)
-        await page.goto(url, timeout=60000)
+        await page.goto(url, timeout=nav_timeout_ms)
         html = await page.content()
     except PlaywrightTimeoutError as exc:
         raise SchemaDetectionError(f"Timed out loading sample URL '{url}': {exc}") from exc
@@ -1416,6 +1425,8 @@ async def detect_schema(
     record: Optional[str] = None,
     report_format: str = "text",
     check_current_only: bool = False,
+    headless: bool = True,
+    nav_timeout_ms: int = DEFAULT_NAV_TIMEOUT_MS,
 ) -> tuple[str, str, int]:
     """Run the full detect -> validate -> report pipeline, returning ``(report, usage_line, exit_code)``.
 
@@ -1442,6 +1453,10 @@ async def detect_schema(
     read, no Anthropic client is constructed and no ``count_tokens`` pre-flight runs - and only the
     current selectors are evaluated; paired with ``--html-file`` it makes zero network calls, the
     basis for a scheduled drift job.
+
+    ``headless`` and ``nav_timeout_ms`` are the resolved ``--headless`` / ``--nav-timeout`` runtime
+    options (see :func:`bookscraper.runtime.runtime_options`): the browser launches headless by
+    default and each live ``--url`` navigation is bounded by ``nav_timeout_ms``.
 
     Offline note (AIS-9/AIS-10): in replay mode there is no client, so the ``count_tokens``
     pre-flight budget is skipped entirely (nothing is sent to bound); the usage line reports zero
@@ -1483,7 +1498,7 @@ async def detect_schema(
     current_proposals = _build_current_proposals(fields, current)
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=HEADLESS_BROWSER)
+        browser = await playwright.chromium.launch(headless=headless)
         samples: list[dict[str, Any]] = []
         recorded: dict[str, str] = {}
         proposals: dict[str, dict[str, Any]] = {}
@@ -1500,7 +1515,7 @@ async def detect_schema(
                     # sees. The context is torn down with the browser in the finally below.
                     context = await new_scrape_context(browser)
                     page = await context.new_page()
-                    pruned_html = await fetch_pruned_html(label, page)
+                    pruned_html = await fetch_pruned_html(label, page, nav_timeout_ms=nav_timeout_ms)
                 # Never send a bot-wall / CAPTCHA page to the model (its markup is useless for
                 # selector detection and the request would waste tokens on an interstitial).
                 if await _detect_bot_wall(page, site):
