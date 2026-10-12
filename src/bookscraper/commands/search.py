@@ -6,6 +6,8 @@ import csv
 import logging
 import time
 from collections import Counter
+from pathlib import Path
+from typing import NoReturn
 
 import httpx
 
@@ -22,6 +24,107 @@ module_logger = logging.getLogger(__name__)
 # Default number of detail scrapes in flight at once (CLI --concurrency arrives in task 05.0).
 # Per-host pacing is the rate limiter's job, so this only bounds total concurrent detail fetches.
 DEFAULT_CONCURRENCY = 4
+
+# Sites with a search provider wired end-to-end today. Only Leanpub is implemented (its JSON API);
+# task 03.3 adds the Playwright-backed providers for the other site keys. Selecting a site outside
+# this set is a clear, loud error in resolve_search_targets - never a silent skip - so a user does
+# not think amazon/packtpub/oreilly were searched when no provider exists to search them yet.
+SUPPORTED_SEARCH_SITES = frozenset({"leanpub"})
+
+
+def _target_error(message: str) -> NoReturn:
+    """
+    Report an invalid ``search`` targeting selection and exit with argparse's usage status (2).
+
+    Mirrors ``argparse.ArgumentParser.error``'s exit code so a bad ``--site`` / ``--query`` /
+    ``--queries-file`` combination fails as a usage error rather than a mid-run crash.
+
+    :param message: The human-facing reason, surfaced through :func:`print_log`.
+    :raises SystemExit: Always, with code ``2``.
+    """
+    print_log(f"search: {message}", "error")
+    module_logger.error(f"search targeting error: {message}")
+    raise SystemExit(2)
+
+
+def _read_queries_file(path: str) -> list[str]:
+    """
+    Read search queries from ``path``, one per line, skipping blanks and ``#`` comment lines.
+
+    :param path: The ``--queries-file`` path to read.
+    :returns: The queries in file order, stripped, with blank and comment lines removed.
+    :raises SystemExit: With code ``2`` if the file cannot be read.
+    """
+    try:
+        raw_lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        _target_error(f"cannot read --queries-file {path!r}: {exc.strerror or exc}")
+    queries = []
+    for raw in raw_lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        queries.append(line)
+    return queries
+
+
+def _resolve_queries(args: argparse.Namespace) -> list[str]:
+    """
+    Merge ``--query`` and ``--queries-file`` into one de-duplicated, order-preserving query list.
+
+    ``--query`` values come first (in the order given), then ``--queries-file`` values (in file
+    order); duplicates after the first occurrence are dropped. When neither flag supplies a query,
+    the ``SEARCH_QUERIES`` default from ``parameters.py`` is used.
+
+    :param args: Parsed ``search`` arguments (reads ``queries`` and ``queries_file``).
+    :returns: The resolved, de-duplicated query list.
+    """
+    cli_queries_arg = getattr(args, "queries", None)
+    queries_file = getattr(args, "queries_file", None)
+    # Fall back to the parameters.py default only when NEITHER flag was supplied. When a flag is
+    # given but yields nothing (e.g. a comments-only --queries-file), the resolved list stays empty
+    # so the caller raises a loud error rather than silently searching the defaults.
+    if cli_queries_arg is None and queries_file is None:
+        return list(SEARCH_QUERIES)
+    cli_queries = list(cli_queries_arg or [])
+    file_queries = _read_queries_file(queries_file) if queries_file else []
+    merged = []
+    seen = set()
+    for query in [*cli_queries, *file_queries]:
+        if query not in seen:
+            seen.add(query)
+            merged.append(query)
+    return merged
+
+
+def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[str], int]:
+    """
+    Resolve the sites, queries and page cap a ``search`` run should use, in exactly one place.
+
+    Flags beat the ``parameters.py`` defaults: ``--site`` falls back to ``SITES_TO_SCRAPE`` and the
+    query flags fall back to ``SEARCH_QUERIES`` only when unset. An empty resolved site or query
+    list, or a site with no wired provider (see :data:`SUPPORTED_SEARCH_SITES`), is a loud usage
+    error (exit ``2``) rather than a silent no-op.
+
+    :param args: Parsed ``search`` arguments (reads ``sites``, ``queries``, ``queries_file`` and
+        ``max_search_pages``).
+    :returns: A ``(sites, queries, max_search_pages)`` tuple ready for the run loop.
+    :raises SystemExit: With code ``2`` if the resolved sites or queries are empty or a chosen site
+        has no wired search provider.
+    """
+    sites = list(getattr(args, "sites", None) or SITES_TO_SCRAPE)
+    queries = _resolve_queries(args)
+    max_search_pages = getattr(args, "max_search_pages", None) or 3
+
+    if not sites:
+        _target_error("no sites to search; pass --site or configure SITES_TO_SCRAPE")
+    unsupported = [site for site in sites if site not in SUPPORTED_SEARCH_SITES]
+    if unsupported:
+        supported = ", ".join(sorted(SUPPORTED_SEARCH_SITES))
+        _target_error(f"no search provider wired for: {', '.join(unsupported)}; supported sites: {supported}")
+    if not queries:
+        _target_error("no search queries; pass --query/--queries-file or configure SEARCH_QUERIES")
+    return sites, queries, max_search_pages
 
 
 def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv"):
@@ -82,6 +185,10 @@ async def run(args: argparse.Namespace):
     start_time = time.time()
     module_logger.info("Application started.")
 
+    # Resolve sites/queries/page cap before anything is opened, so a bad targeting selection
+    # (exit 2) fails fast without spinning up a storage backend or HTTP client.
+    sites, queries, max_search_pages = resolve_search_targets(args)
+
     storage_backend = resolve_store_backend(args.store_backend)
     # One per-run, per-host rate limiter registry shared by the search and detail fetches so the
     # whole run is throttled to each host's configured rate.
@@ -112,11 +219,11 @@ async def run(args: argparse.Namespace):
         ) as http_client:
             robots = None if args.ignore_robots else RobotsCache(build_robots_fetcher(http_client), limiters)
 
-            # --- Iterate through SITES_TO_SCRAPE and perform search + scrape ---
-            for site_name in SITES_TO_SCRAPE:
+            # --- Iterate through the resolved sites and perform search + scrape ---
+            for site_name in sites:
                 print_log(f"\n--- Processing {site_name.title()} ---", "step")
 
-                for search_item in SEARCH_QUERIES:
+                for search_item in queries:
                     current_search_results = []
                     # Leanpub-Specific
                     if site_name.lower() == "leanpub":
@@ -124,7 +231,7 @@ async def run(args: argparse.Namespace):
 
                         # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
                         current_search_results = await get_leanpub_search_results_via_api(
-                            search_item, limiters=limiters, robots=robots
+                            search_item, limiters=limiters, robots=robots, max_pages=max_search_pages
                         )
 
                         # Pre-scrape deduplication

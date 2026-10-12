@@ -11,13 +11,20 @@ import argparse
 #: graph (``pymongo`` and the rest); ``cli.py`` itself imports only ``argparse``.
 STORE_BACKENDS = ("mongo", "json")
 
+#: The site keys the ``search --site`` flag accepts, matching the top-level keys of
+#: ``scraping/parameters.py``'s ``site_constants``. Defined here (rather than imported) to keep
+#: ``cli.py`` importing only ``argparse``; a drift guard (``test_site_keys_match_site_constants``)
+#: asserts it stays in sync with ``site_constants``.
+SITE_KEYS = ("amazon", "packtpub", "leanpub", "oreilly")
+
 
 def _positive_int(value: str) -> int:
     """
     ``argparse`` type for a strictly positive integer (>= 1).
 
-    Used by ``rotate-cert --keep`` so ``0`` and negatives are rejected at parse time - a
-    ``--keep 0`` would otherwise ask pruning to delete every certificate, including the active one.
+    Used by ``rotate-cert --keep`` (so ``0`` and negatives are rejected at parse time - a
+    ``--keep 0`` would otherwise ask pruning to delete every certificate, including the active one)
+    and by ``search --max-search-pages`` (so a non-positive page count is rejected up front).
 
     :param value: The raw command-line token.
     :returns: The parsed integer.
@@ -137,11 +144,45 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[store_parent, scrape_runtime_parent, logging_parent],
     )
     search_parser.add_argument(
+        "--site",
+        dest="sites",
+        action="append",
+        choices=list(SITE_KEYS),
+        default=None,
+        help="Restrict the search to this site; repeat --site to target several. Omit to use "
+        "SITES_TO_SCRAPE from parameters.py. A chosen site with no wired search provider yet is a "
+        "clear error, not a silent skip.",
+    )
+    search_parser.add_argument(
+        "-q",
+        "--query",
+        dest="queries",
+        action="append",
+        default=None,
+        help="A search query to run; repeat -q/--query to run several. Combines with "
+        "--queries-file (union, order preserved, de-duplicated). Omit both to use SEARCH_QUERIES "
+        "from parameters.py.",
+    )
+    search_parser.add_argument(
+        "--queries-file",
+        dest="queries_file",
+        default=None,
+        help="Path to a file of search queries, one per line; blank lines and lines starting with "
+        "'#' are skipped. Combines with --query (union, order preserved, de-duplicated).",
+    )
+    search_parser.add_argument(
         "--max-search-pages",
         dest="max_search_pages",
-        type=int,
+        type=_positive_int,
         default=3,
-        help="Maximum number of search-result pages to fetch per query per site (default: 3).",
+        help="Maximum number of search-result pages to fetch per query per site (default: 3). Must be >= 1.",
+    )
+    search_parser.add_argument(
+        "--no-filters",
+        dest="no_filters",
+        action="store_true",
+        help="Do not apply the SCRAPE_FILTERS rating thresholds to search results; keep every "
+        "candidate. Off by default.",
     )
     search_parser.add_argument(
         "--ignore-robots",

@@ -22,7 +22,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 | #  | Document                                                             | Status         | Blocks |
 |----|----------------------------------------------------------------------|----------------|--------|
 | 01 | [Shared parent parsers](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/01-shared-parent-parsers.md)          | ✅ Complete    | 02-07  |
-| 02 | [Search targeting flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/02-search-targeting-flags.md)        | ⬜ Not started | -      |
+| 02 | [Search targeting flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/02-search-targeting-flags.md)        | ✅ Complete    | -      |
 | 03 | [Browser & concurrency flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/03-browser-and-concurrency-flags.md) | ⬜ Not started | - |
 | 04 | [Dry run & output locations](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/04-dry-run-and-output-locations.md) | ⬜ Not started | -   |
 | 05 | [Exit-code contract & interrupt handling](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/05-exit-code-contract.md) | ⬜ Not started | - |

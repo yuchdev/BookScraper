@@ -39,6 +39,7 @@ async def get_leanpub_search_results_via_api(
     query: str,
     limiters: Optional[DomainRateLimiters] = None,
     robots: Optional[RobotsCache] = None,
+    max_pages: Optional[int] = None,
 ) -> list[dict]:
     """
     Fetch Leanpub search-result candidates for ``query`` via Leanpub's paginated JSON API.
@@ -48,6 +49,9 @@ async def get_leanpub_search_results_via_api(
         against, or ``None`` to use the shared module-level instance.
     :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to
         skip the robots.txt check (e.g. under ``--ignore-robots``).
+    :param max_pages: The maximum number of result pages to fetch (the resolved
+        ``--max-search-pages``), or ``None`` for no cap. Pagination still stops early when a page
+        returns fewer than a full page of results.
     :returns: A list of candidate book dictionaries collected across all result pages.
     """
     print_log(f"Leanpub - Fetching search results from Leanpub.com for {query}.", "info")
@@ -85,6 +89,9 @@ async def get_leanpub_search_results_via_api(
             return response
 
         while True:
+            # Honor the resolved --max-search-pages cap: stop before fetching a page beyond it.
+            if max_pages is not None and current_page > max_pages:
+                break
             params = {
                 "bookstore": "true",
                 "filter_erotica": "true",

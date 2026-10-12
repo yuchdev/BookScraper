@@ -12,9 +12,11 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
-from bookscraper.commands.search import run, save_failed_urls_to_csv
+from bookscraper.commands.search import resolve_search_targets, run, save_failed_urls_to_csv
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 MODULE = "bookscraper.commands.search"
@@ -787,3 +789,188 @@ async def test_search_detail_scrape_is_bounded():
     backend.save_books.assert_called_once()
     (saved_arg,), _ = backend.save_books.call_args
     assert len(saved_arg) == 12
+
+
+# --------------------------------------------------------------------------- #
+# resolve_search_targets  (subtask 05.0/02)
+# --------------------------------------------------------------------------- #
+def _targets_args(**overrides) -> SimpleNamespace:
+    """Build a search Namespace for resolve_search_targets with all targeting attrs defaulted."""
+    base = {"sites": None, "queries": None, "queries_file": None, "max_search_pages": None}
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_query_and_queries_file_are_merged_and_deduplicated(tmp_path):
+    """
+    [Local] search: resolve_search_targets merges --query and --queries-file (order-preserved, deduped).
+
+    Scenario:
+        Given --query ["Rust", "Go"] and a queries-file listing ["Go", "Python"]
+        When resolve_search_targets resolves the queries
+        Then the result is ["Rust", "Go", "Python"] - CLI queries first, then file queries, with the
+        duplicate "Go" dropped after its first occurrence.
+
+    Boundaries:
+        - Real file read via tmp_path; no network, no backend
+        - Only the query-merge path; empty-list and unsupported-site errors are separate tests
+
+    On failure, first check:
+        - The _resolve_queries ordering (CLI then file) and the seen-set de-duplication in search.py
+    """
+    qfile = tmp_path / "queries.txt"
+    qfile.write_text("Go\nPython\n", encoding="utf-8")
+    args = _targets_args(queries=["Rust", "Go"], queries_file=str(qfile))
+
+    _, queries, _ = resolve_search_targets(args)
+
+    assert queries == ["Rust", "Go", "Python"]
+
+
+def test_queries_file_skips_comments_and_blanks(tmp_path):
+    """
+    [Local] search: resolve_search_targets skips blank lines and '#' comments in a queries file.
+
+    Scenario:
+        Given a queries file with comment lines, blank lines, and whitespace around real queries
+        When resolve_search_targets resolves the queries (no --query given)
+        Then only the stripped non-comment, non-blank queries remain, in file order.
+
+    Boundaries:
+        - Real file read via tmp_path; no network, no backend
+        - Covers the comment/blank filter and strip; the merge-with-CLI path is a separate test
+
+    On failure, first check:
+        - The line.strip()/startswith("#")/blank filter in _read_queries_file in search.py
+    """
+    qfile = tmp_path / "queries.txt"
+    qfile.write_text("# a comment\n\n  Rust  \n# another\nData Science\n\n", encoding="utf-8")
+    args = _targets_args(queries_file=str(qfile))
+
+    _, queries, _ = resolve_search_targets(args)
+
+    assert queries == ["Rust", "Data Science"]
+
+
+def test_defaults_fall_back_to_parameters_constants():
+    """
+    [Local] search: with no targeting flags, resolve_search_targets falls back to parameters.py constants.
+
+    Scenario:
+        Given a Namespace with sites/queries/queries_file None and max_search_pages None
+        When resolve_search_targets resolves the targets
+        Then sites equals SITES_TO_SCRAPE, queries equals SEARCH_QUERIES, and max_search_pages is 3.
+
+    Boundaries:
+        - Pure logic; reads the real module-level SITES_TO_SCRAPE/SEARCH_QUERIES (not patched)
+        - The returned lists are fresh copies, not the module constants themselves
+
+    On failure, first check:
+        - The "fall back to SITES_TO_SCRAPE / SEARCH_QUERIES when unset" branches in search.py
+        - The "max_search_pages or 3" default in resolve_search_targets
+    """
+    args = _targets_args()
+
+    sites, queries, max_search_pages = resolve_search_targets(args)
+
+    assert sites == list(search.SITES_TO_SCRAPE)
+    assert queries == list(search.SEARCH_QUERIES)
+    assert max_search_pages == 3
+
+
+def test_unsupported_site_errors_clearly():
+    """
+    [Local] search: selecting a site with no wired provider exits 2 with a message naming supported sites.
+
+    Scenario:
+        Given --site amazon (a valid site key but no search provider wired yet)
+        When resolve_search_targets is called
+        Then SystemExit(2) is raised and the error message names the supported site (leanpub).
+
+    Boundaries:
+        - Pure logic; no network, no backend; print_log is patched to capture the message
+        - A genuinely unknown site is rejected earlier by argparse choices, not here
+
+    On failure, first check:
+        - The SUPPORTED_SEARCH_SITES membership check and _target_error (exit 2) in search.py
+    """
+    args = _targets_args(sites=["amazon"], queries=["Rust"])
+
+    with patch(f"{MODULE}.print_log") as print_log, pytest.raises(SystemExit) as exc_info:
+        resolve_search_targets(args)
+
+    assert exc_info.value.code == 2
+    message = " ".join(str(call.args[0]) for call in print_log.call_args_list)
+    assert "amazon" in message
+    assert "leanpub" in message
+
+
+def test_empty_resolved_query_list_errors(tmp_path):
+    """
+    [Local] search: an empty resolved query list exits 2.
+
+    Scenario:
+        Given a queries file that contains only comments and blanks (and no --query) so the merged
+        query list is empty
+        When resolve_search_targets is called
+        Then SystemExit(2) is raised.
+
+    Boundaries:
+        - Real file read via tmp_path; print_log patched to keep the console quiet
+        - Edge case guarding the "no queries" branch distinct from the unsupported-site branch
+
+    On failure, first check:
+        - The "if not queries" guard in resolve_search_targets in search.py
+    """
+    qfile = tmp_path / "empty.txt"
+    qfile.write_text("# only a comment\n\n", encoding="utf-8")
+    args = _targets_args(queries_file=str(qfile))
+
+    with patch(f"{MODULE}.print_log"), pytest.raises(SystemExit) as exc_info:
+        resolve_search_targets(args)
+
+    assert exc_info.value.code == 2
+
+
+async def test_max_search_pages_reaches_search_provider():
+    """
+    [Local] search: the resolved --max-search-pages reaches the Leanpub search provider as max_pages.
+
+    Scenario:
+        Given a search run with --query "Rust" and --max-search-pages 1
+        When run() executes
+        Then get_leanpub_search_results_via_api is awaited exactly once (one query, one site) with
+        the query "Rust" and max_pages=1.
+
+    Boundaries:
+        - The provider is mocked, so no real pagination happens; this pins that the flag is wired
+          through, not that pagination stops (that is search_utils' own unit coverage)
+
+    On failure, first check:
+        - run() passes max_pages=max_search_pages into get_leanpub_search_results_via_api
+        - resolve_search_targets returns the parsed max_search_pages unchanged
+    """
+    args = SimpleNamespace(
+        store_backend="json",
+        ignore_robots=False,
+        sites=None,
+        queries=["Rust"],
+        queries_file=None,
+        max_search_pages=1,
+    )
+
+    backend = MagicMock()
+    search_api = AsyncMock(return_value=[])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    search_api.assert_awaited_once()
+    assert search_api.call_args.args[0] == "Rust"
+    assert search_api.call_args.kwargs["max_pages"] == 1
+    backend.close.assert_called_once_with()

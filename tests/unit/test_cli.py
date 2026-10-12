@@ -12,7 +12,8 @@ import pytest
 
 from bookscraper import cli
 from bookscraper.backends import storage
-from bookscraper.cli import STORE_BACKENDS, build_parser
+from bookscraper.cli import SITE_KEYS, STORE_BACKENDS, build_parser
+from bookscraper.scraping.parameters import site_constants
 
 
 def test_scrape_urls_parses_full_valid_arg_set():
@@ -243,6 +244,136 @@ def test_search_max_search_pages_type_is_int():
     """
     args = build_parser().parse_args(["search", "--store-backend", "json", "--max-search-pages", "7"])
     assert isinstance(args.max_search_pages, int)
+
+
+def test_site_flag_repeatable_and_validated():
+    """
+    [Unit] cli search: --site is repeatable into args.sites and an unknown site is rejected.
+
+    Scenario:
+        Given a search invocation repeating --site leanpub and --site amazon
+        When build_parser().parse_args() processes the argument list
+        Then args.sites is ["leanpub", "amazon"]; and a --site goodreads value causes SystemExit.
+
+    Boundaries:
+        - Pure argparse; choices come from cli.SITE_KEYS, so an off-list site is rejected at parse
+          time (a site with no provider yet is caught later by resolve_search_targets, not here)
+        - Omitting --site leaves args.sites None so the command falls back to SITES_TO_SCRAPE
+
+    On failure, first check:
+        - Whether action="append", dest="sites", and choices=list(SITE_KEYS) are still set on --site
+        - Whether default=None is still set on --site in the search subparser in cli.py
+    """
+    args = build_parser().parse_args(["search", "--store-backend", "json", "--site", "leanpub", "--site", "amazon"])
+    assert args.sites == ["leanpub", "amazon"]
+
+    default_args = build_parser().parse_args(["search", "--store-backend", "json"])
+    assert default_args.sites is None
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["search", "--store-backend", "json", "--site", "goodreads"])
+
+
+def test_site_keys_match_site_constants():
+    """
+    [Unit] cli: SITE_KEYS stays in sync with the top-level keys of site_constants.
+
+    Scenario:
+        Given cli.SITE_KEYS and scraping.parameters.site_constants
+        When their key sets are compared
+        Then every SITE_KEYS entry is a site_constants key and vice versa.
+
+    Boundaries:
+        - Pure data comparison; no argparse, no network
+        - Guards the hardcoded SITE_KEYS tuple (cli.py imports only argparse) against drifting
+          from the real site_constants
+
+    On failure, first check:
+        - Whether a site was added to or removed from site_constants without updating SITE_KEYS in
+          cli.py
+    """
+    assert set(SITE_KEYS) == set(site_constants)
+
+
+def test_max_search_pages_rejects_zero():
+    """
+    [Unit] cli search: --max-search-pages 0 (and a negative) causes argparse to exit.
+
+    Scenario:
+        Given a search invocation with --max-search-pages 0, then one with --max-search-pages -2
+        When build_parser().parse_args() processes each argument list
+        Then SystemExit is raised each time (the positive-int type rejects values below 1).
+
+    Boundaries:
+        - Pure argparse; exercises the shared _positive_int type= now applied to --max-search-pages
+
+    On failure, first check:
+        - Whether type=_positive_int is still set on --max-search-pages in the search subparser
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["search", "--store-backend", "json", "--max-search-pages", "0"])
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["search", "--store-backend", "json", "--max-search-pages", "-2"])
+
+
+def test_search_query_and_queries_file_flags_parse():
+    """
+    [Unit] cli search: -q/--query is repeatable into args.queries and --queries-file binds its path.
+
+    Scenario:
+        Given a search invocation with -q Rust, --query Go, --queries-file q.txt, and --no-filters
+        When build_parser().parse_args() processes the argument list
+        Then args.queries is ["Rust", "Go"], args.queries_file is "q.txt", and args.no_filters is True.
+
+    Boundaries:
+        - Pure argparse; no file is opened (the queries-file is read later by resolve_search_targets)
+        - Covers both the short -q and long --query forms accumulating into one list
+
+    On failure, first check:
+        - Whether action="append"/dest="queries" is still set on -q/--query and dest="queries_file"
+          on --queries-file in cli.py
+        - Whether --no-filters still maps to dest="no_filters" with action="store_true"
+    """
+    args = build_parser().parse_args(
+        [
+            "search",
+            "--store-backend",
+            "json",
+            "-q",
+            "Rust",
+            "--query",
+            "Go",
+            "--queries-file",
+            "q.txt",
+            "--no-filters",
+        ]
+    )
+    assert args.queries == ["Rust", "Go"]
+    assert args.queries_file == "q.txt"
+    assert args.no_filters is True
+
+
+def test_search_targeting_flags_default_to_none_and_false():
+    """
+    [Unit] cli search: the new targeting flags default to None/False when not supplied.
+
+    Scenario:
+        Given a search invocation with only --store-backend
+        When build_parser().parse_args() processes the argument list
+        Then args.sites, args.queries, and args.queries_file are None and args.no_filters is False.
+
+    Boundaries:
+        - Pure argparse; verifies the defaults that signal fall-back to parameters.py constants
+
+    On failure, first check:
+        - Whether default=None is still set on --site/--query/--queries-file and default False
+          (store_true) on --no-filters in cli.py
+    """
+    args = build_parser().parse_args(["search", "--store-backend", "json"])
+    assert args.sites is None
+    assert args.queries is None
+    assert args.queries_file is None
+    assert args.no_filters is False
 
 
 def test_log_severity_defaults_to_info_on_both_subcommands():

@@ -185,6 +185,33 @@ async def test_leanpub_api_full_page_then_short_page_combines_results():
     assert len(books) == 102
 
 
+async def test_leanpub_api_max_pages_caps_pagination():
+    """
+    [Local] search utils: verifies that max_pages stops pagination after the capped page count.
+
+    Scenario:
+        Given two full (100-book) pages that would otherwise both be fetched
+        When get_leanpub_search_results_via_api is called with max_pages=1
+        Then only the first page is fetched (100 books) and the second page is never requested.
+
+    Boundaries:
+        - Covers the --max-search-pages cap wiring; the "short page stops early" path is separate.
+
+    On failure, first check:
+        - The "if max_pages is not None and current_page > max_pages" guard in the pagination loop.
+    """
+    page1_books = [_search_book(f"b{i}", title=f"Book {i}") for i in range(100)]
+    page2_books = [_search_book(f"c{i}", title=f"More {i}") for i in range(100)]
+    responses = [
+        FakeResponse(json_data=_search_payload(page1_books)),
+        FakeResponse(json_data=_search_payload(page2_books)),
+    ]
+    with _patch_httpx(responses=responses):
+        books = await get_leanpub_search_results_via_api("python", limiters=_fast_limiters(), max_pages=1)
+
+    assert len(books) == 100
+
+
 async def test_leanpub_api_empty_data_returns_empty_immediately():
     """
     [Local] search utils: verifies that an empty "data" array terminates the search immediately.
