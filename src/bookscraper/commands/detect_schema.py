@@ -25,20 +25,23 @@ import sys
 
 from dotenv import load_dotenv
 
+from .. import exitcodes
 from ..book_utils import print_log
 from ..runtime import runtime_options
 from ..scraping.schema_detection import SchemaDetectionError, detect_schema
 
 
-async def run(args: argparse.Namespace):
+async def run(args: argparse.Namespace) -> int:
     """
     The "propose selector-schema updates" workflow (dev maintenance, never touches book data).
 
     Runs :func:`detect_schema` over the sample pages, writes the report to stdout (and
-    ``--output`` if given), and exits ``1`` on a :class:`SchemaDetectionError` or ``4`` on
-    detected schema drift.
+    ``--output`` if given), and returns an exit code.
 
     :param args: Parsed ``detect-schema`` arguments.
+    :returns: :data:`~bookscraper.exitcodes.FATAL` on a :class:`SchemaDetectionError` or an
+        ``--output`` write failure, :data:`~bookscraper.exitcodes.DRIFT` when a current selector
+        matched no sample page, otherwise :data:`~bookscraper.exitcodes.OK`.
     """
     # Load .env so ANTHROPIC_API_KEY (and an optional ANTHROPIC_MODEL) can live there,
     # the same lightweight way commands/rotate_cert.py picks up its ATLAS_* vars.
@@ -66,7 +69,7 @@ async def run(args: argparse.Namespace):
         )
     except SchemaDetectionError as exc:
         print_log(f"Schema detection failed: {exc}", "error")
-        sys.exit(1)
+        return exitcodes.FATAL
 
     json_format = args.format == "json"
 
@@ -92,21 +95,22 @@ async def run(args: argparse.Namespace):
                 handle.write(report + "\n")
         except OSError as exc:
             print_log(f"Error: could not write report to '{args.output}': {exc}", "error")
-            sys.exit(1)
+            return exitcodes.FATAL
         _status(f"Report written to {args.output}", "success")
 
-    if exit_code == 4:
-        # Drift: at least one current selector matched on no sample page. Exit 4 so a scheduled
-        # CI drift job notices, the same way rotate-cert --check propagates its exit 3.
+    if exit_code == exitcodes.DRIFT:
+        # Drift: at least one current selector matched on no sample page. Return 4 so a scheduled
+        # CI drift job notices, the same way rotate-cert --check reports its exit 3.
         _status(
             "Schema drift detected: at least one current selector matched on no sample page. "
             "Review the report and refresh site_constants in parameters.py by hand.",
             "warning",
         )
-        sys.exit(4)
+        return exitcodes.DRIFT
 
     _status(
         "Schema detection complete. Review the proposals above and apply desired changes "
         "to site_constants in parameters.py by hand - nothing was written automatically.",
         "success",
     )
+    return exitcodes.OK

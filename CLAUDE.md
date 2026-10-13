@@ -188,8 +188,9 @@ cert's expiry without rotating. It resolves the same cert the app connects with
 is a **pure local file read** — it never contacts Atlas and never needs the `ATLAS_*` variables, so it's safe as a
 cron/CI health check. Its exit codes are: **`0`** if more than `N` days remain (or no x509 cert is configured — a
 no-op), **`3`** if the cert expires within `N` days (so cron/CI can alert), **`1`** if the cert is expired or
-unreadable. Exit code `3` is dispatched through `main.py` via `sys.exit(3)` in `commands/rotate_cert.py`, the same
-`SystemExit`-propagation path as the existing `1`. Separately, `resolve_store_backend("mongo")` runs a non-raising
+unreadable. As of task 05.0/05, `commands/rotate_cert.py` **returns** these codes (`bookscraper.exitcodes.OK`/
+`PARTIAL`/`FATAL`) rather than calling `sys.exit` itself; `main_sync()` is the single place that calls
+`sys.exit(code)`, after `main()` dispatches to the command and gets its return value back. Separately, `resolve_store_backend("mongo")` runs a non-raising
 pre-flight helper `cert_rotation.cert_expiry_warning(cert_path, warn_days=30)` and `print_log`s any warning *before*
 connecting; a parse failure there is a warning, never a crash. Both paths parse **only the first `CERTIFICATE` PEM
 block** of the combined key+cert file (via the `cryptography` package, a direct dependency) — the private-key block
@@ -255,7 +256,8 @@ unavailable.
   `book_utils.atomic_write_bytes`) with a one-generation `books.json.bak` backup taken before each replace, so an
   interrupt mid-write never truncates the store; and a store that exists but isn't valid JSON is refused rather
   than overwritten — `save_books`/pre-flight raise `store.LocalStoreCorruptError` (surfaced by
-  `resolve_store_backend('json')` as a `print_log` error + `sys.exit(1)` before any scraping) instead of silently
+  `resolve_store_backend('json')` as a `print_log` error, raising `backends.BackendUnavailableError` (05.0/05) which
+`main()` maps to `bookscraper.exitcodes.FATAL`, before any scraping) instead of silently
   discarding its books. `JsonBackend` also caches an in-memory `hash`/`asin`/`book_id`/`slug` index, built once and
   kept current by `save_books`, so repeated dedup lookups don't re-parse the file.
 - Diagnostic reports that aren't database content — `failed_urls.csv` / `failed_books.csv` / `other_links.csv` —
@@ -432,9 +434,9 @@ or `absent_optional` (a key in `parameters.OPTIONAL_SELECTOR_KEYS` — `DETAILS_
 the site leaves unset). `summary.current_broken` counts **only** `broken`. Exit codes: `0` nothing `broken`; `4`
 **drift** — at least one `broken` field; `1` any error (`SchemaDetectionError`). `OPTIONAL_SELECTOR_KEYS` is kept
 minimal: anything the scraper NEEDS to extract a record (title, authors, ISBN-13, publication date, description, the
-search card + its title/detail-link) stays gating. `commands/detect_schema.py`
-propagates exit `4` via `sys.exit(4)` the same way `rotate-cert --check` propagates `3` (`main.py` lets it bubble
-through `asyncio.run`). `--format {text,json}` (default `text`) picks the report: `json` emits a machine-readable
+search card + its title/detail-link) stays gating. As of task 05.0/05, `commands/detect_schema.py` **returns**
+`bookscraper.exitcodes.DRIFT` (4) rather than calling `sys.exit(4)` itself; `main_sync()` is the single `sys.exit`
+call site. `--format {text,json}` (default `text`) picks the report: `json` emits a machine-readable
 document (see `format_json_report`) and keeps **stdout a single parseable JSON object** for a CI drift job, routing
 every human status line to stderr. `--check-current-only` (AIS-9 hard gate) skips the AI step **entirely** — no model
 resolved, no `ANTHROPIC_API_KEY` read, no Anthropic client constructed, no `count_tokens` pre-flight — and evaluates
@@ -619,12 +621,13 @@ up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
   `SITES_TO_SCRAPE` is currently `["leanpub"]`.
 - **`rotate_cert.py`** — the "rotate the Atlas X.509 client certificate" workflow: loads `.env`, calls
   `backends.mongo.cert_rotation.rotate_certificate()` in a worker thread (it uses blocking `httpx`), reports the
-  result through `print_log`, and `sys.exit(1)`s on a `RotationError`. See TLS certificate rotation pipeline above.
+  result through `print_log`, and returns `bookscraper.exitcodes.FATAL` on a `RotationError` (05.0/05: commands
+return a code, `main_sync()` is the sole `sys.exit` call site). See TLS certificate rotation pipeline above.
 - **`detect_schema.py`** — the "propose selector-schema updates" workflow (dev maintenance, not scraping): loads
   sample detail-page URLs, asks Claude to propose CSS selectors, validates them against each page's live DOM, and
   prints a diff-style report. Takes `--site`, one or more repeatable `--url`, and an optional `--output`; no
-  `--store-backend` (it never touches book storage) and it never writes `parameters.py`. `sys.exit(1)`s on a
-  `SchemaDetectionError`. See AI-assisted schema detection above.
+  `--store-backend` (it never touches book storage) and it never writes `parameters.py`. Returns
+  `bookscraper.exitcodes.FATAL` on a `SchemaDetectionError` (05.0/05). See AI-assisted schema detection above.
 
 **`backends/`** — the storage-backend abstraction (see Storage backend above):
 - **`storage.py`** — `StorageBackend` (the mongo/json contract), `MongoBackend`, `JsonBackend`, and

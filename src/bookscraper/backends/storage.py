@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import pathlib
-import sys
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -31,6 +30,16 @@ from .mongo.cert_rotation import cert_expiry_warning
 from .save_summary import SaveSummary
 
 logger = logging.getLogger(__name__)
+
+
+class BackendUnavailableError(Exception):
+    """Raised when the requested storage backend fails its pre-flight check and cannot be used.
+
+    :func:`resolve_store_backend` raises this instead of exiting the process itself, so the
+    decision to abort lives with :func:`bookscraper.main.main`, which maps it to
+    :data:`bookscraper.exitcodes.FATAL` (task 05.0 subtask 05). Carrying a plain message (never a
+    URI, credential, or document body) keeps the run log safe.
+    """
 
 
 def _reject_invalid(books: list[dict]) -> tuple[list[dict], int]:
@@ -270,19 +279,21 @@ def _warn_if_cert_expiring():
 def resolve_store_backend(backend_name: str, json_store: Optional[pathlib.Path] = None) -> StorageBackend:
     """
     Runs a pre-flight check for the requested backend and returns a ready-to-use
-    StorageBackend. Exits the process if that backend isn't usable - there is no
-    interactive fallback: --store-backend is required, so the choice is always
-    explicit (see cli.py).
+    StorageBackend. Raises :class:`BackendUnavailableError` if that backend isn't
+    usable - there is no interactive fallback: --store-backend is required, so the
+    choice is always explicit (see cli.py). The caller (via ``main``) maps the
+    exception to :data:`bookscraper.exitcodes.FATAL`.
 
     :param backend_name: The ``--store-backend`` value (``"mongo"`` or ``"json"``).
     :param json_store: The ``--json-store`` path for the json backend, or ``None`` to use the
         default ``books.json``. The write-permission pre-flight checks this file's directory, and
         the returned :class:`JsonBackend` reads and writes it. Ignored for the mongo backend.
     :returns: A ready-to-use :class:`StorageBackend`.
+    :raises BackendUnavailableError: If the backend name is unknown or its pre-flight check fails.
     """
     if backend_name not in STORE_BACKENDS:
         print_log(f"Unknown storage backend: {backend_name!r}", "error")
-        sys.exit(1)
+        raise BackendUnavailableError(f"Unknown storage backend: {backend_name!r}")
 
     print_log(f"\nRunning pre-flight checks for '{backend_name}' storage backend...", "info")
 
@@ -292,7 +303,7 @@ def resolve_store_backend(backend_name: str, json_store: Optional[pathlib.Path] 
         mongo_collection = database.get_mongo_collection()
         if mongo_collection is None:
             print_log("  MongoDB connection: FAILED. Cannot use 'mongo' backend.", "error")
-            sys.exit(1)
+            raise BackendUnavailableError("MongoDB connection pre-flight failed")
         print_log("  MongoDB connection: OK", "info")
         return MongoBackend(mongo_collection)
 
@@ -304,13 +315,16 @@ def resolve_store_backend(backend_name: str, json_store: Optional[pathlib.Path] 
         print_log("  Checking local write permissions...", "info")
         if not check_local_write_permission(directory):
             print_log("  Local write permission: FAILED. Cannot use 'json' backend.", "error")
-            sys.exit(1)
+            raise BackendUnavailableError("local write-permission pre-flight failed")
         print_log("  Local write permission: OK", "info")
         print_log("  Checking local store integrity...", "info")
         try:
             store.assert_store_readable(store_path)
         except store.LocalStoreCorruptError as e:
             print_log(f"  Local store: CORRUPT. Cannot use 'json' backend. {e}", "error")
-            sys.exit(1)
+            raise BackendUnavailableError("local store integrity pre-flight failed") from e
         print_log("  Local store: OK", "info")
         return JsonBackend(store_path)
+
+    # Unreachable: backend_name is validated against STORE_BACKENDS above.
+    raise BackendUnavailableError(f"Unhandled storage backend: {backend_name!r}")

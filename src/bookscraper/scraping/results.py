@@ -33,6 +33,20 @@ class ScrapeStatus(str, Enum):
     FAILED = "FAILED"  # anything else
 
 
+#: The scrape statuses the exit-code contract (task 05.0 subtask 05) counts as a failed item, so a
+#: run that saw any of them returns :data:`bookscraper.exitcodes.PARTIAL`. ``DUPLICATE``,
+#: ``SKIPPED_ROBOTS`` and ``NOT_FOUND`` are deliberately excluded - a duplicate or a filtered-out
+#: item means the run did what it should, not that an item failed.
+FAILURE_STATUSES = frozenset(
+    {
+        ScrapeStatus.FAILED,
+        ScrapeStatus.TIMEOUT,
+        ScrapeStatus.PARSE_ERROR,
+        ScrapeStatus.BLOCKED,
+    }
+)
+
+
 @dataclass(frozen=True)
 class ScrapeResult:
     """The typed outcome of scraping one book URL.

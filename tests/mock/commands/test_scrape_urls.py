@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
+from bookscraper import exitcodes
 from bookscraper.backends.storage import JsonBackend, SaveSummary
 from bookscraper.commands.scrape_urls import (
     identify_website,
@@ -239,21 +240,21 @@ def _make_playwright_factory() -> tuple[MagicMock, MagicMock]:
 # --------------------------------------------------------------------------- #
 # run() - early-exit / error branches
 # --------------------------------------------------------------------------- #
-async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
+async def test_no_valid_urls_returns_ok_without_sys_exit_in_command(tmp_path):
     """
-    [Local] scrape urls: verifies that a CSV with only "other" URLs exits 0 without scraping.
+    [Local] scrape urls: verifies that a CSV with only "other" URLs returns OK without scraping.
 
     Scenario:
         Given a CSV containing only an example.com URL (tagged "other" by identify_website)
         When run() is called
-        Then sys.exit(0) is raised, the URL is passed to save_other_links_to_csv,
-        and the browser is never opened.
+        Then run() returns exitcodes.OK (never sys.exit mid-function), the URL is passed to
+        save_other_links_to_csv, the browser is never opened, and the backend is closed.
 
     Boundaries:
         - No book URLs in the input; the scraping loop is never entered.
 
     On failure, first check:
-        - The "no valid URLs" early-exit branch in run() and the other-links routing.
+        - The "no valid URLs" branch in run() returning OK and the other-links routing.
     """
     csv_path = _write_csv(tmp_path, ["https://example.com/book"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
@@ -266,11 +267,10 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.save_other_links_to_csv") as save_other,
         patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await run(args)
+        code = await run(args)
 
-    assert exc_info.value.code == 0
+    assert code == exitcodes.OK
     resolve.assert_called_once_with("json", None)
     # The single "other" URL is handed to the skipped-links writer, in the default "." directory.
     save_other.assert_called_once_with(["https://example.com/book"], directory=".")
@@ -278,80 +278,76 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
     pw_factory.assert_not_called()
     save_failed.assert_not_called()
     backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
 
 
-async def test_run_missing_input_file_exits_one(tmp_path):
+async def test_run_missing_input_file_returns_fatal(tmp_path):
     """
-    [Local] scrape urls: verifies that a nonexistent input CSV exits 1 without saving.
+    [Local] scrape urls: verifies that a nonexistent input CSV returns FATAL without saving.
 
     Scenario:
         Given an input_file path that does not exist
         When run() is called
-        Then sys.exit(1) is raised and save_books is never called.
+        Then run() returns exitcodes.FATAL, save_books is never called, and the backend is closed.
 
     Boundaries:
         - Only the file-not-found guard is exercised; bad CSV structure is a separate test.
 
     On failure, first check:
-        - The file-existence check at the start of run().
+        - The file-existence check at the start of run() and its FATAL return.
     """
     missing = tmp_path / "does_not_exist.csv"
     args = SimpleNamespace(input_file=str(missing), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
-    with (
-        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        await run(args)
+    with patch(f"{MODULE}.resolve_store_backend", return_value=backend):
+        code = await run(args)
 
-    assert exc_info.value.code == 1
+    assert code == exitcodes.FATAL
     backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
 
 
-async def test_run_missing_url_column_exits_one(tmp_path):
+async def test_run_missing_url_column_returns_fatal(tmp_path):
     """
-    [Local] scrape urls: verifies that a CSV without a "url" column header exits 1.
+    [Local] scrape urls: verifies that a CSV without a "url" column header returns FATAL.
 
     Scenario:
         Given a CSV whose only column is named "link" instead of "url"
         When run() is called
-        Then sys.exit(1) is raised and save_books is never called.
+        Then run() returns exitcodes.FATAL and save_books is never called.
 
     Boundaries:
         - Covers the missing-column KeyError guard; a completely unparseable CSV is separate.
 
     On failure, first check:
-        - The column-name check after pd.read_csv in run().
+        - The column-name check after pd.read_csv in run() and its FATAL return.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"], header="link")
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
 
     backend = MagicMock()
-    with (
-        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        await run(args)
+    with patch(f"{MODULE}.resolve_store_backend", return_value=backend):
+        code = await run(args)
 
-    assert exc_info.value.code == 1
+    assert code == exitcodes.FATAL
     backend.save_books.assert_not_called()
 
 
-async def test_run_unparseable_csv_exits_one(tmp_path):
+async def test_run_unparseable_csv_returns_fatal(tmp_path):
     """
-    [Local] scrape urls: verifies that a pd.errors.ParserError on CSV load exits 1.
+    [Local] scrape urls: verifies that a pd.errors.ParserError on CSV load returns FATAL.
 
     Scenario:
         Given pd.read_csv patched to raise ParserError("bad csv")
         When run() is called
-        Then sys.exit(1) is raised and save_books is never called.
+        Then run() returns exitcodes.FATAL and save_books is never called.
 
     Boundaries:
         - Covers the CSV-parse exception path; missing column and missing file are separate.
 
     On failure, first check:
-        - The try/except around pd.read_csv in run().
+        - The try/except around pd.read_csv in run() and its FATAL return.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
@@ -360,11 +356,10 @@ async def test_run_unparseable_csv_exits_one(tmp_path):
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.pd.read_csv", side_effect=pd.errors.ParserError("bad csv")),
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await run(args)
+        code = await run(args)
 
-    assert exc_info.value.code == 1
+    assert code == exitcodes.FATAL
     backend.save_books.assert_not_called()
 
 
@@ -411,6 +406,116 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
     backend.close.assert_called_once_with()
     # Success path records no failed/duplicate entries (written to the default "." directory).
     save_failed.assert_called_once_with([], directory=".")
+
+
+async def test_backend_closed_on_interrupt(tmp_path):
+    """
+    [Local] scrape urls: verifies a KeyboardInterrupt propagates but the backend is still closed.
+
+    Scenario:
+        Given pd.read_csv raising KeyboardInterrupt (Ctrl+C mid-run)
+        When run() is called
+        Then KeyboardInterrupt propagates out of run() (to main_sync, which exits 130) and
+        backend.close() is still called once by run()'s finally block.
+
+    Boundaries:
+        - Covers the finally-closes-backend contract on interrupt; run() must not swallow Ctrl+C.
+
+    On failure, first check:
+        - The try/finally around the backend in run() and that KeyboardInterrupt is not caught.
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.pd.read_csv", side_effect=KeyboardInterrupt()),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        await run(args)
+
+    backend.close.assert_called_once_with()
+
+
+async def test_scrape_urls_returns_partial_when_any_failed(tmp_path):
+    """
+    [Local] scrape urls: verifies a run with at least one failed scrape returns PARTIAL.
+
+    Scenario:
+        Given a CSV with two leanpub URLs where one scrapes SUCCESS and one ends FAILED
+        When run() is called
+        Then run() returns exitcodes.PARTIAL, the one good book is saved, and the backend is closed.
+
+    Boundaries:
+        - A FAILED status is a failed item (exit-code contract); SUCCESS alone would be OK.
+
+    On failure, first check:
+        - The FAILURE_STATUSES tally feeding run()'s PARTIAL/OK decision.
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/good", "https://leanpub.com/bad"])
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    pw_factory, browser = _make_playwright_factory()
+    book = {"title": "Good Book", "hash": "abc123"}
+    ok = ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/good", site="leanpub", book=book)
+    bad = ScrapeResult(ScrapeStatus.FAILED, url="https://leanpub.com/bad", site="leanpub", error="boom")
+    scrape_book = AsyncMock(side_effect=[ok, bad])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.PARTIAL
+    backend.save_books.assert_called_once_with([book])
+    browser.close.assert_awaited_once()
+    backend.close.assert_called_once_with()
+
+
+async def test_scrape_urls_returns_ok_when_only_duplicates(tmp_path):
+    """
+    [Local] scrape urls: verifies a run whose only non-success outcome is DUPLICATE returns OK.
+
+    Scenario:
+        Given a CSV with one leanpub URL that scrape_book reports as a DUPLICATE
+        When run() is called
+        Then run() returns exitcodes.OK (a duplicate is not a failure), save_books is never
+        called, and the backend is closed.
+
+    Boundaries:
+        - DUPLICATE is explicitly excluded from FAILURE_STATUSES; a FAILED status is the partial case.
+
+    On failure, first check:
+        - run() must not count DUPLICATE toward the PARTIAL decision.
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/dup"])
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    pw_factory, browser = _make_playwright_factory()
+    dup = ScrapeResult(ScrapeStatus.DUPLICATE, url="https://leanpub.com/dup", site="leanpub")
+    scrape_book = AsyncMock(side_effect=[dup])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.OK
+    backend.save_books.assert_not_called()
+    browser.close.assert_awaited_once()
+    backend.close.assert_called_once_with()
 
 
 @pytest.mark.parametrize(

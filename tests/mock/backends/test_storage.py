@@ -22,7 +22,13 @@ from cryptography.x509.oid import NameOID
 from bookscraper.backends import storage
 from bookscraper.backends.local import store
 from bookscraper.backends.mongo.config import ConfigError
-from bookscraper.backends.storage import JsonBackend, MongoBackend, SaveSummary, resolve_store_backend
+from bookscraper.backends.storage import (
+    BackendUnavailableError,
+    JsonBackend,
+    MongoBackend,
+    SaveSummary,
+    resolve_store_backend,
+)
 from bookscraper.models import SCHEMA_VERSION
 
 
@@ -443,14 +449,14 @@ class TestResolveStoreBackend:
         assert backend._collection is fake_collection
         mock_db.get_mongo_collection.assert_called_once_with()
 
-    def test_mongo_with_no_collection_exits(self):
+    def test_mongo_with_no_collection_raises_backend_unavailable(self):
         """
-        [Local] resolve store backend: verifies that resolve_store_backend("mongo") exits with code 1 when the collection is unavailable.
+        [Local] resolve store backend: verifies that resolve_store_backend("mongo") raises BackendUnavailableError when the collection is unavailable.
 
         Scenario:
             Given database.get_mongo_collection returns None (connection failed)
             When resolve_store_backend("mongo") is called
-            Then SystemExit(1) is raised before a backend is constructed.
+            Then BackendUnavailableError is raised before a backend is constructed.
 
         Boundaries:
             - MongoDB unavailable pre-flight path; no real connection
@@ -463,10 +469,8 @@ class TestResolveStoreBackend:
             patch.object(storage, "database") as mock_db,
         ):
             mock_db.get_mongo_collection.return_value = None
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(BackendUnavailableError):
                 resolve_store_backend("mongo")
-
-        assert exc_info.value.code == 1
 
     def test_json_with_write_permission_returns_json_backend(self, isolated_local_store):
         """
@@ -491,9 +495,9 @@ class TestResolveStoreBackend:
         # the isolated_local_store tmp_path), not an unconditional ".".
         mock_check.assert_called_once_with(str(isolated_local_store.parent))
 
-    def test_preflight_exits_on_corrupt_store(self, isolated_local_store):
+    def test_preflight_raises_on_corrupt_store(self, isolated_local_store):
         """
-        [Local] resolve store backend: verifies preflight exits on corrupt store.
+        [Local] resolve store backend: verifies preflight raises BackendUnavailableError on a corrupt store.
 
         Scenario:
             a corrupt store is caught at pre-flight, before any scraping starts, so a run aborts loudly instead of failing at the first save (or clobbering the store).
@@ -507,19 +511,17 @@ class TestResolveStoreBackend:
         isolated_local_store.write_text("{not valid json", encoding="utf-8")
 
         with patch.object(storage, "check_local_write_permission", return_value=True):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(BackendUnavailableError):
                 resolve_store_backend("json")
 
-        assert exc_info.value.code == 1
-
-    def test_json_without_write_permission_exits(self):
+    def test_json_without_write_permission_raises_backend_unavailable(self):
         """
-        [Local] resolve store backend: verifies that resolve_store_backend("json") exits with code 1 when write permission is denied.
+        [Local] resolve store backend: verifies that resolve_store_backend("json") raises BackendUnavailableError when write permission is denied.
 
         Scenario:
             Given check_local_write_permission is patched to return False
             When resolve_store_backend("json") is called
-            Then SystemExit(1) is raised before a backend is constructed.
+            Then BackendUnavailableError is raised before a backend is constructed.
 
         Boundaries:
             - No-permission pre-flight path; no real filesystem access
@@ -528,19 +530,17 @@ class TestResolveStoreBackend:
             - The write-permission guard in resolve_store_backend
         """
         with patch.object(storage, "check_local_write_permission", return_value=False):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(BackendUnavailableError):
                 resolve_store_backend("json")
 
-        assert exc_info.value.code == 1
-
-    def test_unknown_backend_exits_without_running_checks(self):
+    def test_unknown_backend_raises_without_running_checks(self):
         """
-        [Local] resolve store backend: verifies that resolve_store_backend with an unknown name exits with code 1 without running any pre-flight checks.
+        [Local] resolve store backend: verifies that resolve_store_backend with an unknown name raises BackendUnavailableError without running any pre-flight checks.
 
         Scenario:
             Given database and check_local_write_permission are both patched
             When resolve_store_backend("csv") is called with an unrecognized backend name
-            Then SystemExit(1) is raised and neither database.get_mongo_collection nor check_local_write_permission was called.
+            Then BackendUnavailableError is raised and neither database.get_mongo_collection nor check_local_write_permission was called.
 
         Boundaries:
             - Unknown backend name; neither mongo nor json pre-flight paths are taken
@@ -552,10 +552,9 @@ class TestResolveStoreBackend:
             patch.object(storage, "database") as mock_db,
             patch.object(storage, "check_local_write_permission") as mock_check,
         ):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(BackendUnavailableError):
                 resolve_store_backend("csv")
 
-        assert exc_info.value.code == 1
         mock_db.get_mongo_collection.assert_not_called()
         mock_check.assert_not_called()
 

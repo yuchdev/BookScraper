@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from pymongo.errors import OperationFailure
 
+from bookscraper import exitcodes
 from bookscraper.backends.mongo.cert_rotation import RotationError
 from bookscraper.backends.mongo.client import MongoConnectionError
 from bookscraper.backends.mongo.config import ConfigError
@@ -263,23 +264,22 @@ async def test_run_rotation_error_logs_and_exits_nonzero():
     Scenario:
         Given rotate_certificate() mocked to raise RotationError('ATLAS_PROJECT_ID not set')
         When rotate_cert.run() is awaited
-        Then SystemExit(1) is raised and the last logged line is an error carrying the reason.
+        Then run() returns exitcodes.FATAL (1) and the last logged line is an error carrying the reason.
 
     Boundaries:
         - Only the failure path of the command wrapper
 
     On failure, first check:
-        - The except RotationError branch and its sys.exit(1) in commands/rotate_cert.py
+        - The except RotationError branch and its FATAL return in commands/rotate_cert.py
     """
     with (
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.cert_rotation.rotate_certificate", side_effect=RotationError("ATLAS_PROJECT_ID not set")),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args())
+        code = await rotate_cert.run(_args())
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     message, status = mock_print.call_args_list[-1].args
     assert status == "error"
     assert "ATLAS_PROJECT_ID not set" in message
@@ -340,11 +340,10 @@ async def test_verify_final_failure_leaves_settings_untouched_and_exits_one(monk
         patch("bookscraper.backends.mongo.cert_rotation.build_mongo_client"),
         patch("bookscraper.backends.mongo.cert_rotation.ping", side_effect=err),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(verify_attempts=1))
+        code = await rotate_cert.run(_args(verify_attempts=1))
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     # settings.json still points at the old cert - never repointed at the unverified one.
     assert json.loads((isolated_config / "settings.json").read_text()) == settings
     warnings = [c.args[0] for c in mock_print.call_args_list if "failed verification" in c.args[0]]
@@ -442,11 +441,10 @@ async def test_verify_failure_message_has_no_password_or_host(monkeypatch, isola
         ),
         patch("bookscraper.backends.mongo.cert_rotation.build_mongo_client", return_value=fake_client),
         patch(f"{MODULE}.print_log", side_effect=_capture),
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(verify_attempts=1))
+        code = await rotate_cert.run(_args(verify_attempts=1))
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     haystack = "\n".join(printed) + "\n" + caplog.text
     assert "SUPERSECRETPW" not in haystack
     assert "prod-cluster" not in haystack
@@ -466,7 +464,7 @@ async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path):
     Scenario:
         Given a cert expiring in 180 days resolved as the active cert
         When rotate_cert.run() is awaited with --check
-        Then SystemExit(0) is raised, rotate_certificate() is never called, and the expires and days-remaining lines are printed.
+        Then run() returns exitcodes.OK (0), rotate_certificate() is never called, and the expires and days-remaining lines are printed.
 
     Boundaries:
         - Pure local file read: the resolver is mocked and Atlas is never contacted
@@ -481,11 +479,10 @@ async def test_check_mode_exit_zero_when_far_from_expiry(tmp_path):
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", str(cert))),
         patch(f"{MODULE}.cert_rotation.rotate_certificate") as mock_rotate,
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 0
+    assert code == exitcodes.OK
     mock_rotate.assert_not_called()
     logged = [c.args[0] for c in mock_print.call_args_list]
     assert any(line.startswith("expires:") for line in logged)
@@ -500,7 +497,7 @@ async def test_check_mode_exit_three_within_warn_window(tmp_path):
     Scenario:
         Given a cert expiring in 10 days resolved as the active cert
         When rotate_cert.run() is awaited with --check --warn-days 30
-        Then SystemExit(3) is raised so cron/CI can alert.
+        Then run() returns exitcodes.PARTIAL (3) so cron/CI can alert.
 
     Boundaries:
         - Only the exit code; the printed lines are covered by the far-from-expiry test
@@ -513,11 +510,10 @@ async def test_check_mode_exit_three_within_warn_window(tmp_path):
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", str(cert))),
         patch(f"{MODULE}.print_log"),
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True, warn_days=30))
+        code = await rotate_cert.run(_args(check=True, warn_days=30))
 
-    assert excinfo.value.code == 3
+    assert code == exitcodes.PARTIAL
 
 
 @pytest.mark.asyncio
@@ -528,7 +524,7 @@ async def test_check_mode_exit_one_when_expired(tmp_path):
     Scenario:
         Given a cert that expired 3 days ago resolved as the active cert
         When rotate_cert.run() is awaited with --check
-        Then SystemExit(1) is raised and a line mentioning 'expired' is logged.
+        Then run() returns exitcodes.FATAL (1) and a line mentioning 'expired' is logged.
 
     Boundaries:
         - Expired is treated as an error, distinct from the exit-3 warning window
@@ -541,11 +537,10 @@ async def test_check_mode_exit_one_when_expired(tmp_path):
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", str(cert))),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     assert any("expired" in c.args[0] for c in mock_print.call_args_list)
 
 
@@ -557,7 +552,7 @@ async def test_check_mode_exit_one_when_unreadable(tmp_path):
     Scenario:
         Given the resolver mocked to return a cert path that does not exist
         When rotate_cert.run() is awaited with --check
-        Then SystemExit(1) is raised and 'Certificate check failed' is logged.
+        Then run() returns exitcodes.FATAL (1) and 'Certificate check failed' is logged.
 
     Boundaries:
         - Only the file-missing case; parse failures share the same RotationError path
@@ -570,11 +565,10 @@ async def test_check_mode_exit_one_when_unreadable(tmp_path):
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", str(missing))),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     assert any("Certificate check failed" in c.args[0] for c in mock_print.call_args_list)
 
 
@@ -586,7 +580,7 @@ async def test_check_mode_without_x509_config_is_noop_zero():
     Scenario:
         Given the resolver mocked to return a URI and no cert
         When rotate_cert.run() is awaited with --check
-        Then SystemExit(0) is raised and a 'nothing to check' line is logged.
+        Then run() returns exitcodes.OK (0) and a 'nothing to check' line is logged.
 
     Boundaries:
         - Password-auth setups must never fail the health check
@@ -598,11 +592,10 @@ async def test_check_mode_without_x509_config_is_noop_zero():
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", return_value=("mongodb+srv://x", None)),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 0
+    assert code == exitcodes.OK
     assert any("nothing to check" in c.args[0] for c in mock_print.call_args_list)
 
 
@@ -614,7 +607,7 @@ async def test_check_mode_config_error_exits_one():
     Scenario:
         Given config.resolve_mongo_connection() mocked to raise ConfigError('bad settings')
         When rotate_cert.run() is awaited with --check
-        Then SystemExit(1) is raised and 'Certificate check failed' is logged.
+        Then run() returns exitcodes.FATAL (1) and 'Certificate check failed' is logged.
 
     Boundaries:
         - A bad settings.json fails loudly instead of being treated as 'nothing to check'
@@ -627,11 +620,10 @@ async def test_check_mode_config_error_exits_one():
         patch(f"{MODULE}.load_dotenv"),
         patch(f"{MODULE}.config.resolve_mongo_connection", side_effect=ConfigError("bad settings")),
         patch(f"{MODULE}.print_log") as mock_print,
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 1
+    assert code == exitcodes.FATAL
     assert any("Certificate check failed" in c.args[0] for c in mock_print.call_args_list)
 
 
@@ -685,10 +677,9 @@ async def test_check_mode_never_requires_atlas_env(tmp_path, monkeypatch):
         patch(f"{MODULE}.cert_rotation.rotate_certificate") as mock_rotate,
         patch(f"{MODULE}.cert_rotation.get_access_token") as mock_token,
         patch(f"{MODULE}.print_log"),
-        pytest.raises(SystemExit) as excinfo,
     ):
-        await rotate_cert.run(_args(check=True))
+        code = await rotate_cert.run(_args(check=True))
 
-    assert excinfo.value.code == 0
+    assert code == exitcodes.OK
     mock_rotate.assert_not_called()
     mock_token.assert_not_called()

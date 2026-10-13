@@ -16,6 +16,31 @@ from bookscraper.cli import SITE_KEYS, STORE_BACKENDS, build_parser
 from bookscraper.scraping.parameters import site_constants
 
 
+def test_help_epilog_documents_exit_codes():
+    """
+    [Unit] cli: verifies the top-level --help epilog documents the exit-code contract.
+
+    Scenario:
+        Given the top-level parser built by build_parser()
+        When its help text is rendered
+        Then it contains an "exit codes:" section naming each contract code (0/1/2/3/4/130) so a
+        shell, cron job, or CI step can gate on the process result.
+
+    Boundaries:
+        - Pure argparse; only the rendered help string is inspected.
+
+    On failure, first check:
+        - The epilog argument on the top-level ArgumentParser in build_parser().
+    """
+    help_text = build_parser().format_help()
+    assert "exit codes:" in help_text
+    for token in ("0", "1", "2", "3", "4", "130"):
+        assert token in help_text
+    assert "PARTIAL" in help_text
+    assert "DRIFT" in help_text
+    assert "INTERRUPTED" in help_text
+
+
 def test_scrape_urls_parses_full_valid_arg_set():
     """
     [Unit] cli scrape-urls: parses -f, --store-backend, and --log-severity into the expected dest= attributes.

@@ -1,7 +1,7 @@
 # 05 - Exit-code contract & interrupt handling
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Python Expert
 
 ## Requirements

@@ -17,7 +17,7 @@ import mongomock
 import pytest
 from pymongo.errors import BulkWriteError
 
-from bookscraper import book_utils
+from bookscraper import book_utils, exitcodes
 from bookscraper.backends import migration
 from bookscraper.backends.local import store
 from bookscraper.backends.mongo import database
@@ -323,16 +323,16 @@ class TestRunCommand:
             Given a MongoBackend over a mongomock collection whose bulk_write raises a
                 BulkWriteError, and the log dir redirected to tmp_path
             When migrate.run is awaited with apply=True
-            Then it raises SystemExit(1) AFTER writing a migration-report-*.json whose apply block
-                records failed=true - never a raw traceback and never a skipped report
+            Then it returns exitcodes.FATAL (1) AFTER writing a migration-report-*.json whose apply
+                block records failed=true - never a raw traceback and never a skipped report
 
         Boundaries:
-            - Partial-failure path: the audit artifact is written before the non-zero exit
-            - The run exits non-zero so a CI/cron job notices the incomplete migration
+            - Partial-failure path: the audit artifact is written before the non-zero return
+            - The run returns non-zero so a CI/cron job notices the incomplete migration
 
         On failure, first check:
-            - The ``if report.apply_failed: sys.exit(1)`` tail of migrate.run (after write_report)
-            - That write_report runs before the exit
+            - The ``if report.apply_failed: return exitcodes.FATAL`` tail of migrate.run (after write_report)
+            - That write_report runs before the return
         """
         collection = _mongo_collection()
         collection.insert_one(_amazon_v1("A0000000001", "One"))
@@ -344,10 +344,9 @@ class TestRunCommand:
 
         with patch.object(collection, "bulk_write", side_effect=_raise):
             with patch(f"{MODULE}.resolve_store_backend", return_value=MongoBackend(collection)):
-                with pytest.raises(SystemExit) as excinfo:
-                    await migrate.run(_args("mongo", apply=True))
+                code = await migrate.run(_args("mongo", apply=True))
 
-        assert excinfo.value.code == 1
+        assert code == exitcodes.FATAL
         report = json.loads(next((tmp_path / "logs").glob("migration-report-*.json")).read_text(encoding="utf-8"))
         assert report["apply"]["failed"] is True
         assert report["apply"]["error"].startswith("BulkWriteError")
@@ -434,7 +433,7 @@ class TestRunCommand:
             Given a tmp_path store file that is not valid JSON, with resolve_store_backend patched
                 to a JsonBackend (bypassing its own pre-flight) and the log dir redirected
             When migrate.run is awaited
-            Then it raises SystemExit(1) rather than clobbering the unreadable store
+            Then it returns exitcodes.FATAL (1) rather than clobbering the unreadable store
 
         Boundaries:
             - Fail loudly on a corrupt store; never overwrite it
@@ -448,10 +447,9 @@ class TestRunCommand:
         monkeypatch.setattr(book_utils, "LOG_DIR", tmp_path / "logs")
 
         with patch(f"{MODULE}.resolve_store_backend", return_value=JsonBackend()):
-            with pytest.raises(SystemExit) as excinfo:
-                await migrate.run(_args("json", apply=True))
+            code = await migrate.run(_args("json", apply=True))
 
-        assert excinfo.value.code == 1
+        assert code == exitcodes.FATAL
 
 
 class TestCliSurface:

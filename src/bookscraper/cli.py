@@ -210,9 +210,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     :returns: The top-level parser with every subcommand wired to its shared parent parsers.
     """
+    # Exit-code contract (source of truth: bookscraper/exitcodes.py; kept as literal text here so
+    # cli.py keeps importing only argparse). Documented in the top-level --help epilog so a shell,
+    # cron job, or CI step can gate on the process result.
     parser = argparse.ArgumentParser(
         prog="bookscraper",
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "exit codes:\n"
+            "  0    OK - completed; nothing failed\n"
+            "  1    FATAL - could not run or was aborted (config/pre-flight failure, "
+            "unavailable backend, unhandled error)\n"
+            "  2    USAGE - argparse usage error\n"
+            "  3    PARTIAL - completed, but at least one item failed; also "
+            "'rotate-cert --check' expiring soon\n"
+            "  4    DRIFT - 'detect-schema': a current selector matched no sample page\n"
+            "  130  INTERRUPTED - cancelled with Ctrl+C\n"
+        ),
     )
     subparsers = parser.add_subparsers(
         dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate}"

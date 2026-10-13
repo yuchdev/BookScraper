@@ -14,9 +14,8 @@ report file (for a collision a human must resolve), never in a printed line.
 from __future__ import annotations
 
 import argparse
-import sys
 
-from .. import book_utils
+from .. import book_utils, exitcodes
 from ..backends import MongoBackend, migration, resolve_store_backend
 from ..backends.local import store
 from ..book_utils import print_log
@@ -77,15 +76,16 @@ def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
     print_log(f"  Report written to {report_path}", "info")
 
 
-async def run(args: argparse.Namespace):
+async def run(args: argparse.Namespace) -> int:
     """Run the migration for the chosen backend, writing only when ``--apply`` is given.
 
     Resolves the backend, migrates it (mongo via guarded per-document ``ReplaceOne`` batches, json
     via the atomic store write with a ``books.json.bak`` backup), writes the report, and prints the
-    summary. Exits ``1`` on a corrupt local store, or after writing the report when the mongo apply
-    failed part-way; otherwise ``0``. The resolved backend connection is always closed.
+    summary. The resolved backend connection is always closed.
 
     :param args: Parsed CLI arguments (``store_backend`` and ``apply``).
+    :returns: :data:`~bookscraper.exitcodes.FATAL` on a corrupt local store, or after writing the
+        report when the mongo apply failed part-way; otherwise :data:`~bookscraper.exitcodes.OK`.
     """
     backend = resolve_store_backend(args.store_backend)
     try:
@@ -99,11 +99,12 @@ async def run(args: argparse.Namespace):
             )
     except store.LocalStoreCorruptError as exc:
         print_log(f"Migration failed: {exc}", "error")
-        sys.exit(1)
+        return exitcodes.FATAL
     finally:
         backend.close()
 
     report_path = migration.write_report(report, book_utils.LOG_DIR)
     _print_summary(report, report_path, args.apply)
     if report.apply_failed:
-        sys.exit(1)
+        return exitcodes.FATAL
+    return exitcodes.OK

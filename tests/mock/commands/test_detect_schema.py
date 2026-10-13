@@ -11,8 +11,7 @@ import json as _json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
+from bookscraper import exitcodes
 from bookscraper.commands import detect_schema
 from bookscraper.scraping.schema_detection import SchemaDetectionError
 
@@ -176,7 +175,7 @@ async def test_run_exits_one_on_detection_error():
     Scenario:
         Given detect_schema() mocked to raise SchemaDetectionError
         When detect_schema.run() is awaited with default args
-        Then SystemExit is raised with code 1 (fail loudly, never partial output).
+        Then run() returns exitcodes.FATAL (1) (fail loudly, never partial output).
 
     Boundaries:
         - Only the error-to-exit-code mapping; the error message text is not asserted
@@ -188,10 +187,9 @@ async def test_run_exits_one_on_detection_error():
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
         patch.object(detect_schema, "detect_schema", new=AsyncMock(side_effect=SchemaDetectionError("boom"))),
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await detect_schema.run(_args())
-    assert exc_info.value.code == 1
+        code = await detect_schema.run(_args())
+    assert code == exitcodes.FATAL
 
 
 async def test_run_writes_report_to_output_file(tmp_path):
@@ -228,7 +226,7 @@ async def test_run_exits_one_when_output_write_fails(tmp_path):
     Scenario:
         Given detect_schema() mocked to succeed and builtins.open patched to raise OSError
         When detect_schema.run() is awaited with --output set
-        Then SystemExit is raised with code 1 instead of an unhandled OSError.
+        Then run() returns exitcodes.FATAL (1) instead of an unhandled OSError.
 
     Boundaries:
         - open() is patched globally for the duration of the call
@@ -241,10 +239,9 @@ async def test_run_exits_one_when_output_write_fails(tmp_path):
         patch.object(detect_schema, "load_dotenv", MagicMock()),
         patch.object(detect_schema, "detect_schema", new=AsyncMock(return_value=("REPORT BODY", "usage line", 0))),
         patch("builtins.open", side_effect=OSError("read-only fs")),
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await detect_schema.run(args)
-    assert exc_info.value.code == 1
+        code = await detect_schema.run(args)
+    assert code == exitcodes.FATAL
 
 
 async def test_run_threads_format_and_check_current_only(capsys):
@@ -321,7 +318,7 @@ async def test_run_exits_four_on_drift():
     [Local] detect schema: verifies run exits four on drift.
 
     Scenario:
-        detect_schema reporting drift (exit 4) propagates as SystemExit(4).
+        detect_schema reporting drift (exit 4) is returned as exitcodes.DRIFT (4).
 
     Boundaries:
         - detect_schema is mocked to return exit_code 4; text format.
@@ -333,10 +330,9 @@ async def test_run_exits_four_on_drift():
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
         patch.object(detect_schema, "detect_schema", new=AsyncMock(return_value=("REPORT", "usage", 4))),
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await detect_schema.run(args)
-    assert exc_info.value.code == 4
+        code = await detect_schema.run(args)
+    assert code == exitcodes.DRIFT
 
 
 async def test_run_exits_four_on_drift_json_format(capsys):
@@ -357,10 +353,9 @@ async def test_run_exits_four_on_drift_json_format(capsys):
     with (
         patch.object(detect_schema, "load_dotenv", MagicMock()),
         patch.object(detect_schema, "detect_schema", new=AsyncMock(return_value=('{"ok": true}', "usage", 4))),
-        pytest.raises(SystemExit) as exc_info,
     ):
-        await detect_schema.run(args)
-    assert exc_info.value.code == 4
+        code = await detect_schema.run(args)
+    assert code == exitcodes.DRIFT
     captured = capsys.readouterr()
     assert _json.loads(captured.out) == {"ok": True}
     assert "drift detected" in captured.err.lower()

@@ -12,7 +12,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from bookscraper import main
+from bookscraper import exitcodes, main
+from bookscraper.backends import BackendUnavailableError
 
 
 def _fake_parser(args) -> Mock:
@@ -188,25 +189,99 @@ async def test_main_unknown_command_calls_parser_error():
 
 def test_main_sync_wraps_main_in_asyncio_run():
     """
-    [Local] main: verifies main sync wraps main in asyncio run.
+    [Local] main: verifies main sync wraps main in asyncio run and exits with its code.
 
     Scenario:
-        main_sync() drives the main() coroutine through asyncio.run exactly once. main is `async def`, so patch.object auto-promotes it to an AsyncMock: calling it synchronously (as main_sync() does, passing the result into asyncio.run) returns a fresh coroutine object each time, not a comparable sentinel - assert on the call shape (one positional arg, itself a coroutine) rather than object identity.
+        main_sync() drives the main() coroutine through asyncio.run exactly once, then calls
+        sys.exit with the returned code. main is `async def`, so patch.object auto-promotes it to an
+        AsyncMock: calling it synchronously (as main_sync() does, passing the result into
+        asyncio.run) returns a fresh coroutine object each time, not a comparable sentinel - assert
+        on the call shape (one positional arg, itself a coroutine) rather than object identity.
 
     Boundaries:
-        - see test body
+        - asyncio.run is mocked to return exitcodes.OK; the KeyboardInterrupt path is separate.
 
     On failure, first check:
-        - see test body
+        - main_sync() builds the main() coroutine, hands it to asyncio.run, and sys.exit(code)s.
     """
     with (
         patch.object(main, "main", new_callable=AsyncMock) as mock_main,
-        patch.object(main.asyncio, "run") as mock_run,
+        patch.object(main.asyncio, "run", return_value=exitcodes.OK) as mock_run,
+        pytest.raises(SystemExit) as exc_info,
     ):
         main.main_sync()
 
+    assert exc_info.value.code == exitcodes.OK
     mock_main.assert_called_once_with()
     mock_run.assert_called_once()
     (coro,) = mock_run.call_args.args
     assert inspect.iscoroutine(coro)
     coro.close()  # asyncio.run is mocked out, so nothing else awaits/closes this coroutine
+
+
+def test_keyboard_interrupt_exits_130_without_traceback():
+    """
+    [Local] main: verifies a KeyboardInterrupt from the run exits 130 with a single warning line.
+
+    Scenario:
+        Given asyncio.run raising KeyboardInterrupt (Ctrl+C during the run)
+        When main_sync() is called
+        Then it exits with exitcodes.INTERRUPTED (130) after a single print_log("Interrupted.",
+        "warning"), never re-raising the KeyboardInterrupt (no traceback).
+
+    Boundaries:
+        - Only the Ctrl+C path of main_sync; the normal-exit path is a separate test.
+
+    On failure, first check:
+        - The except KeyboardInterrupt handler in main_sync and its exit code.
+    """
+
+    def _interrupt(coro):
+        """Stand in for asyncio.run: close the unused coroutine, then raise KeyboardInterrupt."""
+        coro.close()
+        raise KeyboardInterrupt()
+
+    with (
+        patch.object(main.asyncio, "run", side_effect=_interrupt),
+        patch.object(main, "print_log") as mock_print,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        main.main_sync()
+
+    assert exc_info.value.code == exitcodes.INTERRUPTED
+    mock_print.assert_called_once_with("Interrupted.", "warning")
+
+
+@pytest.mark.asyncio
+async def test_main_maps_backend_unavailable_to_fatal():
+    """
+    [Local] main: verifies a BackendUnavailableError from a command maps to FATAL.
+
+    Scenario:
+        Given a scrape-urls run whose resolve_store_backend pre-flight raises
+        BackendUnavailableError (surfacing out of scrape_urls.run)
+        When main() is awaited
+        Then main() returns exitcodes.FATAL rather than letting the exception escape.
+
+    Boundaries:
+        - Only the BackendUnavailableError -> FATAL mapping; the command's own body is mocked out.
+
+    On failure, first check:
+        - The try/except BackendUnavailableError wrapper around the command dispatch in main().
+    """
+    args = SimpleNamespace(command="scrape-urls", log_severity="info")
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging"),
+        patch.object(
+            main.scrape_urls,
+            "run",
+            new_callable=AsyncMock,
+            side_effect=BackendUnavailableError("MongoDB connection pre-flight failed"),
+        ),
+        patch.object(main, "print_log"),
+    ):
+        code = await main.main()
+
+    assert code == exitcodes.FATAL

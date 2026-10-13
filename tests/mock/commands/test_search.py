@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bookscraper import exitcodes
 from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
 from bookscraper.commands.search import resolve_search_targets, run, save_failed_urls_to_csv
@@ -295,8 +296,10 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
-        await run(args)
+        code = await run(args)
 
+    # An all-success run (one duplicate skipped pre-scrape) is OK, not a failure.
+    assert code == exitcodes.OK
     # Only the non-duplicate book is scraped in detail.
     detail.assert_awaited_once()
     _, kwargs = detail.call_args
@@ -365,8 +368,10 @@ async def test_run_detail_results_partition_into_saved_and_failed():
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
     ):
-        await run(args)
+        code = await run(args)
 
+    # At least one detail scrape failed, so the run is PARTIAL.
+    assert code == exitcodes.PARTIAL
     # Only the SUCCESS result's book is persisted.
     backend.save_books.assert_called_once_with([{"title": "Good Book", "hash": "ok"}])
     backend.close.assert_called_once_with()
@@ -461,21 +466,21 @@ async def test_run_no_new_books_skips_save_but_closes_backend():
     backend.close.assert_called_once_with()
 
 
-async def test_run_keyboard_interrupt_is_caught_and_backend_closed():
+async def test_run_keyboard_interrupt_propagates_and_backend_closed():
     """
-    [Local] search: verifies that a KeyboardInterrupt is caught and the backend is still closed.
+    [Local] search: verifies that a KeyboardInterrupt propagates and the backend is still closed.
 
     Scenario:
         Given the Leanpub search API raising KeyboardInterrupt
         When run() is called
-        Then run() returns normally (KeyboardInterrupt does not propagate), save_books is
-        never called, and backend.close() is called once.
+        Then KeyboardInterrupt propagates out of run() (to main_sync, which exits 130), save_books
+        is never called, and backend.close() is still called once by the finally block.
 
     Boundaries:
-        - Covers the KeyboardInterrupt catch; generic exceptions are a separate test.
+        - Covers that Ctrl+C is no longer swallowed by run(); generic exceptions are a separate test.
 
     On failure, first check:
-        - The except KeyboardInterrupt handler and the backend.close() in run()'s finally block.
+        - run() must NOT catch KeyboardInterrupt, and backend.close() must be in run()'s finally block.
     """
     args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
@@ -488,29 +493,30 @@ async def test_run_keyboard_interrupt_is_caught_and_backend_closed():
         patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
+        pytest.raises(KeyboardInterrupt),
     ):
-        # Must not propagate: run() catches KeyboardInterrupt and finishes cleanly.
+        # Must propagate: run() no longer swallows KeyboardInterrupt.
         await run(args)
 
     backend.save_books.assert_not_called()
     backend.close.assert_called_once_with()
 
 
-async def test_run_generic_exception_is_caught_and_backend_closed():
+async def test_run_generic_exception_is_caught_and_returns_fatal():
     """
-    [Local] search: verifies that a RuntimeError from the search API is caught and the backend closed.
+    [Local] search: verifies that a RuntimeError from the search API is caught and returns FATAL.
 
     Scenario:
         Given the Leanpub search API raising RuntimeError("search API exploded")
         When run() is called
-        Then run() returns normally, save_books is never called, and backend.close()
+        Then run() returns exitcodes.FATAL, save_books is never called, and backend.close()
         is called once.
 
     Boundaries:
         - Covers the broad except Exception handler; KeyboardInterrupt is a separate test.
 
     On failure, first check:
-        - The outer except Exception handler and backend.close() in run()'s finally block.
+        - The outer except Exception handler, its FATAL return, and backend.close() in run()'s finally block.
     """
     args = SimpleNamespace(store_backend="json", ignore_robots=False)
 
@@ -524,8 +530,9 @@ async def test_run_generic_exception_is_caught_and_backend_closed():
         patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
-        await run(args)
+        code = await run(args)
 
+    assert code == exitcodes.FATAL
     backend.save_books.assert_not_called()
     backend.close.assert_called_once_with()
 
