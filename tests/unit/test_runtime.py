@@ -171,6 +171,64 @@ def test_ignore_robots_passthrough():
     assert runtime.runtime_options(_args()).ignore_robots is False
 
 
+def test_dry_run_output_dir_and_json_store_resolution():
+    """
+    [Unit] runtime: verifies dry_run, output_dir and json_store resolve from the Namespace with sane defaults.
+
+    Scenario:
+        Given a Namespace omitting the three fields, then one setting all of them for the json backend
+        When runtime_options resolves the options
+        Then the omitted case yields dry_run False / output_dir "." / json_store None, and the set case
+             carries dry_run True, the given output_dir, and json_store as a Path.
+
+    Boundaries:
+        - Pure resolution logic; the mongo-combination rejection is a separate test
+        - json_store is only ever set alongside the json backend here
+
+    On failure, first check:
+        - The getattr fallbacks and the Path conversion in runtime_options / _resolve_json_store
+    """
+    defaults = runtime.runtime_options(_args())
+    assert defaults.dry_run is False
+    assert defaults.output_dir == "."
+    assert defaults.json_store is None
+
+    resolved = runtime.runtime_options(
+        _args(dry_run=True, output_dir="reports", json_store="custom.json", store_backend="json")
+    )
+    assert resolved.dry_run is True
+    assert resolved.output_dir == "reports"
+    assert resolved.json_store == Path("custom.json")
+
+
+def test_json_store_with_mongo_backend_is_usage_error():
+    """
+    [Unit] runtime: verifies --json-store combined with --store-backend mongo is a usage error (exit 2).
+
+    Scenario:
+        Given a Namespace pairing json_store with store_backend "mongo"
+        When runtime_options resolves the options
+        Then SystemExit(2) is raised; and json_store with the json backend, or an absent json_store
+             with mongo, both resolve without error.
+
+    Boundaries:
+        - Pure resolution logic; exit code 2 mirrors argparse's usage-error convention
+        - The json-backend and json_store-absent cases prove the guard is narrow
+
+    On failure, first check:
+        - The store_backend == "mongo" guard in runtime._resolve_json_store
+    """
+    with pytest.raises(SystemExit) as exc_info:
+        runtime.runtime_options(_args(json_store="custom.json", store_backend="mongo"))
+    assert exc_info.value.code == 2
+
+    # The narrow guard: json backend + json_store is fine, and mongo without json_store is fine.
+    assert runtime.runtime_options(_args(json_store="custom.json", store_backend="json")).json_store == Path(
+        "custom.json"
+    )
+    assert runtime.runtime_options(_args(store_backend="mongo")).json_store is None
+
+
 def test_commands_do_not_import_headless_browser_constant():
     """
     [Unit] runtime: verifies no command module or the schema-detection engine imports HEADLESS_BROWSER.

@@ -1372,3 +1372,81 @@ def test_ignore_robots_defined_once_in_source():
     """
     source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
     assert source.count('"--ignore-robots"') == 1
+
+
+def test_dry_run_output_dir_json_store_defaults_and_dests():
+    """
+    [Unit] cli scrape-urls: the 05.0/04 runtime flags default to their documented values and dests.
+
+    Scenario:
+        Given a minimal scrape-urls invocation with none of the three new flags
+        When build_parser().parse_args() processes it
+        Then args.dry_run is False, args.output_dir is ".", and args.json_store is None.
+
+    Boundaries:
+        - Pure argparse; no filesystem, no network
+        - Covers the _scrape_runtime_parent defaults consumed by runtime.runtime_options
+
+    On failure, first check:
+        - The default= values and dest= names on --dry-run/--output-dir/--json-store in _scrape_runtime_parent
+    """
+    args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "json"])
+    assert args.dry_run is False
+    assert args.output_dir == "."
+    assert args.json_store is None
+
+
+def test_dry_run_output_dir_json_store_parse_on_both_commands():
+    """
+    [Unit] cli: --dry-run, --output-dir and --json-store parse into their dests on scrape-urls and search.
+
+    Scenario:
+        Given a scrape-urls invocation setting all three flags, then a search invocation doing the same
+        When build_parser().parse_args() processes each
+        Then args.dry_run is True, args.output_dir and args.json_store hold the given values on both.
+
+    Boundaries:
+        - Pure argparse; both scraping subcommands share _scrape_runtime_parent
+        - No file is opened and no cross-flag validation runs at parse time
+
+    On failure, first check:
+        - That both subcommands include _scrape_runtime_parent in their parents=
+        - The dest= names (dry_run/output_dir/json_store)
+    """
+    scrape_args = build_parser().parse_args(
+        [
+            "scrape-urls",
+            "-f",
+            "x.csv",
+            "--store-backend",
+            "json",
+            "--dry-run",
+            "--output-dir",
+            "reports",
+            "--json-store",
+            "custom.json",
+        ]
+    )
+    assert scrape_args.dry_run is True
+    assert scrape_args.output_dir == "reports"
+    assert scrape_args.json_store == "custom.json"
+
+    search_args = build_parser().parse_args(
+        [
+            "search",
+            "--store-backend",
+            "json",
+            "--site",
+            "leanpub",
+            "-q",
+            "python",
+            "--dry-run",
+            "--output-dir",
+            "out",
+            "--json-store",
+            "books-2.json",
+        ]
+    )
+    assert search_args.dry_run is True
+    assert search_args.output_dir == "out"
+    assert search_args.json_store == "books-2.json"

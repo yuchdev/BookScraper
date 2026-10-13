@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from .book_utils import print_log
@@ -44,12 +45,19 @@ class RuntimeOptions:
     :ivar nav_timeout_ms: Per-page navigation timeout in milliseconds (``--nav-timeout`` seconds
         converted to ms), fed to ``scrape_details.NAVIGATION_TIMEOUT_MS``'s call sites.
     :ivar ignore_robots: Whether ``robots.txt`` is skipped for the run.
+    :ivar dry_run: Whether the run reads for dedup but saves nothing (no ``save_books`` call).
+    :ivar output_dir: Directory the diagnostic CSVs are written to (``.`` by default).
+    :ivar json_store: Explicit ``json`` backend store-file path, or ``None`` to use the default
+        ``books.json``. Always ``None`` unless ``--store-backend json`` is in use.
     """
 
     headless: bool
     concurrency: int
     nav_timeout_ms: int
     ignore_robots: bool
+    dry_run: bool
+    output_dir: str
+    json_store: Optional[Path]
 
 
 def _parse_bool_env(raw: str) -> Optional[bool]:
@@ -99,15 +107,44 @@ def runtime_options(args: argparse.Namespace) -> RuntimeOptions:
 
     :param args: The parsed subcommand arguments.
     :returns: The resolved :class:`RuntimeOptions`.
+    :raises SystemExit: With usage code ``2`` when ``--json-store`` is combined with
+        ``--store-backend mongo`` (the json store file has no meaning for the mongo backend).
     """
     headless = _resolve_headless(getattr(args, "headless", None))
     concurrency = getattr(args, "concurrency", DEFAULT_CONCURRENCY)
     nav_timeout_s = getattr(args, "nav_timeout_s", DEFAULT_NAV_TIMEOUT_S)
     nav_timeout_ms = int(round(nav_timeout_s * 1000))
     ignore_robots = bool(getattr(args, "ignore_robots", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    output_dir = getattr(args, "output_dir", None) or "."
+    json_store = _resolve_json_store(getattr(args, "json_store", None), getattr(args, "store_backend", None))
     return RuntimeOptions(
         headless=headless,
         concurrency=concurrency,
         nav_timeout_ms=nav_timeout_ms,
         ignore_robots=ignore_robots,
+        dry_run=dry_run,
+        output_dir=output_dir,
+        json_store=json_store,
     )
+
+
+def _resolve_json_store(raw: Optional[str], store_backend: Optional[str]) -> Optional[Path]:
+    """Resolve ``--json-store`` into a path, rejecting its use with the mongo backend.
+
+    :param raw: The raw ``--json-store`` value (``None`` when the flag was not supplied).
+    :param store_backend: The resolved ``--store-backend`` value, used only to reject the
+        meaningless ``--json-store`` + ``mongo`` combination.
+    :returns: The store-file :class:`~pathlib.Path` when the flag was given, else ``None`` so the
+        json backend falls back to its default ``books.json``.
+    :raises SystemExit: With usage code ``2`` when ``raw`` is given alongside the mongo backend.
+    """
+    if raw is None:
+        return None
+    if store_backend == "mongo":
+        print_log(
+            "--json-store only applies to --store-backend json; it cannot be combined with --store-backend mongo.",
+            "error",
+        )
+        raise SystemExit(2)
+    return Path(raw)

@@ -974,3 +974,118 @@ async def test_max_search_pages_reaches_search_provider():
     assert search_api.call_args.args[0] == "Rust"
     assert search_api.call_args.kwargs["max_pages"] == 1
     backend.close.assert_called_once_with()
+
+
+# --------------------------------------------------------------------------- #
+# --dry-run (subtask 05.0/04)
+# --------------------------------------------------------------------------- #
+def _dry_run_search_args(**overrides) -> SimpleNamespace:
+    """Build a search Namespace carrying the 05.0/04 runtime fields.
+
+    :param overrides: Field overrides (e.g. dry_run, output_dir, json_store).
+    :returns: The populated :class:`types.SimpleNamespace`.
+    """
+    base = {
+        "store_backend": "json",
+        "ignore_robots": False,
+        "dry_run": False,
+        "output_dir": ".",
+        "json_store": None,
+    }
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+async def test_dry_run_never_calls_save_books():
+    """
+    [Local] search: verifies a --dry-run run saves nothing but still closes the backend.
+
+    Scenario:
+        Given a single non-duplicate Leanpub candidate whose detail scrape SUCCEEDS and --dry-run set
+        When run() is called
+        Then save_books is never called, the "DRY RUN - nothing was saved." line is printed, and the
+             backend is still closed.
+
+    Boundaries:
+        - Search API and detail scraper mocked; only the save decision is under test.
+
+    On failure, first check:
+        - The runtime.dry_run branch at the end of run() that skips save_books.
+    """
+    args = _dry_run_search_args(dry_run=True)
+
+    candidate = _leanpub_book("good-book", "Good Book")
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    search_api = AsyncMock(return_value=[candidate])
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/good-book.json",
+            site="leanpub",
+            book={"title": "Good Book", "site": "leanpub", "hash": "ok"},
+        )
+    )
+    printed: list[tuple[str, str]] = []
+
+    def _record_print(message, severity="info", *args, **kwargs):
+        """Capture (message, severity) for every print_log call."""
+        printed.append((message, severity))
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.print_log", _record_print),
+    ):
+        await run(args)
+
+    backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
+    assert any(msg == "DRY RUN - nothing was saved." for msg, _ in printed)
+
+
+async def test_dry_run_still_performs_dedup_reads():
+    """
+    [Local] search: verifies a --dry-run run still runs the pre-scrape duplicate-check read.
+
+    Scenario:
+        Given a single Leanpub candidate and --dry-run set
+        When run() is called
+        Then the backend's leanpub_book_exists dedup read is still called while save_books is not.
+
+    Boundaries:
+        - Proves "reads for dedup still run" directly, since the search command owns the read call
+          (unlike scrape-urls, where scrape_book owns it).
+
+    On failure, first check:
+        - That the dry-run branch only gates save_books, leaving the dedup loop intact.
+    """
+    args = _dry_run_search_args(dry_run=True)
+
+    candidate = _leanpub_book("good-book", "Good Book")
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    search_api = AsyncMock(return_value=[candidate])
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/good-book.json",
+            site="leanpub",
+            book={"title": "Good Book", "site": "leanpub", "hash": "ok"},
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    backend.leanpub_book_exists.assert_called_once_with("id-good-book", "good-book")
+    backend.save_books.assert_not_called()

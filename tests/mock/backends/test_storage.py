@@ -487,7 +487,9 @@ class TestResolveStoreBackend:
             backend = resolve_store_backend("json")
 
         assert isinstance(backend, JsonBackend)
-        mock_check.assert_called_once_with()
+        # The pre-flight checks the store file's own directory (the default books.json lives under
+        # the isolated_local_store tmp_path), not an unconditional ".".
+        mock_check.assert_called_once_with(str(isolated_local_store.parent))
 
     def test_preflight_exits_on_corrupt_store(self, isolated_local_store):
         """
@@ -556,6 +558,33 @@ class TestResolveStoreBackend:
         assert exc_info.value.code == 1
         mock_db.get_mongo_collection.assert_not_called()
         mock_check.assert_not_called()
+
+    def test_json_store_path_used_by_backend_and_preflight(self, tmp_path):
+        """
+        [Local] resolve store backend: verifies an explicit --json-store path drives both the pre-flight and the backend.
+
+        Scenario:
+            Given a --json-store path in a tmp_path subdirectory and write permission granted
+            When resolve_store_backend("json", that path) is called
+            Then the write-permission pre-flight checks that file's own directory (not ".") and the
+                 returned JsonBackend reads and writes exactly that path.
+
+        Boundaries:
+            - check_local_write_permission is patched True; store integrity is a no-op on a missing file
+
+        On failure, first check:
+            - The store_path/directory derivation in resolve_store_backend's json branch
+            - That JsonBackend stores and resolves the explicit path
+        """
+        store_path = tmp_path / "sub" / "custom.json"
+        store_path.parent.mkdir(parents=True)
+
+        with patch.object(storage, "check_local_write_permission", return_value=True) as mock_check:
+            backend = resolve_store_backend("json", store_path)
+
+        assert isinstance(backend, JsonBackend)
+        mock_check.assert_called_once_with(str(store_path.parent))
+        assert backend._store_path() == store_path
 
 
 class TestCertExpiryPreflight:

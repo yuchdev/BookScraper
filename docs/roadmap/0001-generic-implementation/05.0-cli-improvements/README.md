@@ -24,7 +24,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 | 01 | [Shared parent parsers](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/01-shared-parent-parsers.md)          | ✅ Complete    | 02-07  |
 | 02 | [Search targeting flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/02-search-targeting-flags.md)        | ✅ Complete    | -      |
 | 03 | [Browser & concurrency flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/03-browser-and-concurrency-flags.md) | ✅ Complete    | - |
-| 04 | [Dry run & output locations](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/04-dry-run-and-output-locations.md) | ⬜ Not started | -   |
+| 04 | [Dry run & output locations](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/04-dry-run-and-output-locations.md) | ✅ Complete    | -   |
 | 05 | [Exit-code contract & interrupt handling](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/05-exit-code-contract.md) | ⬜ Not started | - |
 | 06 | [`--version` & help polish](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/06-version-and-help.md)           | ⬜ Not started | -      |
 | 07 | [`doctor` subcommand](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/07-doctor-subcommand.md)                | ⬜ Not started | 08     |

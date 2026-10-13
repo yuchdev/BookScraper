@@ -178,6 +178,29 @@ def _scrape_runtime_parent() -> argparse.ArgumentParser:
         action="store_true",
         help=_IGNORE_ROBOTS_HELP,
     )
+    parent.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Run everything, including backend reads for duplicate detection, but save nothing: "
+        "no save_books call is made and the run prints the title, site and hash of each book it "
+        "would have saved. Still requires --store-backend and still runs the pre-flight.",
+    )
+    parent.add_argument(
+        "--output-dir",
+        dest="output_dir",
+        default=".",
+        help="Directory the diagnostic CSVs (failed_*.csv, other_links.csv) are written to; "
+        "created if missing (default: the current directory).",
+    )
+    parent.add_argument(
+        "--json-store",
+        dest="json_store",
+        default=None,
+        help="Path of the json backend's store file (default: books.json). Only valid with "
+        "--store-backend json; combining it with --store-backend mongo is a usage error. The "
+        "write-permission pre-flight checks this file's directory.",
+    )
     return parent
 
 

@@ -6,6 +6,7 @@ books.json is ever touched because resolve_store_backend is always patched.
 """
 
 import csv
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from bookscraper.backends.storage import SaveSummary
+from bookscraper.backends.storage import JsonBackend, SaveSummary
 from bookscraper.commands.scrape_urls import (
     identify_website,
     run,
@@ -270,9 +271,9 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path):
         await run(args)
 
     assert exc_info.value.code == 0
-    resolve.assert_called_once_with("json")
-    # The single "other" URL is handed to the skipped-links writer.
-    save_other.assert_called_once_with(["https://example.com/book"])
+    resolve.assert_called_once_with("json", None)
+    # The single "other" URL is handed to the skipped-links writer, in the default "." directory.
+    save_other.assert_called_once_with(["https://example.com/book"], directory=".")
     # Never reaches the browser section, never saves books, never writes failed CSV.
     pw_factory.assert_not_called()
     save_failed.assert_not_called()
@@ -408,8 +409,8 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
     backend.save_books.assert_called_once_with([book])
     browser.close.assert_awaited_once()
     backend.close.assert_called_once_with()
-    # Success path records no failed/duplicate entries.
-    save_failed.assert_called_once_with([])
+    # Success path records no failed/duplicate entries (written to the default "." directory).
+    save_failed.assert_called_once_with([], directory=".")
 
 
 @pytest.mark.parametrize(
@@ -671,3 +672,154 @@ async def test_ignore_robots_flag_bypasses_check_and_warns_once(tmp_path):
 
     warnings = [msg for msg, sev in printed if sev == "warning" and "--ignore-robots" in msg]
     assert len(warnings) == 1
+
+
+# --------------------------------------------------------------------------- #
+# --dry-run and --output-dir (subtask 05.0/04)
+# --------------------------------------------------------------------------- #
+def _dry_run_args(csv_path, **overrides) -> SimpleNamespace:
+    """Build a scrape-urls Namespace with the 05.0/04 runtime fields set.
+
+    :param csv_path: The input CSV path bound to input_file.
+    :param overrides: Field overrides (e.g. dry_run, output_dir, json_store).
+    :returns: The populated :class:`types.SimpleNamespace`.
+    """
+    base = {
+        "input_file": str(csv_path),
+        "store_backend": "json",
+        "ignore_robots": False,
+        "dry_run": False,
+        "output_dir": ".",
+        "json_store": None,
+    }
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+async def test_dry_run_never_calls_save_books(tmp_path):
+    """
+    [Local] scrape urls: verifies a --dry-run run saves nothing yet still wires the backend for dedup.
+
+    Scenario:
+        Given a CSV with one leanpub URL that scrape_book resolves as a SUCCESS and --dry-run set
+        When run() is called
+        Then save_books is never called, the "DRY RUN - nothing was saved." line is printed, and the
+             storage backend is still handed to scrape_book (so inline dedup reads can run).
+
+    Boundaries:
+        - scrape_book is mocked, so the inline dedup read is proven by the backend being passed down,
+          not by a real read; the search command covers the read-call assertion directly.
+
+    On failure, first check:
+        - The runtime.dry_run branch at the end of run() that skips the save_books call.
+        - That the storage backend is still the 4th positional arg to scrape_book.
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/good"])
+    args = _dry_run_args(csv_path, dry_run=True, output_dir=str(tmp_path))
+
+    backend = MagicMock()
+    pw_factory, browser = _make_playwright_factory()
+    book = {"title": "Good Book", "site": "leanpub", "hash": "abc123"}
+    result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/good", site="leanpub", book=book)
+    scrape_book = AsyncMock(side_effect=[result])
+    printed: list[tuple[str, str]] = []
+
+    def _record_print(message, severity="info", *args, **kwargs):
+        """Capture (message, severity) for every print_log call."""
+        printed.append((message, severity))
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.print_log", _record_print),
+    ):
+        await run(args)
+
+    backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
+    browser.close.assert_awaited_once()
+    assert any(msg == "DRY RUN - nothing was saved." for msg, _ in printed)
+    # The backend is still threaded into scrape_book (4th positional arg) for inline dedup reads.
+    assert scrape_book.call_args.args[3] is backend
+
+
+async def test_dry_run_leaves_store_byte_identical(tmp_path, isolated_local_store):
+    """
+    [Local] scrape urls: verifies a --dry-run run leaves the json store file byte-identical.
+
+    Scenario:
+        Given a pre-populated books.json and a run that scrapes one SUCCESS book with --dry-run set,
+            backed by a real JsonBackend over the isolated store
+        When run() is called
+        Then the store file's bytes (sha256 before and after) are unchanged - nothing was persisted.
+
+    Boundaries:
+        - Uses a real JsonBackend over isolated_local_store (never the repo-root books.json); only
+          Playwright and scrape_book are mocked.
+
+    On failure, first check:
+        - That the dry-run branch skips save_books so the store's atomic write never runs.
+    """
+    isolated_local_store.write_text('[{"hash": "existing", "title": "Old", "site": "leanpub"}]', encoding="utf-8")
+    digest_before = hashlib.sha256(isolated_local_store.read_bytes()).hexdigest()
+
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/good"])
+    args = _dry_run_args(csv_path, dry_run=True, output_dir=str(tmp_path))
+
+    backend = JsonBackend()
+    pw_factory, _browser = _make_playwright_factory()
+    book = {"title": "New Book", "site": "leanpub", "hash": "brandnew"}
+    result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/good", site="leanpub", book=book)
+    scrape_book = AsyncMock(side_effect=[result])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        await run(args)
+
+    digest_after = hashlib.sha256(isolated_local_store.read_bytes()).hexdigest()
+    assert digest_after == digest_before
+
+
+async def test_output_dir_created_and_used_for_all_diagnostics(tmp_path):
+    """
+    [Local] scrape urls: verifies --output-dir is created and receives every diagnostic CSV.
+
+    Scenario:
+        Given a CSV with one scrapable leanpub URL (resolved FAILED) and one example.com "other" URL,
+            with --output-dir pointing at a not-yet-existing nested directory
+        When run() is called with the real CSV writers
+        Then the nested directory is created and both failed_books.csv and other_links.csv land in it.
+
+    Boundaries:
+        - The CSV writers are NOT mocked here (the point is where they write); scrape_book is.
+
+    On failure, first check:
+        - The Path(output_dir).mkdir(parents=True) call and the directory= kwarg on both writers.
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/x", "https://example.com/other"])
+    out_dir = tmp_path / "nested" / "reports"
+    args = _dry_run_args(csv_path, output_dir=str(out_dir))
+
+    backend = MagicMock()
+    pw_factory, _browser = _make_playwright_factory()
+    result = ScrapeResult(ScrapeStatus.FAILED, url="https://leanpub.com/x", site="leanpub", error="boom")
+    scrape_book = AsyncMock(side_effect=[result])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+    ):
+        await run(args)
+
+    assert out_dir.is_dir()
+    assert (out_dir / "failed_books.csv").exists()
+    assert (out_dir / "other_links.csv").exists()

@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import os
 import sys
 import time
 from collections import Counter
+from pathlib import Path
 
 import httpx
 import pandas as pd
@@ -19,63 +21,75 @@ from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import ROBOTS_FETCH_TIMEOUT_S, build_robots_fetcher, scrape_book
 
 
-def save_failed_urls_to_csv(failed_urls_with_status: list[tuple[str, str, str]], filename: str = "failed_books.csv"):
+def save_failed_urls_to_csv(
+    failed_urls_with_status: list[tuple[str, str, str]],
+    filename: str = "failed_books.csv",
+    directory: str = ".",
+):
     """Save the failed/duplicate URLs with their status and error reason to a CSV file.
 
     :param failed_urls_with_status: A list of ``(url, status, error)`` tuples, where ``status``
         is a :class:`ScrapeStatus` value and ``error`` is a short, secret-free reason (may be
         empty for a duplicate).
-    :param filename: The name of the CSV file to create.
+    :param filename: The fixed name of the CSV file to create (unaffected by ``--output-dir``).
+    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
     """
     if not failed_urls_with_status:
         logger.info(f"No failed/duplicate URLs to save to {filename}.")
         return
 
+    target = os.path.join(directory, filename)
     try:
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        with open(target, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["url", "status", "error"])  # Add status + error header
             for url, status, error in failed_urls_with_status:
                 writer.writerow([csv_safe_cell(url), csv_safe_cell(status), csv_safe_cell(error)])
         print_log(
-            f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}",
+            f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {target}",
             "success",
         )
-        logger.info(f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {filename}")
+        logger.info(f"Successfully saved {len(failed_urls_with_status)} failed/duplicate URLs to {target}")
 
     except (OSError, csv.Error) as e:
         logger.error(
-            f"Error saving failed/duplicate URLs to CSV ({filename}): {e}",
+            f"Error saving failed/duplicate URLs to CSV ({target}): {e}",
             exc_info=True,
         )
         print_log(
-            f"Error: Could not write failed/duplicate URLs to CSV file {filename}. Details: {e}",
+            f"Error: Could not write failed/duplicate URLs to CSV file {target}. Details: {e}",
             "error",
         )
 
 
-def save_other_links_to_csv(other_links: list[str], filename: str = "other_links.csv"):
-    """Saves the 'other' links (skipped URLs) to a CSV file."""
+def save_other_links_to_csv(other_links: list[str], filename: str = "other_links.csv", directory: str = "."):
+    """Saves the 'other' links (skipped URLs) to a CSV file.
+
+    :param other_links: The skipped URLs to record.
+    :param filename: The fixed name of the CSV file to create (unaffected by ``--output-dir``).
+    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
+    """
     if not other_links:
         logger.info(f"No 'other' links to save to {filename}.")
         return
 
+    target = os.path.join(directory, filename)
     try:
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        with open(target, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["url"])
             for url in other_links:
                 writer.writerow([csv_safe_cell(url)])
         print_log(
-            f"Successfully saved {len(other_links)} 'other' links to {filename}",
+            f"Successfully saved {len(other_links)} 'other' links to {target}",
             "success",
         )
-        logger.info(f"Successfully saved {len(other_links)} 'other' links to {filename}")
+        logger.info(f"Successfully saved {len(other_links)} 'other' links to {target}")
 
     except (OSError, csv.Error) as e:
-        logger.error(f"Error saving 'other' links to CSV ({filename}): {e}", exc_info=True)
+        logger.error(f"Error saving 'other' links to CSV ({target}): {e}", exc_info=True)
         print_log(
-            f"Error: Could not write 'other' links to CSV file {filename}. Details: {e}",
+            f"Error: Could not write 'other' links to CSV file {target}. Details: {e}",
             "error",
         )
 
@@ -94,6 +108,26 @@ def identify_website(url: str) -> str:
         return "other"
 
 
+def _report_dry_run_books(books: list[dict], store_backend: str):
+    """Print the title, site and hash of each book a non-dry run would have saved.
+
+    :param books: The successfully scraped, non-duplicate book documents.
+    :param store_backend: The resolved ``--store-backend`` name, named in the header line.
+    """
+    if not books:
+        print_log("No new unique books scraped to save.", "info")
+        return
+    print_log(
+        f"Would save {len(books)} book(s) via '{store_backend}' storage backend (title | site | hash):",
+        "info",
+    )
+    for book in books:
+        title = book.get("title", "Unknown Title")
+        site = book.get("site", "?")
+        book_hash = book.get("hash", "?")
+        print_log(f"  {title} | {site} | {book_hash}", "info")
+
+
 async def run(args: argparse.Namespace):
     """
     The "I already have URLs" workflow: scrape a CSV of book URLs into the chosen store.
@@ -110,7 +144,12 @@ async def run(args: argparse.Namespace):
     # the resolved values down instead of importing the headless default / a module concurrency one.
     runtime = runtime_options(args)
 
-    storage_backend = resolve_store_backend(args.store_backend)
+    # Create the diagnostics output directory up front (default "." is a no-op) so both the
+    # early "no valid URLs" exit and the end-of-run writes land in --output-dir.
+    output_dir = runtime.output_dir
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    storage_backend = resolve_store_backend(args.store_backend, runtime.json_store)
     # One per-run, per-host rate limiter registry, threaded down to every scrape_book call so a
     # whole run (across every batch) is throttled to each host's configured rate.
     limiters = build_default_limiters()
@@ -187,7 +226,7 @@ async def run(args: argparse.Namespace):
             "No valid book URLs found to scrape. Saving skipped links and exiting.",
             "info",
         )
-        save_other_links_to_csv(website_urls["other"])
+        save_other_links_to_csv(website_urls["other"], directory=output_dir)
         sys.exit(0)
 
     # Playwright Browser Setup and Scraping Loop
@@ -298,19 +337,25 @@ async def run(args: argparse.Namespace):
     # Diagnostic reports (failed/duplicate URLs, skipped "other" links) are process
     # diagnostics, not database content, so they're always written as CSV best-effort,
     # independent of --store-backend.
-    save_failed_urls_to_csv(failed_urls_with_status)
-    save_other_links_to_csv(website_urls["other"])
+    save_failed_urls_to_csv(failed_urls_with_status, directory=output_dir)
+    save_other_links_to_csv(website_urls["other"], directory=output_dir)
 
-    print_log(f"Saving scraped books via '{args.store_backend}' storage backend...", "info")
-    if books:
-        summary = await asyncio.to_thread(storage_backend.save_books, books)
-        # summary.errors > 0 is the partial-failure signal the exit-code contract
-        # (task 05.0, subtask 05) consumes.
-        print_log(
-            f"Save summary: {summary.inserted} new, {summary.duplicates} duplicates, {summary.errors} errors.",
-            "warning" if summary.errors > 0 else "success",
-        )
+    if runtime.dry_run:
+        # Dedup reads already ran inline (scrape_book consulted the backend); a dry run just
+        # refuses to persist, so no save_books call is made and the store is left untouched.
+        print_log("DRY RUN - nothing was saved.", "warning")
+        _report_dry_run_books(books, args.store_backend)
     else:
-        print_log("No new unique books scraped to save.", "info")
+        print_log(f"Saving scraped books via '{args.store_backend}' storage backend...", "info")
+        if books:
+            summary = await asyncio.to_thread(storage_backend.save_books, books)
+            # summary.errors > 0 is the partial-failure signal the exit-code contract
+            # (task 05.0, subtask 05) consumes.
+            print_log(
+                f"Save summary: {summary.inserted} new, {summary.duplicates} duplicates, {summary.errors} errors.",
+                "warning" if summary.errors > 0 else "success",
+            )
+        else:
+            print_log("No new unique books scraped to save.", "info")
 
     storage_backend.close()

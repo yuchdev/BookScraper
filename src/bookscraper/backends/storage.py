@@ -161,9 +161,24 @@ class JsonBackend(StorageBackend):
         ("slugs", "slug"),
     )
 
-    def __init__(self):
-        """Create the backend with its in-memory index unbuilt (built lazily on first lookup)."""
+    def __init__(self, path: Optional[pathlib.Path] = None):
+        """Create the backend with its in-memory index unbuilt (built lazily on first lookup).
+
+        :param path: The store file this backend reads from and writes to. ``None`` (the default)
+            defers to :data:`store.LOCAL_STORE_FILE` at every access, so a test that monkeypatches
+            that module constant stays isolated; an explicit path (from ``--json-store``) is used
+            verbatim.
+        """
+        self._path = path
         self._index: Optional[dict[str, set[str]]] = None
+
+    def _store_path(self) -> pathlib.Path:
+        """Return the store file to use, resolving the ``None`` default lazily.
+
+        :returns: The explicit path given at construction, else the current
+            :data:`store.LOCAL_STORE_FILE` (read now, not at construction time).
+        """
+        return self._path if self._path is not None else store.LOCAL_STORE_FILE
 
     @classmethod
     def _add_to_index(cls, index: dict[str, set[str]], book: dict):
@@ -179,7 +194,7 @@ class JsonBackend(StorageBackend):
             index: dict[str, set[str]] = {bucket: set() for bucket, _ in self._INDEX_FIELDS}
             # Pass the path explicitly (read now, not at def time) so tests that
             # monkeypatch store.LOCAL_STORE_FILE stay isolated from the real store.
-            for book in store._load_books(store.LOCAL_STORE_FILE):
+            for book in store._load_books(self._store_path()):
                 if isinstance(book, dict):
                     self._add_to_index(index, book)
             self._index = index
@@ -193,7 +208,7 @@ class JsonBackend(StorageBackend):
         :func:`store.save_books` and the in-memory index.
         """
         valid, rejected = _reject_invalid(books)
-        summary = store.save_books(valid, store.LOCAL_STORE_FILE)
+        summary = store.save_books(valid, self._store_path())
         # Mirror in the cache exactly what store.save_books just persisted: valid books that
         # carry a hash not already known (duplicates are not re-added; invalid ones never reach here).
         if self._index is not None:
@@ -252,12 +267,18 @@ def _warn_if_cert_expiring():
         print_log(warning, "warning")
 
 
-def resolve_store_backend(backend_name: str) -> StorageBackend:
+def resolve_store_backend(backend_name: str, json_store: Optional[pathlib.Path] = None) -> StorageBackend:
     """
     Runs a pre-flight check for the requested backend and returns a ready-to-use
     StorageBackend. Exits the process if that backend isn't usable - there is no
     interactive fallback: --store-backend is required, so the choice is always
     explicit (see cli.py).
+
+    :param backend_name: The ``--store-backend`` value (``"mongo"`` or ``"json"``).
+    :param json_store: The ``--json-store`` path for the json backend, or ``None`` to use the
+        default ``books.json``. The write-permission pre-flight checks this file's directory, and
+        the returned :class:`JsonBackend` reads and writes it. Ignored for the mongo backend.
+    :returns: A ready-to-use :class:`StorageBackend`.
     """
     if backend_name not in STORE_BACKENDS:
         print_log(f"Unknown storage backend: {backend_name!r}", "error")
@@ -276,16 +297,20 @@ def resolve_store_backend(backend_name: str) -> StorageBackend:
         return MongoBackend(mongo_collection)
 
     if backend_name == "json":
+        store_path = json_store if json_store is not None else store.LOCAL_STORE_FILE
+        # Check the store file's own directory (not always "."), so --json-store pointing elsewhere
+        # is pre-flighted where it will actually be written.
+        directory = str(store_path.parent) or "."
         print_log("  Checking local write permissions...", "info")
-        if not check_local_write_permission():
+        if not check_local_write_permission(directory):
             print_log("  Local write permission: FAILED. Cannot use 'json' backend.", "error")
             sys.exit(1)
         print_log("  Local write permission: OK", "info")
         print_log("  Checking local store integrity...", "info")
         try:
-            store.assert_store_readable(store.LOCAL_STORE_FILE)
+            store.assert_store_readable(store_path)
         except store.LocalStoreCorruptError as e:
             print_log(f"  Local store: CORRUPT. Cannot use 'json' backend. {e}", "error")
             sys.exit(1)
         print_log("  Local store: OK", "info")
-        return JsonBackend()
+        return JsonBackend(store_path)

@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import csv
 import logging
+import os
 import time
 from collections import Counter
 from pathlib import Path
@@ -124,7 +125,7 @@ def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[st
     return sites, queries, max_search_pages
 
 
-def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv"):
+def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv", directory: str = "."):
     """
     Save the failed scrape records to a CSV file.
 
@@ -132,18 +133,20 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
     be evaluated as a spreadsheet formula.
 
     :param failed_urls: Failure records with the keys ``url``, ``site``, ``title`` and ``error``.
-    :param filename: The CSV file to write.
+    :param filename: The fixed name of the CSV file to write (unaffected by ``--output-dir``).
+    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
     """
     if not failed_urls:
         module_logger.info(f"No failed URLs to save to {filename}.")
         return
 
+    target = os.path.join(directory, filename)
     try:
         fieldnames = ["url", "site", "title", "error"]  # Must cover every key a failure record carries
-        module_logger.info(f"Saving failed URLs to CSV: {filename}")
-        print_log(f"Saving {len(failed_urls)} failed URLs to {filename}...", "info")
+        module_logger.info(f"Saving failed URLs to CSV: {target}")
+        print_log(f"Saving {len(failed_urls)} failed URLs to {target}...", "info")
 
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        with open(target, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
             writer.writeheader()
             for item in failed_urls:
@@ -156,17 +159,37 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
                         f"Unexpected error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {e}",
                         exc_info=True,
                     )
-        print_log(f"Failed URLs successfully saved to {filename}.", "success")
-        module_logger.info(f"Failed URLs successfully saved to {filename}.")
+        print_log(f"Failed URLs successfully saved to {target}.", "success")
+        module_logger.info(f"Failed URLs successfully saved to {target}.")
     except IOError as e:
-        module_logger.error(f"I/O error saving failed URLs to CSV {filename}: {e}")
-        print_log(f"Error saving failed URLs to {filename}: {e}", "error")
+        module_logger.error(f"I/O error saving failed URLs to CSV {target}: {e}")
+        print_log(f"Error saving failed URLs to {target}: {e}", "error")
     except csv.Error as e:
         module_logger.critical(
-            f"An unexpected error occurred while saving failed URLs to CSV {filename}: {e}",
+            f"An unexpected error occurred while saving failed URLs to CSV {target}: {e}",
             exc_info=True,
         )
-        print_log(f"Critical Error saving failed URLs to {filename}. Check log file.", "error")
+        print_log(f"Critical Error saving failed URLs to {target}. Check log file.", "error")
+
+
+def _report_dry_run_books(books: list[dict], store_backend: str):
+    """Print the title, site and hash of each book a non-dry run would have saved.
+
+    :param books: The successfully scraped book documents.
+    :param store_backend: The resolved ``--store-backend`` name, named in the header line.
+    """
+    if not books:
+        print_log("No new books to save.")
+        return
+    print_log(
+        f"Would save {len(books)} book(s) via '{store_backend}' storage backend (title | site | hash):",
+        "info",
+    )
+    for book in books:
+        title = book.get("title", "Unknown Title")
+        site = book.get("site", "?")
+        book_hash = book.get("hash", "?")
+        print_log(f"  {title} | {site} | {book_hash}", "info")
 
 
 async def run(args: argparse.Namespace):
@@ -190,7 +213,11 @@ async def run(args: argparse.Namespace):
     # (exit 2) fails fast without spinning up a storage backend or HTTP client.
     sites, queries, max_search_pages = resolve_search_targets(args)
 
-    storage_backend = resolve_store_backend(args.store_backend)
+    # Create the diagnostics output directory up front (default "." is a no-op).
+    output_dir = runtime.output_dir
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    storage_backend = resolve_store_backend(args.store_backend, runtime.json_store)
     # One per-run, per-host rate limiter registry shared by the search and detail fetches so the
     # whole run is throttled to each host's configured rate.
     limiters = build_default_limiters()
@@ -386,9 +413,14 @@ async def run(args: argparse.Namespace):
     print_log("\n--- Output Summary ---", "step")
     # failed_urls.csv is a process diagnostic, not database content, so it's always
     # written as CSV best-effort, independent of --store-backend.
-    save_failed_urls_to_csv(failed_scrape_attempts)
+    save_failed_urls_to_csv(failed_scrape_attempts, directory=output_dir)
 
-    if scraped_books_data:
+    if runtime.dry_run:
+        # Pre-scrape dedup reads already ran (leanpub_book_exists above); a dry run just refuses to
+        # persist, so no save_books call is made and the store is left untouched.
+        print_log("DRY RUN - nothing was saved.", "warning")
+        _report_dry_run_books(scraped_books_data, args.store_backend)
+    elif scraped_books_data:
         print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
         # save_books blocks (a MongoDB insert_many or the JSON store's fsync + replace), so it runs
         # in a worker thread like the other storage calls instead of stalling the event loop.
