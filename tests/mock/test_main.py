@@ -156,6 +156,40 @@ async def test_main_dispatches_to_detect_schema_run():
 
 
 @pytest.mark.asyncio
+async def test_main_dispatches_to_doctor_run():
+    """
+    [Local] main: verifies that command="doctor" dispatches to doctor.run().
+
+    Scenario:
+        Given args with command="doctor" and log_severity="info"
+        When main() is called
+        Then doctor.run() is awaited with args, and scrape_urls.run() and search.run() are not
+        called.
+
+    Boundaries:
+        - Only the doctor branch is tested; other commands are separate tests.
+
+    On failure, first check:
+        - The "doctor" branch in main()'s command dispatch.
+    """
+    args = SimpleNamespace(command="doctor", log_severity="info")
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging") as mock_configure,
+        patch.object(main.scrape_urls, "run", new_callable=AsyncMock) as mock_scrape_run,
+        patch.object(main.search, "run", new_callable=AsyncMock) as mock_search_run,
+        patch.object(main.doctor, "run", new_callable=AsyncMock) as mock_doctor_run,
+    ):
+        await main.main()
+
+    mock_configure.assert_called_once_with(logging.INFO)
+    mock_doctor_run.assert_awaited_once_with(args)
+    mock_scrape_run.assert_not_called()
+    mock_search_run.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_main_unknown_command_calls_parser_error():
     """
     [Local] main: verifies main unknown command calls parser error.

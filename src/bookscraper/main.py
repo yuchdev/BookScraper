@@ -8,7 +8,7 @@ from . import exitcodes
 from .backends import BackendUnavailableError
 from .book_utils import configure_logging, print_log
 from .cli import build_parser
-from .commands import detect_schema, migrate, rotate_cert, scrape_urls, search
+from .commands import detect_schema, doctor, migrate, rotate_cert, scrape_urls, search
 
 
 async def main() -> int:
@@ -36,6 +36,8 @@ async def main() -> int:
             return await detect_schema.run(args)
         if args.command == "migrate":
             return await migrate.run(args)
+        if args.command == "doctor":
+            return await doctor.run(args)
     except BackendUnavailableError as exc:
         print_log(f"Storage backend unavailable: {exc}", "error")
         return exitcodes.FATAL

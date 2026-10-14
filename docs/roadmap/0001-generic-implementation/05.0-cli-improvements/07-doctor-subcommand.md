@@ -1,7 +1,7 @@
 # 07 - `doctor` subcommand
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 02.0 / 05](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/05-single-mongo-client-factory.md), [Task 02.1 / 06](/docs/roadmap/0001-generic-implementation/02.1-x509-certificate-rotation/06-certificate-expiry-inspection.md)
 **Role:** Python Expert → Security Auditor (output review)
 

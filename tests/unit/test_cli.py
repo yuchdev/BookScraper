@@ -1578,3 +1578,64 @@ def test_dry_run_output_dir_json_store_parse_on_both_commands():
     assert search_args.dry_run is True
     assert search_args.output_dir == "out"
     assert search_args.json_store == "books-2.json"
+
+
+def test_doctor_store_backend_is_optional_and_defaults_none():
+    """
+    [Unit] cli doctor: --store-backend is optional and defaults to None.
+
+    Scenario:
+        Given a bare "doctor" invocation with no --store-backend
+        When it is parsed
+        Then args.command is "doctor", args.store_backend is None, and args.online is False.
+
+    Boundaries:
+        - doctor must NOT reuse the required _store_parent(); the flag is bespoke and optional.
+
+    On failure, first check:
+        - The doctor subparser's --store-backend (required must be absent, default None).
+    """
+    args = build_parser().parse_args(["doctor"])
+    assert args.command == "doctor"
+    assert args.store_backend is None
+    assert args.online is False
+
+
+def test_doctor_parses_optional_store_backend_and_online():
+    """
+    [Unit] cli doctor: --store-backend and --online parse into the expected dest= attributes.
+
+    Scenario:
+        Given a "doctor --store-backend mongo --online --log-severity debug" invocation
+        When it is parsed
+        Then args.store_backend is "mongo", args.online is True, and args.log_severity is "debug".
+
+    Boundaries:
+        - Pure argparse; no command is run.
+
+    On failure, first check:
+        - The doctor subparser's --store-backend/--online dest= and the shared logging parent.
+    """
+    args = build_parser().parse_args(["doctor", "--store-backend", "mongo", "--online", "--log-severity", "debug"])
+    assert args.store_backend == "mongo"
+    assert args.online is True
+    assert args.log_severity == "debug"
+
+
+def test_doctor_rejects_unknown_store_backend():
+    """
+    [Unit] cli doctor: an unrecognized --store-backend value is still rejected.
+
+    Scenario:
+        Given "doctor --store-backend sqlite"
+        When it is parsed
+        Then argparse exits (the optional flag still constrains its choices to STORE_BACKENDS).
+
+    Boundaries:
+        - Pure argparse; only the choices list is exercised.
+
+    On failure, first check:
+        - The choices=list(STORE_BACKENDS) on the doctor subparser's --store-backend.
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["doctor", "--store-backend", "sqlite"])

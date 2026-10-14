@@ -268,7 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the bookscraper, Python, and Playwright versions and exit.",
     )
     subparsers = parser.add_subparsers(
-        dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate}"
+        dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate,doctor}"
     )
 
     logging_parent = _logging_parent()
@@ -544,6 +544,36 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the migrated documents to the store. Without it the command is a dry run that "
         "reports what would change and writes nothing to the store.",
+    )
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Report the health of the local setup (toolchain, config, cert, backends) in one screen.",
+        description="Run a series of checks over the local setup - Python/package/Playwright "
+        "toolchain, .env and settings.json presence and auth mode, the resolved X.509 client "
+        "certificate and its expiry, the local JSON store and log directory, and the presence of the "
+        "optional ANTHROPIC_API_KEY / ATLAS_* credentials - and print an aligned status table. Offline "
+        "and instant by default; pass --online to also ping MongoDB Atlas. Exits 1 if any check FAILs "
+        "(a WARN never fails); never prints a secret value, a full connection URI, or a host.",
+        parents=[logging_parent],
+    )
+    # Unlike every other subcommand, --store-backend is OPTIONAL here (doctor reports the whole
+    # setup regardless), so the required _store_parent() is deliberately NOT reused. A 'json' value
+    # skips the (mongo-only) Atlas ping.
+    doctor_parser.add_argument(
+        "--store-backend",
+        dest="store_backend",
+        choices=list(STORE_BACKENDS),
+        default=None,
+        help="Optional. The backend you intend to use; a 'json' value skips the MongoDB Atlas ping "
+        "(which only applies to the 'mongo' backend). Omit to report every backend's checks.",
+    )
+    doctor_parser.add_argument(
+        "--online",
+        dest="online",
+        action="store_true",
+        help="Also run the checks that need network access (currently the MongoDB Atlas ping). Off "
+        "by default, so doctor is instant and offline-safe.",
     )
 
     return parser
