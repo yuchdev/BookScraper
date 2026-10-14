@@ -16,7 +16,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 04.1 | LLM extraction fallback            | ⬜ Not started | 0 / 5         | -                                                                                                      |
-| 05.0 | CLI improvements                   | ⬜ Not started | 0 / 8         | `tests/unit/test_cli.py` (baseline)                                                                    |
+| 05.0 | CLI improvements                   | ✅ Complete    | 8 / 8         | `tests/unit/test_{cli,runtime,cli_docs}.py`, `tests/mock/commands/test_{scrape_urls,search,rotate_cert,detect_schema,migrate,doctor,exit_contract}.py` |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
 | 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
 | 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -25,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 58 / 99 subtasks complete.
+**Totals:** 66 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -238,6 +238,40 @@ matches the real installed browser, the circuit breaker cannot be bypassed by pa
 or header reaches a log.
 
 **Coverage:** 1048 passed, 99% total; `politeness.py` and `browser.py` fully covered by their dedicated test files.
+
+## Task 05.0 - CLI improvements
+
+### Task 05.0 - CLI improvements (✅ 2026-10-14)
+
+**Delivered** (commits `ba37431`, `d2d855c`, `2312ec2`, `d4359f7`, `6f6da45`, `f27baca`, `dc40f0f`, `f22fd08`,
+review fixes `b6e1c53`):
+- **01** Shared `_logging_parent()`/`_store_parent()`/`_scrape_runtime_parent()` in `cli.py` replace 4 copies of
+  `--log-severity` and 2 of `--store-backend`; `STORE_BACKENDS` shared with `backends/storage.py`.
+- **02** `search` targeting: `--site` (repeatable), `-q`/`--query` (repeatable), `--queries-file`,
+  `--max-search-pages` (now actually caps Leanpub pagination), `--no-filters` (parsed only - task 03.3/04
+  consumes it). `resolve_search_targets()` is the single place defaults apply.
+- **03** `--headless`/`--no-headless`, `--concurrency` (1-32), `--nav-timeout`, `--ignore-robots` via new
+  `runtime.py` (`RuntimeOptions`); `HEADLESS_BROWSER` flips to `True` (a scheduled/CI run must never open a
+  window).
+- **04** `--dry-run` (reads for dedup, never saves), `--output-dir` (all diagnostic CSVs), `--json-store`
+  (`JsonBackend(path=...)`, usage error with `--store-backend mongo`).
+- **05** New `exitcodes.py` (`OK`/`FATAL`/`USAGE`/`PARTIAL`/`DRIFT`/`INTERRUPTED`); every `commands/*.run()`
+  returns a code, `main_sync()` is the sole `sys.exit` call site; `resolve_store_backend` raises
+  `BackendUnavailableError` instead of exiting; Ctrl+C → one warning line + exit 130, no traceback.
+- **06** `--version`/`-V` from installed package metadata; example invocations in the top-level epilog; fixed the
+  stale "against MongoDB" search description.
+- **07** `bookscraper doctor [--online]`: Python/package version, Chromium executable, `.env` presence,
+  settings.json mode, client cert + expiry, JSON store, log dir, `ANTHROPIC_API_KEY`/`ATLAS_*` presence, and
+  (online) a MongoDB ping - all offline-safe by default, never printing a secret value or full URI.
+- **08** `docs/cli.md` (one section per subcommand) with a guard test asserting every parser flag is documented;
+  CLAUDE.md/README trimmed to a short example list linking to it.
+
+**Review:** `feature-reviewer` LGTM; `security-auditor` PASS_WITH_FOLLOWUP (no CRITICAL/HIGH/MEDIUM). Fixed in
+`b6e1c53`: `doctor` now reports a clean FAIL instead of a raw traceback on a malformed `settings.json`; the
+sys.exit AST guard also catches a stray `raise SystemExit(code != 2)`; `--no-filters` documented as not yet
+active; an empty CSV now returns `FATAL` instead of crashing with `EmptyDataError`.
+
+**Coverage:** 1150 passed, 99% total.
 
 ## Task 04.0 - AI-assisted schema detection
 
