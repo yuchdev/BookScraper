@@ -292,61 +292,26 @@ writes `parameters.py`.
 
 ## Running
 
-```bash
-# `uv sync` (see Setup above) already registers the `bookscraper` console script inside .venv.
+See [docs/cli.md](/docs/cli.md) for the full reference: every flag, default, env override,
+and exit code for all six subcommands (`scrape-urls`, `search`, `rotate-cert`, `detect-schema`,
+`migrate`, `doctor`).
 
-# scrape-urls: scrapes a fixed list of URLs from a CSV (works for all 4 sites via Playwright).
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend mongo
+Common invocations:
+
+```bash
+# Scrape a fixed list of URLs, save to the local JSON store:
 uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
 
-# search: searches sites for books matching queries defined in parameters.py, then scrapes details.
+# Search Leanpub for new books matching the configured queries, save to MongoDB:
 uv run bookscraper search --store-backend mongo
-uv run bookscraper search --store-backend json --max-search-pages 5
 
-# rotate-cert: issues a new Atlas X.509 client certificate (needs ATLAS_* credentials, see Authentication
-# configuration). Unlike the two above it takes no --store-backend and never touches the book data.
-uv run bookscraper rotate-cert
-uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-manual.pem
-# By default the new cert is pinged against Atlas before settings.json is repointed; on failure
-# settings.json is left untouched and the command exits 1. Tune retries or skip the check entirely:
-uv run bookscraper rotate-cert --verify-attempts 8
-uv run bookscraper rotate-cert --no-verify              # offline / first-time setup: repoint without pinging
-# After a successful rotation, superseded X509-cert-*.pem files are pruned, keeping only the newest
-# --keep N (default 2) plus the active cert. Retain more, or keep them all:
-uv run bookscraper rotate-cert --keep 5
-uv run bookscraper rotate-cert --no-prune               # keep every certificate on disk
-
-# rotate-cert --check: report the active cert's expiry only (no Atlas contact, no ATLAS_* needed).
-# Exit 0 if >N days remain (or no x509 cert configured), 3 if within N days, 1 if expired/unreadable.
-uv run bookscraper rotate-cert --check
+# Report the active X.509 certificate's expiry (no Atlas contact needed):
 uv run bookscraper rotate-cert --check --warn-days 14
-
-# detect-schema: AI-assisted CSS-selector proposals for a site's detail page (dev-maintenance tool).
-# Takes no --store-backend and never touches book data; needs ANTHROPIC_API_KEY. See AI-assisted schema
-# detection below.
-uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029"
-uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
-uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029" --model claude-sonnet-5 --max-input-tokens 30000
-
-# migrate: rewrite stored v1 book documents to the canonical schema-2 shape, recomputing each
-# document's hash. Dry-run by default (prints a per-field change summary and writes NOTHING to the
-# store); pass --apply to write. Idempotent (a second --apply changes nothing) and never deletes a
-# document; a recomputed hash that collides with another document is left untouched and reported for
-# a human. A migration-report-<timestamp>.json is written to ~/.bookscrapper/logs/ either way.
-uv run bookscraper migrate --store-backend json            # dry run (report only)
-uv run bookscraper migrate --store-backend json --apply    # write the migrated books.json
-uv run bookscraper migrate --store-backend mongo --apply   # write the migrated Atlas collection
-
-# Without `uv run` (inside an activated .venv), or via `python -m` directly:
-python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
-python -m bookscraper search --store-backend json
-python -m bookscraper rotate-cert
-python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/x/9780123456789/"
-python -m bookscraper migrate --store-backend json --apply
 ```
 
-`--store-backend` is required — omitting it is an argparse error, not an interactive prompt (there is no more
-`(C)/(M)/(B)/(E)` choice: see Storage backend above for why the choice is always explicit).
+`--store-backend {mongo|json}` is required for `scrape-urls`, `search`, and `migrate` — omitting it
+is an argparse error (there is no more `(C)/(M)/(B)/(E)` interactive prompt: see Storage backend
+above for why the choice is always explicit). `doctor` accepts it as optional.
 
 ## AI-assisted schema detection
 

@@ -141,122 +141,39 @@ If you don't specify the configuration in the `.env` file, the application will 
 
 ## 💡 Usage
 
-`bookscraper` has three subcommands: `scrape-urls` (scrape details for a known list of URLs), `search` (discover
-new books by searching configured sites, then scrape their details), and `detect-schema` (an AI-assisted
-developer-maintenance tool that proposes CSS-selector updates for a site's detail page). Run `bookscraper
---help` or `bookscraper <subcommand> --help` for full option listings.
-
-**`detect-schema`** — propose CSS-selector updates for a site's detail page (dev maintenance):
+`bookscraper` has six subcommands. The full flag reference, defaults, env overrides, and exit-code
+contract for each one lives in [`docs/cli.md`](docs/cli.md). Run `bookscraper --help` or
+`bookscraper <subcommand> --help` for a quick argparse summary.
 
 ```bash
-uv run bookscraper detect-schema --site amazon \
-  --url "https://www.amazon.com/dp/1098131029" \
-  --url "https://www.amazon.com/dp/1492051365"
+# Scrape a curated list of URLs, save to the local JSON store:
+uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
+
+# Search configured sites for new books, save to MongoDB Atlas:
+uv run bookscraper search --store-backend mongo
+
+# Check the active X.509 certificate's expiry (no Atlas contact needed):
+uv run bookscraper rotate-cert --check --warn-days 14
 ```
 
-It loads each `--url` with Playwright, asks Claude to propose selectors for the fields already in
-`site_constants[site]`, validates them against every sample page's live DOM (flagging any that match
-inconsistently), and prints a diff-style report (optionally also to `--output <path>`). It never writes to
-`parameters.py` — you apply the changes you agree with by hand. Requires `ANTHROPIC_API_KEY` (see
-Configuration above). Takes no `--store-backend`: it never touches book storage. Full writeup, including
-the manual selector loop it automates, is in [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
+`--store-backend {mongo|json}` is required for `scrape-urls`, `search`, and `migrate`. Use
+`uv run bookscraper <subcommand> --help` for the full flag list, or see
+[`docs/cli.md`](docs/cli.md).
 
 ### Input CSV Format (`scrape-urls`)
 
-`scrape-urls` requires an input CSV file (`-f`/`--input-file`) with a single column named `url`. The file must
-already exist — it is not created automatically.
+`scrape-urls` requires an input CSV file (`-f`/`--input-file`) with a single column named `url`. The
+file must already exist — it is not created automatically.
 
 Example content:
 
 ```csv
 url
-[https://www.amazon.com/Product-Title/dp/B00ABCD123](https://www.amazon.com/Product-Title/dp/B00ABCD123)
-[https://www.packtpub.com/product/another-book/9781234567890](https://www.packtpub.com/product/another-book/9781234567890)
-[https://leanpub.com/your-great-book](https://leanpub.com/your-great-book)
-[https://www.oreilly.com/library/view/programming-language/9780123456789/](https://www.oreilly.com/library/view/programming-language/9780123456789/)
-[https://unsupported-site.com/book/some-title](https://unsupported-site.com/book/some-title)
+https://www.amazon.com/Product-Title/dp/B00ABCD123
+https://www.packtpub.com/product/another-book/9781234567890
+https://leanpub.com/your-great-book
+https://www.oreilly.com/library/view/programming-language/9780123456789/
 ```
-
-### Command-Line Arguments
-
-**`scrape-urls`** — scrape details for a known list of URLs:
-
-* `-f` or `--input-file <path/to/urls.csv>`: **(Required)** Path to your input CSV file containing book URLs (e.g.
-  the curated lists checked into `content/`).
-* `-c` or `--output-to-csv`: **(Optional)** If present, scraped data will be saved to `books.csv`, `failed_books.csv`,
-  and `other_links.csv` in the current directory.
-* `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
-  database.
-* `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
-  under `~/.bookscrapper/logs/` (default: `info`).
-
-**`search`** — discover new books by searching configured sites, then scrape their details:
-
-* `-c` or `--output-to-csv`: **(Optional)** If present, scraped data will be saved to `scraped_books.csv` and
-  `failed_urls.csv` in the current directory.
-* `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
-  database.
-* `--max-search-pages <n>`: **(Optional)** Maximum number of search-result pages to fetch per query per site
-  (default: `3`).
-* `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
-  under `~/.bookscrapper/logs/` (default: `info`).
-
-### Examples
-
-All examples below use `uv run`, which runs the command inside `.venv` without activating it. If you've activated
-`.venv` yourself, drop the `uv run` prefix and call `bookscraper` (or `python -m bookscraper`) directly.
-
-1. **Scrape a known list of URLs, save to CSV only:**
-   ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -c
-   ```
-2. **Scrape a known list of URLs, save to MongoDB only:**
-   ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -m
-   ```
-3. **Scrape a known list of URLs, save to both CSV and MongoDB:**
-   ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -c -m
-   ```
-4. **Search configured sites for new books, save to CSV only:**
-   ```bash
-   uv run bookscraper search -c
-   ```
-5. **Search configured sites for new books, save to MongoDB only, up to 5 result pages per query:**
-   ```bash
-   uv run bookscraper search -m --max-search-pages 5
-   ```
-6. **Without `uv run`, use `python -m bookscraper` inside an activated venv:**
-   ```bash
-   python -m bookscraper scrape-urls -f content/urls.csv -c -m
-   python -m bookscraper search -c -m
-   ```
-7. **Display help messages:**
-   ```bash
-   uv run bookscraper --help
-   uv run bookscraper scrape-urls --help
-   uv run bookscraper search --help
-   ```
-
-### Interactive Output Selection
-
-If you run either subcommand without specifying `-c` or `-m` (e.g., `bookscraper scrape-urls -f content/urls.csv`), it will
-perform pre-flight checks for CSV write permissions and MongoDB connectivity. Based on the successful checks, it will
-then prompt you to choose your desired output destination interactively:
-
-```
-Running pre-flight checks for output destinations...
-  Checking CSV write permissions...
-  CSV write permission: OK
-  Checking MongoDB connection...
-  MongoDB connection: OK
-
-No valid output destination specified via command line arguments (-c, -m).
-Do you want to save to (C)SV, (M)ongoDB, or (B)oth, or (E)xit?
-```
-
-If a destination (e.g., MongoDB) fails its pre-flight check, it will not be offered as an option in the interactive
-prompt.
 
 -----
 

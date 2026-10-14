@@ -1,7 +1,7 @@
 # 08 - CLI reference documentation
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [07-doctor-subcommand.md](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/07-doctor-subcommand.md)
 **Role:** Docs Writer
 

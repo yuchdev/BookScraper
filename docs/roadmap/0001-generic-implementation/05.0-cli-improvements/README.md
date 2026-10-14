@@ -1,7 +1,7 @@
 # Task 05.0 - CLI Improvements
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** 🔶 In progress
+**Status:** ✅ Complete
 **Category:** feature | **Priority:** P1
 
 ## Scope
@@ -28,7 +28,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 | 05 | [Exit-code contract & interrupt handling](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/05-exit-code-contract.md) | ✅ Complete    | - |
 | 06 | [`--version` & help polish](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/06-version-and-help.md)           | ✅ Complete    | -      |
 | 07 | [`doctor` subcommand](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/07-doctor-subcommand.md)                | ✅ Complete    | 08     |
-| 08 | [CLI reference documentation](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/08-cli-reference-docs.md)       | ⬜ Not started | -      |
+| 08 | [CLI reference documentation](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/08-cli-reference-docs.md)       | ✅ Complete    | -      |
 
 ## Key constraints
 

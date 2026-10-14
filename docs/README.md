@@ -1,5 +1,11 @@
 # Documentation Registry
 
+## CLI Reference
+
+- [`cli.md`](cli.md) — Complete flag reference for all six subcommands (`scrape-urls`, `search`,
+  `rotate-cert`, `detect-schema`, `migrate`, `doctor`): synopsis, flag tables with `dest`/default/env
+  override, examples, and exit codes.
+
 ## Architecture & Design
 
 - [ADR index](adr/) — architectural decision records
