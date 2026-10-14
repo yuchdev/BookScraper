@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import platform
+from importlib.metadata import PackageNotFoundError, version
 
 #: The storage backends the ``--store-backend`` flag accepts, in the order they
 #: appear in ``--help``. This is the single source of truth shared with
@@ -16,6 +18,29 @@ STORE_BACKENDS = ("mongo", "json")
 #: ``cli.py`` importing only ``argparse``; a drift guard (``test_site_keys_match_site_constants``)
 #: asserts it stays in sync with ``site_constants``.
 SITE_KEYS = ("amazon", "packtpub", "leanpub", "oreilly")
+
+
+def _version_string() -> str:
+    """
+    Build the ``--version`` output: ``bookscraper <version> (Python <x.y.z>, Playwright <v>)``.
+
+    The package and Playwright versions come from installed distribution metadata, never
+    hard-coded, so this can't drift from what is actually installed. Either version falls back to
+    ``"0+unknown"`` when its metadata is unavailable (e.g. running from a source checkout without
+    an editable install) rather than raising.
+
+    :returns: The formatted version string.
+    """
+    try:
+        bookscraper_version = version("bookscraper")
+    except PackageNotFoundError:
+        bookscraper_version = "0+unknown"
+    try:
+        playwright_version = version("playwright")
+    except PackageNotFoundError:
+        playwright_version = "0+unknown"
+    python_version = platform.python_version()
+    return f"bookscraper {bookscraper_version} (Python {python_version}, Playwright {playwright_version})"
 
 
 def _positive_int(value: str) -> int:
@@ -211,13 +236,19 @@ def build_parser() -> argparse.ArgumentParser:
     :returns: The top-level parser with every subcommand wired to its shared parent parsers.
     """
     # Exit-code contract (source of truth: bookscraper/exitcodes.py; kept as literal text here so
-    # cli.py keeps importing only argparse). Documented in the top-level --help epilog so a shell,
-    # cron job, or CI step can gate on the process result.
+    # cli.py keeps its own imports light - argparse plus two stdlib metadata lookups for
+    # --version). Documented in the top-level --help epilog so a shell, cron job, or CI step can
+    # gate on the process result.
     parser = argparse.ArgumentParser(
         prog="bookscraper",
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
+            "examples:\n"
+            "  bookscraper scrape-urls -f content/urls.csv --store-backend json\n"
+            "  bookscraper search --store-backend mongo --site leanpub --query Python\n"
+            "  bookscraper rotate-cert --check --warn-days 14\n"
+            "\n"
             "exit codes:\n"
             "  0    OK - completed; nothing failed\n"
             "  1    FATAL - could not run or was aborted (config/pre-flight failure, "
@@ -228,6 +259,13 @@ def build_parser() -> argparse.ArgumentParser:
             "  4    DRIFT - 'detect-schema': a current selector matched no sample page\n"
             "  130  INTERRUPTED - cancelled with Ctrl+C\n"
         ),
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=_version_string(),
+        help="Show the bookscraper, Python, and Playwright versions and exit.",
     )
     subparsers = parser.add_subparsers(
         dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema,migrate}"
@@ -255,7 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
         "search",
         help="Search sites for new books matching configured queries, then scrape their details.",
         description="Search configured sites for books matching SEARCH_QUERIES, deduplicate "
-        "against MongoDB, and scrape details for new results.",
+        "against the chosen --store-backend, and scrape details for new results.",
         parents=[store_parent, scrape_runtime_parent, logging_parent],
     )
     search_parser.add_argument(

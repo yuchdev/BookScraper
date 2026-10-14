@@ -26,7 +26,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 | 03 | [Browser & concurrency flags](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/03-browser-and-concurrency-flags.md) | ✅ Complete    | - |
 | 04 | [Dry run & output locations](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/04-dry-run-and-output-locations.md) | ✅ Complete    | -   |
 | 05 | [Exit-code contract & interrupt handling](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/05-exit-code-contract.md) | ✅ Complete    | - |
-| 06 | [`--version` & help polish](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/06-version-and-help.md)           | ⬜ Not started | -      |
+| 06 | [`--version` & help polish](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/06-version-and-help.md)           | ✅ Complete    | -      |
 | 07 | [`doctor` subcommand](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/07-doctor-subcommand.md)                | ⬜ Not started | 08     |
 | 08 | [CLI reference documentation](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/08-cli-reference-docs.md)       | ⬜ Not started | -      |
 

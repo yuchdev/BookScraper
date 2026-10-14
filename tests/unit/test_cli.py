@@ -41,6 +41,109 @@ def test_help_epilog_documents_exit_codes():
     assert "INTERRUPTED" in help_text
 
 
+def test_top_level_epilog_lists_exit_codes():
+    """
+    [Unit] cli: verifies the top-level epilog also lists example invocations alongside the exit codes.
+
+    Scenario:
+        Given the top-level parser built by build_parser()
+        When its help text is rendered
+        Then it contains an "examples:" section showing at least one invocation of scrape-urls,
+        search, and rotate-cert, ahead of the existing "exit codes:" section.
+
+    Boundaries:
+        - Pure argparse; only the rendered help string is inspected.
+        - Complements test_help_epilog_documents_exit_codes, which checks the exit-code tokens.
+
+    On failure, first check:
+        - The epilog argument on the top-level ArgumentParser in build_parser().
+    """
+    help_text = build_parser().format_help()
+    assert "examples:" in help_text
+    assert help_text.index("examples:") < help_text.index("exit codes:")
+    for example in ("scrape-urls", "search", "rotate-cert"):
+        assert example in help_text[help_text.index("examples:") : help_text.index("exit codes:")]
+
+
+def test_version_flag_prints_package_version_and_exits_zero(capsys):
+    """
+    [Unit] cli: verifies --version and -V print the package/Python/Playwright versions and exit 0.
+
+    Scenario:
+        Given the top-level parser built by build_parser()
+        When it parses ["--version"] (and separately ["-V"])
+        Then argparse prints "bookscraper <version> (Python <x.y.z>, Playwright <v>)" to stdout and
+        raises SystemExit(0) for each spelling.
+
+    Boundaries:
+        - Both the long and short flag spellings are checked.
+        - The actual installed bookscraper/Playwright versions are used (not mocked), since this
+          flag's whole point is to report what is really installed.
+
+    On failure, first check:
+        - The --version/-V argument definition and _version_string() in cli.py.
+    """
+    for flag in ("--version", "-V"):
+        with pytest.raises(SystemExit) as exc_info:
+            build_parser().parse_args([flag])
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert out.startswith("bookscraper ")
+        assert "Python" in out
+        assert "Playwright" in out
+
+
+def test_version_falls_back_when_metadata_missing(monkeypatch):
+    """
+    [Unit] cli: verifies _version_string() falls back to "0+unknown" when distribution metadata is absent.
+
+    Scenario:
+        Given importlib.metadata.version patched to always raise PackageNotFoundError
+        When cli._version_string() is called
+        Then both the bookscraper and Playwright version slots read "0+unknown" instead of raising.
+
+    Boundaries:
+        - Only the metadata lookup is faked; platform.python_version() still reports the real
+          interpreter version.
+
+    On failure, first check:
+        - The try/except PackageNotFoundError guards in cli._version_string().
+    """
+
+    def _always_missing(name: str) -> str:
+        """Simulate every distribution being uninstalled."""
+        raise cli.PackageNotFoundError(name)
+
+    monkeypatch.setattr(cli, "version", _always_missing)
+    result = cli._version_string()
+    assert "0+unknown" in result
+    assert result.count("0+unknown") == 2
+
+
+def test_search_description_does_not_mention_mongodb_only():
+    """
+    [Unit] cli: verifies the search subcommand's description no longer claims MongoDB-only dedup.
+
+    Scenario:
+        Given the search subparser built by build_parser()
+        When its description text is read
+        Then it does not say "against MongoDB" (either backend is used for dedup), and instead
+        names --store-backend.
+
+    Boundaries:
+        - Only the description string is inspected; behavior is covered elsewhere.
+
+    On failure, first check:
+        - The search subparser's description= text in build_parser().
+    """
+    search_parser = next(
+        action.choices["search"] for action in build_parser()._subparsers._group_actions if hasattr(action, "choices")
+    )
+    description = search_parser.description
+    assert "against MongoDB" not in description
+    assert "--store-backend" in description
+
+
 def test_scrape_urls_parses_full_valid_arg_set():
     """
     [Unit] cli scrape-urls: parses -f, --store-backend, and --log-severity into the expected dest= attributes.
