@@ -495,6 +495,32 @@ def test_check_settings_resolve_failure_is_fail(doctor_env):
     assert "settings mode" in result.detail
 
 
+def test_check_settings_malformed_block_is_clean_fail(doctor_env):
+    """
+    [Local] doctor check: an x509 block missing its cert subkey is a clean FAIL, no traceback.
+
+    Scenario:
+        Given a settings.json whose x509 block has a uri but no cert subkey
+        When check_settings() runs
+        Then resolve_mongo_connection raises KeyError, which is caught and reported as a FAIL naming
+        only the exception type (never a key name or value), rather than escaping as a traceback.
+
+    Boundaries:
+        - Exercises the broadened (KeyError, TypeError) guard; load_settings itself still parses.
+
+    On failure, first check:
+        - check_settings()'s (KeyError, TypeError) branch around resolve_mongo_connection().
+    """
+    (doctor_env.config_dir / "settings.json").write_text(
+        '{"auth_type": "x509", "x509": {"uri": {"source": "literal", "value": "mongodb+srv://x/y"}}}'
+    )
+    result = doctor.check_settings()
+    assert result.status == doctor.FAIL
+    assert "malformed settings.json" in result.detail
+    assert "KeyError" in result.detail
+    assert "cert" not in result.detail
+
+
 def test_check_client_cert_missing_file_is_fail(doctor_env):
     """
     [Local] doctor check: a configured cert path that does not exist is a FAIL.

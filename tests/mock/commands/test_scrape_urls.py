@@ -363,6 +363,34 @@ async def test_run_unparseable_csv_returns_fatal(tmp_path):
     backend.save_books.assert_not_called()
 
 
+async def test_run_empty_csv_returns_fatal(tmp_path):
+    """
+    [Local] scrape urls: verifies that an empty CSV file (no header/rows) returns FATAL.
+
+    Scenario:
+        Given an input file that exists but is empty, so pd.read_csv raises EmptyDataError
+        When run() is called
+        Then run() returns exitcodes.FATAL cleanly (no traceback) and save_books is never called.
+
+    Boundaries:
+        - Covers the EmptyDataError path; a missing file, missing column and unparseable CSV are
+          separate branches.
+
+    On failure, first check:
+        - The pd.errors.EmptyDataError except clause around pd.read_csv in run().
+    """
+    csv_path = tmp_path / "urls.csv"
+    csv_path.write_text("", encoding="utf-8")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    with patch(f"{MODULE}.resolve_store_backend", return_value=backend):
+        code = await run(args)
+
+    assert code == exitcodes.FATAL
+    backend.save_books.assert_not_called()
+
+
 # --------------------------------------------------------------------------- #
 # run() - scraping loop / result type-switch
 # --------------------------------------------------------------------------- #

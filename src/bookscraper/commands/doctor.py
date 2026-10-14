@@ -207,6 +207,12 @@ def check_settings() -> CheckResult:
     except config.ConfigError as exc:
         logger.debug(f"settings.json resolve failed: {type(exc).__name__}")
         return CheckResult("settings.json", FAIL, f"settings mode; {exc}")
+    except (KeyError, TypeError) as exc:
+        # A present-but-malformed block (a missing uri/cert subkey, or a non-dict block) raises
+        # KeyError/TypeError out of resolve_mongo_connection rather than ConfigError; name only the
+        # exception type so a raw key name or value can never leak into the detail.
+        logger.debug(f"settings.json resolve failed: {type(exc).__name__}")
+        return CheckResult("settings.json", FAIL, f"settings mode; malformed settings.json ({type(exc).__name__})")
 
     auth_type = settings.get("auth_type")
     detail = f"settings mode; auth_type={auth_type}; {_describe_uri_source(settings, auth_type)}"
@@ -338,8 +344,8 @@ async def check_mongodb_ping(online: bool, store_backend: Optional[str]) -> Chec
     :param store_backend: The optional ``--store-backend`` value; a ``json`` choice :data:`SKIP`s the
         ping (it does not apply to the local backend).
     :returns: :data:`OK` on a successful ping, :data:`FAIL` on a failure (the reason is already
-        redacted by :func:`database.check_mongodb_connection` and reaches only the run log), or
-        :data:`SKIP`.
+        redacted by :func:`database.check_mongodb_connection`, which prints it to the console and
+        writes it to the run log), or :data:`SKIP`.
     """
     if store_backend == "json":
         return CheckResult("MongoDB ping", SKIP, "not applicable to the json backend")

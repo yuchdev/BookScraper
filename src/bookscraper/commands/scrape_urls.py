@@ -206,6 +206,14 @@ async def run(args: argparse.Namespace) -> int:
                 "error",
             )
             return exitcodes.FATAL
+        except pd.errors.EmptyDataError:
+            logger.critical(f"Error: CSV file '{filepath}' is empty")
+            print_log(
+                f"Critical Error: The CSV file '{filepath}' is empty (no columns to parse). "
+                "Please provide a file with a 'url' column.",
+                "error",
+            )
+            return exitcodes.FATAL
         except KeyError:
             logger.critical(f"Error: CSV file '{filepath}' does not contain a 'url' column.")
             print_log(

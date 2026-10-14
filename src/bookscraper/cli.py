@@ -335,7 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_filters",
         action="store_true",
         help="Do not apply the SCRAPE_FILTERS rating thresholds to search results; keep every "
-        "candidate. Off by default.",
+        "candidate. Off by default (not yet active - see task 03.3).",
     )
 
     rotate_parser = subparsers.add_parser(

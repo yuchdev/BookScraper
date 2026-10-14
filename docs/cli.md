@@ -92,7 +92,7 @@ bookscraper search --store-backend {mongo|json} [options]
 | `-q` / `--query` | `queries` | `None` (uses `SEARCH_QUERIES` from `parameters.py`) | — | A search query; repeat to run several. Combines with `--queries-file` (union, order preserved, deduplicated). |
 | `--queries-file` | `queries_file` | `None` | — | File of search queries, one per line; blank lines and `#`-prefixed lines are skipped. Combines with `-q`. |
 | `--max-search-pages` | `max_search_pages` | `3` | — | Maximum search-result pages per query per site (>= 1). |
-| `--no-filters` | `no_filters` | `False` | — | Disable `SCRAPE_FILTERS` rating thresholds; keep every candidate. |
+| `--no-filters` | `no_filters` | `False` | — | Disable `SCRAPE_FILTERS` rating thresholds; keep every candidate (not yet active - see task 03.3). |
 | `--headless` / `--no-headless` | `headless` | `None` | `BOOKSCRAPER_HEADLESS` | Browser headless/headed mode (see `scrape-urls` for resolution order). |
 | `--concurrency` | `concurrency` | `4` | — | Maximum detail scrapes in flight at once (1–32). |
 | `--nav-timeout` | `nav_timeout_s` | `60.0` | — | Per-page navigation timeout in seconds (> 0). |
