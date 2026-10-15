@@ -80,11 +80,11 @@ async def _run_amazon_search(
 ) -> list[dict[str, Any]]:
     """Drive the unmodified amazon search path offline against ``mapping``.
 
-    ``max_pages`` overrides ``SEARCH_MAXIMUM_PAGES`` (the amazon branch scrapes
-    ``range(1, SEARCH_MAXIMUM_PAGES)``), and each per-page context (opened via
+    ``max_pages`` is passed to the refactored search function, which paginates ``1..max_pages``
+    inclusive (clamped to ``SEARCH_MAXIMUM_PAGES``, 75) and also stops early on an empty / no-results
+    page or a missing-or-disabled next control. Each per-page context (opened via
     ``new_scrape_context``, 03.2/05) gets the low default timeout.
     """
-    monkeypatch.setitem(search_utils.site_constants["amazon"], "SEARCH_MAXIMUM_PAGES", max_pages)
     browser = corpus_router(chromium_browser, mapping)
     original_new_context = search_utils.new_scrape_context
 
@@ -95,7 +95,7 @@ async def _run_amazon_search(
         return context
 
     monkeypatch.setattr(search_utils, "new_scrape_context", _timed_new_context)
-    return await get_search_results_via_playwright(browser, "amazon", "python")
+    return await get_search_results_via_playwright(browser, "amazon", "python", max_pages=max_pages)
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ async def test_amazon_search_golden(
         _amazon_page_url(1): AMAZON_DIR / "search_python_p1.html",
         _amazon_page_url(2): AMAZON_DIR / "search_python_p2.html",
     }
-    result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=3)
+    result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=2)
 
     # Two served pages of eight trimmed cards each, numbered per page.
     assert len(result) == 16
@@ -217,7 +217,7 @@ async def test_amazon_sponsored_card_unwrapped(
         - a sponsored card stored with its ``/sspa/click`` tracking URL (or no ASIN) would dedup wrong and re-fetch the same book forever.
     """
     mapping = {_amazon_page_url(1): AMAZON_DIR / "search_sponsored.html"}
-    result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=2)
+    result = await _run_amazon_search(chromium_browser, corpus_router, monkeypatch, mapping=mapping, max_pages=1)
 
     assert len(result) == 1
     book = result[0]

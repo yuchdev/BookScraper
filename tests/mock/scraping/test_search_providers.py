@@ -12,6 +12,7 @@ from bookscraper.backends.storage import StorageBackend
 from bookscraper.scraping.parameters import site_constants
 from bookscraper.scraping.search_providers import (
     PROVIDERS,
+    AmazonPlaywrightProvider,
     LeanpubApiProvider,
     SearchCandidate,
     SearchContext,
@@ -174,3 +175,185 @@ async def test_max_search_pages_flag_reaches_provider():
     api.assert_awaited_once()
     assert api.call_args.args[0] == "Rust"
     assert api.call_args.kwargs["max_pages"] == 7
+
+
+# ---------------------------------------------------------------------------
+# AmazonPlaywrightProvider (task 03.3/02)
+# ---------------------------------------------------------------------------
+
+
+def _amazon_context() -> SearchContext:
+    """Build a SearchContext whose lazy browser is a stub, so no real Chromium is launched.
+
+    :returns: A :class:`SearchContext` with mocked collaborators and ``browser()`` stubbed to an
+        awaitable returning a fake browser handle.
+    """
+    ctx = SearchContext(http_client=MagicMock(), limiters=MagicMock(), robots=None, headless=True)
+    ctx.browser = AsyncMock(return_value=MagicMock())
+    return ctx
+
+
+def _raw_amazon_book(**overrides) -> dict:
+    """Build one raw amazon search-result dict (the shape get_search_results_via_playwright returns).
+
+    :param overrides: Fields to override on the default record.
+    :returns: A raw amazon result dict with site/query/url/asin/title/authors/rating keys.
+    """
+    book = {
+        "site": "amazon",
+        "query": "python",
+        "search_page_number": 1,
+        "search_result_index": 1,
+        "url": "https://www.amazon.com/dp/B0ABCDEFGH",
+        "asin": "B0ABCDEFGH",
+        "title": "A Python Book",
+        "authors_from_search": "Jane Doe, John Smith",
+        "publication_date": "Jan 1, 2024",
+        "rating": 4.6,
+        "rating_count": 1234,
+    }
+    book.update(overrides)
+    return book
+
+
+def test_amazon_provider_registered_and_needs_browser():
+    """
+    [Local] search_providers: AmazonPlaywrightProvider is registered and declares needs_browser.
+
+    Scenario:
+        Given the PROVIDERS registry
+        When the amazon entry is inspected
+        Then it is an AmazonPlaywrightProvider whose ``site`` is "amazon" and ``needs_browser`` True.
+
+    Boundaries:
+        - Registry/attribute invariant only; the search behaviour is covered by other tests.
+
+    On failure, first check:
+        - PROVIDERS["amazon"] wiring and the class attributes in search_providers.py.
+    """
+    provider = PROVIDERS["amazon"]
+    assert isinstance(provider, AmazonPlaywrightProvider)
+    assert provider.site == "amazon"
+    assert provider.needs_browser is True
+
+
+async def test_amazon_candidate_carries_asin_and_rating():
+    """
+    [Local] search_providers: AmazonPlaywrightProvider maps a raw card dict onto a SearchCandidate.
+
+    Scenario:
+        Given get_search_results_via_playwright returning one amazon card dict (asin, rating,
+        rating_count, comma-joined authors, url, page number)
+        When AmazonPlaywrightProvider.search runs
+        Then the candidate carries source_id=asin, rating/rating_count, the authors split into a
+        list, url==detail_ref==the card url, and page from search_page_number.
+
+    Boundaries:
+        - The Playwright function is mocked; this pins the dict->SearchCandidate adaptation only.
+
+    On failure, first check:
+        - AmazonPlaywrightProvider.search's field mapping in search_providers.py.
+    """
+    provider = AmazonPlaywrightProvider()
+    search = AsyncMock(return_value=[_raw_amazon_book(search_page_number=2)])
+
+    with patch(f"{MODULE}.get_search_results_via_playwright", search):
+        candidates = await provider.search("python", 2, _amazon_context())
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert isinstance(candidate, SearchCandidate)
+    assert candidate.site == "amazon"
+    assert candidate.source_id == "B0ABCDEFGH"
+    assert candidate.rating == 4.6
+    assert candidate.rating_count == 1234
+    assert candidate.authors == ["Jane Doe", "John Smith"]
+    assert candidate.url == "https://www.amazon.com/dp/B0ABCDEFGH"
+    assert candidate.detail_ref == "https://www.amazon.com/dp/B0ABCDEFGH"
+    assert candidate.page == 2
+
+
+async def test_amazon_candidate_without_asin_is_kept():
+    """
+    [Local] search_providers: a card with no ASIN is still emitted as a candidate (URL-deduped later).
+
+    Scenario:
+        Given a raw amazon card dict whose asin is None (e.g. a link-selector-drifted card)
+        When AmazonPlaywrightProvider.search runs
+        Then exactly one candidate is still returned with source_id None (kept, not dropped).
+
+    Boundaries:
+        - Pins the "keep without ASIN" rule; the debug log line itself is not asserted.
+
+    On failure, first check:
+        - The ``if not asin`` branch in AmazonPlaywrightProvider.search (it must keep, not skip).
+    """
+    provider = AmazonPlaywrightProvider()
+    search = AsyncMock(return_value=[_raw_amazon_book(asin=None, url=None)])
+
+    with patch(f"{MODULE}.get_search_results_via_playwright", search):
+        candidates = await provider.search("python", 1, _amazon_context())
+
+    assert len(candidates) == 1
+    assert candidates[0].source_id is None
+    assert candidates[0].url == ""
+
+
+async def test_amazon_already_stored_uses_asin_lookup():
+    """
+    [Local] search_providers: already_stored dedups an amazon candidate by its ASIN.
+
+    Scenario:
+        Given an amazon candidate with an ASIN and a backend whose book_exists_by_asin returns True
+        When already_stored runs
+        Then it returns True and called book_exists_by_asin with that ASIN; a candidate with no ASIN
+        returns False WITHOUT calling the backend (it is URL-deduped later).
+
+    Boundaries:
+        - The backend is a spec'd mock; this pins the ASIN delegation and the no-ASIN short-circuit.
+
+    On failure, first check:
+        - AmazonPlaywrightProvider.already_stored in search_providers.py.
+    """
+    provider = AmazonPlaywrightProvider()
+    with_asin = SearchCandidate(site="amazon", title="A", url="u", detail_ref="u", authors=[], source_id="B0ABCDEFGH")
+    without_asin = SearchCandidate(site="amazon", title="A", url="u", detail_ref="u", authors=[], source_id=None)
+
+    backend = MagicMock(spec=StorageBackend)
+    backend.book_exists_by_asin.return_value = True
+    assert provider.already_stored(with_asin, backend) is True
+    backend.book_exists_by_asin.assert_called_once_with("B0ABCDEFGH")
+
+    backend.book_exists_by_asin.reset_mock()
+    assert provider.already_stored(without_asin, backend) is False
+    backend.book_exists_by_asin.assert_not_called()
+
+
+async def test_amazon_provider_launches_browser_and_forwards_max_pages():
+    """
+    [Local] search_providers: AmazonPlaywrightProvider gets the shared browser and forwards max_pages.
+
+    Scenario:
+        Given AmazonPlaywrightProvider.search called with max_pages=5
+        When the mocked Playwright search records its call
+        Then ctx.browser() was awaited (the browser-backed provider needs one) and the function was
+        awaited once with the shared browser, site "amazon", the query, and max_pages=5.
+
+    Boundaries:
+        - Both the browser launch and the Playwright function are mocked; pins the wiring only.
+
+    On failure, first check:
+        - The ctx.browser()/get_search_results_via_playwright call in AmazonPlaywrightProvider.search.
+    """
+    provider = AmazonPlaywrightProvider()
+    search = AsyncMock(return_value=[])
+    ctx = _amazon_context()
+
+    with patch(f"{MODULE}.get_search_results_via_playwright", search):
+        await provider.search("python", 5, ctx)
+
+    ctx.browser.assert_awaited_once()
+    search.assert_awaited_once()
+    assert search.call_args.args[1] == "amazon"
+    assert search.call_args.args[2] == "python"
+    assert search.call_args.kwargs["max_pages"] == 5

@@ -9,7 +9,7 @@ near those tests for exactly which deep DOM branches are and are not exercised.
 import copy
 import json
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -18,10 +18,20 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from bookscraper.scraping import search_utils
 from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
-from bookscraper.scraping.politeness import DomainRateLimiters, RobotsCache, RobotsResponse
+from bookscraper.scraping.politeness import (
+    DomainCircuitBreakers,
+    DomainRateLimiters,
+    RobotsCache,
+    RobotsResponse,
+)
 from bookscraper.scraping.search_utils import (
+    extract_amazon_asin,
     get_leanpub_search_results_via_api,
     get_search_results_via_playwright,
+    parse_rating,
+    parse_rating_count,
+    resolve_amazon_max_pages,
+    unwrap_amazon_detail_url,
 )
 
 from .playwright_fakes import (
@@ -84,6 +94,19 @@ def _no_wait_default_limiters():
     """
     unbounded = DomainRateLimiters({}, (1_000_000.0, 1_000_000))
     with patch.object(search_utils, "default_limiters", return_value=unbounded):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_default_breakers():
+    """Give every test its own circuit-breaker registry so bot-wall state never leaks across tests.
+
+    The Playwright search path falls back to the module-level ``default_breakers`` when no registry
+    is passed; the breaker's open state has a 900 s cooldown, so without isolation a test that trips
+    the amazon.com breaker would make every later amazon test short-circuit. A fresh registry per
+    test keeps the integration exercised without cross-test contamination.
+    """
+    with patch.object(search_utils, "default_breakers", return_value=DomainCircuitBreakers()):
         yield
 
 
@@ -346,6 +369,7 @@ AMAZON_LINK = "a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal"
 AMAZON_TITLE = "h2.a-size-medium.a-spacing-none.a-color-base.a-text-normal > span"
 AMAZON_AUTHORS = "div.a-row.a-size-base.a-color-secondary div.a-row > a.a-link-normal"
 AMAZON_CARD = '[data-component-type="s-search-result"]'
+AMAZON_NEXT = ".s-pagination-next"
 
 
 async def test_playwright_unknown_site_returns_empty_without_touching_browser():
@@ -440,10 +464,10 @@ async def test_playwright_amazon_multipage_closes_each_context_exactly_once(monk
     [Local] search utils: verifies each per-page BrowserContext is closed exactly once.
 
     Scenario:
-        Given amazon SEARCH_MAXIMUM_PAGES patched so the loop fetches two search pages, each
-        served by its own FakeContext/FakePage, When get_search_results_via_playwright runs,
-        Then two books are returned and every per-iteration context.close() was awaited exactly
-        once (count == number of pages fetched), proving no earlier iteration's context leaks.
+        Given page 1 exposing an enabled next-page control and page 2 none (so pagination stops
+        after two pages), each served by its own FakeContext/FakePage, When
+        get_search_results_via_playwright runs, Then two books are returned and every per-iteration
+        context.close() was awaited exactly once (count == pages fetched), proving no context leaks.
 
     Boundaries:
         - Exercises the per-iteration try/finally (via _search_page); the single-page close is
@@ -453,11 +477,11 @@ async def test_playwright_amazon_multipage_closes_each_context_exactly_once(monk
         - The ``async with _search_page(browser)`` wrapper around each amazon search-page iteration.
     """
     sc = copy.deepcopy(search_utils.site_constants)
-    sc["amazon"]["SEARCH_MAXIMUM_PAGES"] = 3  # range(1, 3) -> two search-page URLs
+    sc["amazon"]["SEARCH_MAXIMUM_PAGES"] = 5  # high cap; the next-button state decides where it stops
     monkeypatch.setattr(search_utils, "site_constants", sc)
 
-    def _page_with_card(asin: str) -> FakePage:
-        """Build a FakePage serving one amazon card with the given ASIN."""
+    def _page_with_card(asin: str, *, has_next: bool) -> FakePage:
+        """Build a FakePage serving one amazon card, optionally exposing an enabled next-page link."""
         card = {
             "text": "",
             "attrs": {"data-asin": asin},
@@ -467,9 +491,17 @@ async def test_playwright_amazon_multipage_closes_each_context_exactly_once(monk
                 AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
             },
         }
-        return FakePage(locators={AMAZON_CARD: FakeLocator([card])}, title="Amazon")
+        locators = {AMAZON_CARD: FakeLocator([card])}
+        if has_next:
+            # An enabled next control (no s-pagination-disabled class) drives one more page.
+            locators[AMAZON_NEXT] = FakeLocator([{"attrs": {"class": "s-pagination-item s-pagination-next"}}])
+        return FakePage(locators=locators, title="Amazon")
 
-    contexts = [FakeContext(page=_page_with_card("B0PAGE0001")), FakeContext(page=_page_with_card("B0PAGE0002"))]
+    # Page 1 exposes an enabled "next"; page 2 does not, so pagination stops after exactly two pages.
+    contexts = [
+        FakeContext(page=_page_with_card("B0PAGE0001", has_next=True)),
+        FakeContext(page=_page_with_card("B0PAGE0002", has_next=False)),
+    ]
     context_iter = iter(contexts)
 
     browser = FakeBrowser()
@@ -602,23 +634,27 @@ async def test_playwright_amazon_empty_card_list_breaks_and_returns_empty():
     assert result == []
 
 
-async def test_playwright_amazon_navigation_failure_returns_empty():
+async def test_playwright_amazon_navigation_failure_returns_empty(monkeypatch):
     """
     [Local] search utils: verifies playwright amazon navigation failure returns empty.
 
     Scenario:
-        A goto() failure raises PlaywrightError, which the inner navigation handler now logs
-        cleanly (no stray positional logging arg - subtask 03.3) and then ``continue``s to the next
-        search-page URL instead of touching the dead page. With a single search page the loop then
-        ends and the search returns []. This locks in that a failed navigation skips that page and
-        degrades to an empty result rather than crashing the caller or scraping a dead page.
+        A goto() failure raises PlaywrightError, which the inner navigation handler logs cleanly and
+        then ``continue``s to the next search-page URL instead of touching the dead page. With the
+        page cap set to one, the loop then ends and the search returns []. This locks in that a
+        failed navigation skips that page and degrades to an empty result rather than crashing the
+        caller or scraping a dead page.
 
     Boundaries:
-        - Single page; the multi-page close-on-every-exit behaviour is a separate test.
+        - Single page (SEARCH_MAXIMUM_PAGES capped to 1); the multi-page close-on-every-exit
+          behaviour is a separate test.
 
     On failure, first check:
         - The ``except PlaywrightError`` handler in the amazon search loop (clean log + continue).
     """
+    sc = copy.deepcopy(search_utils.site_constants)
+    sc["amazon"]["SEARCH_MAXIMUM_PAGES"] = 1
+    monkeypatch.setattr(search_utils, "site_constants", sc)
     card = {
         "attrs": {"data-asin": "B0ABCDEFGH"},
         "sub": {
@@ -883,3 +919,247 @@ async def test_leanpub_search_retries_on_429_then_succeeds():
 
     assert len(books) == 1
     assert books[0]["title"] == "A Book"
+
+
+# ---------------------------------------------------------------------------
+# Amazon search provider refactor (task 03.3/02): pagination, pure helpers, rating
+# ---------------------------------------------------------------------------
+
+
+def _amazon_card(
+    asin: str, title: str = "A Book", href: Optional[str] = None, sub_extra: Optional[dict] = None
+) -> dict:
+    """Build one amazon search-card match dict (data-asin attr + title/authors/link sub-locators).
+
+    :param asin: The card's ``data-asin`` value.
+    :param title: The card title text.
+    :param href: The detail-link href; defaults to a ``/dp/<asin>`` path.
+    :param sub_extra: Extra ``selector -> FakeLocator`` entries merged into the card's sub-locators.
+    :returns: A match dict consumable by ``FakeLocator`` as one search-result card.
+    """
+    sub = {
+        AMAZON_LINK: FakeLocator([{"attrs": {"href": href if href is not None else f"/dp/{asin}/ref=sr"}}]),
+        AMAZON_TITLE: FakeLocator(title),
+        AMAZON_AUTHORS: FakeLocator([{"text": "Jane Doe"}]),
+    }
+    if sub_extra:
+        sub.update(sub_extra)
+    return {"text": "", "attrs": {"data-asin": asin}, "sub": sub}
+
+
+def _amazon_page(card: dict, *, has_next: bool, next_disabled: bool = False) -> FakePage:
+    """Build a FakePage serving one amazon card, optionally with an enabled/disabled next control.
+
+    :param card: The single card match dict (see :func:`_amazon_card`).
+    :param has_next: Whether a ``.s-pagination-next`` element is present at all.
+    :param next_disabled: Whether that element carries the ``s-pagination-disabled`` marker.
+    :returns: A :class:`FakePage` wired for the amazon search path.
+    """
+    locators = {AMAZON_CARD: FakeLocator([card])}
+    if has_next:
+        cls = "s-pagination-item s-pagination-next" + (" s-pagination-disabled" if next_disabled else "")
+        locators[AMAZON_NEXT] = FakeLocator([{"attrs": {"class": cls}}])
+    return FakePage(locators=locators, title="Amazon")
+
+
+async def test_amazon_search_fetches_exactly_max_pages():
+    """
+    [Local] search utils: verifies amazon pagination fetches exactly max_pages (inclusive) pages.
+
+    Scenario:
+        Given a page that always exposes one card and an enabled next-page control
+        When get_search_results_via_playwright runs with max_pages=2
+        Then exactly two pages are scraped (one book each, numbered 1 then 2), proving the loop
+        paginates 1..max_pages INCLUSIVE (the old range(1, MAX) off-by-one fetched one fewer).
+
+    Boundaries:
+        - The next control stays enabled, so only the max_pages cap stops the loop; the
+          disabled-next early stop is a separate test.
+
+    On failure, first check:
+        - The ``for page_num in range(1, effective_max + 1)`` loop bound in the amazon case.
+    """
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=True)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", max_pages=2)
+
+    assert len(result) == 2
+    assert [b["search_page_number"] for b in result] == [1, 2]
+    assert all(b["asin"] == "B0AAAAAAA1" for b in result)
+
+
+async def test_amazon_search_stops_on_disabled_next_button():
+    """
+    [Local] search utils: verifies pagination stops when the next-page control is disabled.
+
+    Scenario:
+        Given a first page whose ``.s-pagination-next`` carries the ``s-pagination-disabled`` marker
+        When get_search_results_via_playwright runs with a generous max_pages=5
+        Then only page 1 is scraped (one book) because the disabled next control ends pagination
+        before the cap is reached.
+
+    Boundaries:
+        - A disabled control (not merely absent) is the terminal signal here; the absent-control
+          case is covered by the happy-path/single-page tests.
+
+    On failure, first check:
+        - ``_amazon_has_next_page``'s ``s-pagination-disabled`` / ``aria-disabled`` handling.
+    """
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=True, next_disabled=True)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", max_pages=5)
+
+    assert len(result) == 1
+    assert result[0]["search_page_number"] == 1
+
+
+async def test_amazon_search_no_results_page_returns_empty():
+    """
+    [Local] search utils: verifies a no-results marker page yields no candidates.
+
+    Scenario:
+        Given a page whose SEARCH_NO_RESULTS_TEXT selector matches (Amazon's empty-results banner)
+        When get_search_results_via_playwright runs
+        Then an empty list is returned and the card selector is never waited on (no card scraping).
+
+    Boundaries:
+        - Exercises the no-results early stop before wait_for_selector; the exhausted-last-page
+          (card-selector timeout) stop is covered by the Chromium search goldens.
+
+    On failure, first check:
+        - The SEARCH_NO_RESULTS_TEXT / SEARCH_NO_BOOKS_FOUND marker loop in the amazon case.
+    """
+    no_results_selector = search_utils.site_constants["amazon"]["SEARCH_NO_RESULTS_TEXT"]
+    page = FakePage(
+        locators={no_results_selector: FakeLocator([{"text": "No results for python"}])},
+        title="Amazon",
+    )
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", max_pages=2)
+
+    assert result == []
+    page.wait_for_selector.assert_not_called()
+
+
+async def test_amazon_search_rating_parsed_from_card():
+    """
+    [Local] search utils: verifies rating and rating_count are parsed from a card when present.
+
+    Scenario:
+        Given a card whose SEARCH_RATING element reads "4.6 out of 5 stars" and whose
+        SEARCH_RATING_COUNT element reads "1,234"
+        When get_search_results_via_playwright runs for amazon
+        Then the single result carries rating 4.6 (float) and rating_count 1234 (int).
+
+    Boundaries:
+        - Pins the card-scoped rating extraction and numeric parsing; a card with no rating element
+          leaves both None (covered implicitly by the other amazon card tests).
+
+    On failure, first check:
+        - The SEARCH_RATING / SEARCH_RATING_COUNT reads in the amazon case and parse_rating(_count).
+    """
+    rating_selector = search_utils.site_constants["amazon"]["SEARCH_RATING"]
+    count_selector = search_utils.site_constants["amazon"]["SEARCH_RATING_COUNT"]
+    card = _amazon_card(
+        "B0RATING001",
+        sub_extra={
+            rating_selector: FakeLocator("4.6 out of 5 stars"),
+            count_selector: FakeLocator("1,234"),
+        },
+    )
+    page = _amazon_page(card, has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["rating"] == 4.6
+    assert result[0]["rating_count"] == 1234
+
+
+def test_amazon_sponsored_link_unwrapped_to_dp_url():
+    """
+    [Unit] search utils: verifies sponsored /sspa/click links unwrap to the real /dp URL and ASIN.
+
+    Scenario:
+        Given a sponsored ``/sspa/click?...&url=<encoded /dp path>`` href and a base URL
+        When unwrap_amazon_detail_url and extract_amazon_asin run
+        Then the decoded absolute product URL is returned and the 10-char ASIN is recovered from it;
+        a plain href joins onto the base URL; a sponsored link with no ``url`` param yields None.
+
+    Boundaries:
+        - Pure helpers (no browser); this is the unit coverage the spec asks for of the existing
+          sponsored-unwrap logic.
+
+    On failure, first check:
+        - unwrap_amazon_detail_url's /sspa/click branch and extract_amazon_asin's regex.
+    """
+    base = "https://www.amazon.com"
+    sponsored = "/sspa/click?ie=UTF8&url=%2Fdp%2FB0SPONSOR1%2Fref%3Dabc&qualifier=1"
+    unwrapped = unwrap_amazon_detail_url(sponsored, base)
+    assert unwrapped == "https://www.amazon.com/dp/B0SPONSOR1/ref=abc"
+    assert extract_amazon_asin(unwrapped) == "B0SPONSOR1"
+
+    assert unwrap_amazon_detail_url("/dp/B0PLAIN0001", base) == "https://www.amazon.com/dp/B0PLAIN0001"
+    assert unwrap_amazon_detail_url("/sspa/click?ie=UTF8&foo=1", base) is None
+    assert extract_amazon_asin(None) is None
+    assert extract_amazon_asin("https://www.amazon.com/no-asin-here") is None
+
+
+def test_amazon_rating_parse_helpers_handle_absent_and_malformed():
+    """
+    [Unit] search utils: verifies parse_rating / parse_rating_count tolerate absent and junk input.
+
+    Scenario:
+        Given assorted rating / count strings (well-formed, comma decimal, parenthesised count,
+        empty, and number-less)
+        When parse_rating and parse_rating_count run
+        Then numbers are extracted as float/int and absent/number-less input yields None.
+
+    Boundaries:
+        - Pure parsing; no browser. Guards the "rating when present" contract so a missing rating
+          never becomes a fabricated zero.
+
+    On failure, first check:
+        - The _RATING_RE / _RATING_COUNT_RE regexes and the None-guards in the parse helpers.
+    """
+    assert parse_rating("4.6 out of 5 stars") == 4.6
+    assert parse_rating("4,6 von 5") == 4.6
+    assert parse_rating(None) is None
+    assert parse_rating("no stars here") is None
+    assert parse_rating_count("1,234") == 1234
+    assert parse_rating_count("(1,234 ratings)") == 1234
+    assert parse_rating_count(None) is None
+    assert parse_rating_count("no digits") is None
+
+
+def test_amazon_max_pages_clamped_with_log():
+    """
+    [Unit] search utils: verifies resolve_amazon_max_pages clamps to the site limit and logs it.
+
+    Scenario:
+        Given a requested page count above the site limit, below it, and None
+        When resolve_amazon_max_pages runs
+        Then an over-limit request is clamped to the site limit AND emits one clamp log line
+        (console via print_log), an under-limit request is returned unchanged with no clamp log, and
+        None falls back to the site limit.
+
+    Boundaries:
+        - Pure clamp helper; the pagination loop consuming its result is covered separately.
+
+    On failure, first check:
+        - resolve_amazon_max_pages's min()/log branch.
+    """
+    with patch.object(search_utils, "print_log") as mock_log:
+        assert resolve_amazon_max_pages(100, 75, "python") == 75
+        clamp_calls = [c for c in mock_log.call_args_list if "clamping" in c.args[0].lower()]
+        assert len(clamp_calls) == 1
+
+    with patch.object(search_utils, "print_log") as mock_log:
+        assert resolve_amazon_max_pages(2, 75, "python") == 2
+        assert not any("clamping" in c.args[0].lower() for c in mock_log.call_args_list)
+
+    assert resolve_amazon_max_pages(None, 75, "python") == 75

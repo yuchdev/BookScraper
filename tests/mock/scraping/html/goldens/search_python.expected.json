@@ -1,14 +1,16 @@
 {
   "_known_issues": [
-    "search pipeline (subtask 03.3): amazon's SEARCH_BOOK_DETAIL_LINK selector (a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal) no longer matches live result cards, so raw_href is None for every card and both url and asin come out None - even though data-asin is present on the card, it is only read inside the link branch. This is exactly the selector-drift this corpus exists to catch.",
-    "search pipeline (subtask 03.3): amazon pagination iterates range(1, SEARCH_MAXIMUM_PAGES) with no next-button handling; SEARCH_NEXT_PAGE_SELECTOR is defined but never read, so the disabled-next-button state has no effect on where scraping stops."
+    "search pipeline (subtask 03.3/02): amazon's SEARCH_BOOK_DETAIL_LINK selector (a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal) still does not match these live cards (they use s-line-clamp-3), so raw_href - and therefore url - is None for every non-sponsored card. asin is now read from the card's data-asin attribute independently of the link, so it is populated here; only url remains None until the link selector is repaired (deliberately left out of 03.3/02 scope - a selector fix needs a fresh capture to verify). rating/rating_count are null because the captured corpus was sanitized before SEARCH_RATING existed, so the rating markup is not present in these fixtures.",
+    "search pipeline (subtask 03.3/02): pagination now reads SEARCH_NEXT_PAGE_SELECTOR and paginates 1..max_pages inclusive, stopping on a missing/disabled next control; this golden caps max_pages at 2 so exactly pages 1-2 are characterized."
   ],
   "candidates": [
     {
-      "asin": null,
+      "asin": "1718502702",
       "authors_from_search": "Eric Matthes",
       "publication_date": "Jan 10, 2023",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 1,
       "site": "amazon",
@@ -16,10 +18,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1423251652",
       "authors_from_search": "Robin Nixon",
       "publication_date": "May 1, 2025",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 2,
       "site": "amazon",
@@ -27,10 +31,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1718503407",
       "authors_from_search": "Al Sweigart",
       "publication_date": "May 20, 2025",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 3,
       "site": "amazon",
@@ -38,10 +44,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1098171306",
       "authors_from_search": "Mark Lutz",
       "publication_date": "Apr 1, 2025",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 4,
       "site": "amazon",
@@ -49,10 +57,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "B0CSY7BL6Q",
       "authors_from_search": "codeprowess",
       "publication_date": "Jan 21, 2024",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 5,
       "site": "amazon",
@@ -60,10 +70,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "B0GY888SDD",
       "authors_from_search": "Andrew Michaels",
       "publication_date": "Jun 4, 2026",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 6,
       "site": "amazon",
@@ -71,10 +83,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1492056359",
       "authors_from_search": "Luciano Ramalho",
       "publication_date": "May 10, 2022",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 7,
       "site": "amazon",
@@ -82,10 +96,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "183664633X",
       "authors_from_search": "Maaike van Putten, Imke van Putten",
       "publication_date": "Feb 25, 2026",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 1,
       "search_result_index": 8,
       "site": "amazon",
@@ -93,10 +109,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "163610035X",
       "authors_from_search": "Part of: Coding & Programming - QuickStart Guides (4 books) , Robert Oliver",
       "publication_date": "Apr 22, 2023",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 1,
       "site": "amazon",
@@ -104,10 +122,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1098155432",
       "authors_from_search": "Allen B. Downey",
       "publication_date": "Jul 2, 2024",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 2,
       "site": "amazon",
@@ -115,10 +135,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1098174402",
       "authors_from_search": "Bill Lubanovic",
       "publication_date": "Oct 14, 2025",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 3,
       "site": "amazon",
@@ -126,10 +148,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "B0HHXQDRW8",
       "authors_from_search": null,
       "publication_date": "Sep 5, 2026",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 4,
       "site": "amazon",
@@ -137,10 +161,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "0063375001",
       "authors_from_search": "Louise Erdrich",
       "publication_date": "Mar 24, 2026",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 5,
       "site": "amazon",
@@ -148,10 +174,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1492052205",
       "authors_from_search": "Harry Percival, Bob Gregory",
       "publication_date": "Apr 14, 2020",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 6,
       "site": "amazon",
@@ -159,10 +187,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1718501129",
       "authors_from_search": "Justin Seitz, Tim Arnold",
       "publication_date": "Apr 14, 2021",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 7,
       "site": "amazon",
@@ -170,10 +200,12 @@
       "url": null
     },
     {
-      "asin": null,
+      "asin": "1423252632",
       "authors_from_search": "Robin Nixon",
       "publication_date": "Nov 1, 2025",
       "query": "python",
+      "rating": null,
+      "rating_count": null,
       "search_page_number": 2,
       "search_result_index": 8,
       "site": "amazon",

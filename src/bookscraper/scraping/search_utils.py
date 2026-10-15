@@ -21,12 +21,20 @@ from playwright.async_api import Browser, Error as PlaywrightError, Page
 from ..book_utils import print_log
 from .browser import new_scrape_context
 from .parameters import site_constants
-from .politeness import DomainRateLimiters, RobotsCache, default_limiters, retry_async
+from .politeness import (
+    DomainCircuitBreakers,
+    DomainRateLimiters,
+    RobotsCache,
+    default_breakers,
+    default_limiters,
+    retry_async,
+)
 from .scrape_details import (
     MAX_ATTEMPTS,
     RETRY_BASE_DELAY_S,
     RETRY_MAX_DELAY_S,
     ROBOTS_HTTPX_USER_AGENT,
+    _detect_bot_wall,
     httpx_retry_after,
     is_transient,
     route_handler,
@@ -245,12 +253,151 @@ async def _search_page(browser: Browser) -> AsyncIterator[Page]:
             logger.debug(f"Ignoring context-close failure: {exc}")
 
 
+# Amazon ASIN: the 10-char token embedded in a ``/dp/<asin>`` or ``/gp/product/<asin>`` path.
+_AMAZON_ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})")
+# A leading rating number such as the ``4.6`` in "4.6 out of 5 stars" (``.`` or ``,`` decimal).
+_RATING_RE = re.compile(r"(\d+(?:[.,]\d+)?)")
+# A review-count run of digits/grouping separators such as ``1,234`` in "1,234 ratings".
+_RATING_COUNT_RE = re.compile(r"[\d,]+")
+
+
+def unwrap_amazon_detail_url(raw_href: str, base_url: str) -> Optional[str]:
+    """Resolve an Amazon search-card ``href`` to an absolute detail URL, unwrapping sponsored links.
+
+    A sponsored result's link is an ``/sspa/click?...&url=<url-encoded path>`` redirect whose real
+    product path lives in the ``url`` query parameter; this decodes that parameter and joins it onto
+    ``base_url``. A plain (non-sponsored) ``href`` is simply joined onto ``base_url``. A sponsored
+    link carrying no ``url`` parameter has no recoverable destination and yields ``None`` so the
+    caller can skip that card.
+
+    :param raw_href: The raw ``href`` read from the card's detail-link element.
+    :param base_url: The site base URL to resolve a relative path against (``https://www.amazon.com``).
+    :returns: The absolute detail URL, or ``None`` for a sponsored link with no ``url`` parameter.
+    """
+    if "/sspa/click" in raw_href:
+        query_params = parse_qs(urlparse(raw_href).query)
+        embedded = query_params.get("url")
+        if not embedded:
+            return None
+        return urljoin(base_url, unquote(embedded[0]))
+    return urljoin(base_url, raw_href)
+
+
+def extract_amazon_asin(url: Optional[str]) -> Optional[str]:
+    """Return the 10-character ASIN embedded in an Amazon ``/dp/`` or ``/gp/product/`` ``url``.
+
+    :param url: The absolute detail URL to search, or ``None``.
+    :returns: The ASIN, or ``None`` when ``url`` is falsy or carries no ASIN token.
+    """
+    if not url:
+        return None
+    match = _AMAZON_ASIN_RE.search(url)
+    return match.group(1) if match else None
+
+
+def parse_rating(text: Optional[str]) -> Optional[float]:
+    """Parse the average rating out of a search-card rating string, or ``None``.
+
+    Reads the first number in a string such as ``"4.6 out of 5 stars"`` (tolerating a comma decimal
+    separator). A missing, blank, or number-less string yields ``None`` so a card with no rating
+    flows downstream as "unrated" rather than a fabricated zero.
+
+    :param text: The raw rating element text, or ``None``.
+    :returns: The parsed rating as a float, or ``None`` when none is present/parseable.
+    """
+    if not text:
+        return None
+    match = _RATING_RE.search(text)
+    if not match:
+        return None
+    # The regex only matches digits with an optional single decimal group, so float() is safe.
+    return float(match.group(1).replace(",", "."))
+
+
+def parse_rating_count(text: Optional[str]) -> Optional[int]:
+    """Parse the review count out of a search-card count string, or ``None``.
+
+    Reads the first digit run (tolerating ``,`` grouping separators) in a string such as ``"1,234"``
+    or ``"(1,234)"``. A missing, blank, or digit-less string yields ``None``.
+
+    :param text: The raw rating-count element text, or ``None``.
+    :returns: The parsed count as an int, or ``None`` when none is present/parseable.
+    """
+    if not text:
+        return None
+    match = _RATING_COUNT_RE.search(text)
+    if not match:
+        return None
+    digits = match.group(0).replace(",", "")
+    if not digits.isdigit():
+        return None
+    # Guarded by isdigit() above, so int() cannot raise.
+    return int(digits)
+
+
+def resolve_amazon_max_pages(requested: Optional[int], site_limit: int, query: str) -> int:
+    """Clamp a requested search-page count to Amazon's documented site limit, logging any clamp.
+
+    When ``requested`` is ``None`` the site limit is used as-is; otherwise the smaller of the two
+    wins, and a request that exceeds the site limit emits a single clamp log line (console + run
+    log) so an operator sees that fewer pages than asked for will be fetched.
+
+    :param requested: The resolved ``--max-search-pages`` value, or ``None`` for "use the site limit".
+    :param site_limit: ``site_constants["amazon"]["SEARCH_MAXIMUM_PAGES"]`` (the documented cap).
+    :param query: The search query, named in the clamp log line.
+    :returns: The effective maximum number of result pages to fetch (at least 1).
+    """
+    if requested is None:
+        return max(1, site_limit)
+    effective = min(requested, site_limit)
+    if requested > site_limit:
+        logger.info(
+            f"Amazon - requested {requested} search pages for '{query}' exceeds the site limit "
+            f"{site_limit}; clamping to {site_limit}."
+        )
+        print_log(
+            f"Amazon - clamping requested {requested} search pages to the site limit of {site_limit}.",
+            "info",
+        )
+    return max(1, effective)
+
+
+async def _amazon_has_next_page(page: Page, selector: Optional[str]) -> bool:
+    """Return whether the Amazon search ``page`` exposes an enabled "next page" control.
+
+    Pagination stops when the next-page control is absent or disabled (Amazon marks the terminal
+    page's control with the ``s-pagination-disabled`` class and ``aria-disabled="true"``). A missing
+    selector, a no-match, a disabled control, or a read error all read as "no next page", so a listing
+    run never over-runs past its last real page. Detection is best-effort and never raises.
+
+    :param page: The freshly-scraped Playwright search page to inspect.
+    :param selector: The configured ``SEARCH_NEXT_PAGE_SELECTOR``, or ``None`` when unset.
+    :returns: ``True`` iff an enabled next-page control is present.
+    """
+    if not selector:
+        return False
+    locator = page.locator(selector)
+    try:
+        if await locator.count() == 0:
+            return False
+        classes = await locator.first.get_attribute("class") or ""
+        aria_disabled = await locator.first.get_attribute("aria-disabled")
+    except PlaywrightError as exc:
+        logger.debug(f"Amazon next-page detection failed on {page.url}: {exc}")
+        return False
+    if "s-pagination-disabled" in classes:
+        return False
+    return aria_disabled != "true"
+
+
 async def get_search_results_via_playwright(
     browser: Browser,
     site_name: str,
     query: str,
     limiters: Optional[DomainRateLimiters] = None,
     robots: Optional[RobotsCache] = None,
+    breakers: Optional[DomainCircuitBreakers] = None,
+    max_pages: Optional[int] = None,
     # filters: dict = None
 ) -> list[dict]:
     """
@@ -279,10 +426,16 @@ async def get_search_results_via_playwright(
         or ``None`` to use the shared module-level instance.
     :param robots: The per-run :class:`RobotsCache` to consult before fetching, or ``None`` to skip
         the robots.txt check (e.g. under ``--ignore-robots``).
+    :param breakers: The per-run :class:`DomainCircuitBreakers` tracking repeated bot-wall blocks,
+        or ``None`` to use the shared module-level instance. When the site's breaker is open,
+        pagination stops without a request (matching ``scrape_details.scrape_book``).
+    :param max_pages: The maximum number of result pages to fetch (the resolved
+        ``--max-search-pages``), or ``None`` to use the site's ``SEARCH_MAXIMUM_PAGES``. The value is
+        clamped to that site limit (logged when it clamps).
     :returns: A list of dictionaries, each a preliminary book record found on the search results
         pages, typically carrying ``site``, ``query``, ``search_page_number``,
         ``search_result_index``, ``title``, ``authors_from_search``, ``publication_date``, ``url``
-        and (for Amazon) ``asin``.
+        and (for Amazon) ``asin``, ``rating`` and ``rating_count``.
     :raises Exception: Catches and logs any unhandled exceptions that occur during the search
         process, printing a critical error message to the console.
     """
@@ -290,6 +443,7 @@ async def get_search_results_via_playwright(
     books_from_search_results = []
     current_page_num = 0
     active_limiters = limiters if limiters is not None else default_limiters()
+    active_breakers = breakers if breakers is not None else default_breakers()
 
     try:
         site_config = site_constants.get(site_name)
@@ -308,14 +462,28 @@ async def get_search_results_via_playwright(
 
         match site_name.lower():
             case "amazon":
+                base_url = site_constants["amazon"]["BASE_URL"]
                 parsed_query = quote_plus(query)
-                search_urls = [
-                    f"{selectors['SEARCH_BASE_URL']}".replace("[k]", parsed_query).replace("[p]", str(p))
-                    for p in range(1, selectors.get("SEARCH_MAXIMUM_PAGES"))
-                ]
+                # Clamp the requested page count to Amazon's documented site limit (logged on clamp).
+                effective_max = resolve_amazon_max_pages(max_pages, selectors.get("SEARCH_MAXIMUM_PAGES") or 1, query)
+                # One per-domain breaker for the Amazon host: an open breaker (from earlier repeated
+                # bot-wall blocks this run) skips the search entirely, mirroring scrape_book.
+                breaker = active_breakers.for_url(selectors["SEARCH_BASE_URL"])
 
-                for search_result_page in search_urls:
-                    current_page_num += 1
+                # Paginate 1..effective_max INCLUSIVE (fixes the old range(1, MAX) off-by-one). The
+                # loop also stops early on a bot wall, a no-results marker, an empty page, or a
+                # missing/disabled next-page control (handled per page below).
+                for page_num in range(1, effective_max + 1):
+                    current_page_num = page_num
+                    search_result_page = (
+                        selectors["SEARCH_BASE_URL"].replace("[k]", parsed_query).replace("[p]", str(page_num))
+                    )
+
+                    if breaker.is_open():
+                        logger.info(f"Amazon - circuit open; stopping search for '{query}' without a request.")
+                        print_log(f"Amazon - bot-wall circuit open; stopping search for '{query}'.", "warning")
+                        break
+
                     # Each search page gets its own isolated context (own cookie jar, UA/identity
                     # matching what the detail scraper and schema-detection see) via the shared
                     # factory, closed on every exit path of this iteration by _search_page.
@@ -325,7 +493,8 @@ async def get_search_results_via_playwright(
                         # robots.txt gate (fetched once per host per run), BEFORE navigating: a
                         # disallowed search page is skipped and never fetched. The user-agent matched
                         # against robots.txt is the one the context actually presents (read from the
-                        # live page), never a stale hard-coded value.
+                        # live page), never a stale hard-coded value. All search pages share one host,
+                        # so a disallowed first page ends pagination.
                         if robots is not None and not await robots.allowed(
                             search_result_page, await page.evaluate("() => navigator.userAgent")
                         ):
@@ -333,7 +502,7 @@ async def get_search_results_via_playwright(
                             print_log(
                                 f"Skipping search page {search_result_page}: disallowed by robots.txt.", "warning"
                             )
-                            continue
+                            break
 
                         try:
                             # Throttle per host immediately before navigating to each search page.
@@ -352,20 +521,46 @@ async def get_search_results_via_playwright(
                             logger.error(f"Failed to navigate to page {current_page_num}: {e}")
                             continue
 
-                        # Find all book cards on the current page
-                        # Case where no books are found, but might have book cards
-                        if selectors.get("SEARCH_NO_BOOKS_FOUND") and (
-                            await page.locator(selectors["SEARCH_NO_BOOKS_FOUND"]).count() > 0
-                        ):
-                            print_log(
-                                f"No book cards found on page {current_page_num} for {site_name}.",
-                                "warning",
-                            )
-                            logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
-                            break  # No books to scrape, exit the while loop
+                        # Bot-wall detection right after navigation (identify and back off, never
+                        # bypass): a CAPTCHA/interstitial trips the per-domain circuit breaker and
+                        # stops pagination, exactly like scrape_book treats a BLOCKED detail page.
+                        if await _detect_bot_wall(page, "amazon"):
+                            opened = breaker.record_blocked()
+                            logger.warning(f"Amazon - bot wall detected on search page {current_page_num}; stopping.")
+                            if opened:
+                                print_log(
+                                    "Amazon - bot-wall circuit opened after repeated blocks; skipping Amazon "
+                                    "for the rest of the run.",
+                                    "warning",
+                                )
+                            else:
+                                print_log(
+                                    f"Amazon - bot wall detected on search page {current_page_num}; stopping.",
+                                    "warning",
+                                )
+                            break
 
-                        # If book cards are found
-                        await page.wait_for_selector(selectors["SEARCH_BOOK_CARD"])
+                        # No-results markers: a zero-results search page carries one of these and no
+                        # cards, so stop before waiting on the card selector.
+                        no_results = False
+                        for marker_key in ("SEARCH_NO_RESULTS_TEXT", "SEARCH_NO_BOOKS_FOUND"):
+                            marker_selector = selectors.get(marker_key)
+                            if marker_selector and await page.locator(marker_selector).count() > 0:
+                                no_results = True
+                                break
+                        if no_results:
+                            print_log(f"No results on page {current_page_num} for {site_name}.", "warning")
+                            logger.warning(f"No results on page {current_page_num} for {site_name}.")
+                            break
+
+                        # Wait for the card selector; a page with no cards (an exhausted last page)
+                        # times out here, which ends pagination with the pages gathered so far.
+                        try:
+                            await page.wait_for_selector(selectors["SEARCH_BOOK_CARD"])
+                        except PlaywrightError as e:
+                            logger.info(f"No book cards appeared on page {current_page_num} for {site_name}: {e}")
+                            print_log(f"No book cards found on page {current_page_num} for {site_name}.", "warning")
+                            break
                         book_cards = await page.locator(selectors["SEARCH_BOOK_CARD"]).all()
                         if not book_cards:
                             print_log(
@@ -373,9 +568,12 @@ async def get_search_results_via_playwright(
                                 "warning",
                             )
                             logger.warning(f"No book cards found on page {current_page_num} for {site_name}.")
-                            break  # No books to scrape, exit the while loop
+                            break  # No books to scrape, exit the loop
 
-                        #                    print_log(f"Found {len(book_cards)} book cards on page {current_page_num} for {site_name}.", "info")
+                        # A page that produced cards is a healthy response; reset the breaker's
+                        # consecutive-block counter like a successful scrape does.
+                        breaker.record_success()
+
                         print_log(
                             f"Found {len(book_cards)} books on page {search_result_page}.",
                             "info",
@@ -395,56 +593,27 @@ async def get_search_results_via_playwright(
                                     await link_element.get_attribute("href") if await link_element.count() > 0 else None
                                 )
 
-                                book_url = None
-                                asin = None  # Initialize ASIN for Amazon
+                                # Unwrap the detail URL (sponsored /sspa/click links decode to the
+                                # real product path). A sponsored link with no 'url' param has no
+                                # recoverable destination, so skip that card.
+                                is_sponsored = bool(raw_href) and "/sspa/click" in raw_href
+                                book_url = unwrap_amazon_detail_url(raw_href, base_url) if raw_href else None
+                                if is_sponsored and book_url is None:
+                                    logger.warning(f"Sponsored link without 'url' parameter: {raw_href}")
+                                    continue
 
-                                if raw_href:
-                                    if site_name == "amazon":
-                                        # Handles Amazon's sponsored items, extracting the actual URL from the 'url' parameter
-                                        if "/sspa/click" in raw_href:
-                                            parsed_href = urlparse(raw_href)
-                                            query_params = parse_qs(parsed_href.query)
-
-                                            if "url" in query_params:
-                                                embedded_path = unquote(query_params["url"][0])
-                                                book_url = urljoin(
-                                                    site_constants["amazon"]["BASE_URL"],
-                                                    embedded_path,
-                                                )
-                                                logger.debug(f"Extracted and decoded sponsored URL: {book_url}")
-
-                                                # Attempt to extract ASIN from the final book_url (if available)
-                                                asin_match = re.search(
-                                                    r"/(?:dp|gp/product)/([A-Z0-9]{10})",
-                                                    book_url,
-                                                )
-                                                if asin_match:
-                                                    asin = asin_match.group(1)
-                                            else:
-                                                logger.warning(f"Sponsored link without 'url' parameter: {raw_href}")
-                                                continue  # Skip this card if we can't get a valid URL
-
-                                        # Non-sponsored Amazon link
-                                        else:
-                                            book_url = urljoin(
-                                                site_constants["amazon"]["BASE_URL"],
-                                                raw_href,
-                                            )
-                                            if selectors.get("SEARCH_ASIN_ATTRIBUTE"):
-                                                asin = await card.get_attribute(selectors["SEARCH_ASIN_ATTRIBUTE"])
-                                            else:
-                                                logger.warning(
-                                                    "Check Amazon parameter SEARCH_ASIN_ATTRIBUTE to locate ASIN in book cards."
-                                                )
-
-                                    else:
-                                        # For non-Amazon sites, just join the URL
-                                        book_url = urljoin(site_constants[site_name]["BASE_URL"], raw_href)
+                                # ASIN (source_id) comes from the card's data-asin attribute, read
+                                # independently of the detail link so it survives link-selector drift.
+                                # A sponsored card that carries none falls back to the unwrapped URL.
+                                asin = None
+                                asin_attribute = selectors.get("SEARCH_ASIN_ATTRIBUTE")
+                                if asin_attribute:
+                                    asin = await card.get_attribute(asin_attribute)
+                                if not asin and is_sponsored:
+                                    asin = extract_amazon_asin(book_url)
 
                                 book_data["url"] = book_url if book_url else None
-                                # Amazon ASIN
-                                if site_name == "amazon":
-                                    book_data["asin"] = asin if asin else None
+                                book_data["asin"] = asin if asin else None
 
                                 # Extract Title
                                 title_element = card.locator(selectors["SEARCH_TITLE"])
@@ -457,11 +626,7 @@ async def get_search_results_via_playwright(
                                 authors = []
                                 if await authors_elements.count() > 0:
                                     authors = await authors_elements.all_text_contents()
-                                if site_name == "leanpub":
-                                    names_list = authors[0].split(" and ")
-                                    book_data["authors_from_search"] = names_list if authors else None
-                                else:
-                                    book_data["authors_from_search"] = ", ".join(authors) if authors else None
+                                book_data["authors_from_search"] = ", ".join(authors) if authors else None
 
                                 # Extract Publication Date
                                 publication_date_selector = selectors.get("SEARCH_PUBLICATION_DATE")
@@ -482,6 +647,36 @@ async def get_search_results_via_playwright(
                                     # logger.info(f"No SEARCH_PUBLICATION_DATE selector defined for {site_name}.")
                                     book_data["publication_date"] = None
 
+                                # Rating / rating count (optional - absent for a book with no reviews).
+                                book_data["rating"] = None
+                                rating_selector = selectors.get("SEARCH_RATING")
+                                if rating_selector:
+                                    try:
+                                        rating_locator = card.locator(rating_selector)
+                                        if await rating_locator.count() > 0:
+                                            book_data["rating"] = parse_rating(
+                                                await rating_locator.first.text_content()
+                                            )
+                                    except PlaywrightError as e:
+                                        logger.debug(f"Could not read rating on {site_name} card: {e}")
+                                book_data["rating_count"] = None
+                                rating_count_selector = selectors.get("SEARCH_RATING_COUNT")
+                                if rating_count_selector:
+                                    try:
+                                        count_locator = card.locator(rating_count_selector)
+                                        if await count_locator.count() > 0:
+                                            book_data["rating_count"] = parse_rating_count(
+                                                await count_locator.first.text_content()
+                                            )
+                                    except PlaywrightError as e:
+                                        logger.debug(f"Could not read rating count on {site_name} card: {e}")
+
+                                if not book_data["asin"]:
+                                    logger.debug(
+                                        f"Amazon card kept without an ASIN (page {current_page_num}, "
+                                        f"card {i + 1}): {book_data.get('title')}"
+                                    )
+
                                 books_from_search_results.append(book_data)
                                 logger.debug(
                                     f"Extracted: {book_data.get('title')} by {book_data.get('authors_from_search')} ({site_name}) (URL: {book_data.get('url')}, ASIN: {book_data.get('asin')})"
@@ -498,6 +693,12 @@ async def get_search_results_via_playwright(
                                 )
                                 # Continue to the next card if an error occurs during extraction of this card
                                 continue
+
+                        # Stop when there is no enabled next-page control (a missing or disabled
+                        # "next" button marks the last page); otherwise continue to the next page.
+                        if not await _amazon_has_next_page(page, selectors.get("SEARCH_NEXT_PAGE_SELECTOR")):
+                            logger.info(f"Amazon - no enabled next page after page {current_page_num}; stopping.")
+                            break
 
             case _:
                 # For other sites, simply encode the query and append.

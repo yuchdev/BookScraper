@@ -89,6 +89,10 @@ OPTIONAL_SELECTOR_KEYS = frozenset(
         # sample page they correctly match nothing.
         "SEARCH_NO_RESULTS_TEXT",
         "SEARCH_NO_BOOKS_FOUND",
+        # Search-card rating/review-count: a book with no reviews carries neither, so a card (or a
+        # whole page) matching nothing is expected, not drift.
+        "SEARCH_RATING",
+        "SEARCH_RATING_COUNT",
     }
 )
 
@@ -147,9 +151,15 @@ site_constants = {
         "SEARCH_PUBLICATION_DATE": "div.a-row.a-size-base.a-color-secondary div.a-row > span.a-size-base.a-color-secondary.a-text-normal",
         "SEARCH_ASIN_ATTRIBUTE": "data-asin",
         "SEARCH_BOOK_DETAIL_LINK": "a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal",
+        # Search-card rating (optional - a book with no reviews has none). The rating text is
+        # Amazon's "4.6 out of 5 stars" icon-alt; the count is the sibling underline span.
+        "SEARCH_RATING": "span.a-icon-alt",
+        "SEARCH_RATING_COUNT": "span.s-underline-text",
         "SEARCH_NEXT_PAGE_SELECTOR": ".s-pagination-next",
         "SEARCH_NO_RESULTS_TEXT": "div.s-no-results-box h1.a-size-large",
-        "SEARCH_MAXIMUM_PAGES": 2,
+        # Amazon documents a hard limit of 75 search-result pages per query; the search provider
+        # (task 03.3/02) clamps any requested --max-search-pages to this and logs when it does.
+        "SEARCH_MAXIMUM_PAGES": 75,
         ### BOOK DETAIL PAGE SELECTORS
         "404_PAGE_TITLE": "page not found",  # Part of title to check for 404 pages
         "BOOK_TITLE": "#productTitle",

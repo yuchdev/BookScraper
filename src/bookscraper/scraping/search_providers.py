@@ -33,7 +33,7 @@ from playwright.async_api import Browser, async_playwright
 from ..backends import StorageBackend
 from .parameters import site_constants
 from .politeness import DomainRateLimiters, RobotsCache
-from .search_utils import get_leanpub_search_results_via_api
+from .search_utils import get_leanpub_search_results_via_api, get_search_results_via_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -265,9 +265,94 @@ class LeanpubApiProvider:
         return backend.leanpub_book_exists(candidate.source_id, candidate.slug)
 
 
+class AmazonPlaywrightProvider:
+    """Amazon search provider: paginated search-results scraping via Playwright (task 03.3/02).
+
+    Wraps :func:`~bookscraper.scraping.search_utils.get_search_results_via_playwright` (the Amazon
+    ``match/case`` branch) and adapts each raw result dict into a :class:`SearchCandidate`. Unlike
+    the API-only Leanpub provider this one needs a browser (``needs_browser`` is ``True``), so the
+    shared :class:`SearchContext` launches Chromium lazily on the first :meth:`search` call.
+
+    The underlying function paginates ``1..max_pages`` inclusive (clamped to
+    ``site_constants["amazon"]["SEARCH_MAXIMUM_PAGES"]``), unwraps sponsored ``/sspa/click`` links,
+    reads each card's ``data-asin`` as the stable identifier, and stops early on a bot wall / missing
+    next button / no-results page. ``already_stored`` dedups by ASIN via
+    :meth:`~bookscraper.backends.storage.StorageBackend.book_exists_by_asin`.
+    """
+
+    site = "amazon"
+    needs_browser = True
+
+    async def search(self, query: str, max_pages: int, ctx: SearchContext) -> list[SearchCandidate]:
+        """Scrape Amazon search results for ``query`` and adapt each card to the uniform shape.
+
+        Launches (or reuses) the shared browser via ``ctx.browser()`` and drives the Playwright
+        search path with the run's limiters, robots cache, and ``max_pages``. Each raw result dict
+        becomes a :class:`SearchCandidate` whose ``source_id`` is the card's ASIN; a card that
+        carried no ASIN is still emitted (URL-deduped later) but logged at debug level. Authors,
+        which the function joins into one comma-separated string, are split back into a list.
+
+        :param query: The search query to run against Amazon's book search.
+        :param max_pages: The maximum number of result pages to fetch (the resolved
+            ``--max-search-pages``); clamped to the site limit inside the function.
+        :param ctx: The shared :class:`SearchContext` (its lazily launched browser, limiters, and
+            robots cache are used).
+        :returns: The Amazon candidates as uniform :class:`SearchCandidate` records.
+        """
+        browser = await ctx.browser()
+        raw_results = await get_search_results_via_playwright(
+            browser,
+            self.site,
+            query,
+            limiters=ctx.limiters,
+            robots=ctx.robots,
+            max_pages=max_pages,
+        )
+        candidates: list[SearchCandidate] = []
+        for book in raw_results:
+            asin = book.get("asin")
+            url = book.get("url") or ""
+            if not asin:
+                logger.debug(f"Amazon candidate without an ASIN kept for URL-dedup: {book.get('title')!r}.")
+            authors_text = book.get("authors_from_search") or ""
+            authors = [name.strip() for name in authors_text.split(",") if name.strip()]
+            candidates.append(
+                SearchCandidate(
+                    site=self.site,
+                    title=book.get("title") or "",
+                    url=url,
+                    # The detail scrape fetches the same product URL the card pointed to; subtask 06
+                    # wires the generic per-site detail dispatch that consumes it.
+                    detail_ref=url,
+                    authors=authors,
+                    source_id=asin,
+                    rating=book.get("rating"),
+                    rating_count=book.get("rating_count"),
+                    query=query,
+                    page=book.get("search_page_number", 1),
+                )
+            )
+        return candidates
+
+    def already_stored(self, candidate: SearchCandidate, backend: StorageBackend) -> bool:
+        """Report whether the Amazon ``candidate`` already exists in ``backend`` (by ASIN).
+
+        A candidate with no ASIN cannot be deduped by ASIN here (it is URL-deduped later by the
+        pipeline), so it is treated as not-yet-stored.
+
+        :param candidate: The Amazon candidate to check (its ``source_id`` is the ASIN).
+        :param backend: The resolved storage backend.
+        :returns: ``True`` if the backend already holds this ASIN, else ``False``.
+        """
+        if not candidate.source_id:
+            return False
+        return backend.book_exists_by_asin(candidate.source_id)
+
+
 #: The search-provider registry: site key -> provider instance. The single source of truth for which
-#: sites ``search`` can target (``resolve_search_targets`` checks membership here). Only Leanpub is
-#: wired today; subtasks 02/03 add the browser-backed providers via ``PROVIDERS["amazon"] = ...``.
+#: sites ``search`` can target (``resolve_search_targets`` checks membership here). Leanpub (API) and
+#: Amazon (Playwright) are wired; subtask 03 adds the remaining browser-backed providers.
 PROVIDERS: dict[str, SearchProvider] = {
     LeanpubApiProvider.site: LeanpubApiProvider(),
+    AmazonPlaywrightProvider.site: AmazonPlaywrightProvider(),
 }

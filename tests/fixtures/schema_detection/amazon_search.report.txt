@@ -48,6 +48,24 @@ Review each field below and apply desired changes to site_constants by hand.
       [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0/8 cards matched, 0%)
     !! PARTIAL - matched fewer than 80% of the cards on at least one sample URL. Review before applying.
 
+### SEARCH_RATING
+  = (unchanged) 'span.a-icon-alt'
+    rationale: current site_constants selector for SEARCH_RATING
+    status: absent_optional
+    validation:
+      [ no  ] <FIXTURES>/html/amazon/search_python_p1.html (0/8 cards matched, 0%)
+      [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0/8 cards matched, 0%)
+    !! PARTIAL - matched fewer than 80% of the cards on at least one sample URL. Review before applying.
+
+### SEARCH_RATING_COUNT
+  = (unchanged) 'span.s-underline-text'
+    rationale: current site_constants selector for SEARCH_RATING_COUNT
+    status: absent_optional
+    validation:
+      [ no  ] <FIXTURES>/html/amazon/search_python_p1.html (0/8 cards matched, 0%)
+      [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0/8 cards matched, 0%)
+    !! PARTIAL - matched fewer than 80% of the cards on at least one sample URL. Review before applying.
+
 ### SEARCH_NEXT_PAGE_SELECTOR
   = (unchanged) '.s-pagination-next'
     rationale: current site_constants selector for SEARCH_NEXT_PAGE_SELECTOR
@@ -65,6 +83,6 @@ Review each field below and apply desired changes to site_constants by hand.
       [ no  ] <FIXTURES>/html/amazon/search_python_p2.html (0 elements)
 
 ========================================================================
-WARNING: 1 card-relative selector(s) matched under 80% of the cards on at least one sample URL: SEARCH_BOOK_DETAIL_LINK
+WARNING: 3 card-relative selector(s) matched under 80% of the cards on at least one sample URL: SEARCH_BOOK_DETAIL_LINK, SEARCH_RATING, SEARCH_RATING_COUNT
 
 SECURITY NOTICE: these selector proposals were derived from UNTRUSTED page content, which may attempt prompt injection. Treat every proposal (and its rationale) as a suggestion to review by hand and validate against the live DOM before applying it to parameters.py - never apply unreviewed.

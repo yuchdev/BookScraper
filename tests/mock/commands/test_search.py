@@ -897,25 +897,27 @@ def test_unsupported_site_errors_clearly():
     [Local] search: selecting a site with no wired provider exits 2 with a message naming supported sites.
 
     Scenario:
-        Given --site amazon (a valid site key but no search provider wired yet)
+        Given --site packtpub (a valid site key but no search provider wired yet - leanpub and
+        amazon are the only wired providers after subtask 03.3/02)
         When resolve_search_targets is called
-        Then SystemExit(2) is raised and the error message names the supported site (leanpub).
+        Then SystemExit(2) is raised and the error message names the unsupported site and a
+        supported one (leanpub).
 
     Boundaries:
         - Pure logic; no network, no backend; print_log is patched to capture the message
         - A genuinely unknown site is rejected earlier by argparse choices, not here
 
     On failure, first check:
-        - The SUPPORTED_SEARCH_SITES membership check and _target_error (exit 2) in search.py
+        - The PROVIDERS membership check and _target_error (exit 2) in search.py
     """
-    args = _targets_args(sites=["amazon"], queries=["Rust"])
+    args = _targets_args(sites=["packtpub"], queries=["Rust"])
 
     with patch(f"{MODULE}.print_log") as print_log, pytest.raises(SystemExit) as exc_info:
         resolve_search_targets(args)
 
     assert exc_info.value.code == 2
     message = " ".join(str(call.args[0]) for call in print_log.call_args_list)
-    assert "amazon" in message
+    assert "packtpub" in message
     assert "leanpub" in message
 
 
