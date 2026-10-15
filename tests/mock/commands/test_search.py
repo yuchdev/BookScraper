@@ -5,9 +5,11 @@ all mocked, so no network and no real ~/.bookscrapper or books.json is touched. 
 CSV helper here is the DictWriter-based one (distinct from scrape_urls.py's).
 """
 
+import ast
 import asyncio
 import csv
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,6 +23,9 @@ from bookscraper.commands.search import resolve_search_targets, run, save_failed
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 MODULE = "bookscraper.commands.search"
+# The Leanpub search API now lives behind LeanpubApiProvider, which imports the function into the
+# search_providers namespace; patch it there (where the provider looks it up), not in commands.search.
+PROVIDERS_MODULE = "bookscraper.scraping.search_providers"
 
 
 def _leanpub_book(slug: str, title: str) -> dict:
@@ -292,7 +297,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -364,7 +369,7 @@ async def test_run_detail_results_partition_into_saved_and_failed():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
     ):
@@ -414,7 +419,7 @@ async def test_search_failed_record_uses_real_book_url():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
     ):
@@ -455,7 +460,7 @@ async def test_run_no_new_books_skips_save_but_closes_backend():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -490,7 +495,7 @@ async def test_run_keyboard_interrupt_propagates_and_backend_closed():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
         pytest.raises(KeyboardInterrupt),
@@ -526,7 +531,7 @@ async def test_run_generic_exception_is_caught_and_returns_fatal():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -587,7 +592,7 @@ async def test_search_reuses_single_async_client():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.httpx.AsyncClient", client_factory),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
@@ -689,7 +694,9 @@ async def test_run_saves_books_off_the_event_loop_thread():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[_leanpub_book("x", "X")])),
+        patch(
+            f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[_leanpub_book("x", "X")])
+        ),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -731,7 +738,7 @@ async def test_run_skips_search_result_without_slug():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[no_slug, good])),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[no_slug, good])),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -785,7 +792,7 @@ async def test_search_detail_scrape_is_bounded():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=candidates)),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=candidates)),
         patch(f"{MODULE}.get_leanpub_book_details", fake_detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -971,7 +978,7 @@ async def test_max_search_pages_reaches_search_provider():
 
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -1042,7 +1049,7 @@ async def test_dry_run_never_calls_save_books():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
         patch(f"{MODULE}.print_log", _record_print),
@@ -1088,7 +1095,7 @@ async def test_dry_run_still_performs_dedup_reads():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
-        patch(f"{MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.save_failed_urls_to_csv"),
     ):
@@ -1096,3 +1103,32 @@ async def test_dry_run_still_performs_dedup_reads():
 
     backend.leanpub_book_exists.assert_called_once_with("id-good-book", "good-book")
     backend.save_books.assert_not_called()
+
+
+def test_search_run_has_no_site_specific_branches():
+    """
+    [Local] search: commands/search.py carries no "leanpub" string literal (no per-site branch).
+
+    Scenario:
+        Given the parsed AST of commands/search.py
+        When every string-constant node is inspected
+        Then none equals "leanpub" (case-insensitively), proving the run loop dispatches through the
+        provider registry rather than a hard-coded per-site branch.
+
+    Boundaries:
+        - Pure source-AST check; identifiers like get_leanpub_book_details and prose comments are not
+          string literals, so they do not count. A docstring mentioning "Leanpub" inside a longer
+          sentence is one larger constant, never equal to the bare "leanpub".
+
+    On failure, first check:
+        - Any reintroduced `if site_name == "leanpub"` branch or bare "leanpub" literal in
+          commands/search.py.
+    """
+    source = Path(search.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    offending = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.lower() == "leanpub"
+    ]
+    assert offending == []

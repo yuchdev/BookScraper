@@ -1,7 +1,7 @@
 # Task 03.3 - Multi-Site Search Pipeline
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress
 **Category:** feature | **Priority:** P1
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md), [Task 03.2](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/README.md), [Task 05.0](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md)
 
@@ -24,7 +24,7 @@ This task turns `search` into a generic provider pipeline:
 
 | #  | Document                                                             | Status         | Blocks     |
 |----|----------------------------------------------------------------------|----------------|------------|
-| 01 | [Search provider registry](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/01-search-provider-registry.md)     | ⬜ Not started | 02, 03, 06 |
+| 01 | [Search provider registry](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/01-search-provider-registry.md)     | ✅ Complete    | 02, 03, 06 |
 | 02 | [Amazon search provider](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/02-amazon-search-provider.md)         | ⬜ Not started | 04         |
 | 03 | [Packtpub & O'Reilly search providers](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/03-packtpub-and-oreilly-search.md) | ⬜ Not started | 04 |
 | 04 | [Apply SCRAPE_FILTERS](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/04-apply-scrape-filters.md)             | ⬜ Not started | -          |

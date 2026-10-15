@@ -16,19 +16,13 @@ from .. import exitcodes
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
 from ..runtime import runtime_options
-from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
+from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_details
-from ..scraping.search_utils import get_leanpub_search_results_via_api
+from ..scraping.search_providers import PROVIDERS, SearchContext
 
 module_logger = logging.getLogger(__name__)
-
-# Sites with a search provider wired end-to-end today. Only Leanpub is implemented (its JSON API);
-# task 03.3 adds the Playwright-backed providers for the other site keys. Selecting a site outside
-# this set is a clear, loud error in resolve_search_targets - never a silent skip - so a user does
-# not think amazon/packtpub/oreilly were searched when no provider exists to search them yet.
-SUPPORTED_SEARCH_SITES = frozenset({"leanpub"})
 
 
 def _target_error(message: str) -> NoReturn:
@@ -102,8 +96,9 @@ def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[st
 
     Flags beat the ``parameters.py`` defaults: ``--site`` falls back to ``SITES_TO_SCRAPE`` and the
     query flags fall back to ``SEARCH_QUERIES`` only when unset. An empty resolved site or query
-    list, or a site with no wired provider (see :data:`SUPPORTED_SEARCH_SITES`), is a loud usage
-    error (exit ``2``) rather than a silent no-op.
+    list, or a site with no wired provider in
+    :data:`~bookscraper.scraping.search_providers.PROVIDERS` (the single source of truth for which
+    sites are searchable), is a loud usage error (exit ``2``) rather than a silent no-op.
 
     :param args: Parsed ``search`` arguments (reads ``sites``, ``queries``, ``queries_file`` and
         ``max_search_pages``).
@@ -117,9 +112,9 @@ def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[st
 
     if not sites:
         _target_error("no sites to search; pass --site or configure SITES_TO_SCRAPE")
-    unsupported = [site for site in sites if site not in SUPPORTED_SEARCH_SITES]
+    unsupported = [site for site in sites if site not in PROVIDERS]
     if unsupported:
-        supported = ", ".join(sorted(SUPPORTED_SEARCH_SITES))
+        supported = ", ".join(sorted(PROVIDERS))
         _target_error(f"no search provider wired for: {', '.join(unsupported)}; supported sites: {supported}")
     if not queries:
         _target_error("no search queries; pass --query/--queries-file or configure SEARCH_QUERIES")
@@ -241,7 +236,7 @@ async def run(args: argparse.Namespace) -> int:
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
     failed_scrape_attempts = []  # List to store book data that failed detailed scraping
     total_duplicates_skipped = 0  # To sum up duplicates across all sites
-    books_from_search = []
+    survivors = []  # Non-duplicate SearchCandidates that survived the pre-scrape dedup, across all sites
     # Per-status tally for the end-of-run summary (counts every ScrapeStatus seen).
     status_counts: Counter[ScrapeStatus] = Counter()
     # Set by the broad isolation boundary below; an aborted orchestration returns FATAL.
@@ -258,75 +253,58 @@ async def run(args: argparse.Namespace) -> int:
             ) as http_client:
                 robots = None if runtime.ignore_robots else RobotsCache(build_robots_fetcher(http_client), limiters)
 
-                # --- Iterate through the resolved sites and perform search + scrape ---
-                for site_name in sites:
-                    print_log(f"\n--- Processing {site_name.title()} ---", "step")
+                # The per-run SearchContext bundles the shared httpx client, limiters, robots cache,
+                # and a lazily launched browser (started only if a selected provider needs one - the
+                # API-only Leanpub provider never triggers a launch). Closed on block exit.
+                async with SearchContext(
+                    http_client=http_client, limiters=limiters, robots=robots, headless=runtime.headless
+                ) as search_context:
+                    # --- Iterate the resolved sites via the provider registry (no per-site branches) ---
+                    for site_name in sites:
+                        provider = PROVIDERS[site_name]
+                        print_log(f"\n--- Processing {provider.site.title()} ---", "step")
 
-                    for search_item in queries:
-                        current_search_results = []
-                        # Leanpub-Specific
-                        if site_name.lower() == "leanpub":
-                            print_log(f"Leanpub - Searching for '{search_item}' via API...", "info")
+                        for search_item in queries:
+                            candidates = await provider.search(search_item, max_search_pages, search_context)
 
-                            # Get search results - Format: [{'site', 'title', 'book_id', 'slug', 'authors'}]
-                            current_search_results = await get_leanpub_search_results_via_api(
-                                search_item, limiters=limiters, robots=robots, max_pages=max_search_pages
-                            )
-
-                            # Pre-scrape deduplication
-                            print_log("Leanpub - Deduplicating search results...")
-                            for book in current_search_results:
-                                book_title = book.get("title")
-                                book_id = book.get("book_id")
-                                book_slug = book.get("slug")
-                                if not book_slug:
-                                    module_logger.warning(
-                                        f"Skipping Leanpub search result without a slug (id {book_id})."
-                                    )
-                                    continue
-                                book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
-                                book["book_url"] = book_url
-                                exists = await asyncio.to_thread(
-                                    storage_backend.leanpub_book_exists, book_id, book_slug
-                                )
-
+                            # Pre-scrape deduplication: check each candidate against the backend (a
+                            # blocking read, so it runs off the event loop thread) and keep the new ones.
+                            for candidate in candidates:
+                                exists = await asyncio.to_thread(provider.already_stored, candidate, storage_backend)
                                 if not exists:
-                                    # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
-                                    books_from_search.append(book)
+                                    survivors.append(candidate)
                                     print_log(
-                                        f"{site_name.title()} - New book found: {book_title}",
+                                        f"{provider.site.title()} - New book found: {candidate.title}",
                                         "success",
                                     )
                                 else:
                                     total_duplicates_skipped += 1
                                     print_log(
-                                        f"{site_name.title()} - Book already in database: {book_title}",
+                                        f"{provider.site.title()} - Book already in database: {candidate.title}",
                                         "warning",
                                     )
 
-                        print_log(
-                            f"Found {len(current_search_results)} potential new books for '{search_item}'.",
-                            "success",
-                        )
-                        module_logger.info(
-                            f"Found {len(current_search_results)} potential new books for '{search_item}'."
-                        )
+                            print_log(
+                                f"Found {len(candidates)} potential new books for '{search_item}'.",
+                                "success",
+                            )
+                            module_logger.info(f"Found {len(candidates)} potential new books for '{search_item}'.")
 
                 # --- Deduplicate Cross-Site using ISBN / Fuzzy search / Hash ---
-                new_books_for_detailed_scrape = books_from_search
+                # (placeholder for task 03.3 subtask 05; today survivors pass through unchanged.)
 
-                # --- Queue Detailed Scraping Tasks for current site ---
-                leanpub_books = [book for book in new_books_for_detailed_scrape if book["site"].lower() == "leanpub"]
-
-                # Run detailed scraping tasks for the current site concurrently
-                if leanpub_books:
-                    print_log(f"--- Scraping {len(leanpub_books)} Leanpub book(s) ---", "step")
+                # --- Queue Detailed Scraping Tasks ---
+                # Detail dispatch stays Leanpub-only until subtask 06 wires generic per-site
+                # dispatch; today every registered provider is API-based, so every survivor is
+                # fetched through the Leanpub JSON:API detail helper.
+                if survivors:
+                    print_log(f"--- Scraping {len(survivors)} book(s) ---", "step")
                     # Detail scraping runs through a bounded-concurrency sliding window instead of an
                     # unbounded gather: at most `concurrency` fetches are in flight at once and a
                     # finished slot is reused immediately, with per-host pacing left to the rate
                     # limiter. Exceptions are still captured per item like gather(return_exceptions).
                     concurrency = runtime.concurrency
-                    total_detail = len(leanpub_books)
+                    total_detail = len(survivors)
                     # Progress line every ~10% (at least each completion for a tiny run, at most every
                     # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.
                     progress_interval = max(1, min(10, total_detail // 10))
@@ -348,38 +326,38 @@ async def run(args: argparse.Namespace) -> int:
 
                     site_scrape_tasks = [
                         get_leanpub_book_details(
-                            url=book.get("book_url"), client=http_client, limiters=limiters, robots=robots
+                            url=candidate.detail_ref, client=http_client, limiters=limiters, robots=robots
                         )
-                        for book in leanpub_books
+                        for candidate in survivors
                     ]
                     current_site_scraped_results = await bounded_gather(
                         site_scrape_tasks, limit=concurrency, on_result=report_progress
                     )
 
-                    # Process results from detailed scraping for the current site
-                    for original_book_data, result in zip(leanpub_books, current_site_scraped_results, strict=True):
+                    # Process results from detailed scraping
+                    for candidate, result in zip(survivors, current_site_scraped_results, strict=True):
                         if isinstance(result, ScrapeResult):
                             status_counts[result.status] += 1
                             if result.status is ScrapeStatus.SUCCESS:
                                 scraped_books_data.append(result.book)
                                 print_log(
                                     f"Successfully scraped details for: "
-                                    f"{result.book.get('title', 'Unknown Title')} from {site_name}",
+                                    f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
                                     "info",
                                 )
                             else:
-                                # result.url is the real book_url (fixes the old "url": "N/A"), and
+                                # result.url is the real detail URL (fixes the old "url": "N/A"), and
                                 # result.error is the typed, secret-free failure reason.
                                 failed_scrape_attempts.append(
                                     {
                                         "url": result.url,
-                                        "site": original_book_data.get("site", "N/A"),
-                                        "title": original_book_data.get("title", "N/A"),
+                                        "site": candidate.site,
+                                        "title": candidate.title,
                                         "error": result.error or result.status.value,
                                     }
                                 )
                                 print_log(
-                                    f"Failed to scrape details for {result.url} from {site_name}: "
+                                    f"Failed to scrape details for {result.url} from {candidate.site}: "
                                     f"{result.status.value} - {result.error}",
                                     "error",
                                 )
@@ -388,19 +366,19 @@ async def run(args: argparse.Namespace) -> int:
                             # did not convert into a ScrapeResult; record it as a raw failure.
                             failed_scrape_attempts.append(
                                 {
-                                    "url": original_book_data.get("book_url", original_book_data.get("url", "N/A")),
-                                    "site": original_book_data.get("site", "N/A"),
-                                    "title": original_book_data.get("title", "N/A"),
+                                    "url": candidate.detail_ref,
+                                    "site": candidate.site,
+                                    "title": candidate.title,
                                     "error": str(result),
                                 }
                             )
                             print_log(
-                                f"Failed to scrape details for "
-                                f"{original_book_data.get('book_url', 'N/A')} from {site_name}: {str(result)}",
+                                f"Failed to scrape details for {candidate.detail_ref} from {candidate.site}: "
+                                f"{str(result)}",
                                 "error",
                             )
                 else:
-                    print_log(f"No new books identified for detailed scraping on {site_name}.", "info")
+                    print_log("No new books identified for detailed scraping.", "info")
 
         # KeyboardInterrupt is intentionally NOT caught here: it propagates past this isolation
         # boundary (and the finally that closes the backend) up to main_sync, which prints one line
