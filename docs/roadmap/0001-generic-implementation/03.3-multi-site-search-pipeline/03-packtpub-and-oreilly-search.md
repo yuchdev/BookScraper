@@ -1,7 +1,7 @@
 # 03 - Packtpub & O'Reilly search providers
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (descoped - see Investigation outcome; 2026-10-22, user-ratified)
 **Depends on:** [01-search-provider-registry.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/01-search-provider-registry.md)
 **Role:** Scraping Expert
 
@@ -43,7 +43,41 @@ more stable than DOM scraping.
 - `test_pagination_stops_at_last_page` (per provider)
 - `test_book_exists_by_url_parity` (both backends)
 
-## Success criteria
+## Investigation outcome (2026-10-22, user-ratified)
 
-- [ ] `docs/scraping/search-sources.md` documents the chosen source for each site, with evidence.
-- [ ] `SITES_TO_SCRAPE` default becomes `["leanpub", "amazon", "packtpub", "oreilly"]`.
+Step 1's live investigation (see [`docs/scraping/search-sources.md`](/docs/scraping/search-sources.md)) found
+**both sites hard-block automated access**, independent of `robots.txt`:
+
+- **Packtpub:** every request - including the plausible `services.packtpub.com` API host - is intercepted by a
+  Cloudflare managed challenge (`HTTP 403`, `<title>Just a moment...</title>`), from both the project's headless
+  Chromium and a plain `httpx` client. `robots.txt` itself *allows* search (`Content-Signal: search=yes`); the
+  block is enforced at the Cloudflare edge regardless.
+- **O'Reilly:** a hard `HTTP 403` (Akamai) on the search page itself, and `robots.txt` also returns `403` -
+  unfetchable, so the project's fail-closed `RobotsCache` policy disallows it on the robots gate alone. The site is
+  now a paywalled subscription platform.
+
+Passing either wall would require solving/bypassing a Cloudflare challenge, identity spoofing, or a logged-in
+session - all excluded by the project's "identify and back off, never disguise or bypass" rule (task 03.2). No
+selector was fabricated, no endpoint was guessed, and no fixture was captured behind either wall.
+
+**Decision: descope both providers.** `PacktpubProvider`/`OreillyProvider` are not implemented.
+`SITES_TO_SCRAPE` stays `["leanpub", "amazon"]` (the original success criterion below is superseded and will not
+be met). Their existing `SEARCH_*` entries in `parameters.py` stay as the pre-existing speculative placeholders -
+`site_constants` still carries them for a future reattempt, but nothing reads them. Detail-page scraping for
+Packtpub/O'Reilly via `scrape-urls` (task 03.0) is unaffected; only *search discovery* for these two sites is
+closed off.
+
+Three wall-independent pieces still land under this subtask, since they are needed regardless of how (or whether)
+Packtpub/O'Reilly search is ever reattempted:
+1. `StorageBackend.book_exists_by_url(url) -> bool` on both backends (a sparse `url` index in mongo, the json
+   in-memory index), with parity test coverage. Pure infra for any future URL-keyed provider.
+2. Widen `GENERIC_BOT_WALL_RULES` to also recognize this newer Cloudflare "Just a moment..." challenge variant
+   (title text + the `challenge-platform` script), since any site could serve it, with a fixture.
+3. Refresh the stale `tests/fixtures/robots/packtpub.txt` fixture: the committed copy has `Disallow: /search`,
+   which the live file no longer has.
+
+## Success criteria (superseded - see Investigation outcome above)
+
+- [x] `docs/scraping/search-sources.md` documents the chosen source for each site, with evidence.
+- [ ] ~~`SITES_TO_SCRAPE` default becomes `["leanpub", "amazon", "packtpub", "oreilly"]`~~ - not achievable without
+      evasion; `SITES_TO_SCRAPE` stays `["leanpub", "amazon"]`.

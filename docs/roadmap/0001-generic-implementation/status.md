@@ -517,3 +517,11 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   and the clean list is the `hash_book` input ("Dedup + migrate"). In the corpus only the synthetic `_many_authors`
   fixtures change hash; every real-book golden hash is unchanged. Stored documents with a repeated author get their
   hash recomputed by the 03.1/06 migration, which reports every changed hash and any collision (never auto-merged).
+- **2026-10-22 - 03.3/03 descoped (user-ratified):** live investigation found Packtpub (Cloudflare managed
+  challenge, HTTP 403 on every host including the plausible API) and O'Reilly (Akamai 403 on the search page and
+  on `robots.txt` itself) both hard-block automated access. Evasion is out of policy, so `PacktpubProvider` /
+  `OreillyProvider` are not implemented; `SITES_TO_SCRAPE` stays `["leanpub", "amazon"]`. See
+  [`docs/scraping/search-sources.md`](/docs/scraping/search-sources.md) and
+  [03.3/03](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/03-packtpub-and-oreilly-search.md)'s
+  Investigation outcome. Three wall-independent pieces still land under the same subtask: `book_exists_by_url`,
+  a wider Cloudflare bot-wall rule, and a refreshed packtpub robots.txt fixture.
