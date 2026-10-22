@@ -147,6 +147,39 @@ def test_min_rating_is_float():
     assert isinstance(parameters.SCRAPE_FILTERS["min_rating"], float)
 
 
+def test_scrape_filters_shape_is_valid():
+    """
+    [Unit] parameters: verifies SCRAPE_FILTERS carries only known top-level and per-site keys.
+
+    Scenario:
+        Given the parameters module is imported
+        When the SCRAPE_FILTERS top-level keys and each per_site entry's keys are inspected
+        Then every top-level key is one of the allowed base keys plus "per_site", and every key
+             inside a per_site entry is one of the allowed base keys.
+
+    Boundaries:
+        - Shape/key-name check only; the numeric thresholds are not asserted here.
+        - This is the import-time sanity tripwire the subtask spec requires (unknown key -> failure).
+
+    On failure, first check:
+        - A typo or stray key added to SCRAPE_FILTERS or to a per_site override in parameters.py.
+    """
+    allowed_base = {
+        "enable_rating_filter",
+        "min_rating",
+        "include_new_books_without_rating",
+        "min_isbns_required",
+    }
+    filters = parameters.SCRAPE_FILTERS
+    assert set(filters) - {"per_site"} <= allowed_base
+    per_site = filters.get("per_site", {})
+    assert isinstance(per_site, dict)
+    for site, overrides in per_site.items():
+        assert isinstance(site, str) and site
+        assert isinstance(overrides, dict)
+        assert set(overrides) <= allowed_base
+
+
 def test_every_detail_selector_key_is_consumed():
     """
     [Unit] parameters: verifies every detail-page selector key is read by scrape_book.

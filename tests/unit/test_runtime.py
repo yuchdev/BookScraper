@@ -171,6 +171,26 @@ def test_ignore_robots_passthrough():
     assert runtime.runtime_options(_args()).ignore_robots is False
 
 
+def test_no_filters_passthrough():
+    """
+    [Unit] runtime: verifies no_filters is carried through, defaulting to False when absent.
+
+    Scenario:
+        Given a Namespace with no_filters True, False, and absent
+        When runtime_options resolves the options
+        Then the resolved no_filters mirrors the attribute and defaults to False when it is missing.
+
+    Boundaries:
+        - Pure getattr passthrough; only the search subcommand defines --no-filters.
+
+    On failure, first check:
+        - The getattr fallback for no_filters in runtime_options and the RuntimeOptions field.
+    """
+    assert runtime.runtime_options(_args(no_filters=True)).no_filters is True
+    assert runtime.runtime_options(_args(no_filters=False)).no_filters is False
+    assert runtime.runtime_options(_args()).no_filters is False
+
+
 def test_dry_run_output_dir_and_json_store_resolution():
     """
     [Unit] runtime: verifies dry_run, output_dir and json_store resolve from the Namespace with sane defaults.

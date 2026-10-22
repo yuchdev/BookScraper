@@ -290,7 +290,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
             ScrapeStatus.SUCCESS,
             url="https://leanpub.com/api/v1/cache/books/fresh-book.json",
             site="leanpub",
-            book={"title": "Fresh Book", "hash": "h1"},
+            book={"title": "Fresh Book", "site": "leanpub", "hash": "h1"},
         )
     )
 
@@ -312,7 +312,7 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
 
     backend.save_books.assert_called_once()
     (saved,), _ = backend.save_books.call_args
-    assert saved == [{"title": "Fresh Book", "hash": "h1"}]
+    assert saved == [{"title": "Fresh Book", "site": "leanpub", "hash": "h1"}]
     backend.close.assert_called_once_with()
 
 
@@ -353,7 +353,7 @@ async def test_run_detail_results_partition_into_saved_and_failed():
                 ScrapeStatus.SUCCESS,
                 url="https://leanpub.com/api/v1/cache/books/good.json",
                 site="leanpub",
-                book={"title": "Good Book", "hash": "ok"},
+                book={"title": "Good Book", "site": "leanpub", "hash": "ok"},
             ),
             ScrapeResult(
                 ScrapeStatus.FAILED,
@@ -378,7 +378,7 @@ async def test_run_detail_results_partition_into_saved_and_failed():
     # At least one detail scrape failed, so the run is PARTIAL.
     assert code == exitcodes.PARTIAL
     # Only the SUCCESS result's book is persisted.
-    backend.save_books.assert_called_once_with([{"title": "Good Book", "hash": "ok"}])
+    backend.save_books.assert_called_once_with([{"title": "Good Book", "site": "leanpub", "hash": "ok"}])
     backend.close.assert_called_once_with()
 
     # The typed FAILED result and the raw Exception both land in the failed-attempts CSV.
@@ -687,7 +687,10 @@ async def test_run_saves_books_off_the_event_loop_thread():
     backend.save_books = MagicMock(side_effect=_save_books)
     detail = AsyncMock(
         return_value=ScrapeResult(
-            ScrapeStatus.SUCCESS, url="https://leanpub.com/x", site="leanpub", book={"title": "X", "hash": "h"}
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/x",
+            site="leanpub",
+            book={"title": "X", "site": "leanpub", "hash": "h"},
         )
     )
 
@@ -787,7 +790,9 @@ async def test_search_detail_scrape_is_bounded():
         scraped += 1
         await asyncio.sleep(0)
         in_flight -= 1
-        return ScrapeResult(ScrapeStatus.SUCCESS, url=url, site="leanpub", book={"title": url, "hash": url})
+        return ScrapeResult(
+            ScrapeStatus.SUCCESS, url=url, site="leanpub", book={"title": url, "site": "leanpub", "hash": url}
+        )
 
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
@@ -1134,3 +1139,140 @@ def test_search_run_has_no_site_specific_branches():
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.lower() == "leanpub"
     ]
     assert offending == []
+
+
+async def test_filtered_books_written_to_csv_and_not_saved(tmp_path):
+    """
+    [Local] search: a book dropped by the detail-stage SCRAPE_FILTERS is written to filtered_books.csv and not saved.
+
+    Scenario:
+        Given two fresh Leanpub candidates whose detail scrapes both SUCCEED, where book A carries an
+        ISBN-13 and book B carries none, under SCRAPE_FILTERS requiring min_isbns_required 1
+        When run() is called
+        Then only book A is passed to save_books, book B is absent from the saved batch, and
+        filtered_books.csv names book B with its reason while book A is not in it.
+
+    Boundaries:
+        - Exercises the detail-stage filter and its CSV diagnostic; the rating stage is covered by the
+          pure filters unit tests.
+
+    On failure, first check:
+        - The passes_detail_filters branch in run() and the save_filtered_books_to_csv call.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False, output_dir=str(tmp_path))
+    filters = {
+        "enable_rating_filter": False,
+        "min_rating": 3.5,
+        "include_new_books_without_rating": True,
+        "min_isbns_required": 1,
+        "per_site": {},
+    }
+
+    book_a = _leanpub_book("book-a", "Book A")
+    book_b = _leanpub_book("book-b", "Book B")
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    backend.leanpub_book_exists = MagicMock(side_effect=[False, False])
+
+    search_api = AsyncMock(return_value=[book_a, book_b])
+    detail = AsyncMock(
+        side_effect=[
+            ScrapeResult(
+                ScrapeStatus.SUCCESS,
+                url="https://leanpub.com/api/v1/cache/books/book-a.json",
+                site="leanpub",
+                book={"title": "Book A", "site": "leanpub", "hash": "ha", "isbn10": None, "isbn13": "9780306406157"},
+            ),
+            ScrapeResult(
+                ScrapeStatus.SUCCESS,
+                url="https://leanpub.com/api/v1/cache/books/book-b.json",
+                site="leanpub",
+                book={"title": "Book B", "site": "leanpub", "hash": "hb", "isbn10": None, "isbn13": None},
+            ),
+        ]
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.SCRAPE_FILTERS", filters),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    # A filtered-out book is not a failure.
+    assert code == exitcodes.OK
+    backend.save_books.assert_called_once()
+    (saved,), _ = backend.save_books.call_args
+    saved_titles = {doc["title"] for doc in saved}
+    assert saved_titles == {"Book A"}
+
+    csv_path = tmp_path / "filtered_books.csv"
+    assert csv_path.exists()
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    titles = {row["title"] for row in rows}
+    assert titles == {"Book B"}
+    assert rows[0]["stage"] == "detail"
+    assert "ISBN" in rows[0]["reason"]
+
+
+async def test_no_filters_disables_both_stages(tmp_path):
+    """
+    [Local] search: --no-filters keeps a book that SCRAPE_FILTERS would otherwise drop and writes no filtered CSV.
+
+    Scenario:
+        Given a fresh Leanpub candidate whose detail scrape SUCCEEDS with no ISBNs, under
+        SCRAPE_FILTERS requiring min_isbns_required 1, but with no_filters True on the run
+        When run() is called
+        Then the book is saved despite carrying no ISBN and no filtered_books.csv is written.
+
+    Boundaries:
+        - Exercises the runtime.no_filters bypass on the detail stage; the search stage bypass shares
+          the same flag.
+
+    On failure, first check:
+        - The ``runtime.no_filters`` short-circuit guarding passes_detail_filters in run().
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False, output_dir=str(tmp_path), no_filters=True)
+    filters = {
+        "enable_rating_filter": True,
+        "min_rating": 3.5,
+        "include_new_books_without_rating": True,
+        "min_isbns_required": 1,
+        "per_site": {},
+    }
+
+    book_b = _leanpub_book("book-b", "Book B")
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    backend.leanpub_book_exists = MagicMock(side_effect=[False])
+
+    search_api = AsyncMock(return_value=[book_b])
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/book-b.json",
+            site="leanpub",
+            book={"title": "Book B", "site": "leanpub", "hash": "hb", "isbn10": None, "isbn13": None},
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{MODULE}.SCRAPE_FILTERS", filters),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.OK
+    backend.save_books.assert_called_once()
+    (saved,), _ = backend.save_books.call_args
+    assert {doc["title"] for doc in saved} == {"Book B"}
+    assert not (tmp_path / "filtered_books.csv").exists()

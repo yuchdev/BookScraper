@@ -49,6 +49,8 @@ class RuntimeOptions:
     :ivar output_dir: Directory the diagnostic CSVs are written to (``.`` by default).
     :ivar json_store: Explicit ``json`` backend store-file path, or ``None`` to use the default
         ``books.json``. Always ``None`` unless ``--store-backend json`` is in use.
+    :ivar no_filters: Whether ``SCRAPE_FILTERS`` is bypassed for the run (``--no-filters``); when
+        ``True`` both the search-stage and detail-stage filters keep every candidate/document.
     """
 
     headless: bool
@@ -58,6 +60,7 @@ class RuntimeOptions:
     dry_run: bool
     output_dir: str
     json_store: Optional[Path]
+    no_filters: bool
 
 
 def _parse_bool_env(raw: str) -> Optional[bool]:
@@ -118,6 +121,7 @@ def runtime_options(args: argparse.Namespace) -> RuntimeOptions:
     dry_run = bool(getattr(args, "dry_run", False))
     output_dir = getattr(args, "output_dir", None) or "."
     json_store = _resolve_json_store(getattr(args, "json_store", None), getattr(args, "store_backend", None))
+    no_filters = bool(getattr(args, "no_filters", False))
     return RuntimeOptions(
         headless=headless,
         concurrency=concurrency,
@@ -126,6 +130,7 @@ def runtime_options(args: argparse.Namespace) -> RuntimeOptions:
         dry_run=dry_run,
         output_dir=output_dir,
         json_store=json_store,
+        no_filters=no_filters,
     )
 
 

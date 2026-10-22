@@ -1,7 +1,7 @@
 # 04 - Apply SCRAPE_FILTERS
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-amazon-search-provider.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/02-amazon-search-provider.md), [03-packtpub-and-oreilly-search.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/03-packtpub-and-oreilly-search.md)
 **Role:** Python Expert
 

@@ -16,7 +16,8 @@ from .. import exitcodes
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, print_log
 from ..runtime import runtime_options
-from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE
+from ..scraping.filters import passes_detail_filters, passes_search_filters
+from ..scraping.parameters import SCRAPE_FILTERS, SEARCH_QUERIES, SITES_TO_SCRAPE
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_details
@@ -168,6 +169,56 @@ def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_url
         print_log(f"Critical Error saving failed URLs to {target}. Check log file.", "error")
 
 
+def save_filtered_books_to_csv(filtered_books: list[dict], filename: str = "filtered_books.csv", directory: str = "."):
+    """
+    Save the books dropped by ``SCRAPE_FILTERS`` to a CSV diagnostic file.
+
+    ``filtered_books.csv`` is a process diagnostic (like ``failed_urls.csv``), not database content -
+    a filtered book is never saved to the store. Every cell goes through
+    :func:`~bookscraper.book_utils.csv_safe_cell` so page-derived text can't be evaluated as a
+    spreadsheet formula.
+
+    :param filtered_books: Filter records with the keys ``title``, ``site``, ``url``, ``stage`` and
+        ``reason``.
+    :param filename: The fixed name of the CSV file to write (unaffected by ``--output-dir``).
+    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
+    """
+    if not filtered_books:
+        module_logger.info(f"No filtered books to save to {filename}.")
+        return
+
+    target = os.path.join(directory, filename)
+    try:
+        fieldnames = ["title", "site", "url", "stage", "reason"]
+        module_logger.info(f"Saving filtered books to CSV: {target}")
+        print_log(f"Saving {len(filtered_books)} filtered books to {target}...", "info")
+
+        with open(target, "w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
+            writer.writeheader()
+            for item in filtered_books:
+                try:
+                    writer.writerow({key: csv_safe_cell(value) for key, value in item.items()})
+                except ValueError as ve:
+                    module_logger.error(f"Error writing filtered book {item.get('title', 'Unknown')} to CSV: {ve}")
+                except csv.Error as e:
+                    module_logger.error(
+                        f"Unexpected error writing filtered book {item.get('title', 'Unknown')} to CSV: {e}",
+                        exc_info=True,
+                    )
+        print_log(f"Filtered books successfully saved to {target}.", "success")
+        module_logger.info(f"Filtered books successfully saved to {target}.")
+    except IOError as e:
+        module_logger.error(f"I/O error saving filtered books to CSV {target}: {e}")
+        print_log(f"Error saving filtered books to {target}: {e}", "error")
+    except csv.Error as e:
+        module_logger.critical(
+            f"An unexpected error occurred while saving filtered books to CSV {target}: {e}",
+            exc_info=True,
+        )
+        print_log(f"Critical Error saving filtered books to {target}. Check log file.", "error")
+
+
 def _report_dry_run_books(books: list[dict], store_backend: str):
     """Print the title, site and hash of each book a non-dry run would have saved.
 
@@ -237,6 +288,7 @@ async def run(args: argparse.Namespace) -> int:
     failed_scrape_attempts = []  # List to store book data that failed detailed scraping
     total_duplicates_skipped = 0  # To sum up duplicates across all sites
     survivors = []  # Non-duplicate SearchCandidates that survived the pre-scrape dedup, across all sites
+    filtered_books = []  # Records dropped by SCRAPE_FILTERS (search or detail stage); never saved
     # Per-status tally for the end-of-run summary (counts every ScrapeStatus seen).
     status_counts: Counter[ScrapeStatus] = Counter()
     # Set by the broad isolation boundary below; an aborted orchestration returns FATAL.
@@ -271,18 +323,40 @@ async def run(args: argparse.Namespace) -> int:
                             # blocking read, so it runs off the event loop thread) and keep the new ones.
                             for candidate in candidates:
                                 exists = await asyncio.to_thread(provider.already_stored, candidate, storage_backend)
-                                if not exists:
-                                    survivors.append(candidate)
-                                    print_log(
-                                        f"{provider.site.title()} - New book found: {candidate.title}",
-                                        "success",
-                                    )
-                                else:
+                                if exists:
                                     total_duplicates_skipped += 1
                                     print_log(
                                         f"{provider.site.title()} - Book already in database: {candidate.title}",
                                         "warning",
                                     )
+                                    continue
+                                # Search-stage SCRAPE_FILTERS: drop a low/un-rated candidate BEFORE the
+                                # expensive detail scrape (bypassed entirely by --no-filters).
+                                keep, reason = (
+                                    (True, None)
+                                    if runtime.no_filters
+                                    else passes_search_filters(candidate, SCRAPE_FILTERS)
+                                )
+                                if not keep:
+                                    filtered_books.append(
+                                        {
+                                            "title": candidate.title,
+                                            "site": candidate.site,
+                                            "url": candidate.url,
+                                            "stage": "search",
+                                            "reason": reason,
+                                        }
+                                    )
+                                    print_log(
+                                        f"{provider.site.title()} - Filtered out ({reason}): {candidate.title}",
+                                        "warning",
+                                    )
+                                    continue
+                                survivors.append(candidate)
+                                print_log(
+                                    f"{provider.site.title()} - New book found: {candidate.title}",
+                                    "success",
+                                )
 
                             print_log(
                                 f"Found {len(candidates)} potential new books for '{search_item}'.",
@@ -339,12 +413,36 @@ async def run(args: argparse.Namespace) -> int:
                         if isinstance(result, ScrapeResult):
                             status_counts[result.status] += 1
                             if result.status is ScrapeStatus.SUCCESS:
-                                scraped_books_data.append(result.book)
-                                print_log(
-                                    f"Successfully scraped details for: "
-                                    f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
-                                    "info",
+                                # Detail-stage SCRAPE_FILTERS: a successfully scraped book can still be
+                                # dropped on its ISBN count before it reaches save_books (bypassed by
+                                # --no-filters). A filtered book is a diagnostic, never a failure.
+                                keep, reason = (
+                                    (True, None)
+                                    if runtime.no_filters
+                                    else passes_detail_filters(result.book, SCRAPE_FILTERS)
                                 )
+                                if keep:
+                                    scraped_books_data.append(result.book)
+                                    print_log(
+                                        f"Successfully scraped details for: "
+                                        f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
+                                        "info",
+                                    )
+                                else:
+                                    filtered_books.append(
+                                        {
+                                            "title": result.book.get("title") or candidate.title,
+                                            "site": candidate.site,
+                                            "url": result.url,
+                                            "stage": "detail",
+                                            "reason": reason,
+                                        }
+                                    )
+                                    print_log(
+                                        f"Filtered out ({reason}): "
+                                        f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
+                                        "warning",
+                                    )
                             else:
                                 # result.url is the real detail URL (fixes the old "url": "N/A"), and
                                 # result.error is the typed, secret-free failure reason.
@@ -404,12 +502,24 @@ async def run(args: argparse.Namespace) -> int:
                 f"{status.value}={status_counts[status]}" for status in ScrapeStatus if status_counts[status]
             )
             print_log(f"Scrape status breakdown: {status_breakdown}.")
+        if filtered_books:
+            # Count every filtered-out book per reason for the run summary; the books themselves are
+            # written to filtered_books.csv below and never saved to the store.
+            reason_counts = Counter(item["reason"] for item in filtered_books)
+            filter_breakdown = ", ".join(f"{reason}={count}" for reason, count in reason_counts.most_common())
+            print_log(
+                f"{len(filtered_books)} book(s) filtered out by SCRAPE_FILTERS: {filter_breakdown}.",
+                "warning",
+            )
 
         # --- Output Saving ---
         print_log("\n--- Output Summary ---", "step")
         # failed_urls.csv is a process diagnostic, not database content, so it's always
         # written as CSV best-effort, independent of --store-backend.
         save_failed_urls_to_csv(failed_scrape_attempts, directory=output_dir)
+        # filtered_books.csv is likewise a process diagnostic (never database content), so it's
+        # always written best-effort regardless of --store-backend or --dry-run.
+        save_filtered_books_to_csv(filtered_books, directory=output_dir)
 
         if runtime.dry_run:
             # Pre-scrape dedup reads already ran (leanpub_book_exists above); a dry run just refuses to

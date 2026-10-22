@@ -10,6 +10,7 @@
 /failed_books.csv
 /failed_urls.csv
 /other_links.csv
+/filtered_books.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -118,6 +118,11 @@ SCRAPE_FILTERS = {
     "min_rating": 3.5,  # Minimum rating for books to be considered
     "include_new_books_without_rating": True,  # If True, books with no rating (0.0) will be included
     "min_isbns_required": 1,  # Minimum number of ISBNs to consider a book's ISBNs "complete"
+    # Per-site overrides layered onto the base keys above by scraping.filters.resolve_site_filters.
+    # Leanpub books rarely carry ISBNs, so the ISBN requirement is relaxed to 0 for Leanpub.
+    "per_site": {
+        "leanpub": {"min_isbns_required": 0},
+    },
 }
 
 # Generic bot-wall / anti-bot interstitial detection rules applied to EVERY site (subtask
