@@ -10,12 +10,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from bookscraper.backends.storage import StorageBackend
 from bookscraper.scraping.parameters import site_constants
+from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 from bookscraper.scraping.search_providers import (
     PROVIDERS,
     AmazonPlaywrightProvider,
     LeanpubApiProvider,
     SearchCandidate,
     SearchContext,
+    scrape_candidate,
 )
 
 MODULE = "bookscraper.scraping.search_providers"
@@ -44,7 +46,7 @@ def _context() -> SearchContext:
     :returns: A :class:`SearchContext` whose httpx client and limiters are mocks and whose robots
         cache is ``None`` (the API path a test exercises never touches them for real).
     """
-    return SearchContext(http_client=MagicMock(), limiters=MagicMock(), robots=None, headless=True)
+    return SearchContext(http_client=MagicMock(), limiters=MagicMock(), robots=None, headless=True, backend=MagicMock())
 
 
 def test_registry_contains_every_site_in_site_constants():
@@ -188,7 +190,7 @@ def _amazon_context() -> SearchContext:
     :returns: A :class:`SearchContext` with mocked collaborators and ``browser()`` stubbed to an
         awaitable returning a fake browser handle.
     """
-    ctx = SearchContext(http_client=MagicMock(), limiters=MagicMock(), robots=None, headless=True)
+    ctx = SearchContext(http_client=MagicMock(), limiters=MagicMock(), robots=None, headless=True, backend=MagicMock())
     ctx.browser = AsyncMock(return_value=MagicMock())
     return ctx
 
@@ -357,3 +359,74 @@ async def test_amazon_provider_launches_browser_and_forwards_max_pages():
     assert search.call_args.args[1] == "amazon"
     assert search.call_args.args[2] == "python"
     assert search.call_args.kwargs["max_pages"] == 5
+
+
+# ---------------------------------------------------------------------------
+# scrape_candidate - generic detail dispatch (task 03.3/06)
+# ---------------------------------------------------------------------------
+async def test_dispatch_routes_leanpub_to_api_and_others_to_playwright():
+    """
+    [Local] search_providers: scrape_candidate routes Leanpub to the JSON:API and other sites to Playwright.
+
+    Scenario:
+        Given one Leanpub candidate and one Amazon candidate, with get_leanpub_book_details and
+        scrape_book both mocked and a context whose lazy browser and backend are stubs
+        When scrape_candidate is awaited for each
+        Then the Leanpub one is fetched via get_leanpub_book_details with the context's shared httpx
+        client (no browser launched for it), and the Amazon one is fetched via scrape_book with the
+        lazily launched browser, its own site, and the context's storage backend.
+
+    Boundaries:
+        - Both detail helpers are mocked; this pins the routing and argument wiring only, not a real
+          fetch. Leanpub keeps the shared-client optimisation; every other site takes the browser path.
+
+    On failure, first check:
+        - The ``candidate.site == LEANPUB_SITE`` branch in scrape_candidate and the argument order of
+          its get_leanpub_book_details / scrape_book calls in search_providers.py.
+    """
+    leanpub = SearchCandidate(
+        site="leanpub",
+        title="A Book",
+        url="https://leanpub.com/a-book",
+        detail_ref="https://leanpub.com/api/v1/cache/books/a-book.json",
+        authors=["Ada Lovelace"],
+    )
+    amazon = SearchCandidate(
+        site="amazon",
+        title="A Python Book",
+        url="https://www.amazon.com/dp/B0ABCDEFGH",
+        detail_ref="https://www.amazon.com/dp/B0ABCDEFGH",
+        authors=["Jane Doe"],
+        source_id="B0ABCDEFGH",
+    )
+    ctx = _amazon_context()  # browser() stubbed, backend a MagicMock
+
+    leanpub_result = ScrapeResult(
+        ScrapeStatus.SUCCESS, url=leanpub.detail_ref, site="leanpub", book={"title": "A Book", "hash": "h"}
+    )
+    amazon_result = ScrapeResult(
+        ScrapeStatus.SUCCESS, url=amazon.detail_ref, site="amazon", book={"title": "A Python Book", "hash": "h2"}
+    )
+    leanpub_detail = AsyncMock(return_value=leanpub_result)
+    playwright_detail = AsyncMock(return_value=amazon_result)
+
+    with (
+        patch(f"{MODULE}.get_leanpub_book_details", leanpub_detail),
+        patch(f"{MODULE}.scrape_book", playwright_detail),
+    ):
+        got_leanpub = await scrape_candidate(leanpub, ctx)
+        got_amazon = await scrape_candidate(amazon, ctx)
+
+    # Leanpub -> JSON:API via the shared client; the browser is launched only for the Amazon leg.
+    assert got_leanpub is leanpub_result
+    leanpub_detail.assert_awaited_once()
+    assert leanpub_detail.call_args.kwargs["url"] == leanpub.detail_ref
+    assert leanpub_detail.call_args.kwargs["client"] is ctx.http_client
+
+    # Amazon -> Playwright scrape_book with the lazy browser, its own site, and the backend.
+    assert got_amazon is amazon_result
+    playwright_detail.assert_awaited_once()
+    assert playwright_detail.call_args.args[0] == amazon.detail_ref
+    assert playwright_detail.call_args.args[2] == "amazon"
+    assert playwright_detail.call_args.args[3] is ctx.backend
+    ctx.browser.assert_awaited_once()

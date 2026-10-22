@@ -21,8 +21,9 @@ from ..scraping.filters import passes_detail_filters, passes_search_filters
 from ..scraping.parameters import SCRAPE_FILTERS, SEARCH_QUERIES, SITES_TO_SCRAPE
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
 from ..scraping.results import ScrapeResult, ScrapeStatus
-from ..scraping.scrape_details import build_robots_fetcher, get_leanpub_book_details
-from ..scraping.search_providers import PROVIDERS, SearchContext
+from ..scraping.scrape_details import build_robots_fetcher
+from ..scraping.search_providers import PROVIDERS, SearchContext, scrape_candidate
+from ._reporting import elapsed_since, format_status_breakdown, write_failed_csv
 
 module_logger = logging.getLogger(__name__)
 
@@ -123,51 +124,9 @@ def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[st
     return sites, queries, max_search_pages
 
 
-def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv", directory: str = "."):
-    """
-    Save the failed scrape records to a CSV file.
-
-    Every cell goes through :func:`~bookscraper.book_utils.csv_safe_cell` so page-derived text can't
-    be evaluated as a spreadsheet formula.
-
-    :param failed_urls: Failure records with the keys ``url``, ``site``, ``title`` and ``error``.
-    :param filename: The fixed name of the CSV file to write (unaffected by ``--output-dir``).
-    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
-    """
-    if not failed_urls:
-        module_logger.info(f"No failed URLs to save to {filename}.")
-        return
-
-    target = os.path.join(directory, filename)
-    try:
-        fieldnames = ["url", "site", "title", "error"]  # Must cover every key a failure record carries
-        module_logger.info(f"Saving failed URLs to CSV: {target}")
-        print_log(f"Saving {len(failed_urls)} failed URLs to {target}...", "info")
-
-        with open(target, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-            writer.writeheader()
-            for item in failed_urls:
-                try:
-                    writer.writerow({key: csv_safe_cell(value) for key, value in item.items()})
-                except ValueError as ve:
-                    module_logger.error(f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}")
-                except csv.Error as e:
-                    module_logger.error(
-                        f"Unexpected error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {e}",
-                        exc_info=True,
-                    )
-        print_log(f"Failed URLs successfully saved to {target}.", "success")
-        module_logger.info(f"Failed URLs successfully saved to {target}.")
-    except IOError as e:
-        module_logger.error(f"I/O error saving failed URLs to CSV {target}: {e}")
-        print_log(f"Error saving failed URLs to {target}: {e}", "error")
-    except csv.Error as e:
-        module_logger.critical(
-            f"An unexpected error occurred while saving failed URLs to CSV {target}: {e}",
-            exc_info=True,
-        )
-        print_log(f"Critical Error saving failed URLs to {target}. Check log file.", "error")
+#: CSV column order for ``failed_urls.csv`` (the ``search`` failed-detail-scrape diagnostic). Covers
+#: every key a failure record carries, so the shared ``write_failed_csv`` writer drops no row.
+FAILED_URLS_FIELDNAMES = ["url", "site", "title", "error"]
 
 
 def save_filtered_books_to_csv(filtered_books: list[dict], filename: str = "filtered_books.csv", directory: str = "."):
@@ -312,7 +271,11 @@ async def run(args: argparse.Namespace) -> int:
                 # and a lazily launched browser (started only if a selected provider needs one - the
                 # API-only Leanpub provider never triggers a launch). Closed on block exit.
                 async with SearchContext(
-                    http_client=http_client, limiters=limiters, robots=robots, headless=runtime.headless
+                    http_client=http_client,
+                    limiters=limiters,
+                    robots=robots,
+                    headless=runtime.headless,
+                    backend=storage_backend,
                 ) as search_context:
                     # --- Iterate the resolved sites via the provider registry (no per-site branches) ---
                     for site_name in sites:
@@ -367,154 +330,152 @@ async def run(args: argparse.Namespace) -> int:
                             )
                             module_logger.info(f"Found {len(candidates)} potential new books for '{search_item}'.")
 
-                # --- Within-run cross-site title deduplication (task 03.3 subtask 05) ---
-                # The same book often surfaces on several sites with differently decorated titles
-                # (subtitles, edition markers) that the canonical hash cannot catch. Group the
-                # post-filter survivors by normalized (title | first author) and keep one per key,
-                # preferring a publisher site over a reseller (DEDUP_SITE_PRIORITY), so the same book
-                # is scraped in detail at most once. Each dropped candidate is logged at info level
-                # naming the kept one's URL. No fuzzy matching: a false merge loses a book forever.
-                if survivors:
-                    survivors, dropped_pairs = group_candidates(survivors)
-                    cross_site_dropped = len(dropped_pairs)
-                    for dropped_candidate, kept_candidate in dropped_pairs:
-                        module_logger.info(
-                            f"Cross-site duplicate dropped: '{dropped_candidate.title}' "
-                            f"({dropped_candidate.site}); keeping {kept_candidate.site} "
-                            f"candidate at {kept_candidate.url}"
-                        )
-                        print_log(
-                            f"Cross-site duplicate: dropped '{dropped_candidate.title}' "
-                            f"({dropped_candidate.site}) in favor of {kept_candidate.url}",
-                            "info",
-                        )
-
-                # --- Queue Detailed Scraping Tasks ---
-                # Detail dispatch stays Leanpub-only until subtask 06 wires generic per-site
-                # dispatch; today every registered provider is API-based, so every survivor is
-                # fetched through the Leanpub JSON:API detail helper.
-                if survivors:
-                    print_log(f"--- Scraping {len(survivors)} book(s) ---", "step")
-                    # Detail scraping runs through a bounded-concurrency sliding window instead of an
-                    # unbounded gather: at most `concurrency` fetches are in flight at once and a
-                    # finished slot is reused immediately, with per-host pacing left to the rate
-                    # limiter. Exceptions are still captured per item like gather(return_exceptions).
-                    concurrency = runtime.concurrency
-                    total_detail = len(survivors)
-                    # Progress line every ~10% (at least each completion for a tiny run, at most every
-                    # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.
-                    progress_interval = max(1, min(10, total_detail // 10))
-                    progress = Counter()  # keys: "done" / "ok" / "fail"
-
-                    def report_progress(result):
-                        """Tally one completed detail scrape and emit a progress line at each interval."""
-                        progress["done"] += 1
-                        if isinstance(result, ScrapeResult) and result.status is ScrapeStatus.SUCCESS:
-                            progress["ok"] += 1
-                        else:
-                            progress["fail"] += 1
-                        if progress["done"] % progress_interval == 0 or progress["done"] == total_detail:
+                    # --- Within-run cross-site title deduplication (task 03.3 subtask 05) ---
+                    # The same book often surfaces on several sites with differently decorated titles
+                    # (subtitles, edition markers) that the canonical hash cannot catch. Group the
+                    # post-filter survivors by normalized (title | first author) and keep one per key,
+                    # preferring a publisher site over a reseller (DEDUP_SITE_PRIORITY), so the same book
+                    # is scraped in detail at most once. Each dropped candidate is logged at info level
+                    # naming the kept one's URL. No fuzzy matching: a false merge loses a book forever.
+                    if survivors:
+                        survivors, dropped_pairs = group_candidates(survivors)
+                        cross_site_dropped = len(dropped_pairs)
+                        for dropped_candidate, kept_candidate in dropped_pairs:
+                            module_logger.info(
+                                f"Cross-site duplicate dropped: '{dropped_candidate.title}' "
+                                f"({dropped_candidate.site}); keeping {kept_candidate.site} "
+                                f"candidate at {kept_candidate.url}"
+                            )
                             print_log(
-                                f"{progress['done']}/{total_detail} done "
-                                f"(ok={progress['ok']} dup=0 fail={progress['fail']})",
+                                f"Cross-site duplicate: dropped '{dropped_candidate.title}' "
+                                f"({dropped_candidate.site}) in favor of {kept_candidate.url}",
                                 "info",
                             )
 
-                    site_scrape_tasks = [
-                        get_leanpub_book_details(
-                            url=candidate.detail_ref, client=http_client, limiters=limiters, robots=robots
-                        )
-                        for candidate in survivors
-                    ]
-                    current_site_scraped_results = await bounded_gather(
-                        site_scrape_tasks, limit=concurrency, on_result=report_progress
-                    )
+                    # --- Queue Detailed Scraping Tasks ---
+                    # Every surviving candidate - whatever its site - is dispatched through the one
+                    # generic scrape_candidate() router (task 03.3 subtask 06): Leanpub via the run's
+                    # shared httpx JSON:API client, every other site via the context's lazily launched
+                    # browser. This loop carries no per-site branch - the routing lives in the router.
+                    if survivors:
+                        print_log(f"--- Scraping {len(survivors)} book(s) ---", "step")
+                        # Detail scraping runs through a bounded-concurrency sliding window instead of an
+                        # unbounded gather: at most `concurrency` fetches are in flight at once and a
+                        # finished slot is reused immediately, with per-host pacing left to the rate
+                        # limiter. Exceptions are still captured per item like gather(return_exceptions).
+                        concurrency = runtime.concurrency
+                        total_detail = len(survivors)
+                        # Progress line every ~10% (at least each completion for a tiny run, at most every
+                        # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.
+                        progress_interval = max(1, min(10, total_detail // 10))
+                        progress = Counter()  # keys: "done" / "ok" / "fail"
 
-                    # Process results from detailed scraping
-                    for candidate, result in zip(survivors, current_site_scraped_results, strict=True):
-                        if isinstance(result, ScrapeResult):
-                            status_counts[result.status] += 1
-                            if result.status is ScrapeStatus.SUCCESS:
-                                # Detail-stage SCRAPE_FILTERS: a successfully scraped book can still be
-                                # dropped on its ISBN count before it reaches save_books (bypassed by
-                                # --no-filters). A filtered book is a diagnostic, never a failure.
-                                keep, reason = (
-                                    (True, None)
-                                    if runtime.no_filters
-                                    else passes_detail_filters(result.book, SCRAPE_FILTERS)
+                        def report_progress(result):
+                            """Tally one completed detail scrape and emit a progress line at each interval."""
+                            progress["done"] += 1
+                            if isinstance(result, ScrapeResult) and result.status is ScrapeStatus.SUCCESS:
+                                progress["ok"] += 1
+                            else:
+                                progress["fail"] += 1
+                            if progress["done"] % progress_interval == 0 or progress["done"] == total_detail:
+                                print_log(
+                                    f"{progress['done']}/{total_detail} done "
+                                    f"(ok={progress['ok']} dup=0 fail={progress['fail']})",
+                                    "info",
                                 )
-                                if not keep:
-                                    filtered_books.append(
+
+                        detail_tasks = [scrape_candidate(candidate, search_context) for candidate in survivors]
+                        current_site_scraped_results = await bounded_gather(
+                            detail_tasks, limit=concurrency, on_result=report_progress
+                        )
+
+                        # Process results from detailed scraping
+                        for candidate, result in zip(survivors, current_site_scraped_results, strict=True):
+                            if isinstance(result, ScrapeResult):
+                                status_counts[result.status] += 1
+                                if result.status is ScrapeStatus.SUCCESS:
+                                    # Detail-stage SCRAPE_FILTERS: a successfully scraped book can still be
+                                    # dropped on its ISBN count before it reaches save_books (bypassed by
+                                    # --no-filters). A filtered book is a diagnostic, never a failure.
+                                    keep, reason = (
+                                        (True, None)
+                                        if runtime.no_filters
+                                        else passes_detail_filters(result.book, SCRAPE_FILTERS)
+                                    )
+                                    if not keep:
+                                        filtered_books.append(
+                                            {
+                                                "title": result.book.get("title") or candidate.title,
+                                                "site": candidate.site,
+                                                "url": result.url,
+                                                "stage": "detail",
+                                                "reason": reason,
+                                            }
+                                        )
+                                        print_log(
+                                            f"Filtered out ({reason}): "
+                                            f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
+                                            "warning",
+                                        )
+                                        continue
+                                    # Post-detail cross-site dedup (task 03.3 subtask 05): the ISBN-13 is
+                                    # the only reliable cross-site identity, so a scraped record whose
+                                    # canonical isbn13 is already in the store is a DUPLICATE and is not
+                                    # saved. A duplicate is not a failure (the exit-code contract excludes
+                                    # it), so it only bumps the duplicate tallies. The blocking store read
+                                    # runs off the event loop thread like the pre-scrape checks.
+                                    isbn13 = result.book.get("isbn13")
+                                    if isbn13 and await asyncio.to_thread(
+                                        storage_backend.book_exists_by_isbn13, isbn13
+                                    ):
+                                        isbn13_duplicates += 1
+                                        total_duplicates_skipped += 1
+                                        print_log(
+                                            f"{candidate.site.title()} - Book already in database by ISBN-13: "
+                                            f"{result.book.get('title', 'Unknown Title')}",
+                                            "warning",
+                                        )
+                                        continue
+                                    scraped_books_data.append(result.book)
+                                    print_log(
+                                        f"Successfully scraped details for: "
+                                        f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
+                                        "info",
+                                    )
+                                else:
+                                    # result.url is the real detail URL (fixes the old "url": "N/A"), and
+                                    # result.error is the typed, secret-free failure reason.
+                                    failed_scrape_attempts.append(
                                         {
-                                            "title": result.book.get("title") or candidate.title,
-                                            "site": candidate.site,
                                             "url": result.url,
-                                            "stage": "detail",
-                                            "reason": reason,
+                                            "site": candidate.site,
+                                            "title": candidate.title,
+                                            "error": result.error or result.status.value,
                                         }
                                     )
                                     print_log(
-                                        f"Filtered out ({reason}): "
-                                        f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
-                                        "warning",
+                                        f"Failed to scrape details for {result.url} from {candidate.site}: "
+                                        f"{result.status.value} - {result.error}",
+                                        "error",
                                     )
-                                    continue
-                                # Post-detail cross-site dedup (task 03.3 subtask 05): the ISBN-13 is
-                                # the only reliable cross-site identity, so a scraped record whose
-                                # canonical isbn13 is already in the store is a DUPLICATE and is not
-                                # saved. A duplicate is not a failure (the exit-code contract excludes
-                                # it), so it only bumps the duplicate tallies. The blocking store read
-                                # runs off the event loop thread like the pre-scrape checks.
-                                isbn13 = result.book.get("isbn13")
-                                if isbn13 and await asyncio.to_thread(storage_backend.book_exists_by_isbn13, isbn13):
-                                    isbn13_duplicates += 1
-                                    total_duplicates_skipped += 1
-                                    print_log(
-                                        f"{candidate.site.title()} - Book already in database by ISBN-13: "
-                                        f"{result.book.get('title', 'Unknown Title')}",
-                                        "warning",
-                                    )
-                                    continue
-                                scraped_books_data.append(result.book)
-                                print_log(
-                                    f"Successfully scraped details for: "
-                                    f"{result.book.get('title', 'Unknown Title')} from {candidate.site}",
-                                    "info",
-                                )
                             else:
-                                # result.url is the real detail URL (fixes the old "url": "N/A"), and
-                                # result.error is the typed, secret-free failure reason.
+                                # gather(return_exceptions=True) surfaced an exception the detail scraper
+                                # did not convert into a ScrapeResult; record it as a raw failure.
                                 failed_scrape_attempts.append(
                                     {
-                                        "url": result.url,
+                                        "url": candidate.detail_ref,
                                         "site": candidate.site,
                                         "title": candidate.title,
-                                        "error": result.error or result.status.value,
+                                        "error": str(result),
                                     }
                                 )
                                 print_log(
-                                    f"Failed to scrape details for {result.url} from {candidate.site}: "
-                                    f"{result.status.value} - {result.error}",
+                                    f"Failed to scrape details for {candidate.detail_ref} from {candidate.site}: "
+                                    f"{str(result)}",
                                     "error",
                                 )
-                        else:
-                            # gather(return_exceptions=True) surfaced an exception the detail scraper
-                            # did not convert into a ScrapeResult; record it as a raw failure.
-                            failed_scrape_attempts.append(
-                                {
-                                    "url": candidate.detail_ref,
-                                    "site": candidate.site,
-                                    "title": candidate.title,
-                                    "error": str(result),
-                                }
-                            )
-                            print_log(
-                                f"Failed to scrape details for {candidate.detail_ref} from {candidate.site}: "
-                                f"{str(result)}",
-                                "error",
-                            )
-                else:
-                    print_log("No new books identified for detailed scraping.", "info")
+                    else:
+                        print_log("No new books identified for detailed scraping.", "info")
 
         # KeyboardInterrupt is intentionally NOT caught here: it propagates past this isolation
         # boundary (and the finally that closes the backend) up to main_sync, which prints one line
@@ -526,7 +487,7 @@ async def run(args: argparse.Namespace) -> int:
 
         # --- End of Site Iteration ---
 
-        total_time = time.time() - start_time
+        total_time = elapsed_since(start_time)
         print_log("\n--- Scraping Process Summary ---", "step")
         print_log(f"Total scraping process completed in {total_time:.2f} seconds.")
         print_log(f"{len(scraped_books_data)} new book{'s' if len(scraped_books_data) != 1 else ''} scraped.")
@@ -546,10 +507,7 @@ async def run(args: argparse.Namespace) -> int:
                 "info",
             )
         if status_counts:
-            status_breakdown = ", ".join(
-                f"{status.value}={status_counts[status]}" for status in ScrapeStatus if status_counts[status]
-            )
-            print_log(f"Scrape status breakdown: {status_breakdown}.")
+            print_log(f"Scrape status breakdown: {format_status_breakdown(status_counts)}.")
         if filtered_books:
             # Count every filtered-out book per reason for the run summary; the books themselves are
             # written to filtered_books.csv below and never saved to the store.
@@ -564,7 +522,12 @@ async def run(args: argparse.Namespace) -> int:
         print_log("\n--- Output Summary ---", "step")
         # failed_urls.csv is a process diagnostic, not database content, so it's always
         # written as CSV best-effort, independent of --store-backend.
-        save_failed_urls_to_csv(failed_scrape_attempts, directory=output_dir)
+        write_failed_csv(
+            failed_scrape_attempts,
+            fieldnames=FAILED_URLS_FIELDNAMES,
+            filename="failed_urls.csv",
+            directory=output_dir,
+        )
         # filtered_books.csv is likewise a process diagnostic (never database content), so it's
         # always written best-effort regardless of --store-backend or --dry-run.
         save_filtered_books_to_csv(filtered_books, directory=output_dir)

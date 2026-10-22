@@ -33,6 +33,8 @@ from playwright.async_api import Browser, async_playwright
 from ..backends import StorageBackend
 from .parameters import site_constants
 from .politeness import DomainRateLimiters, RobotsCache
+from .results import ScrapeResult
+from .scrape_details import LEANPUB_SITE, get_leanpub_book_details, scrape_book
 from .search_utils import get_leanpub_search_results_via_api, get_search_results_via_playwright
 
 logger = logging.getLogger(__name__)
@@ -94,6 +96,7 @@ class SearchContext:
         limiters: DomainRateLimiters,
         robots: Optional[RobotsCache],
         headless: bool,
+        backend: StorageBackend,
     ):
         """Store the shared collaborators; the browser stays unlaunched until first requested.
 
@@ -102,11 +105,14 @@ class SearchContext:
         :param limiters: The run's per-host rate-limiter registry.
         :param robots: The run's robots.txt cache, or ``None`` under ``--ignore-robots``.
         :param headless: Whether a lazily launched browser runs headless (from ``RuntimeOptions``).
+        :param backend: The resolved storage backend, handed to the Playwright detail scrape for its
+            inline duplicate check (see :func:`scrape_candidate`).
         """
         self._http_client = http_client
         self._limiters = limiters
         self._robots = robots
         self._headless = headless
+        self._backend = backend
         self._playwright = None
         self._browser: Optional[Browser] = None
 
@@ -114,6 +120,11 @@ class SearchContext:
     def http_client(self) -> httpx.AsyncClient:
         """The run's shared httpx client."""
         return self._http_client
+
+    @property
+    def backend(self) -> StorageBackend:
+        """The run's resolved storage backend (used by the Playwright detail scrape)."""
+        return self._backend
 
     @property
     def limiters(self) -> DomainRateLimiters:
@@ -356,3 +367,39 @@ PROVIDERS: dict[str, SearchProvider] = {
     LeanpubApiProvider.site: LeanpubApiProvider(),
     AmazonPlaywrightProvider.site: AmazonPlaywrightProvider(),
 }
+
+
+async def scrape_candidate(candidate: SearchCandidate, ctx: SearchContext) -> ScrapeResult:
+    """Scrape one surviving :class:`SearchCandidate`'s detail page, routing by its site.
+
+    The single detail-dispatch entry point the ``search`` pipeline drives for every survivor
+    (task 03.3 subtask 06), replacing the old per-site branch in
+    :mod:`bookscraper.commands.search`. Leanpub is fetched through its JSON:API with the run's
+    shared :class:`httpx.AsyncClient` - so hundreds of concurrent calls reuse one pooled connection
+    set rather than each opening a throwaway client - while every other site is scraped with
+    Playwright through the context's lazily launched browser. Both paths are handed the run's rate
+    limiters and robots cache (preserving the Leanpub politeness the pre-dispatch loop applied), and
+    the Playwright path additionally gets the storage backend for its inline duplicate check. The
+    call always resolves to a :class:`ScrapeResult`.
+
+    :param candidate: The survivor to fetch details for (its ``detail_ref`` is what is fetched).
+    :param ctx: The shared :class:`SearchContext` (httpx client, limiters, robots, lazy browser and
+        storage backend).
+    :returns: The :class:`ScrapeResult` for the detail scrape.
+    """
+    if candidate.site == LEANPUB_SITE:
+        return await get_leanpub_book_details(
+            url=candidate.detail_ref,
+            client=ctx.http_client,
+            limiters=ctx.limiters,
+            robots=ctx.robots,
+        )
+    browser = await ctx.browser()
+    return await scrape_book(
+        candidate.detail_ref,
+        browser,
+        candidate.site,
+        ctx.backend,
+        limiters=ctx.limiters,
+        robots=ctx.robots,
+    )

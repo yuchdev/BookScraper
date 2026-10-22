@@ -19,7 +19,7 @@ import pytest
 from bookscraper import exitcodes
 from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
-from bookscraper.commands.search import resolve_search_targets, run, save_failed_urls_to_csv
+from bookscraper.commands.search import resolve_search_targets, run
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
 MODULE = "bookscraper.commands.search"
@@ -37,221 +37,6 @@ def _leanpub_book(slug: str, title: str) -> dict:
         "slug": slug,
         "authors": ["Some Author"],
     }
-
-
-# --------------------------------------------------------------------------- #
-# save_failed_urls_to_csv  (search variant: csv.DictWriter, list[dict])
-# --------------------------------------------------------------------------- #
-def test_save_failed_urls_empty_creates_no_file(tmp_path):
-    """
-    [Local] search: verifies that an empty list passed to save_failed_urls_to_csv creates no file.
-
-    Scenario:
-        Given an empty list passed to the search command's save_failed_urls_to_csv
-        When the function is called
-        Then no file is created at the target path.
-
-    Boundaries:
-        - This is the search variant (DictWriter); the scrape_urls variant (csv.writer) is
-          in test_scrape_urls.py.
-
-    On failure, first check:
-        - The empty-list guard in the search command's save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_urls.csv"
-    save_failed_urls_to_csv([], filename=str(target))
-    assert not target.exists()
-
-
-def test_save_failed_urls_writes_header_and_dict_rows(tmp_path):
-    """
-    [Local] search: verifies that two dict items are written as a proper DictWriter CSV.
-
-    Scenario:
-        Given two dicts each with url/site/error keys
-        When save_failed_urls_to_csv writes the file
-        Then csv.DictReader can read back the correct url/site/error values for each row.
-
-    Boundaries:
-        - DictWriter-based variant (search.py); the tuple-based scrape_urls variant is separate.
-
-    On failure, first check:
-        - The fieldnames list and DictWriter.writerow call in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_urls.csv"
-    items = [
-        {"url": "https://leanpub.com/a", "site": "leanpub", "error": "boom"},
-        {"url": "https://leanpub.com/b", "site": "leanpub", "error": "kaboom"},
-    ]
-    save_failed_urls_to_csv(items, filename=str(target))
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
-
-    assert [r["url"] for r in rows] == ["https://leanpub.com/a", "https://leanpub.com/b"]
-    assert [r["error"] for r in rows] == ["boom", "kaboom"]
-    assert rows[0]["site"] == "leanpub"
-
-
-def test_save_failed_urls_missing_key_uses_restval(tmp_path):
-    """
-    [Local] search: verifies that a dict missing the "error" key is written with an empty string.
-
-    Scenario:
-        Given a dict with url and site but no "error" key
-        When save_failed_urls_to_csv writes the file
-        Then the row is written successfully with error == "" (DictWriter restval default).
-
-    Boundaries:
-        - Tests the restval="" behavior; extra-key ValueError is a separate test.
-
-    On failure, first check:
-        - The restval parameter on the DictWriter constructor in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_urls.csv"
-    # No "error" key => restval="" fills it in, no exception.
-    save_failed_urls_to_csv(
-        [{"url": "https://leanpub.com/a", "site": "leanpub"}],
-        filename=str(target),
-    )
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
-
-    assert rows[0]["url"] == "https://leanpub.com/a"
-    assert rows[0]["error"] == ""
-
-
-def test_save_failed_urls_row_valueerror_is_per_item_and_loop_continues(tmp_path):
-    """
-    [Local] search: verifies that a per-row ValueError skips only that row and the loop continues.
-
-    Scenario:
-        Given three dicts where the middle one has an extra field triggering DictWriter
-        ValueError (extrasaction="raise" default)
-        When save_failed_urls_to_csv is called
-        Then the first and third rows are written; the bad middle row is skipped.
-
-    Boundaries:
-        - Covers the per-row ValueError handler; csv.Error is a separate test.
-
-    On failure, first check:
-        - The per-row except ValueError handler inside the writerow loop.
-    """
-    target = tmp_path / "failed_urls.csv"
-    # The middle item has an extra field => DictWriter.writerow raises ValueError
-    # (extrasaction defaults to "raise"); it must be skipped, not abort the loop.
-    items = [
-        {"url": "https://leanpub.com/good1", "site": "leanpub", "error": "e1"},
-        {"url": "https://leanpub.com/bad", "site": "leanpub", "error": "e2", "extra": "nope"},
-        {"url": "https://leanpub.com/good2", "site": "leanpub", "error": "e3"},
-    ]
-    save_failed_urls_to_csv(items, filename=str(target))
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
-
-    urls = [r["url"] for r in rows]
-    assert urls == ["https://leanpub.com/good1", "https://leanpub.com/good2"]
-
-
-def test_save_failed_urls_row_generic_exception_is_per_item_and_loop_continues(tmp_path):
-    """
-    [Local] search: verifies that a per-row csv.Error skips only that row and the loop continues.
-
-    Scenario:
-        Given three items where writerow for the middle one raises csv.Error
-        When save_failed_urls_to_csv is called
-        Then the first and third rows are written; the bad middle row is skipped.
-
-    Boundaries:
-        - Covers the per-row csv.Error handler; ValueError is a separate test.
-
-    On failure, first check:
-        - The per-row except csv.Error / Exception handler inside the writerow loop.
-    """
-    target = tmp_path / "failed_urls.csv"
-    items = [
-        {"url": "https://leanpub.com/good1", "site": "leanpub", "error": "e1"},
-        {"url": "https://leanpub.com/bad", "site": "leanpub", "error": "e2"},
-        {"url": "https://leanpub.com/good2", "site": "leanpub", "error": "e3"},
-    ]
-
-    real_writer_factory = csv.DictWriter
-
-    def _make_writer(csvfile, **kwargs) -> Any:
-        """Build a DictWriter whose writerow raises csv.Error for the 'bad' URL."""
-        writer = real_writer_factory(csvfile, **kwargs)
-        original_writerow = writer.writerow
-
-        def _writerow(row) -> Any:
-            """Raise csv.Error for the bad URL, else delegate to the real writerow."""
-            if row.get("url") == "https://leanpub.com/bad":
-                # A non-ValueError csv.Error hits the inner per-row guard; the loop
-                # must keep going and still write the remaining rows.
-                raise csv.Error("row serialization exploded")
-            return original_writerow(row)
-
-        writer.writerow = _writerow
-        return writer
-
-    with patch(f"{MODULE}.csv.DictWriter", side_effect=_make_writer):
-        save_failed_urls_to_csv(items, filename=str(target))
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
-
-    assert [r["url"] for r in rows] == ["https://leanpub.com/good1", "https://leanpub.com/good2"]
-
-
-def test_save_failed_urls_ioerror_is_swallowed(tmp_path):
-    """
-    [Local] search: verifies that an IOError on file open is swallowed without propagating.
-
-    Scenario:
-        Given builtins.open patched to raise IOError("no space left")
-        When save_failed_urls_to_csv is called with a non-empty list
-        Then no exception reaches the caller and no file is created.
-
-    Boundaries:
-        - Best-effort write contract; csv.Error at construction is a separate test.
-
-    On failure, first check:
-        - The outer try/except IOError / OSError handler in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_urls.csv"
-    with patch("builtins.open", side_effect=IOError("no space left")):
-        save_failed_urls_to_csv(
-            [{"url": "u", "site": "leanpub", "error": "e"}],
-            filename=str(target),
-        )
-    assert not target.exists()
-
-
-def test_save_failed_urls_generic_exception_is_swallowed(tmp_path):
-    """
-    [Local] search: verifies that a csv.Error at DictWriter construction is swallowed.
-
-    Scenario:
-        Given csv.DictWriter patched to raise csv.Error("boom") on construction
-        When save_failed_urls_to_csv is called with a non-empty list
-        Then no exception propagates to the caller.
-
-    Boundaries:
-        - Covers the outer csv.Error / Exception handler at DictWriter construction; the
-          IOError/open path is a separate test.
-
-    On failure, first check:
-        - The outer try/except around DictWriter construction in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_urls.csv"
-    # DictWriter construction itself raises a csv.Error => the outer guard catches it.
-    with patch(f"{MODULE}.csv.DictWriter", side_effect=csv.Error("boom")):
-        save_failed_urls_to_csv(
-            [{"url": "u", "site": "leanpub", "error": "e"}],
-            filename=str(target),
-        )
-    # File was opened (truncated) but nothing meaningful written / no propagation.
 
 
 # --------------------------------------------------------------------------- #
@@ -298,8 +83,8 @@ async def test_isbn13_duplicate_marked_duplicate_not_saved():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -354,8 +139,8 @@ async def test_run_cross_site_duplicates_collapse_before_detail_scrape():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["C++"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -409,8 +194,8 @@ async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -481,8 +266,8 @@ async def test_run_detail_results_partition_into_saved_and_failed():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv", saved_failed),
     ):
         code = await run(args)
 
@@ -531,8 +316,8 @@ async def test_search_failed_record_uses_real_book_url():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv", saved_failed),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv", saved_failed),
     ):
         await run(args)
 
@@ -572,8 +357,8 @@ async def test_run_no_new_books_skips_save_but_closes_backend():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -607,8 +392,8 @@ async def test_run_keyboard_interrupt_propagates_and_backend_closed():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", AsyncMock()),
+        patch(f"{MODULE}.write_failed_csv"),
         pytest.raises(KeyboardInterrupt),
     ):
         # Must propagate: run() no longer swallows KeyboardInterrupt.
@@ -643,8 +428,8 @@ async def test_run_generic_exception_is_caught_and_returns_fatal():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", AsyncMock()),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -704,9 +489,9 @@ async def test_search_reuses_single_async_client():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
         patch(f"{MODULE}.httpx.AsyncClient", client_factory),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -736,37 +521,6 @@ def test_search_module_uses_real_leanpub_only_sites():
         - scraping/parameters.py's SITES_TO_SCRAPE and any test that patches SEARCH_QUERIES.
     """
     assert search.SITES_TO_SCRAPE == ["leanpub"]
-
-
-def test_save_failed_urls_keeps_rows_that_carry_a_title(tmp_path):
-    """
-    [Local] search: verifies real failure records (which carry a title) are written and formula cells neutralized.
-
-    Scenario:
-        Given failure records shaped like run() builds them (url/site/title/error) with one '=' leading title
-        When save_failed_urls_to_csv writes the file
-        Then every row is present with its title column and the formula-leading cell is prefixed with a quote.
-
-    Boundaries:
-        - Regression for the DictWriter fieldnames bug that silently dropped every row carrying a title key
-
-    On failure, first check:
-        - The fieldnames list in save_failed_urls_to_csv covers every key run() puts in a failure record
-        - csv_safe_cell is applied to each value before writerow
-    """
-    target = tmp_path / "failed_urls.csv"
-    items = [
-        {"url": "https://leanpub.com/a", "site": "leanpub", "title": "=HYPERLINK(1)", "error": "HTTP 500"},
-        {"url": "https://leanpub.com/b", "site": "leanpub", "title": "Book B", "error": "invalid JSON"},
-    ]
-    save_failed_urls_to_csv(items, filename=str(target))
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
-
-    assert [r["url"] for r in rows] == ["https://leanpub.com/a", "https://leanpub.com/b"]
-    assert [r["title"] for r in rows] == ["'=HYPERLINK(1)", "Book B"]
-    assert [r["error"] for r in rows] == ["HTTP 500", "invalid JSON"]
 
 
 async def test_run_saves_books_off_the_event_loop_thread():
@@ -811,8 +565,8 @@ async def test_run_saves_books_off_the_event_loop_thread():
         patch(
             f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[_leanpub_book("x", "X")])
         ),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -853,8 +607,8 @@ async def test_run_skips_search_result_without_slug():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[no_slug, good])),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -909,8 +663,8 @@ async def test_search_detail_scrape_is_bounded():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=candidates)),
-        patch(f"{MODULE}.get_leanpub_book_details", fake_detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", fake_detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -1097,8 +851,8 @@ async def test_max_search_pages_reaches_search_provider():
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", AsyncMock()),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", AsyncMock()),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -1168,8 +922,8 @@ async def test_dry_run_never_calls_save_books():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
         patch(f"{MODULE}.print_log", _record_print),
     ):
         await run(args)
@@ -1214,8 +968,8 @@ async def test_dry_run_still_performs_dedup_reads():
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -1312,8 +1066,8 @@ async def test_filtered_books_written_to_csv_and_not_saved(tmp_path):
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{MODULE}.SCRAPE_FILTERS", filters),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -1380,8 +1134,8 @@ async def test_no_filters_disables_both_stages(tmp_path):
         patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
         patch(f"{MODULE}.SCRAPE_FILTERS", filters),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
-        patch(f"{MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -1390,3 +1144,81 @@ async def test_no_filters_disables_both_stages(tmp_path):
     (saved,), _ = backend.save_books.call_args
     assert {doc["title"] for doc in saved} == {"Book B"}
     assert not (tmp_path / "filtered_books.csv").exists()
+
+
+async def test_search_save_runs_off_event_loop():
+    """
+    [Local] search: verifies save_books is dispatched through asyncio.to_thread, not run inline.
+
+    Scenario:
+        Given one fresh Leanpub book whose detail scrape succeeds, with asyncio.to_thread wrapped to
+        record every callable it is handed
+        When run() is called
+        Then the backend's save_books is one of the callables dispatched through asyncio.to_thread
+        (so the blocking save never stalls the event loop), surviving the generic-dispatch refactor.
+
+    Boundaries:
+        - Pins the "search saves off the loop thread too" requirement (task 03.3 subtask 06); the
+          dedup reads also go through to_thread, so the assertion only checks save_books is present.
+
+    On failure, first check:
+        - The asyncio.to_thread(storage_backend.save_books, ...) call near the end of run().
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/x.json",
+            site="leanpub",
+            book={"title": "X", "site": "leanpub", "hash": "h"},
+        )
+    )
+
+    real_to_thread = asyncio.to_thread
+    dispatched: list = []
+
+    async def _recording_to_thread(func, *a, **k) -> Any:
+        """Record the callable dispatched off-loop, then run it through the real to_thread."""
+        dispatched.append(func)
+        return await real_to_thread(func, *a, **k)
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(
+            f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", AsyncMock(return_value=[_leanpub_book("x", "X")])
+        ),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
+        patch(f"{MODULE}.asyncio.to_thread", _recording_to_thread),
+    ):
+        await run(args)
+
+    assert backend.save_books in dispatched
+
+
+def test_misleading_key_count_log_removed():
+    """
+    [Local] search: verifies the misleading per-book "Book Data" key-count log is gone.
+
+    Scenario:
+        Given the source of commands/search.py
+        When it is scanned for the old log string
+        Then neither the "Book Data" phrase nor the book_data_to_scrape name it counted appears
+        (the only scraping-count log now counts the survivor list, not a dict's keys).
+
+    Boundaries:
+        - Pure source check; the replacement "--- Scraping N book(s) ---" line is asserted elsewhere by
+          the dispatch tests exercising run().
+
+    On failure, first check:
+        - Any reintroduced print_log("--- Scraping {len(book_data_to_scrape)} Book Data ---") in
+          commands/search.py.
+    """
+    source = Path(search.__file__).read_text(encoding="utf-8")
+    assert "Book Data" not in source
+    assert "book_data_to_scrape" not in source

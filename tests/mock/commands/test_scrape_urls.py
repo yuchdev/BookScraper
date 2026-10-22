@@ -19,7 +19,6 @@ from bookscraper.backends.storage import JsonBackend, SaveSummary
 from bookscraper.commands.scrape_urls import (
     identify_website,
     run,
-    save_failed_urls_to_csv,
     save_other_links_to_csv,
 )
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
@@ -57,82 +56,6 @@ def test_identify_website_all_branches(url: str, expected: str):
         - The URL pattern regexes or string conditions in identify_website.
     """
     assert identify_website(url) == expected
-
-
-# --------------------------------------------------------------------------- #
-# save_failed_urls_to_csv  (scrape_urls variant: csv.writer, (url, status) tuples)
-# --------------------------------------------------------------------------- #
-def test_save_failed_urls_empty_creates_no_file(tmp_path):
-    """
-    [Local] scrape urls: verifies that an empty failed-URL list creates no CSV file.
-
-    Scenario:
-        Given an empty list passed to save_failed_urls_to_csv
-        When the function is called
-        Then no file is created at the target path.
-
-    Boundaries:
-        - Only the "nothing to write" early-exit is tested; actual CSV content is separate.
-
-    On failure, first check:
-        - The empty-list guard in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_books.csv"
-    save_failed_urls_to_csv([], filename=str(target))
-    assert not target.exists()
-
-
-def test_scrape_urls_failed_csv_has_status_and_error_columns(tmp_path):
-    """
-    [Local] scrape urls: verifies that the failed-URLs CSV has the correct header and rows.
-
-    Scenario:
-        Given three (url, status, error) tuples covering DUPLICATE/NOT_FOUND/TIMEOUT
-        When save_failed_urls_to_csv writes the file
-        Then the CSV has header ["url", "status", "error"] and the body rows match the input.
-
-    Boundaries:
-        - Tests the scrape_urls variant (csv.writer with tuples); the search variant
-          (DictWriter) is in test_search.py.
-
-    On failure, first check:
-        - The header list and row-writing loop in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_books.csv"
-    rows = [
-        ("https://leanpub.com/a", "DUPLICATE", ""),
-        ("https://www.amazon.com/dp/1", "NOT_FOUND", "404 page detected"),
-        ("https://www.oreilly.com/x", "TIMEOUT", "timed out after 3 attempts"),
-    ]
-    save_failed_urls_to_csv(rows, filename=str(target))
-
-    with open(target, encoding="utf-8", newline="") as fh:
-        read_rows = list(csv.reader(fh))
-
-    assert read_rows[0] == ["url", "status", "error"]
-    assert read_rows[1:] == [list(r) for r in rows]
-
-
-def test_save_failed_urls_open_failure_is_swallowed(tmp_path):
-    """
-    [Local] scrape urls: verifies that an OSError on file open is swallowed, not propagated.
-
-    Scenario:
-        Given builtins.open patched to raise OSError("disk full")
-        When save_failed_urls_to_csv is called with a non-empty list
-        Then no exception propagates to the caller and no file is created.
-
-    Boundaries:
-        - Best-effort write contract: the caller must not crash when the diagnostic CSV fails.
-
-    On failure, first check:
-        - The try/except around the open() call in save_failed_urls_to_csv.
-    """
-    target = tmp_path / "failed_books.csv"
-    with patch("builtins.open", side_effect=OSError("disk full")):
-        # Must not propagate: the caller relies on best-effort diagnostic writes.
-        save_failed_urls_to_csv([("u", "FAILED", "boom")], filename=str(target))
-    assert not target.exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -266,7 +189,7 @@ async def test_no_valid_urls_returns_ok_without_sys_exit_in_command(tmp_path):
         patch(f"{MODULE}.resolve_store_backend", return_value=backend) as resolve,
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.save_other_links_to_csv") as save_other,
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.write_failed_csv") as save_failed,
     ):
         code = await run(args)
 
@@ -425,7 +348,7 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.write_failed_csv") as save_failed,
     ):
         await run(args)
 
@@ -433,7 +356,9 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
     browser.close.assert_awaited_once()
     backend.close.assert_called_once_with()
     # Success path records no failed/duplicate entries (written to the default "." directory).
-    save_failed.assert_called_once_with([], directory=".")
+    save_failed.assert_called_once()
+    assert save_failed.call_args.args[0] == []
+    assert save_failed.call_args.kwargs["directory"] == "."
 
 
 async def test_backend_closed_on_interrupt(tmp_path):
@@ -497,7 +422,7 @@ async def test_scrape_urls_returns_partial_when_any_failed(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -536,7 +461,7 @@ async def test_scrape_urls_returns_ok_when_only_duplicates(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 
@@ -551,25 +476,25 @@ async def test_scrape_urls_returns_ok_when_only_duplicates(tmp_path):
     [
         (
             ScrapeResult(ScrapeStatus.DUPLICATE, url="https://leanpub.com/x", site="leanpub"),
-            ("https://leanpub.com/x", "DUPLICATE", ""),
+            {"url": "https://leanpub.com/x", "status": "DUPLICATE", "error": ""},
         ),
         (
             ScrapeResult(
                 ScrapeStatus.FAILED, url="https://leanpub.com/x", site="leanpub", error="KeyError: 'BASE_URL'"
             ),
-            ("https://leanpub.com/x", "FAILED", "KeyError: 'BASE_URL'"),
+            {"url": "https://leanpub.com/x", "status": "FAILED", "error": "KeyError: 'BASE_URL'"},
         ),
         (
             ScrapeResult(
                 ScrapeStatus.NOT_FOUND, url="https://leanpub.com/x", site="leanpub", error="404 page detected"
             ),
-            ("https://leanpub.com/x", "NOT_FOUND", "404 page detected"),
+            {"url": "https://leanpub.com/x", "status": "NOT_FOUND", "error": "404 page detected"},
         ),
         (
             ScrapeResult(
                 ScrapeStatus.TIMEOUT, url="https://leanpub.com/x", site="leanpub", error="timed out after 3 attempts"
             ),
-            ("https://leanpub.com/x", "TIMEOUT", "timed out after 3 attempts"),
+            {"url": "https://leanpub.com/x", "status": "TIMEOUT", "error": "timed out after 3 attempts"},
         ),
     ],
 )
@@ -581,7 +506,7 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
         Given a CSV with one URL and scrape_book returning DUPLICATE/FAILED/NOT_FOUND/TIMEOUT
         When run() is called
         Then save_books is never called, the backend and browser are closed, and
-        save_failed_urls_to_csv receives exactly one (url, status, error) row whose
+        write_failed_csv receives exactly one {url, status, error} dict record whose
         values match the typed result.
 
     Boundaries:
@@ -589,7 +514,7 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
         - The UNKNOWN_ERROR status no longer exists; every non-success carries a typed ScrapeStatus.
 
     On failure, first check:
-        - The match/case result-type dispatch in run() and the (url, status, error) row assembly.
+        - The match/case result-type dispatch in run() and the {url, status, error} record assembly.
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/x"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
@@ -603,7 +528,7 @@ async def test_run_non_success_results_recorded_not_saved(tmp_path, scrape_resul
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.write_failed_csv") as save_failed,
     ):
         await run(args)
 
@@ -653,7 +578,7 @@ async def test_run_summary_counts_each_status(tmp_path):
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.asyncio.sleep", AsyncMock()),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
         patch(f"{MODULE}.print_log", print_log),
     ):
         await run(args)
@@ -710,7 +635,7 @@ async def test_scrape_urls_no_longer_sleeps_between_batches(tmp_path):
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.asyncio.sleep", sleep),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
@@ -723,28 +648,25 @@ async def test_scrape_urls_no_longer_sleeps_between_batches(tmp_path):
     browser.close.assert_awaited_once()
 
 
-def test_failed_and_other_link_csvs_neutralize_formula_cells(tmp_path):
+def test_other_link_csv_neutralizes_formula_cells(tmp_path):
     """
-    [Local] scrape urls: verifies both diagnostic CSV writers quote formula-leading cells.
+    [Local] scrape urls: verifies the other-links diagnostic writer quotes formula-leading cells.
 
     Scenario:
-        Given a failed row whose error and an other-link whose URL start with spreadsheet formula triggers
-        When save_failed_urls_to_csv and save_other_links_to_csv write their files
-        Then those cells are written with a leading single quote and ordinary cells are unchanged.
+        Given an other-link whose URL starts with a spreadsheet formula trigger
+        When save_other_links_to_csv writes the file
+        Then that cell is written with a leading single quote and the ordinary URL is unchanged.
 
     Boundaries:
-        - Covers failed_books.csv and other_links.csv; the search variant has its own test
+        - Covers other_links.csv; the shared failed-CSV writer's neutralization is tested in
+          test_reporting.py.
 
     On failure, first check:
-        - csv_safe_cell is applied to every cell in both writers in commands/scrape_urls.py
+        - csv_safe_cell is applied to every cell in save_other_links_to_csv in commands/scrape_urls.py
     """
-    failed = tmp_path / "failed_books.csv"
-    save_failed_urls_to_csv([("https://x/1", "FAILED", "=cmd|' /C calc'!A0")], filename=str(failed))
     other = tmp_path / "other_links.csv"
     save_other_links_to_csv(["@SUM(1)", "https://example.com/ok"], filename=str(other))
 
-    with open(failed, encoding="utf-8", newline="") as fh:
-        assert list(csv.reader(fh))[1] == ["https://x/1", "FAILED", "'=cmd|' /C calc'!A0"]
     with open(other, encoding="utf-8", newline="") as fh:
         assert [row[0] for row in csv.reader(fh)][1:] == ["'@SUM(1)", "https://example.com/ok"]
 
@@ -793,7 +715,7 @@ async def test_ignore_robots_flag_bypasses_check_and_warns_once(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
         patch(f"{MODULE}.print_log", _record_print),
     ):
         await run(args)
@@ -866,7 +788,7 @@ async def test_dry_run_never_calls_save_books(tmp_path):
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
         patch(f"{MODULE}.print_log", _record_print),
     ):
         await run(args)
@@ -913,7 +835,7 @@ async def test_dry_run_leaves_store_byte_identical(tmp_path, isolated_local_stor
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
     ):
         await run(args)
 
