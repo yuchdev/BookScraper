@@ -257,6 +257,117 @@ def test_save_failed_urls_generic_exception_is_swallowed(tmp_path):
 # --------------------------------------------------------------------------- #
 # run()
 # --------------------------------------------------------------------------- #
+async def test_isbn13_duplicate_marked_duplicate_not_saved():
+    """
+    [Local] search: verifies a scraped record whose ISBN-13 is already stored is treated as a duplicate and never saved.
+
+    Scenario:
+        Given one fresh candidate (passing the pre-scrape leanpub dedup) whose detail scrape returns a
+        SUCCESS book carrying an isbn13 that backend.book_exists_by_isbn13 reports already stored
+        When run() is called
+        Then book_exists_by_isbn13 is consulted with that isbn13, save_books is never called, and the
+        run still exits OK - a duplicate is not a failure (task 03.3 subtask 05).
+
+    Boundaries:
+        - Post-detail cross-site dedup only; the pre-scrape leanpub check already passed and the
+          detail-stage filter is relaxed to 0 ISBNs for leanpub.
+
+    On failure, first check:
+        - The ``book_exists_by_isbn13`` guard in run()'s SUCCESS branch and its ``continue`` before
+          ``scraped_books_data.append``.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+
+    fresh = _leanpub_book("fresh-book", "Fresh Book")
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.book_exists_by_isbn13 = MagicMock(return_value=True)
+
+    search_api = AsyncMock(return_value=[fresh])
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/fresh-book.json",
+            site="leanpub",
+            book={"title": "Fresh Book", "site": "leanpub", "hash": "h1", "isbn13": "9781491908419"},
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    # A store duplicate is not a failure.
+    assert code == exitcodes.OK
+    backend.book_exists_by_isbn13.assert_called_once_with("9781491908419")
+    # The book is NOT saved: scraped_books_data stays empty, so save_books is never called.
+    backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
+
+
+async def test_run_cross_site_duplicates_collapse_before_detail_scrape():
+    """
+    [Local] search: verifies within-run cross-site grouping scrapes a repeated book's detail only once.
+
+    Scenario:
+        Given a search that returns two candidates with the same title and first author but different
+        slugs (both fresh past the pre-scrape leanpub dedup, both passing the search-stage filter)
+        When run() is called
+        Then group_candidates collapses them to one survivor, so get_leanpub_book_details is awaited
+        exactly once and only that one book is saved.
+
+    Boundaries:
+        - Exercises run()'s group_candidates step and its dropped-candidate logging loop; single site
+          (leanpub) is enough since the grouping keys on normalized title+author, not on site.
+
+    On failure, first check:
+        - The ``survivors, dropped_pairs = group_candidates(survivors)`` step in run() and the detail
+          task list built from the post-grouping survivors.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+
+    first = _leanpub_book("edition-a", "Effective Modern C++")
+    second = _leanpub_book("edition-b", "Effective Modern C++: 42 Specific Ways")
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+    backend.book_exists_by_isbn13 = MagicMock(return_value=False)
+
+    search_api = AsyncMock(return_value=[first, second])
+    detail = AsyncMock(
+        return_value=ScrapeResult(
+            ScrapeStatus.SUCCESS,
+            url="https://leanpub.com/api/v1/cache/books/edition-a.json",
+            site="leanpub",
+            book={"title": "Effective Modern C++", "site": "leanpub", "hash": "h1"},
+        )
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["C++"]),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.save_failed_urls_to_csv"),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.OK
+    # Two candidates collapsed to one: only the first-seen survivor is scraped and saved.
+    detail.assert_awaited_once()
+    _, kwargs = detail.call_args
+    assert kwargs["url"].endswith("/edition-a.json")
+    backend.save_books.assert_called_once()
+    backend.close.assert_called_once_with()
+
+
 async def test_run_dedup_only_new_book_proceeds_to_detail_scrape():
     """
     [Local] search: verifies that only non-duplicate books proceed to detail scrape.
@@ -1174,6 +1285,9 @@ async def test_filtered_books_written_to_csv_and_not_saved(tmp_path):
     backend = MagicMock()
     backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
     backend.leanpub_book_exists = MagicMock(side_effect=[False, False])
+    # Book A carries an ISBN-13 and reaches the post-detail store check; it is fresh (not yet stored),
+    # so the book survives to save_books and only the ISBN-less book B is filtered out.
+    backend.book_exists_by_isbn13 = MagicMock(return_value=False)
 
     search_api = AsyncMock(return_value=[book_a, book_b])
     detail = AsyncMock(

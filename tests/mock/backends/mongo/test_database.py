@@ -991,6 +991,105 @@ class TestCheckBookExistsByUrl:
         assert database.check_book_exists_by_url("https://x/p", collection) is False
 
 
+class TestCheckBookExistsByIsbn13:
+    """Tests for database.check_book_exists_by_isbn13 (task 03.3 subtask 05)."""
+
+    def test_found(self):
+        """
+        [Local] check book exists by isbn13: verifies a matching find_one result returns True and uses the correct query.
+
+        Scenario:
+            Given a Mock collection whose find_one returns a document
+            When database.check_book_exists_by_isbn13("9781492078005", collection) is called
+            Then True is returned and find_one is called with {"isbn13": "9781492078005"}.
+
+        Boundaries:
+            - The "found" path; no real MongoDB
+
+        On failure, first check:
+            - The find_one query shape and return-value in check_book_exists_by_isbn13
+        """
+        collection = Mock()
+        collection.find_one.return_value = {"isbn13": "9781492078005"}
+        assert database.check_book_exists_by_isbn13("9781492078005", collection) is True
+        collection.find_one.assert_called_once_with({"isbn13": "9781492078005"})
+
+    def test_not_found(self):
+        """
+        [Local] check book exists by isbn13: verifies a None find_one result returns False.
+
+        Scenario:
+            Given a Mock collection whose find_one returns None
+            When database.check_book_exists_by_isbn13("9781492078005", collection) is called
+            Then False is returned.
+
+        Boundaries:
+            - The "not found" path; no real MongoDB
+
+        On failure, first check:
+            - The None-result path in check_book_exists_by_isbn13
+        """
+        collection = Mock()
+        collection.find_one.return_value = None
+        assert database.check_book_exists_by_isbn13("9781492078005", collection) is False
+
+    def test_empty_isbn13_returns_false_without_querying(self):
+        """
+        [Local] check book exists by isbn13: verifies an empty isbn13 returns False without querying.
+
+        Scenario:
+            Given a Mock collection
+            When database.check_book_exists_by_isbn13("", collection) is called
+            Then False is returned and find_one is never called.
+
+        Boundaries:
+            - The falsy-isbn13 short-circuit; mirrors the json backend's empty-isbn13 guard
+
+        On failure, first check:
+            - The ``if not isbn13`` guard at the top of check_book_exists_by_isbn13
+        """
+        collection = Mock()
+        assert database.check_book_exists_by_isbn13("", collection) is False
+        collection.find_one.assert_not_called()
+
+    def test_none_collection_returns_false(self, monkeypatch):
+        """
+        [Local] check book exists by isbn13: verifies a None collection returns False without querying.
+
+        Scenario:
+            Given get_mongo_collection is patched to return None and collection argument is also None
+            When database.check_book_exists_by_isbn13("9781492078005", None) is called
+            Then False is returned.
+
+        Boundaries:
+            - The None-collection short-circuit; no real MongoDB
+
+        On failure, first check:
+            - The None-collection guard in check_book_exists_by_isbn13
+        """
+        monkeypatch.setattr(database, "get_mongo_collection", Mock(return_value=None))
+        assert database.check_book_exists_by_isbn13("9781492078005", None) is False
+
+    def test_find_one_exception_returns_false(self):
+        """
+        [Local] check book exists by isbn13: verifies a PyMongoError from find_one is caught and returns False.
+
+        Scenario:
+            Given a Mock collection whose find_one raises PyMongoError("boom")
+            When database.check_book_exists_by_isbn13("9781492078005", collection) is called
+            Then the exception is swallowed and False is returned.
+
+        Boundaries:
+            - The exception-handling path; only PyMongoError exercised
+
+        On failure, first check:
+            - The try/except around find_one in check_book_exists_by_isbn13
+        """
+        collection = Mock()
+        collection.find_one.side_effect = PyMongoError("boom")
+        assert database.check_book_exists_by_isbn13("9781492078005", collection) is False
+
+
 class TestCheckBookExists:
     """Tests for database.check_book_exists_in_db."""
 
@@ -1207,6 +1306,7 @@ _ALL_SECONDARY_NAMES = (
     "source_id_lookup_index",
     "slug_lookup_index",
     "url_lookup_index",
+    "isbn13_lookup_index",
 )
 
 
@@ -1300,15 +1400,15 @@ class TestEnsureUniqueIndexOnHash:
 class TestEnsureIndexes:
     """Tests for database.ensure_indexes."""
 
-    def test_ensure_indexes_creates_all_six_when_absent(self):
+    def test_ensure_indexes_creates_all_seven_when_absent(self):
         """
-        [Local] database ensure indexes: verifies ensure indexes creates all six when absent.
+        [Local] database ensure indexes: verifies ensure indexes creates all seven when absent.
 
         Scenario:
-            an empty collection gets the unique hash index plus all five sparse secondary lookup indexes created in one call.
+            an empty collection gets the unique hash index plus all six sparse secondary lookup indexes created in one call.
 
         Boundaries:
-            - index_information() reports only the implicit _id_ index. The source_id index is the schema-2 (03.1) home of the Leanpub book id, indexed alongside the legacy book_id; the url index backs check_book_exists_by_url for a URL-keyed provider (03.3 subtask 03).
+            - index_information() reports only the implicit _id_ index. The source_id index is the schema-2 (03.1) home of the Leanpub book id, indexed alongside the legacy book_id; the url index backs check_book_exists_by_url for a URL-keyed provider (03.3 subtask 03); the isbn13 index backs the post-detail cross-site dedup (03.3 subtask 05).
 
         On failure, first check:
             - a lookup field is left unindexed, so pre-scrape dedup falls back to a full collection scan.
@@ -1322,7 +1422,8 @@ class TestEnsureIndexes:
         collection.create_index.assert_any_call("source_id", sparse=True, name="source_id_lookup_index")
         collection.create_index.assert_any_call("slug", sparse=True, name="slug_lookup_index")
         collection.create_index.assert_any_call("url", sparse=True, name="url_lookup_index")
-        assert collection.create_index.call_count == 6
+        collection.create_index.assert_any_call("isbn13", sparse=True, name="isbn13_lookup_index")
+        assert collection.create_index.call_count == 7
 
     def test_ensure_indexes_is_idempotent_when_all_present(self):
         """
@@ -1372,7 +1473,7 @@ class TestEnsureIndexes:
             database.ensure_indexes(collection)
 
         attempted = [c.args[0] for c in collection.create_index.call_args_list]
-        assert attempted == ["asin", "book_id", "source_id", "slug", "url"]
+        assert attempted == ["asin", "book_id", "source_id", "slug", "url", "isbn13"]
         printed = [c.args[0] for c in mock_print.call_args_list]
         assert any("Warning: Failed to ensure sparse index on 'asin'" in msg for msg in printed)
 

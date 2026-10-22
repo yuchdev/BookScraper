@@ -348,6 +348,46 @@ def check_book_exists_by_url(url: str, mongo_collection: Optional[Collection] = 
         return False
 
 
+def check_book_exists_by_isbn13(isbn13: str, mongo_collection: Optional[Collection] = None) -> bool:
+    """
+    Checks if a book with the given ISBN-13 already exists in the database.
+
+    The ISBN-13 is the only reliable cross-site book identity (title + author decorations defeat
+    the ``hash``), so this is the post-detail-scrape dedup check: a freshly scraped record whose
+    canonical ``isbn13`` already exists is a duplicate and is not saved (task 03.3 subtask 05).
+    Backed by the sparse ``isbn13_lookup_index`` so the check is an index scan, not a collection scan.
+
+    :param isbn13: The canonical ISBN-13 to look up; a falsy value returns ``False`` without querying.
+    :param mongo_collection: Optional pre-resolved collection; the global one is used when omitted.
+    :returns: ``True`` if any stored document carries a matching ``isbn13``; ``False`` otherwise.
+    """
+    if not isbn13:
+        return False
+
+    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
+
+    if books_collection is None:
+        module_logger.error("MongoDB collection not provided for duplicate check or not initialized.")
+        print_log("Error: MongoDB collection not available for duplicate check.", "error")
+        return False
+
+    try:
+        is_duplicate = books_collection.find_one({"isbn13": isbn13}) is not None
+        if is_duplicate:
+            module_logger.info(f"ISBN-13 {isbn13} found in MongoDB Atlas database. Skipping save.")
+        return is_duplicate
+    except PyMongoError as e:
+        module_logger.error(
+            f"Error checking for duplicate book in DB by ISBN-13: {e}",
+            exc_info=True,
+        )
+        print_log(
+            f"Error: Error checking for duplicate book in DB by ISBN-13: {e}",
+            "error",
+        )
+        return False
+
+
 def check_book_exists_in_db(book_hash: str, mongo_collection: Optional[Collection] = None) -> bool:
     """
     Checks if a book with the given hash already exists in the database.
@@ -422,15 +462,17 @@ def update_book_isbn(
 # Leanpub schema-2, url -> a future URL-keyed provider) that would otherwise be a full
 # collection scan. ``source_id`` is the schema-2 (03.1) home of the Leanpub book id - indexed
 # alongside the legacy ``book_id`` so both document shapes stay index-backed. ``url`` backs
-# check_book_exists_by_url for a site with no native id or ASIN (task 03.3 subtask 03). All
-# are sparse (only documents carrying the field are indexed) and none is unique: two editions
-# can legitimately share a slug across sites.
+# check_book_exists_by_url for a site with no native id or ASIN (task 03.3 subtask 03), and
+# ``isbn13`` backs check_book_exists_by_isbn13, the post-detail-scrape cross-site dedup check
+# (task 03.3 subtask 05). All are sparse (only documents carrying the field are indexed) and none
+# is unique: two editions can legitimately share a slug across sites.
 _SECONDARY_INDEXES: Tuple[Tuple[str, str], ...] = (
     ("asin", "asin_lookup_index"),
     ("book_id", "book_id_lookup_index"),
     ("source_id", "source_id_lookup_index"),
     ("slug", "slug_lookup_index"),
     ("url", "url_lookup_index"),
+    ("isbn13", "isbn13_lookup_index"),
 )
 
 

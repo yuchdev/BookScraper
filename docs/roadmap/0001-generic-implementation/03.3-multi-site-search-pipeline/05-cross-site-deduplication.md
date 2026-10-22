@@ -1,7 +1,7 @@
 # 05 - Cross-site deduplication
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 03.1 / 02](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/02-isbn-normalization.md)
 **Role:** Python Expert
 

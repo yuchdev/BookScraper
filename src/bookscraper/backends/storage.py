@@ -107,6 +107,10 @@ class StorageBackend(ABC):
         """Report whether a book with the given detail-page ``url`` already exists in the backend."""
 
     @abstractmethod
+    def book_exists_by_isbn13(self, isbn13: str) -> bool:
+        """Report whether a book with the given ``isbn13`` already exists in the backend."""
+
+    @abstractmethod
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Report whether a Leanpub book matching ``book_id`` or ``book_slug`` already exists in the backend."""
 
@@ -144,6 +148,10 @@ class MongoBackend(StorageBackend):
         """Delegate to :func:`database.check_book_exists_by_url`."""
         return database.check_book_exists_by_url(url, self._collection)
 
+    def book_exists_by_isbn13(self, isbn13: str) -> bool:
+        """Delegate to :func:`database.check_book_exists_by_isbn13`."""
+        return database.check_book_exists_by_isbn13(isbn13, self._collection)
+
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Delegate to :func:`deduplicate.leanpub_prescrape_deduplicate`."""
         return deduplicate.leanpub_prescrape_deduplicate(book_id, book_slug, self._collection)
@@ -157,7 +165,7 @@ class JsonBackend(StorageBackend):
     """
     File-backed backend over :mod:`bookscraper.backends.local.store`.
 
-    Holds an in-memory index of the store's ``hash``/``asin``/``book_id``/``slug``/``url``
+    Holds an in-memory index of the store's ``hash``/``asin``/``book_id``/``slug``/``url``/``isbn13``
     values, built once (lazily) from the file and kept current by :meth:`save_books` for the life
     of the process. Every lookup then hits the index rather than re-reading and re-parsing
     the whole file, so ``search``'s per-candidate ``leanpub_book_exists`` calls cost
@@ -177,6 +185,7 @@ class JsonBackend(StorageBackend):
         ("book_ids", "source_id"),
         ("slugs", "slug"),
         ("urls", "url"),
+        ("isbn13s", "isbn13"),
     )
 
     def __init__(self, path: Optional[pathlib.Path] = None):
@@ -253,6 +262,12 @@ class JsonBackend(StorageBackend):
         if not url:
             return False
         return url in self._ensure_index()["urls"]
+
+    def book_exists_by_isbn13(self, isbn13: str) -> bool:
+        """Report whether ``isbn13`` is present in the in-memory index."""
+        if not isbn13:
+            return False
+        return isbn13 in self._ensure_index()["isbn13s"]
 
     def leanpub_book_exists(self, book_id: Optional[str], book_slug: Optional[str]) -> bool:
         """Report whether ``book_id`` or ``book_slug`` is present in the in-memory index."""

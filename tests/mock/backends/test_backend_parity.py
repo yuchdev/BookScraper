@@ -231,6 +231,41 @@ def test_book_exists_by_url_parity(backend: Backend):
     assert backend.book_exists_by_url("") is False
 
 
+def test_book_exists_by_isbn13_parity(backend: Backend):
+    """
+    [Local] storage backend parity: verifies book_exists_by_isbn13 behaves identically on both backends.
+
+    Scenario:
+        ``book_exists_by_isbn13`` is true for a stored book's canonical ISBN-13, false for an unknown
+        ISBN-13, and false for an empty string - the post-detail cross-site dedup key (task 03.3
+        subtask 05) that decides a scraped record whose ISBN-13 is already stored is a duplicate, not
+        saved.
+
+    Boundaries:
+        - one stored book queried by its own isbn13, a miss, and ""; json goes through the in-memory
+          isbn13 index, mongo through the sparse isbn13_lookup_index.
+
+    On failure, first check:
+        - one backend's isbn13 lookup reads a field the other never indexes, so the same scrape stores
+          an ISBN-13 twice on one backend but not the other, or "" is treated as a universal match.
+    """
+    backend.save_books(
+        [
+            _doc(
+                hash=_hash("isbn"),
+                site="oreilly",
+                url="https://www.oreilly.com/library/view/effective-modern-c/9781491908419/",
+                title="Effective Modern C++",
+                isbn13="9781491908419",
+            )
+        ]
+    )
+
+    assert backend.book_exists_by_isbn13("9781491908419") is True
+    assert backend.book_exists_by_isbn13("9780000000000") is False
+    assert backend.book_exists_by_isbn13("") is False
+
+
 def test_leanpub_lookup_by_id_or_slug(backend: Backend):
     """
     [Local] storage backend parity: verifies leanpub lookup by id or slug.

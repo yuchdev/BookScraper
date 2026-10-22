@@ -28,7 +28,7 @@ This task turns `search` into a generic provider pipeline:
 | 02 | [Amazon search provider](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/02-amazon-search-provider.md)         | ✅ Complete    | 04         |
 | 03 | [Packtpub & O'Reilly search providers](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/03-packtpub-and-oreilly-search.md) | ✅ Complete    | 04 |
 | 04 | [Apply SCRAPE_FILTERS](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/04-apply-scrape-filters.md)             | ✅ Complete    | -          |
-| 05 | [Cross-site deduplication](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/05-cross-site-deduplication.md)     | ⬜ Not started | -          |
+| 05 | [Cross-site deduplication](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/05-cross-site-deduplication.md)     | ✅ Complete    | -          |
 | 06 | [Generic detail-scrape dispatch](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/06-generic-detail-dispatch.md) | ⬜ Not started | -         |
 
 ## Key constraints

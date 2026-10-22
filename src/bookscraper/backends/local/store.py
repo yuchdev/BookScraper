@@ -191,6 +191,23 @@ def check_book_exists_by_url(url: str, path: Path = LOCAL_STORE_FILE) -> bool:
     return any(b.get("url") == url for b in _load_books(path) if isinstance(b, dict))
 
 
+def check_book_exists_by_isbn13(isbn13: str, path: Path = LOCAL_STORE_FILE) -> bool:
+    """
+    Report whether a book with the given ``isbn13`` already exists in the store.
+
+    The ISBN-13 is the only reliable cross-site book identity, so this is the post-detail-scrape
+    dedup check (task 03.3 subtask 05), the json counterpart to
+    :func:`~bookscraper.backends.mongo.database.check_book_exists_by_isbn13`.
+
+    :param isbn13: The canonical ISBN-13 to look up; a falsy value returns ``False``.
+    :param path: Store file location.
+    :returns: ``True`` if any stored document carries a matching ``isbn13``.
+    """
+    if not isbn13:
+        return False
+    return any(b.get("isbn13") == isbn13 for b in _load_books(path) if isinstance(b, dict))
+
+
 def leanpub_book_exists(book_id: Optional[str], book_slug: Optional[str], path: Path = LOCAL_STORE_FILE) -> bool:
     """
     Report whether a Leanpub book already exists in the store, matched by id or slug.
