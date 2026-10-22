@@ -202,6 +202,35 @@ def test_asin_lookup(backend: Backend):
     assert backend.book_exists_by_asin("") is False
 
 
+def test_book_exists_by_url_parity(backend: Backend):
+    """
+    [Local] storage backend parity: verifies book_exists_by_url behaves identically on both backends.
+
+    Scenario:
+        ``book_exists_by_url`` is true for a stored book's detail URL, false for an unknown URL, and false for an empty string - the URL-keyed dedup a future provider needs for a site with no native id or ASIN (task 03.3 subtask 03).
+
+    Boundaries:
+        - one stored book queried by its own url, a miss, and ""; json goes through the in-memory url index, mongo through the sparse url_lookup_index.
+
+    On failure, first check:
+        - one backend's url lookup reads a field the other never indexes, so a URL-keyed provider re-scrapes known books on one backend but not the other, or "" is treated as a universal match that blocks every new book.
+    """
+    backend.save_books(
+        [
+            _doc(
+                hash=_hash("url"),
+                site="packtpub",
+                url="https://www.packtpub.com/product/some-book/9781999999999",
+                title="A URL-keyed Book",
+            )
+        ]
+    )
+
+    assert backend.book_exists_by_url("https://www.packtpub.com/product/some-book/9781999999999") is True
+    assert backend.book_exists_by_url("https://www.packtpub.com/product/other/9780000000000") is False
+    assert backend.book_exists_by_url("") is False
+
+
 def test_leanpub_lookup_by_id_or_slug(backend: Backend):
     """
     [Local] storage backend parity: verifies leanpub lookup by id or slug.
@@ -247,9 +276,7 @@ def test_leanpub_lookup_ignores_non_string_identifiers(backend: Backend):
     On failure, first check:
         - The isinstance(str) guard in JsonBackend.leanpub_book_exists and in deduplicate.leanpub_prescrape_deduplicate
     """
-    backend.save_books(
-        [_doc(hash=_hash("lp"), source_id="42", slug="the-book", url="https://leanpub.com/the-book")]
-    )
+    backend.save_books([_doc(hash=_hash("lp"), source_id="42", slug="the-book", url="https://leanpub.com/the-book")])
 
     assert backend.leanpub_book_exists({"$ne": None}, {"$gt": ""}) is False
     assert backend.leanpub_book_exists({"$ne": None}, "the-book") is True

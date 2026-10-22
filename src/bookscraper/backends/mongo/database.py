@@ -309,6 +309,45 @@ def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collect
         return False
 
 
+def check_book_exists_by_url(url: str, mongo_collection: Optional[Collection] = None) -> bool:
+    """
+    Checks if a book with the given detail-page URL already exists in the database.
+
+    The URL-keyed counterpart to :func:`check_amazon_asin_exists_in_db`, for a future URL-keyed
+    search provider (a site exposing neither a native id nor an ASIN - task 03.3 subtask 03).
+    Backed by the sparse ``url_lookup_index`` so the check is an index scan, not a collection scan.
+
+    :param url: The detail-page URL to look up; a falsy value returns ``False`` without querying.
+    :param mongo_collection: Optional pre-resolved collection; the global one is used when omitted.
+    :returns: ``True`` if any stored document carries a matching ``url``; ``False`` otherwise.
+    """
+    if not url:
+        return False
+
+    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
+
+    if books_collection is None:
+        module_logger.error("MongoDB collection not provided for duplicate check or not initialized.")
+        print_log("Error: MongoDB collection not available for duplicate check.", "error")
+        return False
+
+    try:
+        is_duplicate = books_collection.find_one({"url": url}) is not None
+        if is_duplicate:
+            module_logger.info(f"URL {url} found in MongoDB Atlas database. Skipping detailed scrape.")
+        return is_duplicate
+    except PyMongoError as e:
+        module_logger.error(
+            f"Error checking for duplicate book in DB by URL: {e}",
+            exc_info=True,
+        )
+        print_log(
+            f"Error: Error checking for duplicate book in DB by URL: {e}",
+            "error",
+        )
+        return False
+
+
 def check_book_exists_in_db(book_hash: str, mongo_collection: Optional[Collection] = None) -> bool:
     """
     Checks if a book with the given hash already exists in the database.
@@ -380,15 +419,18 @@ def update_book_isbn(
 
 # Sparse secondary lookup indexes, as (field, index name) pairs. Each accelerates a
 # pre-scrape dedup lookup (asin -> Amazon, book_id/slug -> Leanpub v1, source_id/slug ->
-# Leanpub schema-2) that would otherwise be a full collection scan. ``source_id`` is the
-# schema-2 (03.1) home of the Leanpub book id - indexed alongside the legacy ``book_id`` so
-# both document shapes stay index-backed. All are sparse (only documents carrying the field
-# are indexed) and none is unique: two editions can legitimately share a slug across sites.
+# Leanpub schema-2, url -> a future URL-keyed provider) that would otherwise be a full
+# collection scan. ``source_id`` is the schema-2 (03.1) home of the Leanpub book id - indexed
+# alongside the legacy ``book_id`` so both document shapes stay index-backed. ``url`` backs
+# check_book_exists_by_url for a site with no native id or ASIN (task 03.3 subtask 03). All
+# are sparse (only documents carrying the field are indexed) and none is unique: two editions
+# can legitimately share a slug across sites.
 _SECONDARY_INDEXES: Tuple[Tuple[str, str], ...] = (
     ("asin", "asin_lookup_index"),
     ("book_id", "book_id_lookup_index"),
     ("source_id", "source_id_lookup_index"),
     ("slug", "slug_lookup_index"),
+    ("url", "url_lookup_index"),
 )
 
 

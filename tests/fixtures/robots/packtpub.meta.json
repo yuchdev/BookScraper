@@ -1,15 +1,14 @@
 {
   "bookscraper_version": "1.0.0",
-  "bytes_raw": 143,
-  "bytes_sanitized": 143,
-  "captured_at": "2026-10-01T12:44:47.886310+00:00",
+  "bytes_raw": 2676,
+  "bytes_sanitized": 2676,
+  "captured_at": "2026-10-22T12:02:16.722125+00:00",
   "chromium_version": "n/a",
-  "hand_built": true,
+  "hand_built": false,
   "kind": "robots",
   "logged_out": true,
-  "reason": "Live fetch of the robots.txt returned HTTP 403 (bot-walled to the logged-out httpx fetch, verified 2026-10-01, >=10s apart); hand-built to a neutral, representative robots.txt shape (FIX-6).",
-  "sanitizer_version": "1.1.0",
-  "sha256": "8653544fc5031f3eaaa36437251215dfad4c046aa2bf9a5f11e04afe7f0e1020",
+  "sanitizer_version": "1.2.0",
+  "sha256": "3073d1e371afb3271c7666148766fedc5145f7d8440f7114062db79b7bd58add",
   "site": "packtpub",
   "url": "https://www.packtpub.com/robots.txt"
 }

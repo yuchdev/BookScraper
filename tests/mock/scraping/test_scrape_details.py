@@ -2123,6 +2123,60 @@ async def test_cloudflare_challenge_detected_on_any_site():
     assert result.attempts == 1
 
 
+async def test_cloudflare_managed_challenge_detected_by_title():
+    """
+    [Local] scrape details: verifies the newer Cloudflare "Just a moment..." managed challenge is detected by title.
+
+    Scenario:
+        packtpub serves the managed-challenge interstitial titled "Just a moment..." and exposes
+        none of the older #challenge-form / #cf-challenge-running elements.
+    Boundaries:
+        - detection comes from the title_contains branch (the page has no bot-wall selector match),
+          so the result is BLOCKED with no retry (attempts == 1).
+
+    On failure, first check:
+        - the widened GENERIC_BOT_WALL_RULES "Just a moment" title rule, or _detect_bot_wall's
+          title_contains branch.
+    """
+    url = "https://www.packtpub.com/en-us/search?query=python"
+    page = FakePage(title="Just a moment...")
+    browser = FakeBrowser(page=page)
+    breakers = DomainCircuitBreakers()
+
+    result = await scrape_book(url, browser, "packtpub", breakers=breakers)
+
+    assert result.status is ScrapeStatus.BLOCKED
+    assert result.error == "bot wall detected"
+    assert result.attempts == 1
+
+
+async def test_cloudflare_managed_challenge_detected_by_script_selector():
+    """
+    [Local] scrape details: verifies the Cloudflare managed challenge is detected by its challenge-platform script.
+
+    Scenario:
+        packtpub serves a managed-challenge page with no telltale title, but carrying the
+        challenge-platform runtime script the widened rule matches on.
+    Boundaries:
+        - detection comes from the selector-count branch against script[src*='challenge-platform'],
+          proving the script-tag rule works independently of the title; BLOCKED, no retry.
+
+    On failure, first check:
+        - the widened GENERIC_BOT_WALL_RULES challenge-platform selector, or _detect_bot_wall's
+          selector-count branch.
+    """
+    url = "https://www.packtpub.com/en-us/search?query=python"
+    page = FakePage(locators={"script[src*='challenge-platform']": FakeLocator("challenge-platform")})
+    browser = FakeBrowser(page=page)
+    breakers = DomainCircuitBreakers()
+
+    result = await scrape_book(url, browser, "packtpub", breakers=breakers)
+
+    assert result.status is ScrapeStatus.BLOCKED
+    assert result.error == "bot wall detected"
+    assert result.attempts == 1
+
+
 async def test_open_circuit_skips_request_and_returns_blocked():
     """
     [Local] scrape details: verifies an already-open domain breaker short-circuits before any request.

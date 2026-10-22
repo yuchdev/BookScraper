@@ -175,6 +175,22 @@ def check_amazon_asin_exists(asin: str, path: Path = LOCAL_STORE_FILE) -> bool:
     return any(b.get("asin") == asin for b in _load_books(path) if isinstance(b, dict))
 
 
+def check_book_exists_by_url(url: str, path: Path = LOCAL_STORE_FILE) -> bool:
+    """
+    Report whether a book with the given detail-page ``url`` already exists in the store.
+
+    The URL-keyed counterpart to :func:`check_amazon_asin_exists`, for a future URL-keyed
+    search provider (a site exposing neither a native id nor an ASIN - task 03.3 subtask 03).
+
+    :param url: The detail-page URL to look up; a falsy value returns ``False``.
+    :param path: Store file location.
+    :returns: ``True`` if any stored document carries a matching ``url``.
+    """
+    if not url:
+        return False
+    return any(b.get("url") == url for b in _load_books(path) if isinstance(b, dict))
+
+
 def leanpub_book_exists(book_id: Optional[str], book_slug: Optional[str], path: Path = LOCAL_STORE_FILE) -> bool:
     """
     Report whether a Leanpub book already exists in the store, matched by id or slug.

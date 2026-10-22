@@ -130,6 +130,12 @@ SCRAPE_FILTERS = {
 # circuit breaker. Edit these (not the detection code) to tune bot-wall recognition.
 GENERIC_BOT_WALL_RULES: list[dict[str, str]] = [
     {"selector": "#challenge-form, #cf-challenge-running"},
+    # Newer Cloudflare "managed challenge" variant (task 03.3/03 investigation): it titles itself
+    # "Just a moment..." and loads the challenge-platform runtime script, but exposes NEITHER of the
+    # older #challenge-form / #cf-challenge-running elements above (both matched 0 elements against
+    # the live Packtpub wall). Either marker - the title or the script tag - identifies it.
+    {"title_contains": "Just a moment"},
+    {"selector": "script[src*='challenge-platform']"},
 ]
 
 # Selectors and constants for each site

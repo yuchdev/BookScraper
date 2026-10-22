@@ -390,6 +390,88 @@ class TestCheckAmazonAsinExists:
         assert store.check_amazon_asin_exists("", isolated_local_store) is False
 
 
+class TestCheckBookExistsByUrl:
+    """Tests for store.check_book_exists_by_url(): URL-based dedup lookup in the json store."""
+
+    def test_found(self, isolated_local_store):
+        """
+        [Unit] check book exists by url: verifies True is returned when the url is present.
+
+        Scenario:
+            Given a store containing a book with url "https://x/p"
+            When check_book_exists_by_url("https://x/p", path) is called
+            Then True is returned
+
+        Boundaries:
+            - Exact url match; store populated via save_books in the same test
+            - "url" field lookup, for a URL-keyed provider (03.3 subtask 03)
+
+        On failure, first check:
+            - Whether the url lookup is built from the stored file correctly
+            - Recent changes to check_book_exists_by_url in store.py
+        """
+        store.save_books([{"hash": "h1", "url": "https://x/p"}], isolated_local_store)
+        assert store.check_book_exists_by_url("https://x/p", isolated_local_store) is True
+
+    def test_not_found(self, isolated_local_store):
+        """
+        [Unit] check book exists by url: verifies False is returned when the url is absent.
+
+        Scenario:
+            Given a store containing a book with url "https://x/p"
+            When check_book_exists_by_url("https://x/other", path) is called
+            Then False is returned
+
+        Boundaries:
+            - "https://x/other" is not in the store; "https://x/p" is present so the lookup is not trivially empty
+            - No exception; an absent url is always a clean False
+
+        On failure, first check:
+            - Whether the url lookup accidentally matches a prefix or substring
+            - Recent changes to the not-found path in check_book_exists_by_url
+        """
+        store.save_books([{"hash": "h1", "url": "https://x/p"}], isolated_local_store)
+        assert store.check_book_exists_by_url("https://x/other", isolated_local_store) is False
+
+    def test_empty_store_returns_false(self, isolated_local_store):
+        """
+        [Unit] check book exists by url: verifies False is returned when the store file does not exist.
+
+        Scenario:
+            Given no store file
+            When check_book_exists_by_url("https://x/p", path) is called
+            Then False is returned
+
+        Boundaries:
+            - Non-existent store; function must not raise FileNotFoundError
+            - Mirrors the same behavior in check_amazon_asin_exists
+
+        On failure, first check:
+            - Whether _load_books handles a missing file by returning []
+            - Recent changes to the empty-store path in check_book_exists_by_url
+        """
+        assert store.check_book_exists_by_url("https://x/p", isolated_local_store) is False
+
+    def test_empty_url_returns_false(self, isolated_local_store):
+        """
+        [Unit] check book exists by url: verifies False is returned when an empty string url is queried.
+
+        Scenario:
+            Given no store file
+            When check_book_exists_by_url("", path) is called
+            Then False is returned
+
+        Boundaries:
+            - Empty string; guards against a falsy check treating "" as "no url to look up"
+            - Result must be False, not raise
+
+        On failure, first check:
+            - Whether an empty url triggers an early-return branch with wrong result
+            - Recent changes to the url lookup in check_book_exists_by_url
+        """
+        assert store.check_book_exists_by_url("", isolated_local_store) is False
+
+
 class TestLeanpubBookExists:
     """Tests for store.leanpub_book_exists(): book_id/slug dedup lookup for the Leanpub scrape path."""
 

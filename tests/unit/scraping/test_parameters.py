@@ -214,3 +214,28 @@ def test_every_site_has_bot_wall_rules():
     amazon_rules = parameters.site_constants["amazon"]["BOT_WALL"]
     assert {"title_contains": "Robot Check"} in amazon_rules
     assert any("validateCaptcha" in rule.get("selector", "") for rule in amazon_rules)
+
+
+def test_generic_rules_cover_cloudflare_managed_challenge():
+    """
+    [Unit] parameters: verifies GENERIC_BOT_WALL_RULES recognizes the newer Cloudflare managed-challenge variant.
+
+    Scenario:
+        Given the shared GENERIC_BOT_WALL_RULES
+        When the rule set is inspected for the "Just a moment..." managed-challenge markers
+        Then it carries both a title_contains "Just a moment" rule and a selector matching the
+        challenge-platform script, alongside the original #challenge-form / #cf-challenge-running rule
+
+    Boundaries:
+        - Pure data inspection over static config; no scrape, browser, or network
+        - Tripwire for the task 03.3/03 investigation: the live Packtpub wall exposed NEITHER of the
+          older markers, so these two were added
+
+    On failure, first check:
+        - A GENERIC_BOT_WALL_RULES edit dropped the "Just a moment" title or challenge-platform selector
+    """
+    generic = parameters.GENERIC_BOT_WALL_RULES
+    assert {"title_contains": "Just a moment"} in generic
+    assert any("challenge-platform" in rule.get("selector", "") for rule in generic)
+    # The original Cloudflare rule is retained, not replaced.
+    assert {"selector": "#challenge-form, #cf-challenge-running"} in generic

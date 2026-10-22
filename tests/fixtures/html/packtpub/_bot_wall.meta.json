@@ -1,0 +1,15 @@
+{
+  "bookscraper_version": "1.0.0",
+  "bytes_raw": 1051,
+  "bytes_sanitized": 1051,
+  "captured_at": "2026-10-22T12:02:16.722125+00:00",
+  "chromium_version": "n/a",
+  "hand_built": true,
+  "kind": "detail",
+  "logged_out": true,
+  "reason": "hand-built sanitized reproduction of the newer Cloudflare 'managed challenge' interstitial (title 'Just a moment...' plus a challenge-platform script src) that fronts the whole www.packtpub.com origin (task 03.3/03 investigation, 2026-10-16). The older #challenge-form / #cf-challenge-running markers are absent in this variant, so GENERIC_BOT_WALL_RULES was widened to match the title and the challenge-platform script; the script src is an inert data: URL so the fixture stays offline in the corpus harness. No real Packtpub content is included.",
+  "sanitizer_version": "1.1.0",
+  "sha256": "bccac23282d4d4c23272d850ed719d97c5785ce3a031bcabb57611d3fd352999",
+  "site": "packtpub",
+  "url": "https://www.packtpub.com/en-us/search?query=python"
+}

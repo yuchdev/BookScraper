@@ -212,6 +212,31 @@ class TestMongoBackend:
         mock_db.check_amazon_asin_exists_in_db.assert_called_once_with("B00XYZ", collection)
         assert result is False
 
+    def test_book_exists_by_url_returns_delegated_value(self):
+        """
+        [Local] mongo backend: verifies that MongoBackend.book_exists_by_url delegates to database.check_book_exists_by_url.
+
+        Scenario:
+            Given a MongoBackend with a Mock collection and database.check_book_exists_by_url returning True
+            When backend.book_exists_by_url("https://x/p") is called
+            Then check_book_exists_by_url is called with ("https://x/p", collection) and True is returned.
+
+        Boundaries:
+            - Delegation and return-value passthrough; no real MongoDB
+
+        On failure, first check:
+            - The delegation call in MongoBackend.book_exists_by_url
+        """
+        collection = Mock(name="collection")
+        backend = MongoBackend(collection)
+
+        with patch.object(storage, "database") as mock_db:
+            mock_db.check_book_exists_by_url.return_value = True
+            result = backend.book_exists_by_url("https://x/p")
+
+        mock_db.check_book_exists_by_url.assert_called_once_with("https://x/p", collection)
+        assert result is True
+
     def test_leanpub_book_exists_delegates_to_deduplicate(self):
         """
         [Local] mongo backend: verifies that MongoBackend.leanpub_book_exists delegates to deduplicate.leanpub_prescrape_deduplicate.
@@ -306,7 +331,7 @@ class TestJsonBackend:
             - a lookup reads a field the index never captured, so genuine duplicates slip through or new books are wrongly rejected.
         """
         store.save_books(
-            [{"hash": "h1", "asin": "B001", "book_id": "42", "slug": "some-book"}],
+            [{"hash": "h1", "asin": "B001", "book_id": "42", "slug": "some-book", "url": "https://x/p"}],
             isolated_local_store,
         )
         backend = JsonBackend()
@@ -317,6 +342,9 @@ class TestJsonBackend:
         assert backend.book_exists_by_asin("B001") is True
         assert backend.book_exists_by_asin("B999") is False
         assert backend.book_exists_by_asin("") is False
+        assert backend.book_exists_by_url("https://x/p") is True
+        assert backend.book_exists_by_url("https://x/other") is False
+        assert backend.book_exists_by_url("") is False
         assert backend.leanpub_book_exists("42", None) is True
         assert backend.leanpub_book_exists(None, "some-book") is True
         assert backend.leanpub_book_exists("99", "other") is False
