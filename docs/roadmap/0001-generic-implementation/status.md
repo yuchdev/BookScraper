@@ -13,7 +13,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.0 | Scraping engine hardening          | ✅ Complete    | 6 / 6         | `tests/mock/scraping/test_scrape_details.py`, `tests/unit/scraping/test_{results,text}.py`, `tests/unit/test_no_bare_print.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
 | 03.1 | Canonical book data model          | ✅ Complete    | 6 / 6         | `tests/unit/test_{models,isbn,import_direction}.py`, `tests/unit/scraping/test_normalize.py`, `tests/unit/backends/test_migration.py`, `tests/mock/commands/test_migrate.py`, `tests/mock/backends/test_backend_parity.py` |
 | 03.2 | Politeness & anti-bot resilience   | ✅ Complete    | 6 / 6         | `tests/unit/scraping/test_politeness.py`, `tests/mock/scraping/test_browser.py`, `tests/mock/scraping/test_{scrape_details,search_utils}.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
-| 03.3 | Multi-site search pipeline         | ⬜ Not started | 0 / 6         | -                                                                                                      |
+| 03.3 | Multi-site search pipeline         | ✅ Complete    | 6 / 6         | `tests/unit/scraping/test_{dedup,filters}.py`, `tests/mock/scraping/test_search_providers.py`, `tests/mock/commands/test_{search,reporting}.py`, `tests/mock/backends/test_backend_parity.py` |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
 | 04.1 | LLM extraction fallback            | ⬜ Not started | 0 / 5         | -                                                                                                      |
 | 05.0 | CLI improvements                   | ✅ Complete    | 8 / 8         | `tests/unit/test_{cli,runtime,cli_docs}.py`, `tests/mock/commands/test_{scrape_urls,search,rotate_cert,detect_schema,migrate,doctor,exit_contract}.py` |
@@ -25,7 +25,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 66 / 99 subtasks complete.
+**Totals:** 72 / 99 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
@@ -272,6 +272,47 @@ sys.exit AST guard also catches a stray `raise SystemExit(code != 2)`; `--no-fil
 active; an empty CSV now returns `FATAL` instead of crashing with `EmptyDataError`.
 
 **Coverage:** 1150 passed, 99% total.
+
+## Task 03.3 - Multi-site search pipeline
+
+### Task 03.3 - Multi-site search pipeline (✅ 2026-10-22)
+
+**Delivered** (commits `5ba2d46`, `b2b89d6`, `fb215c8`, `8365505`, `704aa5a`, `61af53c`, `1c63296`, review
+fixes `0499753`):
+- **01** `scraping/search_providers.py`: `SearchCandidate`, the `SearchProvider` protocol, `SearchContext`
+  (shared httpx client, rate limiters, robots cache, a browser launched lazily only if a selected provider needs
+  one), and a `PROVIDERS` registry. `commands/search.py`'s Leanpub-only branch becomes a site-agnostic loop;
+  `--max-search-pages` finally reaches a provider.
+- **02** `AmazonPlaywrightProvider`: fixed the `range(1, SEARCH_MAXIMUM_PAGES)` off-by-one (inclusive
+  `1..max_pages`), stops on no-results/a disabled next button/a bot wall, `SEARCH_MAXIMUM_PAGES` raised to 75,
+  `source_id` from `data-asin` independent of the (still-drifted) detail-link selector.
+- **03 — descoped (user-ratified 2026-10-22).** Live investigation
+  ([`docs/scraping/search-sources.md`](/docs/scraping/search-sources.md)) found Packtpub walled by a Cloudflare
+  managed challenge (HTTP 403 on every host, including the plausible API) and O'Reilly walled by a hard Akamai
+  403 on both the search page and `robots.txt` itself. Evasion is out of policy, so `PacktpubProvider`/
+  `OreillyProvider` are not implemented; `SITES_TO_SCRAPE` stays `["leanpub", "amazon"]`. Three wall-independent
+  pieces still landed: `StorageBackend.book_exists_by_url`, a wider Cloudflare bot-wall rule for the "Just a
+  moment..." challenge variant, and a refreshed `packtpub.txt` robots fixture.
+- **04** `scraping/filters.py` (pure): `passes_search_filters` (rating, pre-detail-scrape) and
+  `passes_detail_filters` (ISBN count with a per-site override for Leanpub) make `SCRAPE_FILTERS` live; filtered
+  books are counted per reason and written to `filtered_books.csv`, never saved. `--no-filters` (parsed since
+  05.0) now actually disables both stages.
+- **05** `scraping/dedup.py` (pure): `dedup_key(title, first_author)` groups cross-site candidates within a run,
+  keeping one per key via `DEDUP_SITE_PRIORITY`; `StorageBackend.book_exists_by_isbn13` catches a cross-site
+  duplicate after the detail scrape (not saved, not a failure).
+- **06** `scraping/search_providers.scrape_candidate()` is the one detail-dispatch router (Leanpub → API,
+  everything else → Playwright) through `bounded_gather`; a new `commands/_reporting.py` replaces both commands'
+  separate, differently-shaped `save_failed_urls_to_csv` with one `write_failed_csv`, output unchanged.
+
+**Review:** `feature-reviewer` REQUEST_CHANGES → fixed; `security-auditor` PASS_WITH_FOLLOWUP (no CRITICAL/HIGH).
+Fixed in `0499753`: `search`'s exit code no longer flips to `PARTIAL` on a run where nothing actually failed
+(DUPLICATE/NOT_FOUND/SKIPPED_ROBOTS were wrongly counted as failures); the two newest duplicate-lookup functions
+(`book_exists_by_url`/`book_exists_by_isbn13`, both backends) now reject non-string input the same way the
+existing Leanpub lookups do (CWE-943); plus progress/logging clarity cleanups and dead-comment removal. Both
+reviews confirmed the Packtpub/O'Reilly walk-away carries no evasion residue (no retry-with-different-UA, no
+header spoofing, no session reuse) and the new bot-wall rule only detects, never bypasses.
+
+**Coverage:** 1219 passed, 98% total.
 
 ## Task 04.0 - AI-assisted schema detection
 

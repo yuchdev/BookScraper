@@ -1,7 +1,7 @@
 # Task 03.3 - Multi-Site Search Pipeline
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** 🔶 In progress
+**Status:** ✅ Complete
 **Category:** feature | **Priority:** P1
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md), [Task 03.2](/docs/roadmap/0001-generic-implementation/03.2-politeness-and-anti-bot/README.md), [Task 05.0](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md)
 
