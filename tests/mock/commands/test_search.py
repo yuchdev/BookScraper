@@ -277,14 +277,64 @@ async def test_run_detail_results_partition_into_saved_and_failed():
     backend.save_books.assert_called_once_with([{"title": "Good Book", "site": "leanpub", "hash": "ok"}])
     backend.close.assert_called_once_with()
 
-    # The typed FAILED result and the raw Exception both land in the failed-attempts CSV.
-    saved_failed.assert_called_once()
-    (failed_arg,), _ = saved_failed.call_args
+    # write_failed_csv is the shared writer for BOTH failed_urls.csv and filtered_books.csv; the
+    # first call is failed_urls.csv, where the typed FAILED result and the raw Exception both land.
+    (failed_arg,), failed_kw = saved_failed.call_args_list[0]
+    assert failed_kw["filename"] == "failed_urls.csv"
     assert len(failed_arg) == 2
     failed_titles = {f["title"] for f in failed_arg}
     assert failed_titles == {"Boom Book", "Weird Book"}
     boom_entry = next(f for f in failed_arg if f["title"] == "Boom Book")
     assert "detail scrape blew up" in boom_entry["error"]
+
+
+@pytest.mark.parametrize("non_failure_status", [ScrapeStatus.DUPLICATE, ScrapeStatus.SKIPPED_ROBOTS])
+async def test_non_failure_detail_result_keeps_run_ok(non_failure_status):
+    """
+    [Local] search: a non-failure detail outcome (DUPLICATE/SKIPPED_ROBOTS) keeps the run exit OK.
+
+    Scenario:
+        Given one fresh candidate whose detail scrape returns a non-success, non-failure
+        ScrapeResult (DUPLICATE or SKIPPED_ROBOTS)
+        When run() is called
+        Then the run exits exitcodes.OK (not PARTIAL), because only FAILURE_STATUSES outcomes count
+        as failures - the result is still written to the failed_urls.csv diagnostic.
+
+    Boundaries:
+        - the exit-code decision in run(); mirrors scrape_urls.py's FAILURE_STATUSES handling
+          (feature review 03.3 item 1).
+
+    On failure, first check:
+        - run() computing PARTIAL from the failed_urls list instead of status_counts/FAILURE_STATUSES.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+
+    candidate = _leanpub_book("skip-book", "Skip Book")
+
+    backend = MagicMock()
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+
+    book_url = "https://leanpub.com/api/v1/cache/books/skip-book.json"
+    search_api = AsyncMock(return_value=[candidate])
+    detail = AsyncMock(return_value=ScrapeResult(non_failure_status, url=book_url, site="leanpub"))
+    saved_failed = MagicMock()
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv", saved_failed),
+    ):
+        code = await run(args)
+
+    # A DUPLICATE / SKIPPED_ROBOTS detail outcome is not a failure, so the run stays OK.
+    assert code == exitcodes.OK
+    backend.save_books.assert_not_called()
+    # It is still recorded in the failed_urls.csv diagnostic (all non-SUCCESS results are).
+    saved_failed.assert_called()
+    (failed_arg,), _ = saved_failed.call_args_list[0]
+    assert [row["url"] for row in failed_arg] == [book_url]
 
 
 async def test_search_failed_record_uses_real_book_url():
@@ -322,8 +372,10 @@ async def test_search_failed_record_uses_real_book_url():
         await run(args)
 
     backend.save_books.assert_not_called()
-    saved_failed.assert_called_once()
-    (failed_arg,), _ = saved_failed.call_args
+    # write_failed_csv is the shared writer for BOTH failed_urls.csv and filtered_books.csv; the
+    # first call is failed_urls.csv.
+    (failed_arg,), failed_kw = saved_failed.call_args_list[0]
+    assert failed_kw["filename"] == "failed_urls.csv"
     assert len(failed_arg) == 1
     record = failed_arg[0]
     assert record["url"] == book_url
@@ -1022,7 +1074,7 @@ async def test_filtered_books_written_to_csv_and_not_saved(tmp_path):
           pure filters unit tests.
 
     On failure, first check:
-        - The passes_detail_filters branch in run() and the save_filtered_books_to_csv call.
+        - The passes_detail_filters branch in run() and the write_failed_csv call for filtered_books.csv.
     """
     args = SimpleNamespace(store_backend="json", ignore_robots=False, output_dir=str(tmp_path))
     filters = {
@@ -1067,7 +1119,6 @@ async def test_filtered_books_written_to_csv_and_not_saved(tmp_path):
         patch(f"{MODULE}.SCRAPE_FILTERS", filters),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
         patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
-        patch(f"{MODULE}.write_failed_csv"),
     ):
         code = await run(args)
 

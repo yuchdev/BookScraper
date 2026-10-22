@@ -182,11 +182,13 @@ def check_book_exists_by_url(url: str, path: Path = LOCAL_STORE_FILE) -> bool:
     The URL-keyed counterpart to :func:`check_amazon_asin_exists`, for a future URL-keyed
     search provider (a site exposing neither a native id nor an ASIN - task 03.3 subtask 03).
 
-    :param url: The detail-page URL to look up; a falsy value returns ``False``.
+    :param url: The detail-page URL to look up; a falsy or non-string value returns ``False``.
     :param path: Store file location.
     :returns: ``True`` if any stored document carries a matching ``url``.
     """
-    if not url:
+    # Only a plain string is a valid lookup key; a non-string url (e.g. a dict smuggled in from
+    # scraped data) is ignored, mirroring the mongo backend's CWE-943 guard so both no-op identically.
+    if not isinstance(url, str) or not url:
         return False
     return any(b.get("url") == url for b in _load_books(path) if isinstance(b, dict))
 
@@ -199,11 +201,13 @@ def check_book_exists_by_isbn13(isbn13: str, path: Path = LOCAL_STORE_FILE) -> b
     dedup check (task 03.3 subtask 05), the json counterpart to
     :func:`~bookscraper.backends.mongo.database.check_book_exists_by_isbn13`.
 
-    :param isbn13: The canonical ISBN-13 to look up; a falsy value returns ``False``.
+    :param isbn13: The canonical ISBN-13 to look up; a falsy or non-string value returns ``False``.
     :param path: Store file location.
     :returns: ``True`` if any stored document carries a matching ``isbn13``.
     """
-    if not isbn13:
+    # Only a plain string is a valid lookup key; a non-string isbn13 (e.g. a dict smuggled in from
+    # scraped data) is ignored, mirroring the mongo backend's CWE-943 guard so both no-op identically.
+    if not isinstance(isbn13, str) or not isbn13:
         return False
     return any(b.get("isbn13") == isbn13 for b in _load_books(path) if isinstance(b, dict))
 

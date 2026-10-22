@@ -266,6 +266,42 @@ def test_book_exists_by_isbn13_parity(backend: Backend):
     assert backend.book_exists_by_isbn13("") is False
 
 
+def test_url_and_isbn13_lookups_reject_non_string_values(backend: Backend):
+    """
+    [Local] storage backend parity: dict-shaped url/isbn13 values are rejected identically on both backends.
+
+    Scenario:
+        Given one stored book in either backend
+        When book_exists_by_url and book_exists_by_isbn13 are called with a dict such as {"$ne": None}
+        Then both backends return False without raising and never turn the dict into a query, while a
+        valid string still matches (the guard does not over-reject).
+
+    Boundaries:
+        - CWE-943 guard mirroring the Leanpub lookups; json goes through the in-memory index (an
+          unhashable dict would otherwise raise on the set lookup) and mongo through find_one (a dict
+          would otherwise become an operator query matching everything).
+
+    On failure, first check:
+        - The isinstance(str) guard in database.check_book_exists_by_url / check_book_exists_by_isbn13
+          store.check_book_exists_by_url / check_book_exists_by_isbn13 and JsonBackend.book_exists_by_url / book_exists_by_isbn13.
+    """
+    backend.save_books(
+        [
+            _doc(
+                hash=_hash("guard"),
+                site="oreilly",
+                url="https://www.oreilly.com/library/view/effective-modern-c/9781491908419/",
+                isbn13="9781491908419",
+            )
+        ]
+    )
+
+    assert backend.book_exists_by_url({"$ne": None}) is False
+    assert backend.book_exists_by_isbn13({"$ne": None}) is False
+    assert backend.book_exists_by_url("https://www.oreilly.com/library/view/effective-modern-c/9781491908419/") is True
+    assert backend.book_exists_by_isbn13("9781491908419") is True
+
+
 def test_leanpub_lookup_by_id_or_slug(backend: Backend):
     """
     [Local] storage backend parity: verifies leanpub lookup by id or slug.

@@ -14,11 +14,13 @@
   default) never starts Chromium.
 * :data:`PROVIDERS` - the registry mapping a site key to its provider instance. It is the single
   source of truth for "is this site searchable"; :func:`bookscraper.commands.search.resolve_search_targets`
-  checks membership here and subtasks 02/03 extend it with ``PROVIDERS["amazon"] = ...`` etc.
+  checks membership here.
 
-Only the Leanpub port (:class:`LeanpubApiProvider`, wrapping
-:func:`~bookscraper.scraping.search_utils.get_leanpub_search_results_via_api`) is implemented now; the
-other sites are wired in by later subtasks in this task.
+``PROVIDERS`` is final at ``{leanpub, amazon}``: the Leanpub port
+(:class:`LeanpubApiProvider`, wrapping
+:func:`~bookscraper.scraping.search_utils.get_leanpub_search_results_via_api`) and the Amazon port
+(:class:`AmazonPlaywrightProvider`). Packtpub and O'Reilly are intentionally not implemented because
+both sites hard-block automated access (subtask 03 descoped; see docs/scraping/search-sources.md).
 """
 
 from __future__ import annotations
@@ -361,8 +363,9 @@ class AmazonPlaywrightProvider:
 
 
 #: The search-provider registry: site key -> provider instance. The single source of truth for which
-#: sites ``search`` can target (``resolve_search_targets`` checks membership here). Leanpub (API) and
-#: Amazon (Playwright) are wired; subtask 03 adds the remaining browser-backed providers.
+#: sites ``search`` can target (``resolve_search_targets`` checks membership here). Final at Leanpub
+#: (API) and Amazon (Playwright); Packtpub and O'Reilly are not implemented because both sites
+#: hard-block automated access (subtask 03 descoped; see docs/scraping/search-sources.md).
 PROVIDERS: dict[str, SearchProvider] = {
     LeanpubApiProvider.site: LeanpubApiProvider(),
     AmazonPlaywrightProvider.site: AmazonPlaywrightProvider(),

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
 import logging
-import os
 import time
 from collections import Counter
 from pathlib import Path
@@ -14,13 +12,13 @@ import httpx
 
 from .. import exitcodes
 from ..backends import resolve_store_backend
-from ..book_utils import csv_safe_cell, print_log
+from ..book_utils import print_log
 from ..runtime import runtime_options
 from ..scraping.dedup import group_candidates
 from ..scraping.filters import passes_detail_filters, passes_search_filters
 from ..scraping.parameters import SCRAPE_FILTERS, SEARCH_QUERIES, SITES_TO_SCRAPE
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_limiters
-from ..scraping.results import ScrapeResult, ScrapeStatus
+from ..scraping.results import FAILURE_STATUSES, ScrapeResult, ScrapeStatus
 from ..scraping.scrape_details import build_robots_fetcher
 from ..scraping.search_providers import PROVIDERS, SearchContext, scrape_candidate
 from ._reporting import elapsed_since, format_status_breakdown, write_failed_csv
@@ -129,54 +127,9 @@ def resolve_search_targets(args: argparse.Namespace) -> tuple[list[str], list[st
 FAILED_URLS_FIELDNAMES = ["url", "site", "title", "error"]
 
 
-def save_filtered_books_to_csv(filtered_books: list[dict], filename: str = "filtered_books.csv", directory: str = "."):
-    """
-    Save the books dropped by ``SCRAPE_FILTERS`` to a CSV diagnostic file.
-
-    ``filtered_books.csv`` is a process diagnostic (like ``failed_urls.csv``), not database content -
-    a filtered book is never saved to the store. Every cell goes through
-    :func:`~bookscraper.book_utils.csv_safe_cell` so page-derived text can't be evaluated as a
-    spreadsheet formula.
-
-    :param filtered_books: Filter records with the keys ``title``, ``site``, ``url``, ``stage`` and
-        ``reason``.
-    :param filename: The fixed name of the CSV file to write (unaffected by ``--output-dir``).
-    :param directory: The directory to write ``filename`` into (``--output-dir``; default ``.``).
-    """
-    if not filtered_books:
-        module_logger.info(f"No filtered books to save to {filename}.")
-        return
-
-    target = os.path.join(directory, filename)
-    try:
-        fieldnames = ["title", "site", "url", "stage", "reason"]
-        module_logger.info(f"Saving filtered books to CSV: {target}")
-        print_log(f"Saving {len(filtered_books)} filtered books to {target}...", "info")
-
-        with open(target, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-            writer.writeheader()
-            for item in filtered_books:
-                try:
-                    writer.writerow({key: csv_safe_cell(value) for key, value in item.items()})
-                except ValueError as ve:
-                    module_logger.error(f"Error writing filtered book {item.get('title', 'Unknown')} to CSV: {ve}")
-                except csv.Error as e:
-                    module_logger.error(
-                        f"Unexpected error writing filtered book {item.get('title', 'Unknown')} to CSV: {e}",
-                        exc_info=True,
-                    )
-        print_log(f"Filtered books successfully saved to {target}.", "success")
-        module_logger.info(f"Filtered books successfully saved to {target}.")
-    except IOError as e:
-        module_logger.error(f"I/O error saving filtered books to CSV {target}: {e}")
-        print_log(f"Error saving filtered books to {target}: {e}", "error")
-    except csv.Error as e:
-        module_logger.critical(
-            f"An unexpected error occurred while saving filtered books to CSV {target}: {e}",
-            exc_info=True,
-        )
-        print_log(f"Critical Error saving filtered books to {target}. Check log file.", "error")
+#: CSV column order for ``filtered_books.csv`` (the ``search`` SCRAPE_FILTERS-drop diagnostic). A
+#: filtered book is never saved to the store; this is a process diagnostic like ``failed_urls.csv``.
+FILTERED_BOOKS_FIELDNAMES = ["title", "site", "url", "stage", "reason"]
 
 
 def _report_dry_run_books(books: list[dict], store_backend: str):
@@ -245,7 +198,11 @@ async def run(args: argparse.Namespace) -> int:
 
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
-    failed_scrape_attempts = []  # List to store book data that failed detailed scraping
+    # Every non-SUCCESS detail result (failures AND duplicate/not-found/robots-skipped outcomes) is
+    # recorded here for the failed_urls.csv diagnostic, exactly as scrape-urls records all non-SUCCESS
+    # in failed_books.csv. The PARTIAL exit code is driven by status_counts/FAILURE_STATUSES below, not
+    # by this list, so a non-failure outcome never flips the exit code.
+    failed_urls = []
     total_duplicates_skipped = 0  # To sum up duplicates across all sites
     cross_site_dropped = 0  # Candidates dropped by the within-run cross-site title dedup (subtask 05)
     isbn13_duplicates = 0  # Scraped records dropped post-detail because their ISBN-13 is already stored
@@ -284,6 +241,7 @@ async def run(args: argparse.Namespace) -> int:
 
                         for search_item in queries:
                             candidates = await provider.search(search_item, max_search_pages, search_context)
+                            survivors_before = len(survivors)
 
                             # Pre-scrape deduplication: check each candidate against the backend (a
                             # blocking read, so it runs off the event loop thread) and keep the new ones.
@@ -324,11 +282,17 @@ async def run(args: argparse.Namespace) -> int:
                                     "success",
                                 )
 
-                            print_log(
-                                f"Found {len(candidates)} potential new books for '{search_item}'.",
-                                "success",
+                            # Report the post-dedup/post-filter survivor count for this query (what will
+                            # actually proceed to the expensive detail scrape), not the raw candidate
+                            # count, which overstates it. The within-run cross-site dedup below can still
+                            # drop a few more before scraping.
+                            new_survivors = len(survivors) - survivors_before
+                            survivor_message = (
+                                f"{new_survivors} new book(s) to scrape for '{search_item}' "
+                                f"(from {len(candidates)} candidate(s) searched)."
                             )
-                            module_logger.info(f"Found {len(candidates)} potential new books for '{search_item}'.")
+                            print_log(survivor_message, "success")
+                            module_logger.info(survivor_message)
 
                     # --- Within-run cross-site title deduplication (task 03.3 subtask 05) ---
                     # The same book often surfaces on several sites with differently decorated titles
@@ -366,21 +330,31 @@ async def run(args: argparse.Namespace) -> int:
                         concurrency = runtime.concurrency
                         total_detail = len(survivors)
                         # Progress line every ~10% (at least each completion for a tiny run, at most every
-                        # 10), plus a final line. Detail scrapes have no duplicate outcome, so dup is 0.
+                        # 10), plus a final line. A detail scrape can still report a DUPLICATE (inline
+                        # backend check), so dup has its own bucket like scrape-urls rather than folding
+                        # into fail.
                         progress_interval = max(1, min(10, total_detail // 10))
-                        progress = Counter()  # keys: "done" / "ok" / "fail"
+                        progress = Counter()  # keys: "done" / "ok" / "dup" / "fail"
 
                         def report_progress(result):
                             """Tally one completed detail scrape and emit a progress line at each interval."""
                             progress["done"] += 1
-                            if isinstance(result, ScrapeResult) and result.status is ScrapeStatus.SUCCESS:
-                                progress["ok"] += 1
-                            else:
+                            if not isinstance(result, ScrapeResult):
+                                # bounded_gather surfaced a raw exception (not a typed ScrapeResult); count
+                                # it as a failure rather than dereferencing result.status.
                                 progress["fail"] += 1
+                            else:
+                                match result.status:
+                                    case ScrapeStatus.SUCCESS:
+                                        progress["ok"] += 1
+                                    case ScrapeStatus.DUPLICATE:
+                                        progress["dup"] += 1
+                                    case _:
+                                        progress["fail"] += 1
                             if progress["done"] % progress_interval == 0 or progress["done"] == total_detail:
                                 print_log(
                                     f"{progress['done']}/{total_detail} done "
-                                    f"(ok={progress['ok']} dup=0 fail={progress['fail']})",
+                                    f"(ok={progress['ok']} dup={progress['dup']} fail={progress['fail']})",
                                     "info",
                                 )
 
@@ -443,9 +417,13 @@ async def run(args: argparse.Namespace) -> int:
                                         "info",
                                     )
                                 else:
-                                    # result.url is the real detail URL (fixes the old "url": "N/A"), and
-                                    # result.error is the typed, secret-free failure reason.
-                                    failed_scrape_attempts.append(
+                                    # Every non-SUCCESS result is recorded to failed_urls.csv (a
+                                    # diagnostic), but only a FAILURE_STATUSES outcome drives the PARTIAL
+                                    # exit code via status_counts below - a DUPLICATE / NOT_FOUND /
+                                    # SKIPPED_ROBOTS outcome means the run did what it should, mirroring
+                                    # scrape-urls. result.url is the real detail URL (fixes the old
+                                    # "url": "N/A") and result.error is the typed secret-free reason.
+                                    failed_urls.append(
                                         {
                                             "url": result.url,
                                             "site": candidate.site,
@@ -454,14 +432,16 @@ async def run(args: argparse.Namespace) -> int:
                                         }
                                     )
                                     print_log(
-                                        f"Failed to scrape details for {result.url} from {candidate.site}: "
+                                        f"Could not scrape details for {result.url} from {candidate.site}: "
                                         f"{result.status.value} - {result.error}",
-                                        "error",
+                                        "error" if result.status in FAILURE_STATUSES else "warning",
                                     )
                             else:
                                 # gather(return_exceptions=True) surfaced an exception the detail scraper
-                                # did not convert into a ScrapeResult; record it as a raw failure.
-                                failed_scrape_attempts.append(
+                                # did not convert into a ScrapeResult; record it as a raw failure and count
+                                # it as FAILED so it drives the PARTIAL exit code like scrape-urls.
+                                status_counts[ScrapeStatus.FAILED] += 1
+                                failed_urls.append(
                                     {
                                         "url": candidate.detail_ref,
                                         "site": candidate.site,
@@ -492,8 +472,8 @@ async def run(args: argparse.Namespace) -> int:
         print_log(f"Total scraping process completed in {total_time:.2f} seconds.")
         print_log(f"{len(scraped_books_data)} new book{'s' if len(scraped_books_data) != 1 else ''} scraped.")
         print_log(
-            f"{len(failed_scrape_attempts)} URLs failed during detailed scrape.",
-            "warning" if len(failed_scrape_attempts) > 0 else "info",
+            f"{len(failed_urls)} URLs failed during detailed scrape.",
+            "warning" if len(failed_urls) > 0 else "info",
         )
         print_log(f"{total_duplicates_skipped} books already in the database and skipped.")
         if cross_site_dropped:
@@ -507,6 +487,10 @@ async def run(args: argparse.Namespace) -> int:
                 "info",
             )
         if status_counts:
+            # This breakdown tallies every detail-scrape OUTCOME, so its SUCCESS count can exceed
+            # len(scraped_books_data): a SUCCESS-scraped book is still dropped afterward by the
+            # detail-stage SCRAPE_FILTERS or the post-detail ISBN-13 dedup. A book counted SUCCESS
+            # here but missing from the saved batch was filtered/deduped, not lost.
             print_log(f"Scrape status breakdown: {format_status_breakdown(status_counts)}.")
         if filtered_books:
             # Count every filtered-out book per reason for the run summary; the books themselves are
@@ -523,14 +507,20 @@ async def run(args: argparse.Namespace) -> int:
         # failed_urls.csv is a process diagnostic, not database content, so it's always
         # written as CSV best-effort, independent of --store-backend.
         write_failed_csv(
-            failed_scrape_attempts,
+            failed_urls,
             fieldnames=FAILED_URLS_FIELDNAMES,
             filename="failed_urls.csv",
             directory=output_dir,
         )
         # filtered_books.csv is likewise a process diagnostic (never database content), so it's
-        # always written best-effort regardless of --store-backend or --dry-run.
-        save_filtered_books_to_csv(filtered_books, directory=output_dir)
+        # always written best-effort regardless of --store-backend or --dry-run, through the same
+        # shared writer as failed_urls.csv (just a different fieldname set and filename).
+        write_failed_csv(
+            filtered_books,
+            fieldnames=FILTERED_BOOKS_FIELDNAMES,
+            filename="filtered_books.csv",
+            directory=output_dir,
+        )
 
         if runtime.dry_run:
             # Pre-scrape dedup reads already ran (leanpub_book_exists above); a dry run just refuses to
@@ -555,12 +545,12 @@ async def run(args: argparse.Namespace) -> int:
         print_log("\nApplication finished.", "step")
         module_logger.info("Application finished.")
 
-        # FATAL if the orchestration aborted; else PARTIAL if any detail scrape failed or a save
-        # errored; else OK. A pre-scrape duplicate is not a failure.
+        # FATAL if the orchestration aborted; else PARTIAL when at least one detail scrape ended in a
+        # failure status (FAILED/TIMEOUT/PARSE_ERROR/BLOCKED) or a save errored; else OK. A
+        # DUPLICATE/NOT_FOUND/SKIPPED_ROBOTS outcome is not a failure, matching scrape-urls.
         if had_unhandled_error:
             return exitcodes.FATAL
-        if failed_scrape_attempts or save_errors > 0:
-            return exitcodes.PARTIAL
-        return exitcodes.OK
+        had_failure = save_errors > 0 or any(status_counts[status] for status in FAILURE_STATUSES)
+        return exitcodes.PARTIAL if had_failure else exitcodes.OK
     finally:
         storage_backend.close()

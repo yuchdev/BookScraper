@@ -317,10 +317,17 @@ def check_book_exists_by_url(url: str, mongo_collection: Optional[Collection] = 
     search provider (a site exposing neither a native id nor an ASIN - task 03.3 subtask 03).
     Backed by the sparse ``url_lookup_index`` so the check is an index scan, not a collection scan.
 
-    :param url: The detail-page URL to look up; a falsy value returns ``False`` without querying.
+    :param url: The detail-page URL to look up; a falsy or non-string value returns ``False``
+        without querying.
     :param mongo_collection: Optional pre-resolved collection; the global one is used when omitted.
     :returns: ``True`` if any stored document carries a matching ``url``; ``False`` otherwise.
     """
+    # Only a plain string is a valid lookup key. A non-string url (e.g. a dict like
+    # ``{"$ne": None}`` smuggled in from scraped data) would otherwise become a Mongo operator
+    # query matching far more than intended (CWE-943), so it is ignored and debug-logged.
+    if not isinstance(url, str):
+        module_logger.debug("Ignoring non-string url of type %s for URL dedup.", type(url).__name__)
+        return False
     if not url:
         return False
 
@@ -357,10 +364,17 @@ def check_book_exists_by_isbn13(isbn13: str, mongo_collection: Optional[Collecti
     canonical ``isbn13`` already exists is a duplicate and is not saved (task 03.3 subtask 05).
     Backed by the sparse ``isbn13_lookup_index`` so the check is an index scan, not a collection scan.
 
-    :param isbn13: The canonical ISBN-13 to look up; a falsy value returns ``False`` without querying.
+    :param isbn13: The canonical ISBN-13 to look up; a falsy or non-string value returns ``False``
+        without querying.
     :param mongo_collection: Optional pre-resolved collection; the global one is used when omitted.
     :returns: ``True`` if any stored document carries a matching ``isbn13``; ``False`` otherwise.
     """
+    # Only a plain string is a valid lookup key. A non-string isbn13 (e.g. a dict like
+    # ``{"$ne": None}`` smuggled in from scraped data) would otherwise become a Mongo operator
+    # query matching far more than intended (CWE-943), so it is ignored and debug-logged.
+    if not isinstance(isbn13, str):
+        module_logger.debug("Ignoring non-string isbn13 of type %s for ISBN-13 dedup.", type(isbn13).__name__)
+        return False
     if not isbn13:
         return False
 

@@ -259,13 +259,19 @@ class JsonBackend(StorageBackend):
 
     def book_exists_by_url(self, url: str) -> bool:
         """Report whether ``url`` is present in the in-memory index."""
-        if not url:
+        # Only a plain string is a lookup key; a non-string url (e.g. a dict smuggled in from
+        # scraped data) would otherwise raise on the set ``in`` check, so guard it like the mongo
+        # backend's CWE-943 guard so both no-op identically.
+        if not isinstance(url, str) or not url:
             return False
         return url in self._ensure_index()["urls"]
 
     def book_exists_by_isbn13(self, isbn13: str) -> bool:
         """Report whether ``isbn13`` is present in the in-memory index."""
-        if not isbn13:
+        # Only a plain string is a lookup key; a non-string isbn13 (e.g. a dict smuggled in from
+        # scraped data) would otherwise raise on the set ``in`` check, so guard it like the mongo
+        # backend's CWE-943 guard so both no-op identically.
+        if not isinstance(isbn13, str) or not isbn13:
             return False
         return isbn13 in self._ensure_index()["isbn13s"]
 
