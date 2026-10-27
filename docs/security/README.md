@@ -6,6 +6,19 @@ The `security-auditor` agent owns this directory. Every change touching auth,
 secrets, external integrations, or untrusted-input ingestion triggers a security
 review whose output is stored here.
 
+## Index
+
+| Document | Scope | Verdict |
+|----------|-------|---------|
+| [2026-09-30-mongodb-auth-configuration.md](2026-09-30-mongodb-auth-configuration.md) | MongoDB Atlas auth resolution (`settings.json` + legacy env) | - |
+| [2026-09-30-real-html-test-corpus.md](2026-09-30-real-html-test-corpus.md) | Committed real-HTML test corpus (06.0) | - |
+| [2026-09-30-x509-certificate-rotation.md](2026-09-30-x509-certificate-rotation.md) | Atlas X.509 client-cert rotation pipeline | - |
+| [2026-10-02-ai-schema-detection.md](2026-10-02-ai-schema-detection.md) | `detect-schema` AIS-1..16 (pre-code gate) | PASS_WITH_FOLLOWUP |
+| [2026-10-04-schema-detection-prompt-injection.md](2026-10-04-schema-detection-prompt-injection.md) | `detect-schema` prompt-injection (as-built, 04.0/09) | PASS |
+| [2026-10-23-llm-extraction-fallback.md](2026-10-23-llm-extraction-fallback.md) | LLM extraction fallback - stored AI values (04.1/01, pre-code gate) | PASS_WITH_FOLLOWUP |
+| [2026-10-26-ci-integration-secrets.md](2026-10-26-ci-integration-secrets.md) | CI integration workflow secrets - Atlas test creds in `atlas-integration` Environment (06.2/04, pre-code gate) | PASS_WITH_FOLLOWUP |
+| [2026-10-26-log-redaction.md](2026-10-26-log-redaction.md) | Secret-redacting log filter in `book_utils.py` (07.0/01, pre-code gate) | PASS_WITH_FOLLOWUP |
+
 ## Naming convention
 
 `threat-model-<scope>.md` for threat models, `review-<scope>-<YYYY-MM-DD>.md`
@@ -32,8 +45,8 @@ for point-in-time reviews.
 
 > **SME REVIEW NEEDED (AI-drafted - verify before relying on this):**
 >
-> **1. Scope.** Two locally-run CLI entry points (`src/scrape_existing_books.py`,
-> `src/bookscraper/search_and_scrape.py`). Trust boundaries: the operator-supplied URL
+> **1. Scope.** Two locally-run CLI entry points (`commands/scrape_urls.py`,
+> `commands/search.py`). Trust boundaries: the operator-supplied URL
 > CSV; four third-party sites/APIs the project does not control; MongoDB Atlas over
 > TLS; the local filesystem (CSV exports, `~/.bookscrapper/logs/*.log`, `.env`,
 > `~/.bookscrapper/`).
@@ -68,7 +81,7 @@ for point-in-time reviews.
 >   `failed_urls.csv`) are now gitignored rather than committed; only the curated,
 >   hand-maintained input lists under `content/` are tracked.
 > - *Denial of service* - `get_leanpub_search_results_via_api` paginates `while True`
->   with no cap and accumulates in memory; `search_and_scrape` gathers every detail fetch
+>   with no cap and accumulates in memory; `commands/search.py` gathers every detail fetch
 >   at once with no concurrency limit; `scrape_book` leaks a Playwright page per Leanpub
 >   call.
 > - *Elevation of privilege* - low in-process risk (no shell, `eval`, or SQL), but with

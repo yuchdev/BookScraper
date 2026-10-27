@@ -189,13 +189,13 @@ def _build_scenario(scenario_name: str) -> tuple[Any, ...]:
 def test_settings_resolution_and_connect(scenario_name, tmp_path, monkeypatch):
     """
     [Integration] connection settings: verifies settings resolution and connect.
-    
+
     Scenario:
         resolve_mongo_connection() reads the declared settings.json shape, returns exactly the declared URI/cert, and the resolved pair connects to live Atlas. 'pass' shapes must resolve AND connect (unmarked). 'x509' shapes must resolve correctly; the connection is expected to XFAIL today (Atlas-side cert issue).
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """

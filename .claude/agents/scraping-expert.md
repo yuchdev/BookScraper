@@ -26,8 +26,8 @@ end-to-end today.
   only rate control anywhere in the project is `asyncio.sleep(random.uniform(0.5, 1.5))` between
   search pages at `search_utils.py:103`.
 - **Amazon** (`amazon.com`) - Playwright detail scraping works through `scrape_book`; the search
-  path `get_search_results_via_playwright` is written but its caller is commented out at
-  `search_and_scrape.py:242-296`. Supplies title, authors, ISBN-10/13, publication date,
+  path `get_search_results_via_playwright` (`scraping/search_utils.py`) is implemented but Amazon
+  is not in `SITES_TO_SCRAPE`, so `commands/search.py` does not activate it. Supplies title, authors, ISBN-10/13, publication date,
   description, tags, and ASIN (regexed from `/dp/` or `/gp/product/`). Capped at
   `SEARCH_MAXIMUM_PAGES = 2`; handles `/sspa/click` sponsored-link indirection.
 - **Packtpub** (`packtpub.com`) - detail selectors only (ISBN-13, publication date, description,

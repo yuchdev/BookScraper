@@ -1,7 +1,7 @@
 # 02 - Enforce the gate in configuration
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-reach-ninety-percent-total.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/01-reach-ninety-percent-total.md)
 **Role:** Testing Expert
 

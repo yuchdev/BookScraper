@@ -1,7 +1,7 @@
 # 02 - Logger hierarchy & library noise
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Python Expert
 
 ## Requirements

@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 from ...book_utils import print_log
 from .database import get_mongo_collection
 
-module_logger = logging.getLogger("deduplicate")
+module_logger = logging.getLogger(__name__)
 
 
 def leanpub_prescrape_deduplicate(book_id: str, book_slug: str, mongo_collection: Optional[Collection] = None) -> bool:

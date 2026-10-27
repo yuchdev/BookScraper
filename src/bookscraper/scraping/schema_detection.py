@@ -40,10 +40,9 @@ Import direction: this lives under ``scraping/`` and imports only from ``scrapin
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import functools
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -59,56 +58,50 @@ from playwright.async_api import (
 )
 
 from ..book_utils import print_log
+from . import ai_common
+from .ai_common import (
+    DEFAULT_HTML_BUDGET,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    MAX_API_RETRIES,
+    MAX_INPUT_TOKENS,
+    AIRequestError,
+    build_snapshot_block,
+    format_replay_usage_line,
+    format_usage_line,
+    prompt_hash,
+    prune_html,
+    sanitize_untrusted,
+)
 from .browser import new_scrape_context
 from .parameters import (
     NON_SELECTOR_SEARCH_KEYS,
     OPTIONAL_SELECTOR_KEYS,
     site_constants,
 )
-from .safe_text import sanitize_untrusted
 from .scrape_details import _detect_bot_wall, route_handler
 
-# ``sanitize_untrusted`` moved to the stdlib-only :mod:`bookscraper.scraping.safe_text` module so
-# lightweight callers can reuse it without importing this heavy (anthropic/Playwright) module;
-# re-exported here under its original name so existing imports keep working.
+# The shared AI-prompt infrastructure - HTML pruning, the ``<page_html>`` fence, model/key
+# resolution, the token pre-flight, usage-line formatters and replay/record I/O - lives in
+# :mod:`bookscraper.scraping.ai_common` so this tool and the 04.1 LLM extraction fallback cannot grow
+# two copies of the same prompt-injection/cost defenses that drift apart (threat-model EXT-5). The
+# shared names are re-imported above (and the fail-loud ones re-bound below to
+# :class:`SchemaDetectionError`) so existing imports and the mock patch targets keep working.
+# ``sanitize_untrusted`` itself originates in the stdlib-only ``safe_text`` module.
 __all__ = ["sanitize_untrusted"]
 
-module_logger = logging.getLogger("schema_detection")
+module_logger = logging.getLogger(__name__)
 
-# Default model; overridable via ANTHROPIC_MODEL (or the ``--model`` flag) so a caller can
-# pin/upgrade without a code change. The exact value is irrelevant to the test suite, which
-# always mocks the anthropic client (no real API call is ever made from tests). ``claude-sonnet-5``
-# runs ADAPTIVE THINKING by default and thinking tokens count toward ``max_tokens``; it also
-# rejects sampling params (temperature/top_p/top_k) and ``budget_tokens`` with a 400, so none of
-# those are sent.
-DEFAULT_MODEL = "claude-sonnet-5"
-# Raised from 2048: on a thinking-by-default model the thinking tokens share the ``max_tokens``
-# budget, so a smaller cap risks truncating the JSON answer. 16000 is the skill's non-streaming
-# default.
-DEFAULT_MAX_TOKENS = 16000
-
-# Upper bound on the pruned-HTML payload handed to the LLM. Kept well under the model's
-# context window while leaving room for the prompt scaffolding and the response.
-DEFAULT_HTML_BUDGET = 60000
+# ``DEFAULT_MODEL`` / ``DEFAULT_MAX_TOKENS`` / ``DEFAULT_HTML_BUDGET`` and the token-budget /
+# retry constants now live in :mod:`bookscraper.scraping.ai_common` and are re-imported above.
 
 # Default per-page navigation timeout in ms when no resolved ``--nav-timeout`` is threaded in
 # (matches ``runtime.DEFAULT_NAV_TIMEOUT_S`` of 60 s). The CLI path always passes an explicit value.
 DEFAULT_NAV_TIMEOUT_MS = 60000
 
-# Pre-flight input-token budget per request (overridable via ``--max-input-tokens``). If a built
-# prompt exceeds it, the HTML snapshot is re-pruned toward ``MIN_HTML_BUDGET`` characters; if it
-# still does not fit, the request is abandoned (``SchemaDetectionError``) rather than sent.
-MAX_INPUT_TOKENS = 40_000
-# The floor the re-prune loop will not shrink the snapshot below.
-MIN_HTML_BUDGET = 10_000
-
 # Hard per-run ceiling on sample URLs (and therefore on paid requests): a cost guard, enforced
 # before any browser launch, network fetch, or API call.
 MAX_SAMPLE_URLS = 5
-
-# At most one retry on a transient SDK error. The anthropic client's own ``max_retries`` is set to
-# this same value so there is exactly one retry layer, never stacked unbounded retries.
-MAX_API_RETRIES = 1
 
 # AIS-7: hard wall-clock bound (seconds) on every single locator evaluation of a selector -
 # ``count()``, ``text_content()`` and the search-card ``all()`` enumeration. A pathological or
@@ -157,16 +150,6 @@ MAX_CARDS_PER_SAMPLE = 50
 # report that already does so.
 RATIONALE_MAX_CHARS = 200
 
-# AIS-1: the pruned page snapshot is spliced into the prompt fenced in ``<page_html>...</page_html>``
-# and the instruction block (below) declares everything inside that fence to be untrusted DATA whose
-# own instructions must be ignored. A hostile page could try to CLOSE the fence early with a literal
-# ``</page_html>`` (or open a decoy ``<page_html>``) and smuggle text into instruction context, so
-# every literal fence tag in the snapshot - opening or closing, any case, any inner whitespace, and
-# including an *attributed* form like ``</page_html foo="x">`` (PI-2) - has its angle brackets
-# HTML-escaped before embedding. Same breakout class, and same fix, as ``sanitize.py``'s V-3
-# ``</script>`` escaping (CWE-116).
-_FENCE_TAG_RE = re.compile(r"<\s*/?\s*page_html\b[^>]*>", re.IGNORECASE)
-
 # AIS-15: a fixed footer appended to BOTH the text report and (as a ``notice`` key) the JSON report,
 # reminding the reviewer that every proposal is derived from untrusted page content and must be
 # human-reviewed before being applied to ``parameters.py`` by hand.
@@ -201,10 +184,24 @@ _QUOTED_SPAN_RE = re.compile(r"\"[^\"]*\"|'[^']*'")
 _REGEX_LITERAL_RE = re.compile(r"/[^/\n]+/[a-z]*")
 
 
-class SchemaDetectionError(Exception):
+class SchemaDetectionError(AIRequestError):
     """Raised on any unrecoverable schema-detection failure (missing API key, page-load
     failure, malformed AI response). Callers (``commands/detect_schema.py``) surface it
-    as a ``print_log`` error and exit non-zero."""
+    as a ``print_log`` error and exit non-zero.
+
+    A subclass of :class:`bookscraper.scraping.ai_common.AIRequestError` (04.1 subtask 02) so the
+    shared AI stack can raise a generic error while this module keeps its own type and 04.0 messages:
+    the fail-loud ``ai_common`` helpers are re-bound below to raise this subclass."""
+
+
+# Re-bind the fail-loud shared helpers to raise :class:`SchemaDetectionError` (a subclass of
+# ``ai_common.AIRequestError``) so calling them through this module preserves 04.0's exact error type
+# and messages - and so ``detect_schema`` and the mock patch targets keep working unchanged.
+resolve_model = functools.partial(ai_common.resolve_model, error_cls=SchemaDetectionError)
+resolve_api_key = functools.partial(ai_common.resolve_api_key, error_cls=SchemaDetectionError)
+load_replay_file = functools.partial(ai_common.load_replay_file, error_cls=SchemaDetectionError)
+replay_lookup = functools.partial(ai_common.replay_lookup, error_cls=SchemaDetectionError)
+write_record_file = functools.partial(ai_common.write_record_file, error_cls=SchemaDetectionError)
 
 
 # --------------------------------------------------------------------------- #
@@ -253,29 +250,6 @@ def search_selector_fields(entry: dict) -> list[str]:
             continue
         fields.append(key)
     return fields
-
-
-def prune_html(html: str, max_chars: int = DEFAULT_HTML_BUDGET) -> str:
-    """Strip an HTML document down to a compact, LLM-friendly snapshot.
-
-    Removes comments and the entire contents of ``<script>``/``<style>``/``<svg>``/
-    ``<noscript>`` elements (noise that carries no selector signal), collapses runs of
-    whitespace, and truncates the result to ``max_chars`` characters. Pure string
-    transformation - no parsing library, no I/O.
-    """
-    if not html:
-        return ""
-
-    text = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
-    for tag in ("script", "style", "svg", "noscript"):
-        text = re.sub(rf"<{tag}\b.*?</{tag}>", "", text, flags=re.DOTALL | re.IGNORECASE)
-        # Also drop self-closing / unclosed leftovers of the tag's opening.
-        text = re.sub(rf"<{tag}\b[^>]*/?>", "", text, flags=re.IGNORECASE)
-
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > max_chars:
-        text = text[:max_chars]
-    return text
 
 
 def build_instruction_block(site: str, field_names: list[str], page_type: str = "detail") -> str:
@@ -331,27 +305,6 @@ def build_instruction_block(site: str, field_names: list[str], page_type: str = 
         "each field name to an object of the form "
         '{"selector": "<css or null>", "rationale": "<one short sentence>"}.'
     )
-
-
-def _neutralize_fence(pruned_html: str) -> str:
-    """Escape any literal ``<page_html>`` / ``</page_html>`` tag in the snapshot (AIS-1).
-
-    A page cannot be allowed to close (or decoy-open) the ``<page_html>`` fence and escape into
-    instruction context, so every fence tag - opening or closing, any case, any inner whitespace -
-    has its angle brackets HTML-escaped (``<`` -> ``&lt;``, ``>`` -> ``&gt;``) before embedding.
-    Pure string transform; all other content is preserved verbatim.
-    """
-    return _FENCE_TAG_RE.sub(lambda m: m.group(0).replace("<", "&lt;").replace(">", "&gt;"), pruned_html)
-
-
-def build_snapshot_block(pruned_html: str) -> str:
-    """Build the per-page snapshot block (the user message), which varies per sample URL
-    and is therefore *not* part of the cacheable prefix.
-
-    The pruned HTML is fenced in ``<page_html>...</page_html>`` (AIS-1) and any literal fence tag
-    inside it is neutralized (``_neutralize_fence``) so a hostile page cannot break out of the
-    fence into instruction context. Pure string assembly."""
-    return f"Pruned HTML snapshot (untrusted page data, fenced below):\n<page_html>\n{_neutralize_fence(pruned_html)}\n</page_html>\n"
 
 
 def build_prompt(site: str, field_names: list[str], pruned_html: str) -> str:
@@ -845,65 +798,6 @@ def format_check_only_usage_line(sample_count: int) -> str:
     )
 
 
-def resolve_model(cli_model: Optional[str]) -> str:
-    """Resolve the model ID with precedence ``--model`` flag > ``ANTHROPIC_MODEL`` env > default.
-
-    ``cli_model`` is the parsed ``--model`` value (``None`` when the flag was omitted). An empty
-    or whitespace-only ID - whether from the flag or the env var - is rejected with
-    ``SchemaDetectionError``; any other value is passed through unchanged for the API to accept
-    or reject.
-    """
-    model = cli_model if cli_model is not None else os.environ.get("ANTHROPIC_MODEL", DEFAULT_MODEL)
-    if not model.strip():
-        raise SchemaDetectionError("Model ID must not be empty. Set --model or ANTHROPIC_MODEL to a valid model ID.")
-    return model
-
-
-def format_usage_line(model: str, usages: list[Any], request_count: int) -> str:
-    """Format the one-line run usage summary from each response's ``usage`` object.
-
-    Sums input / cache-read / cache-creation / output tokens across every response and reports
-    them with the model and request count. Carries **no** prices (they change, and a stale figure
-    would mislead) and **no** API key. Pure formatting.
-    """
-    input_tokens = sum(int(getattr(usage, "input_tokens", 0) or 0) for usage in usages)
-    cache_read = sum(int(getattr(usage, "cache_read_input_tokens", 0) or 0) for usage in usages)
-    cache_creation = sum(int(getattr(usage, "cache_creation_input_tokens", 0) or 0) for usage in usages)
-    output_tokens = sum(int(getattr(usage, "output_tokens", 0) or 0) for usage in usages)
-    return (
-        f"Anthropic usage: model={model} requests={request_count} "
-        f"input_tokens={input_tokens} cache_read_input_tokens={cache_read} "
-        f"cache_creation_input_tokens={cache_creation} output_tokens={output_tokens}"
-    )
-
-
-def prompt_hash(instruction_block: str, snapshot_block: str) -> str:
-    """Return the ``sha256`` key for a prompt, used to index the ``--replay``/``--record`` file.
-
-    The key is the hex ``sha256`` of the exact prompt the live path would send - the static
-    instruction block and the per-page snapshot block joined the same way ``build_prompt``
-    joins them. Both the runtime (replay lookup / record write) and the maintenance script that
-    generates a replay file compute the key through this one function and ``build_snapshot_block``
-    so the two can never drift. Pure: no I/O, no network.
-    """
-    prompt = f"{instruction_block}\n\n{snapshot_block}"
-    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-
-
-def format_replay_usage_line(model: str, replayed: int) -> str:
-    """Format the usage line for an offline ``--replay`` run: zero tokens, ``N`` replayed.
-
-    No Anthropic request is made in replay mode, so there is no real token usage to report;
-    the line mirrors ``format_usage_line``'s shape (all token counts zero) and names how many
-    recorded responses were served. Pure formatting; carries no key.
-    """
-    return (
-        f"Anthropic usage: model={model} requests=0 replayed={replayed} "
-        f"input_tokens=0 cache_read_input_tokens=0 cache_creation_input_tokens=0 "
-        f"output_tokens=0 (offline replay; no API call, no tokens spent)"
-    )
-
-
 def _merge_proposals(
     per_url_proposals: list[dict[str, dict[str, Any]]],
     field_names: list[str],
@@ -935,97 +829,6 @@ def _merge_proposals(
 # --------------------------------------------------------------------------- #
 # External-collaborator helpers (network / browser) - mock-tested.
 # --------------------------------------------------------------------------- #
-def _extract_text(message: anthropic.types.Message) -> str:
-    """Concatenate the ``text`` blocks of an anthropic ``Message`` response.
-
-    Only ``type == "text"`` blocks are collected; ``thinking`` blocks (present on an
-    adaptive-thinking model) are skipped so a thinking summary never leaks into the JSON parse.
-    """
-    parts: list[str] = []
-    for block in getattr(message, "content", []) or []:
-        if getattr(block, "type", None) != "text":
-            continue
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    if not parts:
-        raise SchemaDetectionError("AI response contained no text content.")
-    return "\n".join(parts)
-
-
-def _sdk_error_summary(exc: Exception) -> str:
-    """Summarize an SDK exception as its class name (plus HTTP status if present), never its body.
-
-    AIS-8/AIS-16: the Anthropic error body can echo request content and the account's error
-    detail; the API key is never in it but is never risked either. Mirrors ``rotate-cert``'s
-    "status code, never response body" rule.
-    """
-    status = getattr(exc, "status_code", None)
-    summary = f"Anthropic API request failed: {type(exc).__name__}"
-    if status is not None:
-        summary = f"{summary} (HTTP {status})"
-    return summary
-
-
-def _check_stop_reason(message: anthropic.types.Message):
-    """Raise ``SchemaDetectionError`` for a truncated or refused response, so neither is parsed.
-
-    ``max_tokens`` means the JSON answer was cut off (incomplete, must not be parsed); ``refusal``
-    means the model declined - the ``stop_details.category`` is named when present. Any other stop
-    reason (``end_turn`` etc.) returns normally.
-    """
-    reason = getattr(message, "stop_reason", None)
-    if reason == "max_tokens":
-        raise SchemaDetectionError(
-            "AI response was truncated: it hit max_tokens before completing the JSON answer. "
-            "The output is incomplete and will not be parsed."
-        )
-    if reason == "refusal":
-        details = getattr(message, "stop_details", None)
-        category = getattr(details, "category", None) if details else None
-        suffix = f" (category: {category})" if category else ""
-        raise SchemaDetectionError(f"AI refused to produce a response{suffix}; not parsing it.")
-    if reason == "model_context_window_exceeded":
-        raise SchemaDetectionError(
-            "AI response was truncated: the request exceeded the model's context window. "
-            "The output is incomplete and will not be parsed; lower --max-input-tokens."
-        )
-
-
-def _fit_snapshot_to_budget(
-    client: anthropic.Anthropic,
-    model: str,
-    instruction_block: str,
-    snapshot: str,
-    max_input_tokens: int,
-) -> str:
-    """Return a snapshot small enough that the full prompt fits ``max_input_tokens``.
-
-    Counts tokens with the SDK's ``count_tokens`` endpoint; while over budget the snapshot is
-    halved toward the ``MIN_HTML_BUDGET`` character floor. If the prompt still exceeds the budget
-    at the floor, raises ``SchemaDetectionError`` **without sending** the request.
-    """
-    current = snapshot
-    while True:
-        try:
-            tokens = client.messages.count_tokens(
-                model=model,
-                system=[{"type": "text", "text": instruction_block}],
-                messages=[{"role": "user", "content": current}],
-            ).input_tokens
-        except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
-            raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
-        if tokens <= max_input_tokens:
-            return current
-        if len(current) <= MIN_HTML_BUDGET:
-            raise SchemaDetectionError(
-                f"Prompt still exceeds the {max_input_tokens}-token budget ({tokens} tokens) "
-                f"even after pruning the HTML snapshot to the {MIN_HTML_BUDGET}-character floor. "
-                "Not sending the request."
-            )
-        current = current[: max(MIN_HTML_BUDGET, len(current) // 2)]
-
-
 def call_anthropic(
     instruction_block: str,
     snapshot: str,
@@ -1039,16 +842,23 @@ def call_anthropic(
     it via ``asyncio.to_thread``. The client is built with ``max_retries=MAX_API_RETRIES`` (one
     retry, matched to the module's own bound, so transient errors never stack unbounded retries).
     The static ``instruction_block`` is sent as a cacheable ``system`` block and the per-page
-    ``snapshot`` as the user message. The prompt is first fitted to ``max_input_tokens``
-    (re-pruning the snapshot, or failing without sending). A truncated (``max_tokens``) or refused
-    response raises rather than being parsed, and any SDK/transport error is wrapped as
-    ``SchemaDetectionError`` carrying only the exception class (and HTTP status), never its body.
+    ``snapshot`` as the user message. The prompt is first fitted to ``max_input_tokens`` via the
+    shared :func:`bookscraper.scraping.ai_common.fit_snapshot_to_budget` pre-flight (re-pruning the
+    snapshot, or failing without sending). A truncated (``max_tokens``) or refused response raises
+    rather than being parsed, and any SDK/transport error is wrapped as ``SchemaDetectionError``
+    carrying only the exception class (and HTTP status), never its body.
+
+    Only the client construction stays here (so the ``schema_detection.anthropic`` mock patch point
+    is unchanged); the token pre-flight, stop-reason checks, text extraction and body-free
+    error summary are the shared ``ai_common`` helpers, raising ``SchemaDetectionError``.
     """
     try:
         client = anthropic.Anthropic(api_key=api_key, max_retries=MAX_API_RETRIES)
     except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
-        raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
-    fitted = _fit_snapshot_to_budget(client, model, instruction_block, snapshot, max_input_tokens)
+        raise SchemaDetectionError(ai_common.sdk_error_summary(exc)) from exc
+    fitted = ai_common.fit_snapshot_to_budget(
+        client, model, instruction_block, snapshot, max_input_tokens, error_cls=SchemaDetectionError
+    )
     try:
         message = client.messages.create(
             model=model,
@@ -1063,9 +873,9 @@ def call_anthropic(
             messages=[{"role": "user", "content": fitted}],
         )
     except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
-        raise SchemaDetectionError(_sdk_error_summary(exc)) from exc
-    _check_stop_reason(message)
-    return _extract_text(message), getattr(message, "usage", None)
+        raise SchemaDetectionError(ai_common.sdk_error_summary(exc)) from exc
+    ai_common.check_stop_reason(message, error_cls=SchemaDetectionError)
+    return ai_common.extract_text(message, error_cls=SchemaDetectionError), getattr(message, "usage", None)
 
 
 async def fetch_pruned_html(
@@ -1147,60 +957,6 @@ async def load_html_file_page(
     await page.route("**/*", _block_all_requests)
     await page.set_content(raw_html, wait_until="domcontentloaded")
     return page, prune_html(raw_html, max_chars=max_chars)
-
-
-def load_replay_file(path: str) -> dict[str, str]:
-    """Load a ``--replay`` file: a JSON object of ``{sha256(prompt): raw_model_response}``.
-
-    Keys beginning with ``_`` (e.g. a ``_provenance`` note on a hand-authored file) are
-    ignored, so a recording can carry documentation alongside its hash-keyed entries. Fails
-    loudly on a missing/unreadable path or a payload that is not a JSON object.
-    """
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SchemaDetectionError(f"Cannot read --replay file '{path}': {exc}") from exc
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise SchemaDetectionError(f"--replay file '{path}' is not valid JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise SchemaDetectionError(f"--replay file '{path}' must be a JSON object keyed by prompt hash.")
-    return {key: value for key, value in data.items() if not key.startswith("_")}
-
-
-def replay_lookup(replay: dict[str, str], instruction_block: str, snapshot_block: str) -> str:
-    """Return the recorded response for a prompt, or fail loudly if it is not recorded (AIS-9).
-
-    A missing entry is a hard error ("no recorded response") - never a silent fall-through to a
-    live API call - so an offline run that drifts from its recordings fails rather than spending.
-    """
-    key = prompt_hash(instruction_block, snapshot_block)
-    if key not in replay:
-        raise SchemaDetectionError(
-            f"No recorded response in the --replay file for prompt hash {key}. "
-            "The prompt changed (site fields, page content, or page_type) or the recording is "
-            "stale; refresh it with --record against a live run (for a committed test fixture, "
-            "re-run scripts/generate_schema_replays.py instead)."
-        )
-    return replay[key]
-
-
-def write_record_file(path: str, recorded: dict[str, str]):
-    """Write a ``--record`` file: ``{sha256(prompt): raw_model_response}`` from a live run.
-
-    For maintainers refreshing the committed replay recordings. Carries a ``_provenance`` note
-    and the hash-keyed responses only - never the ``ANTHROPIC_API_KEY`` (it is never part of a
-    prompt or a response) and never any live token figure. Writes solely to ``path``.
-    """
-    payload: dict[str, str] = {
-        "_provenance": "recorded from a live detect-schema run; review before committing as a replay fixture",
-    }
-    payload.update(recorded)
-    try:
-        Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    except OSError as exc:
-        raise SchemaDetectionError(f"Cannot write --record file '{path}': {exc}") from exc
 
 
 async def _bounded_eval(awaitable: Any) -> Any:
@@ -1483,11 +1239,7 @@ async def detect_schema(
         replay_map = load_replay_file(replay) if offline else {}
         if not offline:
             # AIS-9: the key is only required - and only read - on the live path.
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise SchemaDetectionError(
-                    "ANTHROPIC_API_KEY is not set. Export it (or add it to .env) before running detect-schema."
-                )
+            api_key = resolve_api_key()
 
     current = site_constants[site]
     fields = search_selector_fields(current) if page_type == "search" else detail_selector_fields(current)

@@ -1134,6 +1134,9 @@ def test_amazon_rating_parse_helpers_handle_absent_and_malformed():
     assert parse_rating_count("(1,234 ratings)") == 1234
     assert parse_rating_count(None) is None
     assert parse_rating_count("no digits") is None
+    # A run of grouping separators matches the regex but is not a number -> None, never 0.
+    assert parse_rating_count(",") is None
+    assert parse_rating_count("(,,)") is None
 
 
 def test_amazon_max_pages_clamped_with_log():
@@ -1163,3 +1166,308 @@ def test_amazon_max_pages_clamped_with_log():
         assert not any("clamping" in c.args[0].lower() for c in mock_log.call_args_list)
 
     assert resolve_amazon_max_pages(None, 75, "python") == 75
+
+
+# ---------------------------------------------------------------------------
+# Browser-crash / cleanup / breaker branches reachable only through a focused FakeLocator
+# (per task 06.1/03: branches real HTML cannot drive get a focused mock test).
+# ---------------------------------------------------------------------------
+
+AMAZON_BASE_URL = search_utils.site_constants["amazon"]["SEARCH_BASE_URL"]
+
+
+async def test_search_page_swallows_page_and_context_close_failures(monkeypatch):
+    """
+    [Local] search utils: verifies _search_page swallows both close failures on exit.
+
+    Scenario:
+        Given a context whose page.close() AND context.close() both raise (e.g. the browser
+        crashed mid-iteration) When the ``async with _search_page(browser)`` block exits normally
+        Then both close()s are attempted and neither failure propagates out of the block, so a
+        crashed browser can never mask the iteration's own result or abort pagination.
+
+    Boundaries:
+        - Normal-exit close path; the failure is injected on close, not on new_page/new_context.
+
+    On failure, first check:
+        - The two try/except cleanup guards in _search_page's finally block.
+    """
+    page = FakePage()
+    page.close = AsyncMock(side_effect=RuntimeError("page gone - browser crashed"))
+    context = FakeContext(page=page)
+    context.close = AsyncMock(side_effect=RuntimeError("context gone - browser crashed"))
+    browser = FakeBrowser(context=context)
+    monkeypatch.setattr(search_utils, "new_scrape_context", AsyncMock(return_value=context))
+
+    async with search_utils._search_page(browser) as yielded:
+        assert yielded is page
+
+    page.close.assert_awaited_once()
+    context.close.assert_awaited_once()
+
+
+async def test_amazon_has_next_page_false_when_selector_missing():
+    """
+    [Local] search utils: verifies _amazon_has_next_page returns False for a None selector.
+
+    Scenario:
+        Given no SEARCH_NEXT_PAGE_SELECTOR (None) When _amazon_has_next_page is called Then it
+        returns False without touching the page, so an unconfigured next-page selector ends
+        pagination rather than erroring.
+
+    Boundaries:
+        - The ``if not selector`` guard only; the locator-error path is a separate test.
+
+    On failure, first check:
+        - The ``if not selector: return False`` guard at the top of _amazon_has_next_page.
+    """
+    page = FakePage()
+
+    assert await search_utils._amazon_has_next_page(page, None) is False
+
+
+async def test_amazon_has_next_page_false_on_locator_error():
+    """
+    [Local] search utils: verifies a next-page locator error reads as "no next page".
+
+    Scenario:
+        Given a next-page locator whose count() raises PlaywrightError When _amazon_has_next_page
+        is called Then it returns False (best-effort detection never raises), so a flaky
+        next-control read ends pagination cleanly instead of crashing the search.
+
+    Boundaries:
+        - Exercises the ``except PlaywrightError`` branch; the disabled-control case is covered by
+          test_amazon_search_stops_on_disabled_next_button.
+
+    On failure, first check:
+        - The try/except PlaywrightError around count()/get_attribute in _amazon_has_next_page.
+    """
+    page = FakePage(locators={AMAZON_NEXT: FakeLocator(raises=PlaywrightError("bad next locator"))})
+
+    assert await search_utils._amazon_has_next_page(page, AMAZON_NEXT) is False
+
+
+async def test_amazon_search_open_breaker_skips_without_a_request():
+    """
+    [Local] search utils: verifies an already-open circuit breaker skips the search with no request.
+
+    Scenario:
+        Given a DomainCircuitBreakers whose amazon-host breaker is already open (opened by a prior
+        block this run) When get_search_results_via_playwright runs Then it returns [] and never
+        opens a BrowserContext, mirroring scrape_book's "circuit open -> skip" behaviour.
+
+    Boundaries:
+        - The breaker opens before the context is created; the bot-wall-trips-the-breaker path is
+          a separate test.
+
+    On failure, first check:
+        - The ``if breaker.is_open()`` guard before ``async with _search_page`` in the amazon case.
+    """
+    breakers = DomainCircuitBreakers(threshold=1)
+    assert breakers.for_url(AMAZON_BASE_URL).record_blocked() is True  # opens the host breaker
+
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", breakers=breakers)
+
+    assert result == []
+    browser.new_context.assert_not_called()
+
+
+async def test_amazon_search_robots_disallow_skips_before_navigation():
+    """
+    [Local] search utils: verifies a robots.txt-disallowed search page is never navigated to.
+
+    Scenario:
+        Given a RobotsCache that disallows every path When get_search_results_via_playwright runs
+        for amazon Then it returns [] and page.goto is never awaited (the disallowed page is
+        skipped before navigation, and since all search pages share one host, pagination ends).
+
+    Boundaries:
+        - The robots gate fires after the per-iteration context is created but before goto; the
+          Leanpub-API robots gate is a separate test.
+
+    On failure, first check:
+        - The ``if robots is not None and not await robots.allowed(...)`` gate before page.goto.
+    """
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", robots=_disallow_all_robots())
+
+    assert result == []
+    page.goto.assert_not_called()
+
+
+async def test_amazon_search_bot_wall_opens_breaker_and_stops(monkeypatch):
+    """
+    [Local] search utils: verifies a bot wall that opens the breaker stops the whole run.
+
+    Scenario:
+        Given _detect_bot_wall returns True on the first search page and a breaker whose threshold
+        is 1 (so one block opens it) When get_search_results_via_playwright runs with max_pages=3
+        Then it returns [] (no cards scraped), the amazon-host breaker is now open, and
+        wait_for_selector is never called (it stopped at the wall, before card scraping).
+
+    Boundaries:
+        - Covers the ``opened`` True branch (breaker opened); the "detected but not yet opened"
+          branch is a separate test.
+
+    On failure, first check:
+        - The ``if await _detect_bot_wall(...)`` block and its ``if opened`` branch in the amazon case.
+    """
+    monkeypatch.setattr(search_utils, "_detect_bot_wall", AsyncMock(return_value=True))
+    breakers = DomainCircuitBreakers(threshold=1)
+
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=True)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", max_pages=3, breakers=breakers)
+
+    assert result == []
+    assert breakers.for_url(AMAZON_BASE_URL).is_open() is True
+    page.wait_for_selector.assert_not_called()
+
+
+async def test_amazon_search_bot_wall_detected_but_breaker_stays_closed(monkeypatch):
+    """
+    [Local] search utils: verifies a single bot wall stops the run without opening the breaker.
+
+    Scenario:
+        Given _detect_bot_wall returns True and a breaker whose threshold is 3 (so one block does
+        NOT open it) When get_search_results_via_playwright runs Then it returns [] and the
+        amazon-host breaker remains closed (one block is below threshold), exercising the ``else``
+        (not-yet-opened) status-log branch.
+
+    Boundaries:
+        - Covers the ``opened`` False branch; the breaker-opens branch is a separate test.
+
+    On failure, first check:
+        - The ``else`` leg of the ``if opened`` branch in the amazon bot-wall handler.
+    """
+    monkeypatch.setattr(search_utils, "_detect_bot_wall", AsyncMock(return_value=True))
+    breakers = DomainCircuitBreakers(threshold=3)
+
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=True)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", max_pages=3, breakers=breakers)
+
+    assert result == []
+    assert breakers.for_url(AMAZON_BASE_URL).is_open() is False
+
+
+async def test_amazon_search_card_selector_timeout_stops_pagination():
+    """
+    [Local] search utils: verifies a card-selector timeout ends pagination with what's gathered.
+
+    Scenario:
+        Given a page whose wait_for_selector raises PlaywrightTimeoutError (an exhausted last page
+        never renders a card) When get_search_results_via_playwright runs Then it returns [] -
+        the timeout is caught, logged, and ends pagination rather than crashing.
+
+    Boundaries:
+        - The card-selector wait times out; the empty-card-list break (selector resolves, zero
+          cards) is a separate test.
+
+    On failure, first check:
+        - The ``except PlaywrightError`` around page.wait_for_selector(SEARCH_BOOK_CARD).
+    """
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=False)
+    page.wait_for_selector = AsyncMock(side_effect=PlaywrightTimeoutError("no cards appeared"))
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert result == []
+
+
+async def test_amazon_search_rating_locator_error_leaves_rating_none():
+    """
+    [Local] search utils: verifies a rating-locator error leaves rating None and keeps the card.
+
+    Scenario:
+        Given a card whose SEARCH_RATING locator's count() raises PlaywrightError When
+        get_search_results_via_playwright runs Then the one card is still returned with rating None
+        (the error is swallowed, not fabricated as a zero), proving a flaky rating read never drops
+        or corrupts a book.
+
+    Boundaries:
+        - Only the rating read fails; the rating-count read path is a separate test.
+
+    On failure, first check:
+        - The try/except PlaywrightError around the SEARCH_RATING locator read.
+    """
+    rating_selector = search_utils.site_constants["amazon"]["SEARCH_RATING"]
+    card = _amazon_card(
+        "B0RATING001",
+        sub_extra={rating_selector: FakeLocator(raises=PlaywrightError("bad rating locator"))},
+    )
+    page = _amazon_page(card, has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["rating"] is None
+    assert result[0]["title"] == "A Book"
+
+
+async def test_amazon_search_rating_count_locator_error_leaves_count_none():
+    """
+    [Local] search utils: verifies a rating-count-locator error leaves rating_count None, card kept.
+
+    Scenario:
+        Given a card whose SEARCH_RATING_COUNT locator's count() raises PlaywrightError When
+        get_search_results_via_playwright runs Then the one card is still returned with
+        rating_count None, proving a flaky review-count read never drops or corrupts a book.
+
+    Boundaries:
+        - Only the rating-count read fails; the rating read path is a separate test.
+
+    On failure, first check:
+        - The try/except PlaywrightError around the SEARCH_RATING_COUNT locator read.
+    """
+    count_selector = search_utils.site_constants["amazon"]["SEARCH_RATING_COUNT"]
+    card = _amazon_card(
+        "B0COUNT0001",
+        sub_extra={count_selector: FakeLocator(raises=PlaywrightError("bad count locator"))},
+    )
+    page = _amazon_page(card, has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python")
+
+    assert len(result) == 1
+    assert result[0]["rating_count"] is None
+    assert result[0]["title"] == "A Book"
+
+
+async def test_amazon_search_unexpected_error_returns_gathered_books():
+    """
+    [Local] search utils: verifies an unexpected error degrades to the books gathered so far.
+
+    Scenario:
+        Given a breakers registry whose for_url raises an unexpected RuntimeError (standing in for
+        any unhandled failure inside the search body) When get_search_results_via_playwright runs
+        Then it returns [] rather than propagating - the top-level isolation boundary logs critical
+        and returns the preliminary books gathered so far instead of crashing the caller.
+
+    Boundaries:
+        - The failure is raised before any card is gathered (so the result is empty); the point is
+          the graceful top-level catch, not the count.
+
+    On failure, first check:
+        - The outer ``try/except Exception`` wrapping the whole search in
+          get_search_results_via_playwright.
+    """
+    breakers = MagicMock()
+    breakers.for_url.side_effect = RuntimeError("unexpected breaker failure")
+
+    page = _amazon_page(_amazon_card("B0AAAAAAA1"), has_next=False)
+    browser = FakeBrowser(page=page)
+
+    result = await get_search_results_via_playwright(browser, "amazon", "python", breakers=breakers)
+
+    assert result == []

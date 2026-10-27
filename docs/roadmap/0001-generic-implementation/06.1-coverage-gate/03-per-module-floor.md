@@ -1,7 +1,7 @@
 # 03 - Per-module floor
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-enforce-gate-in-config.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/02-enforce-gate-in-config.md), [Task 06.0 / 04](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/04-detail-page-golden-tests.md), [Task 06.0 / 05](/docs/roadmap/0001-generic-implementation/06.0-real-html-mock-test-corpus/05-search-and-api-fixtures.md)
 **Role:** Testing Expert
 

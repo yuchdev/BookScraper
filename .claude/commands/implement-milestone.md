@@ -188,13 +188,11 @@ Build `task_queue` (dependency-ordered), `research_digest`, and `decisions`; wri
 the cursor; set `phase: "execute"`; proceed to Step M1 in the same iteration if
 budget allows, else reschedule.
 
-**Milestone exit gates: this project defines none beyond "full suite green +
-`/pr-review`" - do not invent any.** There is no CI configuration, no coverage
-threshold, no lint config, and no integration or benchmark suite in the repository;
-`tests/bookscraper_test.py` is an empty `unittest` placeholder and
-`tests/connection_test_password.py` / `tests/connection_test_tls.py` / `tests/connection_test_settings.py` are
-standalone MongoDB connectivity scripts that pytest does not collect. When a milestone's own `plan.md` names gates, those are the gates;
-otherwise R1 records an empty `exit_gates` list.
+**Milestone exit gates: when a milestone's own `plan.md` names gates, those are the gates;
+otherwise R1 records an empty `exit_gates` list** and the effective bar is full suite green
+(`uv run pytest --cov`, ≥ 90% coverage) + `/pr-review` LGTM. The project has a real pytest
+suite (`tests/unit/`, `tests/mock/`, `tests/integration/`), lint via flakeforge, and CI
+configuration; do not invent gates beyond what the plan names.
 
 ## Iteration algorithm (execute phase)
 
@@ -340,7 +338,7 @@ FAIL, CRITICAL security finding, `/pr-review` unresolved) stops the **milestone*
 loop, not just the task: a milestone must never advance past a task that could not
 pass its own gates.
 
-This project defines no stricter bar than the `implement-subtasks.md` defaults - but note that "full unit suite green" is currently vacuous: there is no runnable pytest suite (`test/bookscraper_test.py` is an empty `unittest` placeholder), no coverage configuration, and no `uv` lockfile, since dependencies are pinned in `requirements.txt` and installed with pip. Until a subtask lands a real suite, the effective bar at M4/M5 is `/pr-review` LGTM plus the tests the subtask itself introduces, and any `uv run pytest` instruction in an agent brief needs its runner adjusted to the venv actually in use.
+This project defines no stricter bar than the `implement-subtasks.md` defaults. The full suite command is `uv run pytest --cov` (the canonical form; see CLAUDE.md "Testing"); coverage must stay ≥ 90% combined line+branch. The exit gates for milestone 0001-generic-implementation are full suite green + `/pr-review` LGTM — the milestone `plan.md` names no additional gates beyond these.
 
 ---
 

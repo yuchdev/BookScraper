@@ -1580,6 +1580,75 @@ def test_dry_run_output_dir_json_store_parse_on_both_commands():
     assert search_args.json_store == "books-2.json"
 
 
+def test_report_flag_defaults_none_on_scrape_search_and_migrate():
+    """
+    [Unit] cli: --report defaults to None (dest=report) on scrape-urls, search and migrate.
+
+    Scenario:
+        Given a minimal invocation of each of the three reporting commands with no --report
+        When build_parser().parse_args() processes it
+        Then args.report is None on all three.
+
+    Boundaries:
+        - Pure argparse; no filesystem. --report lives on the shared scrape-runtime parent (covering
+          scrape-urls and search) and is declared individually on migrate.
+
+    On failure, first check:
+        - The --report argument on _scrape_runtime_parent() and on the migrate subparser.
+    """
+    scrape_args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "json"])
+    search_args = build_parser().parse_args(["search", "--store-backend", "json"])
+    migrate_args = build_parser().parse_args(["migrate", "--store-backend", "json"])
+    assert scrape_args.report is None
+    assert search_args.report is None
+    assert migrate_args.report is None
+
+
+def test_report_flag_parses_path_on_scrape_search_and_migrate():
+    """
+    [Unit] cli: --report parses its path into args.report on scrape-urls, search and migrate.
+
+    Scenario:
+        Given each reporting command invoked with --report <path>
+        When build_parser().parse_args() processes it
+        Then args.report holds the given path on all three.
+
+    Boundaries:
+        - Pure argparse; no file is opened at parse time.
+
+    On failure, first check:
+        - The dest=report on the --report argument in both declaration sites.
+    """
+    scrape_args = build_parser().parse_args(
+        ["scrape-urls", "-f", "x.csv", "--store-backend", "json", "--report", "r1.json"]
+    )
+    search_args = build_parser().parse_args(["search", "--store-backend", "json", "--report", "r2.json"])
+    migrate_args = build_parser().parse_args(["migrate", "--store-backend", "json", "--report", "r3.json"])
+    assert scrape_args.report == "r1.json"
+    assert search_args.report == "r2.json"
+    assert migrate_args.report == "r3.json"
+
+
+def test_report_flag_rejected_on_non_reporting_commands():
+    """
+    [Unit] cli: --report is not accepted by rotate-cert / detect-schema / doctor.
+
+    Scenario:
+        Given a rotate-cert invocation carrying --report
+        When it is parsed
+        Then argparse exits with a usage error (--report is only on the reporting commands).
+
+    Boundaries:
+        - Guards that --report did not leak onto a non-reporting subcommand via a shared parent.
+
+    On failure, first check:
+        - That --report is only on _scrape_runtime_parent() and the migrate subparser, not
+          _logging_parent().
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["rotate-cert", "--report", "r.json"])
+
+
 def test_doctor_store_backend_is_optional_and_defaults_none():
     """
     [Unit] cli doctor: --store-backend is optional and defaults to None.
@@ -1639,3 +1708,104 @@ def test_doctor_rejects_unknown_store_backend():
     """
     with pytest.raises(SystemExit):
         build_parser().parse_args(["doctor", "--store-backend", "sqlite"])
+
+
+# --------------------------------------------------------------------------- #
+# LLM extraction fallback flags (task 04.1, subtask 05)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("command", ["scrape-urls", "search"])
+def test_ai_fallback_flags_default_off_on_both_subcommands(command):
+    """
+    [Unit] cli: --ai-fallback defaults off (max-pages 20, model None) on scrape-urls AND search.
+
+    Scenario:
+        Given the parser built by build_parser()
+        When a minimal scrape-urls / search invocation is parsed without the fallback flags
+        Then ai_fallback is False, ai_fallback_max_pages is 20, and model is None
+
+    Boundaries:
+        - The flags live on the shared scrape-runtime parent, so both subcommands inherit them
+
+    On failure, first check:
+        - The --ai-fallback/--ai-fallback-max-pages/--model declarations in _scrape_runtime_parent.
+    """
+    extra = ["-f", "x.csv"] if command == "scrape-urls" else []
+    args = build_parser().parse_args([command, "--store-backend", "json", *extra])
+    assert args.ai_fallback is False
+    assert args.ai_fallback_max_pages == 20
+    assert args.model is None
+
+
+def test_ai_fallback_flags_parse_when_set():
+    """
+    [Unit] cli: --ai-fallback, --ai-fallback-max-pages and --model parse into their dests.
+
+    Scenario:
+        Given the parser built by build_parser()
+        When scrape-urls is parsed with all three fallback flags set
+        Then the parsed Namespace carries the enabled flag, the page cap, and the model ID
+
+    Boundaries:
+        - dest names match what commands/scrape_urls.py and runtime read
+
+    On failure, first check:
+        - The dest= values on the fallback flags in _scrape_runtime_parent.
+    """
+    args = build_parser().parse_args(
+        [
+            "scrape-urls",
+            "-f",
+            "x.csv",
+            "--store-backend",
+            "json",
+            "--ai-fallback",
+            "--ai-fallback-max-pages",
+            "50",
+            "--model",
+            "claude-test",
+        ]
+    )
+    assert args.ai_fallback is True
+    assert args.ai_fallback_max_pages == 50
+    assert args.model == "claude-test"
+
+
+@pytest.mark.parametrize("bad", ["0", "201", "-3", "abc"])
+def test_ai_fallback_max_pages_rejects_out_of_range(bad):
+    """
+    [Unit] cli: --ai-fallback-max-pages rejects values outside 1-200 and non-integers (EXT-4 bound).
+
+    Scenario:
+        Given the parser built by build_parser()
+        When --ai-fallback-max-pages is 0, 201, negative, or non-numeric
+        Then argparse exits with usage code 2
+
+    Boundaries:
+        - 1 and 200 are accepted (the inclusive bounds); only outside values fail
+
+    On failure, first check:
+        - cli._bounded_fallback_pages range check.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["search", "--store-backend", "json", "--ai-fallback-max-pages", bad])
+    assert excinfo.value.code == 2
+
+
+@pytest.mark.parametrize("good", ["1", "200"])
+def test_ai_fallback_max_pages_accepts_inclusive_bounds(good):
+    """
+    [Unit] cli: --ai-fallback-max-pages accepts the inclusive 1 and 200 bounds.
+
+    Scenario:
+        Given the parser built by build_parser()
+        When --ai-fallback-max-pages is 1 or 200
+        Then the value parses to that integer
+
+    Boundaries:
+        - Complements the out-of-range rejection test
+
+    On failure, first check:
+        - cli._bounded_fallback_pages range check.
+    """
+    args = build_parser().parse_args(["search", "--store-backend", "json", "--ai-fallback-max-pages", good])
+    assert args.ai_fallback_max_pages == int(good)

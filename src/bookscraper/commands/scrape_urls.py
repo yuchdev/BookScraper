@@ -7,19 +7,26 @@ import os
 import time
 from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 import httpx
-import pandas as pd
+from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
 from .. import exitcodes
 from ..backends import resolve_store_backend
 from ..book_utils import csv_safe_cell, logger, print_log
 from ..runtime import runtime_options
+from ..scraping.ai_extraction import AIExtractionError
 from ..scraping.politeness import RobotsCache, bounded_gather, build_default_breakers, build_default_limiters
 from ..scraping.results import FAILURE_STATUSES, ScrapeResult, ScrapeStatus
-from ..scraping.scrape_details import ROBOTS_FETCH_TIMEOUT_S, build_robots_fetcher, scrape_book
-from ._reporting import elapsed_since, format_status_breakdown, write_failed_csv
+from ..scraping.scrape_details import (
+    ROBOTS_FETCH_TIMEOUT_S,
+    build_robots_fetcher,
+    create_ai_fallback,
+    scrape_book,
+)
+from ._reporting import RunReport, elapsed_since, format_status_breakdown, write_failed_csv
 
 #: CSV column order for ``failed_books.csv`` (the ``scrape-urls`` failed/duplicate diagnostic).
 FAILED_BOOKS_FIELDNAMES = ["url", "status", "error"]
@@ -91,7 +98,7 @@ def _report_dry_run_books(books: list[dict], store_backend: str):
         print_log(f"  {title} | {site} | {book_hash}", "info")
 
 
-async def run(args: argparse.Namespace) -> int:
+async def run(args: argparse.Namespace, report: Optional[RunReport] = None) -> int:
     """
     The "I already have URLs" workflow: scrape a CSV of book URLs into the chosen store.
 
@@ -100,6 +107,8 @@ async def run(args: argparse.Namespace) -> int:
     per-host pacing left to the rate limiter), and writes the run's diagnostic CSVs.
 
     :param args: Parsed ``scrape-urls`` arguments (input file, ``--store-backend``, etc.).
+    :param report: The run report to record per-site counts, the save summary and flags into, or
+        ``None`` when called outside :func:`bookscraper.main.main` (e.g. a unit test).
     :returns: An exit code from :mod:`bookscraper.exitcodes`: :data:`~bookscraper.exitcodes.FATAL`
         on an unreadable input CSV, :data:`~bookscraper.exitcodes.PARTIAL` when at least one URL
         failed to scrape or a save errored, otherwise :data:`~bookscraper.exitcodes.OK` (including
@@ -110,6 +119,36 @@ async def run(args: argparse.Namespace) -> int:
     # Resolve the run-wide runtime knobs once (flag -> env -> parameters.py precedence) and thread
     # the resolved values down instead of importing the headless default / a module concurrency one.
     runtime = runtime_options(args)
+
+    # LLM extraction fallback (task 04.1): opt-in and validated BEFORE any scraping. Without
+    # --ai-fallback this stays None and no ANTHROPIC_API_KEY is read. With it, a missing key or an
+    # empty model ID fails loudly here (exit FATAL) rather than mid-run (threat model EXT-7).
+    ai_fallback = None
+    if getattr(args, "ai_fallback", False):
+        load_dotenv()  # honor ANTHROPIC_API_KEY / ANTHROPIC_MODEL from .env, like detect-schema.
+        try:
+            ai_fallback = create_ai_fallback(model=getattr(args, "model", None), max_pages=args.ai_fallback_max_pages)
+        except AIExtractionError as exc:
+            print_log(
+                f"AI fallback could not start: {exc} Set ANTHROPIC_API_KEY (or add it to .env) and a "
+                "valid --model, or drop --ai-fallback.",
+                "error",
+            )
+            return exitcodes.FATAL
+
+    # Record the run's context in the report up front (so a backend/pre-flight abort still carries
+    # the flags), and attach the fallback runtime so its final counts land in the report even on an
+    # interrupt. A None report (unit test / non-main caller) makes every report call a no-op.
+    if report is not None:
+        report.set_context(
+            store_backend=args.store_backend,
+            flags={
+                "dry_run": runtime.dry_run,
+                "ignore_robots": runtime.ignore_robots,
+                "ai_fallback": ai_fallback is not None,
+            },
+        )
+        report.attach_ai_fallback(ai_fallback)
 
     # Create the diagnostics output directory up front (default "." is a no-op) so both the
     # early "no valid URLs" exit and the end-of-run writes land in --output-dir.
@@ -151,10 +190,39 @@ async def run(args: argparse.Namespace) -> int:
 
         filepath = args.input_file
         try:
-            df = pd.read_csv(filepath, encoding="utf-8")
-            for url in df["url"]:
-                site_identifier = identify_website(url)
-                website_urls[site_identifier].append(url)
+            # stdlib csv replaces pandas here (the only pandas use in the tree): the input is a
+            # one-column CSV of URLs. ``utf-8-sig`` transparently strips a leading UTF-8 BOM, and
+            # ``DictReader`` tolerates extra columns (only the ``url`` column is read). The three
+            # malformed-input cases below keep the exact messages/exit codes the pandas version used.
+            with open(filepath, newline="", encoding="utf-8-sig") as csvfile:
+                reader = csv.DictReader(csvfile)
+                fieldnames = reader.fieldnames
+                if fieldnames is None:
+                    # No header row at all: pandas raised EmptyDataError here.
+                    logger.critical(f"Error: CSV file '{filepath}' is empty")
+                    print_log(
+                        f"Critical Error: The CSV file '{filepath}' is empty (no columns to parse). "
+                        "Please provide a file with a 'url' column.",
+                        "error",
+                    )
+                    return exitcodes.FATAL
+                if "url" not in fieldnames:
+                    # No 'url' column: pandas raised KeyError on df["url"] here.
+                    logger.critical(f"Error: CSV file '{filepath}' does not contain a 'url' column.")
+                    print_log(
+                        f"Critical Error: The CSV file '{filepath}' does not contain a 'url' column. Please ensure it has a 'url' header.",
+                        "error",
+                    )
+                    return exitcodes.FATAL
+                for row in reader:
+                    url = row["url"]
+                    if url is None:
+                        # A data row with fewer fields than the header leaves 'url' as None (the
+                        # DictReader restval); skip it rather than pass a non-string to
+                        # identify_website. Blank lines are already skipped by the csv module.
+                        continue
+                    site_identifier = identify_website(url)
+                    website_urls[site_identifier].append(url)
 
         except FileNotFoundError:
             logger.critical(f"Error: Input file not found at {filepath}")
@@ -163,25 +231,10 @@ async def run(args: argparse.Namespace) -> int:
                 "error",
             )
             return exitcodes.FATAL
-        except pd.errors.ParserError:
-            logger.critical(f"Error: Could not parse CSV at {filepath}")
+        except (csv.Error, UnicodeDecodeError) as exc:
+            logger.critical(f"Error: Could not parse CSV at {filepath}: {exc}")
             print_log(
                 f"Critical Error: Could not parse the CSV file '{filepath}'. Please check its format.",
-                "error",
-            )
-            return exitcodes.FATAL
-        except pd.errors.EmptyDataError:
-            logger.critical(f"Error: CSV file '{filepath}' is empty")
-            print_log(
-                f"Critical Error: The CSV file '{filepath}' is empty (no columns to parse). "
-                "Please provide a file with a 'url' column.",
-                "error",
-            )
-            return exitcodes.FATAL
-        except KeyError:
-            logger.critical(f"Error: CSV file '{filepath}' does not contain a 'url' column.")
-            print_log(
-                f"Critical Error: The CSV file '{filepath}' does not contain a 'url' column. Please ensure it has a 'url' header.",
                 "error",
             )
             return exitcodes.FATAL
@@ -264,6 +317,7 @@ async def run(args: argparse.Namespace) -> int:
                         robots,
                         breakers,
                         nav_timeout_ms=runtime.nav_timeout_ms,
+                        ai_fallback=ai_fallback,
                     )
                     for url in all_urls_to_scrape
                 ]
@@ -274,12 +328,16 @@ async def run(args: argparse.Namespace) -> int:
                         # bounded_gather surfaced an exception scrape_book did not convert into a typed
                         # ScrapeResult; record it as a raw failure instead of dereferencing .status.
                         status_counts[ScrapeStatus.FAILED] += 1
+                        if report is not None:
+                            report.record_status(identify_website(url), ScrapeStatus.FAILED)
                         failed_urls_with_status.append(
                             {"url": url, "status": ScrapeStatus.FAILED.value, "error": str(result)}
                         )
                         logger.error(f"Scraping raised for URL: {url}: {result}")
                         continue
                     status_counts[result.status] += 1
+                    if report is not None:
+                        report.record_status(result.site, result.status)
                     match result.status:
                         case ScrapeStatus.SUCCESS:
                             # book is guaranteed non-None on SUCCESS by ScrapeResult.__post_init__.
@@ -343,12 +401,19 @@ async def run(args: argparse.Namespace) -> int:
                 # summary.errors > 0 is the partial-failure signal the exit-code contract
                 # (task 05.0, subtask 05) consumes.
                 save_errors = summary.errors
+                if report is not None:
+                    report.set_save(summary)
                 print_log(
                     f"Save summary: {summary.inserted} new, {summary.duplicates} duplicates, {summary.errors} errors.",
                     "warning" if summary.errors > 0 else "success",
                 )
             else:
                 print_log("No new unique books scraped to save.", "info")
+
+        # One-line AI-fallback run summary (requests made, fields filled/dropped, whether the cap
+        # was hit, and the summed token usage - no prices, no key). Only when the fallback ran.
+        if ai_fallback is not None:
+            print_log(ai_fallback.summary_line(), "info")
 
         # PARTIAL when at least one URL ended in a failure status (FAILED/TIMEOUT/PARSE_ERROR/
         # BLOCKED) or a save errored; a DUPLICATE/NOT_FOUND/SKIPPED_ROBOTS outcome is not a failure.

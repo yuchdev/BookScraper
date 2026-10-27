@@ -1,7 +1,7 @@
 # 04 - Markdown snapshot spike
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete (measured, not adopted)
 **Depends on:** [03-field-extraction-engine.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/03-field-extraction-engine.md)
 **Role:** Python Expert
 

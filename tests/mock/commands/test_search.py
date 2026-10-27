@@ -19,6 +19,7 @@ import pytest
 from bookscraper import exitcodes
 from bookscraper.backends.storage import SaveSummary
 from bookscraper.commands import search
+from bookscraper.commands._reporting import RunReport
 from bookscraper.commands.search import resolve_search_targets, run
 from bookscraper.scraping.results import ScrapeResult, ScrapeStatus
 
@@ -286,6 +287,71 @@ async def test_run_detail_results_partition_into_saved_and_failed():
     assert failed_titles == {"Boom Book", "Weird Book"}
     boom_entry = next(f for f in failed_arg if f["title"] == "Boom Book")
     assert "detail scrape blew up" in boom_entry["error"]
+
+
+async def test_run_records_per_site_counts_and_save_into_report():
+    """
+    [Local] search: verifies run() records per-site status counts, the save summary and flags.
+
+    Scenario:
+        Given a RunReport passed to run() and three leanpub candidates returning SUCCESS, FAILED,
+        and a raw RuntimeError
+        When run() completes
+        Then report.per_site["leanpub"] is {SUCCESS: 1, FAILED: 2}, report.save reflects the one
+        insert, store_backend is "json", and flags carries filters_enabled/ai_fallback.
+
+    Boundaries:
+        - Only the report-recording hooks in run(); the partition logic itself is a separate test.
+
+    On failure, first check:
+        - The report.record_status / report.set_save / report.set_context calls in search.run.
+    """
+    args = SimpleNamespace(store_backend="json", ignore_robots=False)
+    report = RunReport("search", ["search", "--store-backend", "json"])
+
+    good = _leanpub_book("good", "Good Book")
+    boom = _leanpub_book("boom", "Boom Book")
+    weird = _leanpub_book("weird", "Weird Book")
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    backend.leanpub_book_exists = MagicMock(return_value=False)
+
+    search_api = AsyncMock(return_value=[good, boom, weird])
+    detail = AsyncMock(
+        side_effect=[
+            ScrapeResult(
+                ScrapeStatus.SUCCESS,
+                url="https://leanpub.com/api/v1/cache/books/good.json",
+                site="leanpub",
+                book={"title": "Good Book", "site": "leanpub", "hash": "ok"},
+            ),
+            ScrapeResult(
+                ScrapeStatus.FAILED,
+                url="https://leanpub.com/api/v1/cache/books/boom.json",
+                site="leanpub",
+                error="detail scrape blew up",
+            ),
+            RuntimeError("weird crash"),
+        ]
+    )
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.SEARCH_QUERIES", ["Python"]),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_search_results_via_api", search_api),
+        patch(f"{PROVIDERS_MODULE}.get_leanpub_book_details", detail),
+        patch(f"{MODULE}.write_failed_csv"),
+    ):
+        await run(args, report)
+
+    document = report.to_dict()
+    assert document["per_site"]["leanpub"] == {"SUCCESS": 1, "FAILED": 2}
+    assert document["save"] == {"inserted": 1, "duplicates": 0, "errors": 0}
+    assert document["store_backend"] == "json"
+    assert document["flags"]["filters_enabled"] is True
+    assert document["flags"]["ai_fallback"] is False
+    assert document["ai_fallback"] is None
 
 
 @pytest.mark.parametrize("non_failure_status", [ScrapeStatus.DUPLICATE, ScrapeStatus.SKIPPED_ROBOTS])

@@ -245,9 +245,7 @@ def test_rotate_certificate_explicit_arguments_beat_env(atlas_env, monkeypatch, 
     assert post.call_args_list[1].kwargs["json"] == {"monthsUntilExpiration": 3}
 
 
-def test_rotate_certificate_env_overrides_apply_when_no_arguments(
-    atlas_env, monkeypatch, tmp_path, isolated_config
-):
+def test_rotate_certificate_env_overrides_apply_when_no_arguments(atlas_env, monkeypatch, tmp_path, isolated_config):
     """
     [Local] cert rotation: verifies that ATLAS_CERT_MONTHS and ATLAS_CERT_FILE env vars apply when no explicit arguments are passed.
 
@@ -273,9 +271,7 @@ def test_rotate_certificate_env_overrides_apply_when_no_arguments(
     assert post.call_args_list[1].kwargs["json"] == {"monthsUntilExpiration": 12}
 
 
-def test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body(
-    atlas_env, isolated_config
-):
+def test_rotate_certificate_http_status_error_becomes_rotation_error_without_leaking_body(atlas_env, isolated_config):
     """
     [Local] cert rotation: verifies that an Atlas 403 becomes RotationError with the status code but no response body content.
 

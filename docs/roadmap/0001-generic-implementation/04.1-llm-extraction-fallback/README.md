@@ -38,11 +38,11 @@ needs the `id`/`class`/attribute structure that Markdown discards.
 
 | #  | Document                                                                 | Status         | Blocks |
 |----|--------------------------------------------------------------------------|----------------|--------|
-| 01 | [ADR & threat model](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/01-adr-and-threat-model.md) | ⬜ Not started | 02-05 |
-| 02 | [Shared AI prompt infrastructure](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/02-shared-ai-prompt-infrastructure.md) | ⬜ Not started | 03 |
-| 03 | [Field extraction engine](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/03-field-extraction-engine.md) | ⬜ Not started | 05 |
-| 04 | [Markdown snapshot spike](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/04-markdown-snapshot-spike.md) | ⬜ Not started | -  |
-| 05 | [Scraper integration & provenance](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/05-scraper-integration-and-provenance.md) | ⬜ Not started | - |
+| 01 | [ADR & threat model](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/01-adr-and-threat-model.md) | ✅ Complete | 02-05 |
+| 02 | [Shared AI prompt infrastructure](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/02-shared-ai-prompt-infrastructure.md) | ✅ Complete | 03 |
+| 03 | [Field extraction engine](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/03-field-extraction-engine.md) | ✅ Complete | 05 |
+| 04 | [Markdown snapshot spike](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/04-markdown-snapshot-spike.md) | ✅ Complete (measured, not adopted) | -  |
+| 05 | [Scraper integration & provenance](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/05-scraper-integration-and-provenance.md) | ✅ Complete (summary drops aggregate, not by reason) | - |
 
 ## Dependencies
 

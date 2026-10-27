@@ -921,7 +921,9 @@ async def test_detect_schema_no_urls():
 # --------------------------------------------------------------------------- #
 # validate_search_across_samples (card-relative fractions)
 # --------------------------------------------------------------------------- #
-def _search_page(card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_sel="NEXT", content="<html></html>") -> FakePage:
+def _search_page(
+    card_sel="CARD", title_sel="TITLE", n_cards=8, n_title=8, next_sel="NEXT", content="<html></html>"
+) -> FakePage:
     """A FakePage for a search-results page: ``n_cards`` cards, ``n_title`` of which carry a
     card-relative title element, plus a page-level next-page selector."""
     cards = []

@@ -12,6 +12,15 @@ These options belong to the top-level parser and are not subcommand-specific.
 |------|--------|---------|--------------|-------------|
 | `-V` / `--version` | — | — | — | Print `bookscraper <version> (Python <x.y.z>, Playwright <v>)` and exit. |
 
+### Environment variables
+
+Not tied to a flag.
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `BOOKSCRAPER_LIB_LOG_LEVEL` | `WARNING` | Level (name, e.g. `DEBUG`) for third-party loggers (`pymongo`, `httpx`, `httpcore`, `anthropic`, `asyncio`), which are otherwise pinned to `WARNING` so `--log-severity debug` shows only bookscraper debug lines. Useful when diagnosing a TLS handshake. An unrecognized value is ignored (stays `WARNING`) with a one-line warning. `--log-severity` controls the `bookscraper` loggers; this controls the libraries. |
+| `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | `10000` | MongoDB server-selection timeout in milliseconds, used by every Mongo connection and the `doctor` ping. A blank, non-integer or non-positive value warns and falls back to the default. (Not logging-related; listed here as the one connection-tuning env var.) |
+
 ## Exit codes
 
 All subcommands share this contract (source of truth: `src/bookscraper/exitcodes.py`).
@@ -49,7 +58,13 @@ bookscraper scrape-urls -f <path> --store-backend {mongo|json} [options]
 | `--dry-run` | `dry_run` | `False` | — | Run everything including duplicate-check reads, but save nothing. Prints title/site/hash of each book that would have been saved. |
 | `--output-dir` | `output_dir` | `.` | — | Directory for diagnostic CSVs (`failed_*.csv`, `other_links.csv`); created if missing. |
 | `--json-store` | `json_store` | `None` | — | Explicit path for the `json` backend's store file (default `books.json`). Invalid with `--store-backend mongo`. |
+| `--report` | `report` | `None` | — | Also write the machine-readable run report to this path. A copy is always written next to the run log under `~/.bookscrapper/logs/` regardless of this flag. See [Run report](#run-report) below. |
+| `--ai-fallback` | `ai_fallback` | `False` | — | Enable the opt-in LLM extraction fallback (task 04.1): when a deterministic selector leaves an eligible field (description, publication date, ISBN-10/13, authors; never the title) empty, ask Claude for just that field from the already-loaded page and store it only if it passes the evidence + normalizer gates. Off by default; needs `ANTHROPIC_API_KEY`. |
+| `--ai-fallback-max-pages` | `ai_fallback_max_pages` | `20` | — | Hard per-run cap on fallback **requests** (1–200), enforced by a shared async-safe counter across the concurrent batch. Only with `--ai-fallback`. |
+| `--model` | `model` | `None` (uses env, else `claude-sonnet-5`) | `ANTHROPIC_MODEL` | Anthropic model ID for the `--ai-fallback` requests. Empty value rejected at start-up. Ignored without `--ai-fallback`. |
 | `--log-severity {debug,info,warning,error}` | `log_severity` | `info` | — | Minimum severity written to the run's log file under `~/.bookscrapper/logs/`. Console output is unaffected. |
+
+With `--ai-fallback`, a missing `ANTHROPIC_API_KEY` or an empty model ID fails loudly at start-up (exit `1`) before any scraping; without the flag no key is read and behavior is byte-identical. A one-line run summary (requests made, fields filled/dropped, whether the cap was hit, and summed token usage - no prices, no key) is printed at the end. Every AI-filled field is listed in the record's `ai_extracted_fields`.
 
 ### Examples
 
@@ -100,6 +115,10 @@ bookscraper search --store-backend {mongo|json} [options]
 | `--dry-run` | `dry_run` | `False` | — | Run everything including duplicate-check reads, but save nothing. |
 | `--output-dir` | `output_dir` | `.` | — | Directory for diagnostic CSVs; created if missing. |
 | `--json-store` | `json_store` | `None` | — | Explicit path for the `json` backend's store file. Invalid with `--store-backend mongo`. |
+| `--report` | `report` | `None` | — | Also write the machine-readable run report to this path. A copy is always written next to the run log under `~/.bookscrapper/logs/`. See [Run report](#run-report) below. |
+| `--ai-fallback` | `ai_fallback` | `False` | — | Enable the opt-in LLM extraction fallback (task 04.1); see `scrape-urls`. Hooked only on the Playwright detail path (e.g. Amazon); Leanpub's API path has no selectors to drift. Needs `ANTHROPIC_API_KEY`. |
+| `--ai-fallback-max-pages` | `ai_fallback_max_pages` | `20` | — | Hard per-run cap on fallback requests (1–200). Only with `--ai-fallback`. |
+| `--model` | `model` | `None` (uses env, else `claude-sonnet-5`) | `ANTHROPIC_MODEL` | Anthropic model ID for the `--ai-fallback` requests. Ignored without it. |
 | `--log-severity {debug,info,warning,error}` | `log_severity` | `info` | — | Minimum severity written to the run log file. |
 
 ### Examples
@@ -208,6 +227,7 @@ bookscraper migrate --store-backend {mongo|json} [--apply]
 |------|--------|---------|--------------|-------------|
 | `--store-backend {mongo,json}` | `store_backend` | *(required)* | — | Storage backend to migrate. |
 | `--apply` | `apply` | `False` | — | Write the migrated documents to the store. Without this flag the command is a dry run that reports changes and writes nothing. |
+| `--report` | `report` | `None` | — | Also write the machine-readable run report to this path. A copy is always written next to the run log under `~/.bookscrapper/logs/`. See [Run report](#run-report) below. |
 | `--log-severity {debug,info,warning,error}` | `log_severity` | `info` | — | Minimum severity written to the run log file. |
 
 ### Examples
@@ -345,3 +365,42 @@ uv run bookscraper detect-schema --site amazon --page-type search \
 | `0` | All current selectors matched at least one sample page; no drift. |
 | `1` | A `SchemaDetectionError` occurred (missing API key, page-load failure, malformed AI response). |
 | `4` | Drift: at least one current (non-optional) selector matched no sample page. |
+
+---
+
+## Run report
+
+Every `scrape-urls`, `search`, and `migrate` run writes a machine-readable JSON run report to
+`~/.bookscrapper/logs/bookscraper_<timestamp>_<pid>.report.json` (the same stem as the run log, pruned
+together with it once more than `MAX_LOG_FILES` runs accumulate). Passing `--report PATH` writes an
+additional copy to `PATH`. Both copies are written atomically with owner-only (`0600`) permissions.
+
+The report is `schema` version `1`. A cron or CI wrapper can decide "alert or not" from `exit_code`
+plus `per_site` alone:
+
+```json
+{
+  "schema": 1,
+  "command": "search",
+  "argv": ["search", "--store-backend", "json", "--site", "amazon"],
+  "started_at": "2026-10-26T12:00:00Z",
+  "finished_at": "2026-10-26T12:02:03Z",
+  "duration_s": 123.4,
+  "versions": {"bookscraper": "...", "python": "3.13.0", "playwright": "...", "chromium": "153.0.8010.12"},
+  "store_backend": "json",
+  "flags": {"dry_run": false, "ignore_robots": false, "filters_enabled": true, "ai_fallback": false},
+  "per_site": {"amazon": {"SUCCESS": 12, "DUPLICATE": 3, "BLOCKED": 1}},
+  "save": {"inserted": 12, "duplicates": 0, "errors": 0},
+  "ai_fallback": null,
+  "exit_code": 3
+}
+```
+
+- `argv` is run through the secret-redaction filter, so a credential passed on the command line never
+  reaches the report. The report carries no connection URI, document body, or page HTML.
+- `versions.chromium` is best-effort and may be `null` when Playwright is unavailable.
+- `save` is `null` for a dry run or a run that saved nothing; `migrate` has no `save` or `per_site`.
+- The optional `ai_fallback` block (requests, filled, dropped, cap_hit, token-usage totals - no
+  prices, no key) is present only when `--ai-fallback` ran; otherwise it is `null`.
+- An interrupted run (`Ctrl+C`) still gets a report, finalized with `exit_code` `130`.
+- Writing the report is best-effort: a write failure warns and never changes the exit code.

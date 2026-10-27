@@ -4,8 +4,10 @@ Every external collaborator is mocked: Playwright (via playwright_fakes), httpx,
 asyncio.sleep. No network, no browser, no disk.
 """
 
+import asyncio
 import json
 from contextlib import AbstractContextManager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -13,7 +15,9 @@ import httpx
 import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from bookscraper.scraping import scrape_details
+import bookscraper.book_utils as book_utils
+from bookscraper.scraping import ai_common, ai_extraction, scrape_details
+from bookscraper.scraping.ai_common import UsageAccumulator
 from bookscraper.scraping.parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
 from bookscraper.scraping.politeness import (
     DomainCircuitBreakers,
@@ -2200,3 +2204,465 @@ async def test_open_circuit_skips_request_and_returns_blocked():
     assert result.status is ScrapeStatus.BLOCKED
     assert result.error == "circuit open"
     browser.new_page.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# LLM extraction fallback (task 04.1, subtask 05) - scrape_book hook
+# ---------------------------------------------------------------------------
+
+
+AMAZON_ISBN10_SEL = "#rpi-attribute-book_details-isbn10 .rpi-attribute-value span"
+AMAZON_ISBN13_SEL = "#rpi-attribute-book_details-isbn13 .rpi-attribute-value span"
+AMAZON_DATE_SEL = (
+    "#rpi-attribute-book_details-publication_date .rpi-attribute-value span, "
+    "#rpi-attribute-audiobook_details-release-date .rpi-attribute-value span"
+)
+
+
+def _fake_ai_message(text: str, stop_reason: str = "end_turn") -> SimpleNamespace:
+    """A stand-in anthropic Message carrying one text block and a usage object."""
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=text)],
+        stop_reason=stop_reason,
+        stop_details=None,
+        usage=SimpleNamespace(
+            input_tokens=11,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+            output_tokens=3,
+        ),
+    )
+
+
+def _fake_ai_client(message: SimpleNamespace) -> MagicMock:
+    """A mocked anthropic client whose count_tokens is under budget and create returns message."""
+    client = MagicMock()
+    client.messages.count_tokens.return_value = SimpleNamespace(input_tokens=50)
+    client.messages.create.return_value = message
+    return client
+
+
+def _amazon_page_without_description(content: str) -> FakePage:
+    """An amazon detail page with title/authors/ISBNs/date present but NO description match.
+
+    ``content`` is what ``page.content()`` returns - the untrusted HTML the fallback prompt is
+    built from and the evidence is checked against.
+    """
+    locators = {
+        "#productTitle": FakeLocator("C++ Primer"),
+        ".author a.a-link-normal": FakeLocator([{"text": "Stanley B. Lippman"}]),
+        AMAZON_ISBN10_SEL: FakeLocator("0321714113"),
+        AMAZON_ISBN13_SEL: FakeLocator("978-0321714114"),
+        AMAZON_DATE_SEL: FakeLocator("September 24, 2022"),
+    }
+    return FakePage(locators=locators, title="C++ Primer - Amazon", content=content)
+
+
+def _only_description_replay(content: str, description: str) -> dict[str, str]:
+    """Build a replay map keyed by the exact prompt hash for a DESCRIPTION-only request."""
+    instruction_block = ai_extraction.build_extraction_instruction_block("amazon", ["DESCRIPTION"])
+    snapshot_block = ai_common.build_snapshot_block(ai_common.prune_html(content))
+    key = ai_common.prompt_hash(instruction_block, snapshot_block)
+    return {key: json.dumps({"fields": {"DESCRIPTION": {"value": description, "evidence": description}}})}
+
+
+async def test_fallback_off_by_default_makes_no_call_and_reads_no_key(monkeypatch):
+    """
+    [Local] scrape details: with no ai_fallback runtime, the LLM path is never entered (off by default).
+
+    Scenario:
+        Given an amazon page missing its description and scrape_book called with ai_fallback=None
+        And extract_missing_fields replaced by a tripwire that fails if ever called
+        When scrape_book runs
+        Then it succeeds with description None and ai_extracted_fields == [] and the tripwire never fired
+
+    Boundaries:
+        - ai_fallback defaults to None, so page.content() is never read for a prompt and no client/key is touched
+
+    On failure, first check:
+        - The ``ai_fallback is None`` guard at the top of _apply_ai_fallback.
+    """
+
+    async def _tripwire(*args, **kwargs):
+        """Fail immediately if the fallback engine is ever reached with the flag off."""
+        raise AssertionError("extract_missing_fields must not be called when the fallback is off")
+
+    monkeypatch.setattr(scrape_details, "extract_missing_fields", _tripwire)
+    page = _amazon_page_without_description("<html><body><p>No description element here.</p></body></html>")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book("https://www.amazon.com/dp/0321714113/", browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["description"] is None
+    assert result.book["ai_extracted_fields"] == []
+
+
+async def test_missing_description_filled_and_marked_in_ai_extracted_fields():
+    """
+    [Local] scrape details: a drifted description is recovered via replay and marked (EXT-9 provenance).
+
+    Scenario:
+        Given an amazon page whose description selector matches nothing but whose HTML text carries
+        the description, and an ai_fallback runtime in replay mode returning that text
+        When scrape_book runs
+        Then the result is SUCCESS, description holds the recovered text, and ai_extracted_fields == ["description"]
+
+    Boundaries:
+        - The replay key is the exact prompt hash for a DESCRIPTION-only request; no live client is used
+
+    On failure, first check:
+        - The merge in _apply_ai_fallback, or the dataclasses.replace that stamps ai_extracted_fields.
+    """
+    description = "A thorough, carefully crafted introduction to C++ for working programmers."
+    content = f"<html><body><h1>C++ Primer</h1><div id='desc'>{description}</div></body></html>"
+    page = _amazon_page_without_description(content)
+    browser = FakeBrowser(page=page)
+    runtime = scrape_details.AIFallbackRuntime(
+        client=None,
+        model="claude-sonnet-5",
+        usage=UsageAccumulator(),
+        cap=scrape_details.AICallCap(10),
+        replay=_only_description_replay(content, description),
+    )
+
+    result = await scrape_book("https://www.amazon.com/dp/0321714113/", browser, "amazon", ai_fallback=runtime)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["description"] == description
+    assert result.book["ai_extracted_fields"] == ["description"]
+    assert runtime.cap.used == 1
+    assert runtime.filled == 1
+
+
+async def test_title_missing_still_parse_error_with_fallback_on(monkeypatch):
+    """
+    [Local] scrape details: a missing title is PARSE_ERROR even with the fallback on (EXT-2).
+
+    Scenario:
+        Given an amazon page with no title and an ai_fallback runtime enabled
+        And extract_missing_fields replaced by a tripwire that fails if ever called
+        When scrape_book runs
+        Then it returns PARSE_ERROR and the fallback was never invoked (title is never AI-filled)
+
+    Boundaries:
+        - The title check returns before the fallback hook, so the dedup hash can never be AI-authored
+
+    On failure, first check:
+        - The required-title early return precedes _apply_ai_fallback in scrape_book.
+    """
+
+    async def _tripwire(*args, **kwargs):
+        """Fail immediately if the fallback runs when the required title is missing."""
+        raise AssertionError("the fallback must never run when the required title is missing")
+
+    monkeypatch.setattr(scrape_details, "extract_missing_fields", _tripwire)
+    page = FakePage(locators={}, title="C++ Primer - Amazon", content="<html><body>no title element</body></html>")
+    browser = FakeBrowser(page=page)
+    runtime = scrape_details.AIFallbackRuntime(
+        client=_fake_ai_client(_fake_ai_message("{}")),
+        model="claude-sonnet-5",
+        usage=UsageAccumulator(),
+        cap=scrape_details.AICallCap(10),
+    )
+
+    result = await scrape_book("https://www.amazon.com/dp/0321714113/", browser, "amazon", ai_fallback=runtime)
+
+    assert result.status is ScrapeStatus.PARSE_ERROR
+    assert runtime.cap.used == 0
+
+
+async def test_cap_stops_requests_after_n_pages_across_concurrent_batch():
+    """
+    [Local] scrape details: a shared cap bounds fallback requests across the concurrent batch (EXT-4).
+
+    Scenario:
+        Given five amazon pages each missing their description, scraped concurrently through ONE
+        ai_fallback runtime whose cap is 2, backed by a live mock client
+        When the five scrape_book coroutines run under asyncio.gather
+        Then the mock client.messages.create is called exactly twice and the cap reports it was hit
+
+    Boundaries:
+        - try_reserve is atomic (no await between check and increment), so the batch cannot overshoot 2
+
+    On failure, first check:
+        - AICallCap.try_reserve, or that the one shared runtime/cap is threaded into every scrape_book.
+    """
+    client = _fake_ai_client(_fake_ai_message(json.dumps({"fields": {}})))
+    runtime = scrape_details.AIFallbackRuntime(
+        client=client,
+        model="claude-sonnet-5",
+        usage=UsageAccumulator(),
+        cap=scrape_details.AICallCap(2),
+    )
+
+    def _page_factory(*args, **kwargs) -> FakePage:
+        """Hand each scrape attempt its own title-only amazon page (description empty)."""
+        return FakePage(
+            locators={"#productTitle": FakeLocator("C++ Primer")},
+            title="C++ Primer - Amazon",
+            content="<html><body><p>only a paragraph, no description selector match</p></body></html>",
+        )
+
+    browser = FakeBrowser(page_factory=_page_factory)
+    urls = [f"https://www.amazon.com/dp/000000000{i}/" for i in range(5)]
+    results = await asyncio.gather(*(scrape_book(url, browser, "amazon", ai_fallback=runtime) for url in urls))
+
+    assert all(r.status is ScrapeStatus.SUCCESS for r in results)
+    assert client.messages.create.call_count == 2
+    assert runtime.cap.used == 2
+    assert runtime.cap.hit is True
+
+
+def test_run_summary_line_has_counts_and_no_key():
+    """
+    [Local] scrape details: the AI-fallback run summary carries counts and usage but never the key (EXT-6).
+
+    Scenario:
+        Given an AIFallbackRuntime that made 2 requests, filled 1 field of 3 requested, hit its cap,
+        and recorded a response usage
+        When summary_line() is formatted
+        Then it reports the request/filled/dropped counts, the cap-hit note, and the usage line - and
+        contains neither the API key nor a price
+
+    Boundaries:
+        - summary_line is pure formatting over the shared cap + UsageAccumulator
+
+    On failure, first check:
+        - AIFallbackRuntime.summary_line / UsageAccumulator.usage_line.
+    """
+    usage = UsageAccumulator()
+    usage.record(
+        SimpleNamespace(input_tokens=1234, cache_read_input_tokens=0, cache_creation_input_tokens=0, output_tokens=7)
+    )
+    cap = scrape_details.AICallCap(2)
+    assert cap.try_reserve() and cap.try_reserve() and not cap.try_reserve()  # used=2, hit
+    runtime = scrape_details.AIFallbackRuntime(
+        client=None, model="claude-sonnet-5", usage=usage, cap=cap, requested=3, filled=1
+    )
+
+    line = runtime.summary_line()
+
+    assert "2 request(s) made" in line
+    assert "per-run cap reached" in line
+    assert "1 field(s) filled, 2 dropped" in line
+    assert "input_tokens=1234" in line
+    assert "sk-" not in line and "$" not in line
+
+
+def test_create_ai_fallback_builds_runtime(monkeypatch):
+    """
+    [Local] scrape details: create_ai_fallback resolves key/model and builds a ready runtime.
+
+    Scenario:
+        Given ANTHROPIC_API_KEY set and anthropic.Anthropic patched to a sentinel client
+        When create_ai_fallback(model="claude-x", max_pages=7) runs
+        Then the returned runtime carries the resolved model, the sentinel client, and a cap of 7
+
+    Boundaries:
+        - No real client is constructed (anthropic.Anthropic is patched); the key is only passed through
+
+    On failure, first check:
+        - create_ai_fallback's resolve_api_key/resolve_model/AICallCap wiring.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-build-test")
+    sentinel = object()
+    monkeypatch.setattr(scrape_details.anthropic, "Anthropic", lambda **kwargs: sentinel)
+
+    runtime = scrape_details.create_ai_fallback(model="claude-x", max_pages=7)
+
+    assert runtime.model == "claude-x"
+    assert runtime.client is sentinel
+    assert all(runtime.cap.try_reserve() for _ in range(7)) and not runtime.cap.try_reserve()
+
+
+async def test_ai_fallback_page_content_failure_recovers_nothing():
+    """
+    [Local] scrape details: a page.content() failure during the fallback degrades to deterministic-only (EXT-7).
+
+    Scenario:
+        Given an amazon page missing its description whose content() raises a Playwright error
+        And the fallback enabled with a cap slot available
+        When scrape_book runs
+        Then it succeeds with description None and ai_extracted_fields [], reserving one cap slot but
+        requesting nothing
+
+    Boundaries:
+        - try_reserve runs before page.content(), so a dead page still consumes the slot but recovers nothing
+
+    On failure, first check:
+        - The page.content() try/except in _apply_ai_fallback.
+    """
+    page = _amazon_page_without_description("<html><body>unused</body></html>")
+    page.content = AsyncMock(side_effect=scrape_details.PlaywrightError("page crashed"))
+    browser = FakeBrowser(page=page)
+    runtime = scrape_details.AIFallbackRuntime(
+        client=_fake_ai_client(_fake_ai_message("{}")),
+        model="claude-sonnet-5",
+        usage=UsageAccumulator(),
+        cap=scrape_details.AICallCap(5),
+    )
+
+    result = await scrape_book("https://www.amazon.com/dp/0321714113/", browser, "amazon", ai_fallback=runtime)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert result.book["description"] is None
+    assert result.book["ai_extracted_fields"] == []
+    assert runtime.cap.used == 1
+    assert runtime.requested == 0
+
+
+def test_create_ai_fallback_client_construction_failure_is_body_free(monkeypatch):
+    """
+    [Local] scrape details: a client-construction failure raises a body-free AIExtractionError (EXT-6).
+
+    Scenario:
+        Given ANTHROPIC_API_KEY set and anthropic.Anthropic patched to raise an HTTP-style error
+        whose str() carries a secret body
+        When create_ai_fallback runs
+        Then it raises AIExtractionError summarizing only the class name (and status), not the body
+
+    Boundaries:
+        - Mirrors the rotate-cert / detect-schema "status code, never response body" contract
+
+    On failure, first check:
+        - The except branch in create_ai_fallback and ai_common.sdk_error_summary.
+    """
+
+    class _FakeStatusError(Exception):
+        """A stand-in SDK error carrying an HTTP status and a secret body in its str()."""
+
+        status_code = 503
+
+        def __str__(self) -> str:
+            """Return a secret body that must never reach the raised error message."""
+            return "SECRET-BODY-should-never-surface"
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ctor-fail")
+
+    def _raise(**kwargs):
+        """Stand in for anthropic.Anthropic construction failing."""
+        raise _FakeStatusError()
+
+    monkeypatch.setattr(scrape_details.anthropic, "Anthropic", _raise)
+
+    with pytest.raises(ai_extraction.AIExtractionError) as excinfo:
+        scrape_details.create_ai_fallback(model=None, max_pages=5)
+
+    message = str(excinfo.value)
+    assert "SECRET-BODY-should-never-surface" not in message
+    assert "_FakeStatusError" in message and "503" in message
+
+
+async def test_existing_goldens_unchanged_without_flag(monkeypatch):
+    """
+    [Local] scrape details: without the fallback, scrape_book output is byte-identical to today's goldens.
+
+    Scenario:
+        Given a fully populated amazon page and scrape_book called with no ai_fallback
+        And extract_missing_fields replaced by a tripwire that fails if ever reached
+        When scrape_book runs
+        Then the record matches the deterministic happy-path fields exactly and ai_extracted_fields is []
+
+    Boundaries:
+        - Proves the off-by-default guarantee at the field level; the chromium detail goldens cover
+          the full byte-for-byte record
+
+    On failure, first check:
+        - Any fallback code path running when ai_fallback is None, or ai_extracted_fields not defaulting to [].
+    """
+
+    async def _tripwire(*args, **kwargs):
+        """Fail immediately if the fallback engine runs for an off-by-default run."""
+        raise AssertionError("the fallback must not run without --ai-fallback")
+
+    monkeypatch.setattr(scrape_details, "extract_missing_fields", _tripwire)
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/ref=sr_1_1"
+    browser = FakeBrowser(page=_amazon_page())
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert result.status is ScrapeStatus.SUCCESS
+    book = result.book
+    assert book["title"] == "Great Python Book"
+    assert book["authors"] == ["Jane Doe", "John Smith"]
+    assert book["isbn10"] == "0136816487"
+    assert book["isbn13"] == "9780136816485"
+    assert book["description"] == "A great book about Python."
+    assert book["ai_extracted_fields"] == []
+
+
+# ---------------------------------------------------------------------------
+# Per-task scrape log context (task 07.0/04)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_leanpub_book_details_sets_and_resets_scrape_context():
+    """
+    [Local] get_leanpub_book_details: the scrape context is leanpub:<slug> during the fetch.
+
+    Scenario:
+        Given a mocked httpx client whose get() records the live scrape_context value
+        When get_leanpub_book_details runs for the example book endpoint
+        Then the in-flight context is ``leanpub:example`` and it is reset to ``-`` afterward.
+
+    Boundaries:
+        - httpx mocked; the context is read at the moment the fetch runs (inside the wrapper)
+        - Proves the wrapper sets the context and the token is reset on return
+
+    On failure, first check:
+        - scrape_log_context(LEANPUB_SITE, url) wrapping _get_leanpub_book_details in scrape_details.py
+    """
+    captured = []
+
+    def _record_get(*args, **kwargs) -> FakeResponse:
+        """Record the live scrape context, then return the canned Leanpub payload."""
+        captured.append(book_utils.scrape_context.get())
+        return FakeResponse(json_data=_leanpub_payload())
+
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=_record_get)
+    client.aclose = AsyncMock()
+
+    assert book_utils.scrape_context.get() == "-"
+    with patch.object(scrape_details.httpx, "AsyncClient", MagicMock(return_value=client)):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert captured == ["leanpub:example"]
+    assert book_utils.scrape_context.get() == "-"
+
+
+async def test_scrape_book_sets_and_resets_scrape_context():
+    """
+    [Local] scrape_book: the scrape context is amazon:<asin> during the scrape, reset afterward.
+
+    Scenario:
+        Given a storage backend whose book_exists_by_hash records the live scrape_context value
+        When scrape_book runs for an amazon /dp/<ASIN> URL
+        Then the in-flight context is ``amazon:B0ABCDEFGH`` and it is reset to ``-`` afterward.
+
+    Boundaries:
+        - Playwright faked; the context is read during the inline duplicate check
+        - Proves the ASIN short-id path and the token reset on return
+
+    On failure, first check:
+        - scrape_log_context(site, url) wrapping _scrape_book and scrape_short_id's ASIN branch
+    """
+    captured = []
+
+    def _record_hash(_hash) -> bool:
+        """Record the live scrape context, then report the book as new."""
+        captured.append(book_utils.scrape_context.get())
+        return False
+
+    storage = MagicMock()
+    storage.book_exists_by_hash = MagicMock(side_effect=_record_hash)
+    browser = FakeBrowser(page=_amazon_page())
+
+    assert book_utils.scrape_context.get() == "-"
+    result = await scrape_book("https://www.amazon.com/dp/B0ABCDEFGH/", browser, "amazon", storage_backend=storage)
+
+    assert result.status is ScrapeStatus.SUCCESS
+    assert captured == ["amazon:B0ABCDEFGH"]
+    assert book_utils.scrape_context.get() == "-"

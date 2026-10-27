@@ -136,6 +136,22 @@ project's existing "automation proposes, a human/deterministic step decides" con
 (the Atlas cert-rotation flow only rewrites `settings.json` for a value it deterministically
 owns) and the config resolver's "fail loudly rather than silently guess" philosophy.
 
+### Related but separate: the `--ai-fallback` runtime extraction fallback (task 04.1)
+
+`detect-schema` keeps AI firmly **out of the data path** - it proposes selectors, a human applies
+them. Task 04.1's opt-in `--ai-fallback` (on `scrape-urls` / `search`, ADR
+[`0003`](/docs/adr/0003-llm-extraction-fallback.md)) is the separate, inverse-direction decision:
+when a deterministic selector leaves an *eligible* field empty at scrape time, Claude fills **that one
+field** from the already-loaded page and the value - after passing deterministic evidence +
+normalizer gates - is **stored**, marked in `BookRecord.ai_extracted_fields`. It reuses this tool's
+hardened stack (`scraping/ai_common.py`: the `<page_html>` fence, `sanitize_untrusted`, the pruner,
+the token budget, model/key resolution, replay/record) rather than a parallel copy, so the two AI
+surfaces share one injection defense. The two are complementary: `detect-schema` + the drift check
+remain the **primary, preferred** path to a permanent deterministic selector fix; `--ai-fallback` is a
+bounded, off-by-default bridge that recovers a drifted field (including the silent empty-element
+Amazon `DESCRIPTION` case the drift check misses) until that fix ships. See [LLM extraction fallback](llm-extraction-fallback.md) for the full writeup; `title` is never
+AI-filled (it feeds the dedup hash), and `--ai-fallback` never writes `parameters.py` either.
+
 ### Prompt-injection hardening & selector sanity
 
 The pruned page HTML is **untrusted input** - a page (or a surviving ad slot, or a committed
@@ -437,3 +453,18 @@ When drift is detected by the real-HTML mock corpus rather than a live run, the
 `scripts/capture_fixtures.py --refresh` re-captures a site's fixtures and reports which
 selectors drifted, and its step-by-step feeds those snapshots into `detect-schema`
 (via the `--html-file`/`--replay` offline mode above) and then `pytest --update-goldens`.
+
+## CI: scheduled selector-drift checks
+
+`.github/workflows/audit.yml` (task 06.2/05) runs weekly and on `workflow_dispatch`:
+
+- **`drift-offline`** (every run): `detect-schema --check-current-only --format json --html-file <fixture>` per site
+  (amazon, packtpub, oreilly) against the committed HTML corpus. It needs no network and no `ANTHROPIC_API_KEY`;
+  exit `4` (a current selector matches nothing) or `1` fails the job, so it guards against a selector regression
+  versus the stored snapshots. Leanpub is skipped: it has no CSS selectors (JSON API). The JSON report is uploaded as
+  an artifact.
+- **`drift-live`** (only when dispatched with `live: true`): the same check against one real URL per site. Exit `4`
+  opens or comments on a `Selector drift: <site>` issue (`issues: write` scoped to this job only); any other non-zero
+  exit fails the job.
+- **`dependencies`**: `uv export --frozen` then `pip-audit --strict`; any known vulnerability in a locked dependency
+  fails the run.

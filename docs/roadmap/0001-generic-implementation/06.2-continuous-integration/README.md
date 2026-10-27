@@ -15,12 +15,12 @@ Actions workflows that make those gates automatic.
 
 | #  | Document                                                        | Status         | Blocks |
 |----|-----------------------------------------------------------------|----------------|--------|
-| 01 | [Lint workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/01-lint-workflow.md)                      | ⬜ Not started | 02     |
-| 02 | [Test & coverage workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/02-test-and-coverage-workflow.md) | ⬜ Not started | 03  |
-| 03 | [Chromium tier in CI](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/03-chromium-tier.md)                | ⬜ Not started | -      |
-| 04 | [Manual integration workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/04-integration-workflow.md) | ⬜ Not started | -      |
-| 05 | [Scheduled audits: dependencies & selector drift](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/05-scheduled-audits.md) | ⬜ Not started | - |
-| 06 | [Branch protection & badges](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/06-branch-protection-and-badges.md) | ⬜ Not started | - |
+| 01 | [Lint workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/01-lint-workflow.md)                      | ✅ Complete | 02     |
+| 02 | [Test & coverage workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/02-test-and-coverage-workflow.md) | ✅ Complete (matrix 3.13 only until 08.0/01) | 03  |
+| 03 | [Chromium tier in CI](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/03-chromium-tier.md)                | ✅ Complete | -      |
+| 04 | [Manual integration workflow](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/04-integration-workflow.md) | ✅ Complete | -      |
+| 05 | [Scheduled audits: dependencies & selector drift](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/05-scheduled-audits.md) | ✅ Complete | - |
+| 06 | [Branch protection & badges](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/06-branch-protection-and-badges.md) | ✅ Complete | - |
 
 ## Key constraints
 

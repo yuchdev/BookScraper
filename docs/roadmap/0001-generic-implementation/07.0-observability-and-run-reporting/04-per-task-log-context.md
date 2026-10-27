@@ -1,7 +1,7 @@
 # 04 - Per-task log context
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-logger-hierarchy.md](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/02-logger-hierarchy.md)
 **Role:** Python Expert
 

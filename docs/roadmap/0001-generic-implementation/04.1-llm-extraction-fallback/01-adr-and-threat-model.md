@@ -1,7 +1,7 @@
 # 01 - ADR & threat model
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Architect + Security Auditor
 
 ## Context

@@ -9,6 +9,7 @@ are in `assets/`.
 | ADR                                              | Title                                  | Status   | Date       |
 |--------------------------------------------------|----------------------------------------|----------|------------|
 | [0002](0002-ai-assisted-schema-detection.md)     | AI-Assisted CSS-Selector Schema Detection | Accepted | 2026-09-23 |
+| [0003](0003-llm-extraction-fallback.md)          | LLM Extraction Fallback for Drifted Single Fields | Accepted | 2026-10-23 |
 
 The first real ADR landed as `0002`: `0001` was an illustrative example that has since
 been deleted (see the Naming conventions note below - a gap in the sequence is expected

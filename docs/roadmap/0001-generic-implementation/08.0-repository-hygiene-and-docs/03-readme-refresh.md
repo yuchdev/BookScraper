@@ -1,7 +1,7 @@
 # 03 - README refresh
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 05.0 / 08](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/08-cli-reference-docs.md)
 **Role:** Docs Writer
 

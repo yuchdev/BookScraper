@@ -22,13 +22,13 @@ ENV_VAR_NAME = "TEST_MONGODB_URI_PASS"
 def test_password_auth_connects():
     """
     [Integration] connection password auth: verifies password auth connects.
-    
+
     Scenario:
         Password/SCRAM auth resolves and pings the live Atlas cluster successfully.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """

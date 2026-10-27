@@ -1,7 +1,7 @@
 # 04 - Packaging metadata & build smoke test
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-python-version-alignment.md](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/01-python-version-alignment.md)
 **Role:** Python Expert
 
@@ -33,3 +33,23 @@
 
 - [ ] `pandas` is absent from `uv.lock`'s direct dependencies.
 - [ ] The wheel installs and runs in a clean venv.
+
+## Notes (as built)
+
+- **Build backend kept as `setuptools`.** No concrete problem was found that switching to
+  `hatchling`/`uv_build` would remove: `uv build` produces a clean sdist+wheel and the stray
+  `src/bookscraper.egg-info` is a build artifact removed by the build step, not a backend defect.
+  The `requires` floor was bumped to `setuptools>=77` only so the PEP 639 SPDX `license = "MIT"`
+  expression is guaranteed to build (it needs setuptools 77+); the backend itself is unchanged.
+- **`--version` already present.** The CLI already carries `-V`/`--version` (argparse
+  `action="version"` via `cli._version_string()` using `importlib.metadata`), with unit tests
+  (`tests/unit/test_cli.py`) and docs (`docs/cli/cli.md`), so no new flag/test/doc was needed.
+- **Metadata:** `description` updated to "…with JSON or MongoDB Atlas storage"; added `license`
+  (SPDX `MIT`, matching `LICENSE`), `authors` (name only, no email), `keywords`, and
+  `[project.urls]` (Repository/Issues/Documentation off the `origin` https URL). Classifiers kept.
+- **pandas removed** from `[project].dependencies`; `commands/scrape_urls.py` now reads the
+  one-column URL CSV with stdlib `csv.DictReader` (`utf-8-sig` BOM strip, tolerant of extra
+  columns), preserving the four malformed-input messages/exit codes. `uv lock` dropped pandas and
+  its transitive deps (numpy, python-dateutil, six, tzdata) with no other version changes.
+- **`/dep-audit`:** the only findings are the known-open `certifi`/`pymongo` advisories, left as-is
+  per task scope.

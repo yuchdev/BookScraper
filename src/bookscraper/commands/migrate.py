@@ -14,6 +14,7 @@ report file (for a collision a human must resolve), never in a printed line.
 from __future__ import annotations
 
 import argparse
+from typing import Optional
 
 from .. import book_utils, exitcodes
 from ..backends import MongoBackend, migration, resolve_store_backend
@@ -21,6 +22,7 @@ from ..backends.local import store
 from ..book_utils import print_log
 from ..scraping import normalize
 from ..scraping.safe_text import sanitize_untrusted
+from ._reporting import RunReport
 
 
 def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
@@ -76,7 +78,7 @@ def _print_summary(report: migration.MigrationReport, report_path, apply: bool):
     print_log(f"  Report written to {report_path}", "info")
 
 
-async def run(args: argparse.Namespace) -> int:
+async def run(args: argparse.Namespace, report: Optional[RunReport] = None) -> int:
     """Run the migration for the chosen backend, writing only when ``--apply`` is given.
 
     Resolves the backend, migrates it (mongo via guarded per-document ``ReplaceOne`` batches, json
@@ -84,17 +86,24 @@ async def run(args: argparse.Namespace) -> int:
     summary. The resolved backend connection is always closed.
 
     :param args: Parsed CLI arguments (``store_backend`` and ``apply``).
+    :param report: The run report to record the backend and flags into, or ``None`` when called
+        outside :func:`bookscraper.main.main` (e.g. a unit test).
     :returns: :data:`~bookscraper.exitcodes.FATAL` on a corrupt local store, or after writing the
         report when the mongo apply failed part-way; otherwise :data:`~bookscraper.exitcodes.OK`.
     """
+    if report is not None:
+        report.set_context(
+            store_backend=args.store_backend,
+            flags={"apply": args.apply, "dry_run": not args.apply},
+        )
     backend = resolve_store_backend(args.store_backend)
     try:
         if isinstance(backend, MongoBackend):
-            report = migration.migrate_mongo_collection(
+            result = migration.migrate_mongo_collection(
                 backend._collection, apply=args.apply, transform=normalize.from_v1_document
             )
         else:
-            report = migration.migrate_json_store(
+            result = migration.migrate_json_store(
                 store.LOCAL_STORE_FILE, apply=args.apply, transform=normalize.from_v1_document
             )
     except store.LocalStoreCorruptError as exc:
@@ -103,8 +112,8 @@ async def run(args: argparse.Namespace) -> int:
     finally:
         backend.close()
 
-    report_path = migration.write_report(report, book_utils.LOG_DIR)
-    _print_summary(report, report_path, args.apply)
-    if report.apply_failed:
+    report_path = migration.write_report(result, book_utils.LOG_DIR)
+    _print_summary(result, report_path, args.apply)
+    if result.apply_failed:
         return exitcodes.FATAL
     return exitcodes.OK

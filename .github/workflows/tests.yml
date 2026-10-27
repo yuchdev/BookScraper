@@ -1,0 +1,116 @@
+name: Tests
+
+# Runs the default offline suite (unit + mock tiers; the integration marker is excluded by
+# addopts in pyproject.toml, so no secrets are needed here) with coverage, then enforces the
+# per-module coverage floor. Everything runs from the frozen uv.lock so CI never resolves new
+# versions (task 06.2/02). The Chromium-marked corpus tier skips cleanly when no browser is
+# present, so a dedicated step installs Chromium and a later step fails the job if that tier
+# skipped anyway (task 06.2/03) - a silently skipped tier must never read as green.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: this workflow only reads the checked-out tree.
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Matrix floor is the current pyproject requires-python (>=3.13), so only 3.13 qualifies
+        # today. Task 08.0/01 (supported Python range) will widen and re-sync this list (e.g. add
+        # 3.14) and keep the macos-latest leg on the newest supported Python.
+        os: [ubuntu-latest]
+        python-version: ["3.13"]
+        include:
+          # This project is developed on macOS: run the newest Python there too.
+          - os: macos-latest
+            python-version: "3.13"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(uv run python -c "import importlib.metadata as m; print(m.version('playwright'))")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: uv run playwright install --with-deps chromium
+
+      - name: Install Chromium system dependencies (cache hit, Linux)
+        if: steps.playwright-cache.outputs.cache-hit == 'true' && runner.os == 'Linux'
+        run: uv run playwright install-deps chromium
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov --cov-report=xml --cov-report=json -q
+
+      - name: Enforce per-module coverage floor
+        run: uv run python scripts/check_module_coverage.py
+
+      - name: Assert the Chromium tier ran
+        run: |
+          uv run pytest tests/mock/scraping/html -m chromium -q -rs | tee chromium-tier.log
+          if grep -q "SKIPPED" chromium-tier.log; then
+            echo "::error::Chromium corpus tier skipped - browser missing or unusable"
+            exit 1
+          fi
+
+      - name: Upload coverage.xml
+        # Newest-Python ubuntu job only, to avoid duplicate artifact-name collisions.
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+
+  # Build smoke test (task 08.0/04): the packaging metadata must produce an installable wheel.
+  # Builds the sdist+wheel, installs ONLY the built wheel into a throwaway venv (no source tree,
+  # no dev group), and runs `bookscraper --version` so a broken [project.scripts] entry point or
+  # missing runtime dependency fails here rather than for a user who pip-installs the wheel.
+  build:
+    name: build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.13"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Install the wheel into a clean venv and run --version
+        run: |
+          uv venv "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
+          "$RUNNER_TEMP/smoke/bin/bookscraper" --version

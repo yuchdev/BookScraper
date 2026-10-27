@@ -11,6 +11,7 @@ site field's bare-key literal domain.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import get_args
 
 import pytest
@@ -446,3 +447,49 @@ def test_validate_document_reports_wrong_field_types():
         "ai_extracted_fields must be a list",
     ):
         assert fragment in problems
+
+
+def test_ai_extracted_fields_round_trips_non_empty():
+    """
+    [Unit] BookRecord: a non-empty ai_extracted_fields list survives to_document/from_document (04.1).
+
+    Scenario:
+        Given a record whose ai_extracted_fields lists an AI-filled field
+        When it is serialized and rebuilt
+        Then to_document emits the list (a copy, not an alias) and from_document restores it equal
+
+    Boundaries:
+        - Provenance is the sole re-scrape signal (threat model EXT-9); it must never be dropped
+
+    On failure, first check:
+        - ai_extracted_fields in to_document / from_document, or the list-copy guard.
+    """
+
+    record = replace(_full_record(), ai_extracted_fields=["description"])
+    document = record.to_document()
+
+    assert document["ai_extracted_fields"] == ["description"]
+    document["ai_extracted_fields"].append("mutation")  # a document edit must not touch the record
+    assert record.ai_extracted_fields == ["description"]
+    assert BookRecord.from_document(record.to_document()).ai_extracted_fields == ["description"]
+
+
+def test_validate_document_accepts_non_empty_ai_extracted_fields():
+    """
+    [Unit] validate_document: a valid non-empty ai_extracted_fields list passes the save boundary.
+
+    Scenario:
+        Given a schema-2 document whose ai_extracted_fields is ["description", "isbn13"]
+        When validate_document runs
+        Then it returns no problems
+
+    Boundaries:
+        - A list of strings is the only accepted shape (a non-list is rejected elsewhere)
+
+    On failure, first check:
+        - The ai_extracted_fields branch of validate_document / _validate_str_list.
+    """
+    document = _full_record().to_document()
+    document["ai_extracted_fields"] = ["description", "isbn13"]
+
+    assert validate_document(document) == []

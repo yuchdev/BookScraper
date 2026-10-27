@@ -213,4 +213,3 @@ class TestLeanpubPrescrapeDeduplicate:
 
         deduplicate.leanpub_prescrape_deduplicate({"$ne": None}, "real-slug", collection)
         collection.find_one.assert_called_once_with({"$or": [{"slug": "real-slug"}]})
-

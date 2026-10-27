@@ -8,6 +8,7 @@ same effect. The MongoDB connection pre-flight now lives in backends/mongo/datab
 """
 
 import locale
+import os
 
 import pytest
 
@@ -19,6 +20,7 @@ from bookscraper.book_utils import (
     extract_year_from_date,
     hash_book,
     normalize_date,
+    redact,
 )
 
 
@@ -736,3 +738,294 @@ def test_csv_safe_cell_neutralizes_formula_prefixes(value, expected):
         - Whether a new caller needs a non-string value rendered differently
     """
     assert csv_safe_cell(value) == expected
+
+
+# Sample secrets are assembled by concatenation so the source text never contains a
+# contiguous real-looking credential that would trip .claude/hooks/secret_scan.py.
+_FAKE_USERINFO = "alice" + ":" + "s3cr3t" + "val"
+_FAKE_MONGO_URI = "mongodb+srv://" + _FAKE_USERINFO + "@cluster0.example.net/db?retryWrites=true"
+_FAKE_PEM_BEGIN = "-----BEGIN RSA " + "PRIVATE KEY-----"
+_FAKE_PEM_END = "-----END RSA " + "PRIVATE KEY-----"
+_FAKE_PEM_BODY = "MIIB" + "FakeKeyMaterialNotReal" + "0123456789"
+
+
+class TestRedact:
+    """Tests for book_utils.redact(): the pure secret-masking choke point (task 07.0/01)."""
+
+    def test_redact_mongodb_srv_credentials(self):
+        """
+        [Unit] redact: a mongodb+srv URI has its user:pass@ userinfo masked, host/db kept.
+
+        Scenario:
+            Given a connection string carrying inline user:pass@ credentials
+            When redact() processes it
+            Then the userinfo is replaced by <redacted>@ and no credential substring remains.
+
+        Boundaries:
+            - Pure string transform; no logging, no I/O
+            - The scheme-agnostic userinfo rule, exercised via the mongodb+srv scheme
+
+        On failure, first check:
+            - The scheme://user:pass@ pattern in _REDACTION_RULES in book_utils.py
+        """
+        out = redact(_FAKE_MONGO_URI)
+        assert _FAKE_USERINFO not in out
+        assert "s3cr3t" not in out
+        assert out == "mongodb+srv://<redacted>@cluster0.example.net/db?retryWrites=true"
+
+    def test_redact_anthropic_key(self):
+        """
+        [Unit] redact: an Anthropic sk-ant- key is masked to sk-ant-<redacted>.
+
+        Scenario:
+            Given a string embedding an sk-ant- token
+            When redact() processes it
+            Then only the sk-ant- prefix survives and the secret body is gone.
+
+        Boundaries:
+            - Prefix-anchored vendor rule; sk-ant- ordered before the generic sk- rule
+            - Pure string transform
+
+        On failure, first check:
+            - The sk-ant- rule ordering in _REDACTION_RULES in book_utils.py
+        """
+        fake_key = "sk-ant-" + "api03" + ("A" * 30)
+        out = redact(f"key loaded: {fake_key}")
+        assert fake_key not in out
+        assert out == "key loaded: sk-ant-<redacted>"
+
+    def test_redact_bearer_token_and_query_secrets(self):
+        """
+        [Unit] redact: a Bearer Authorization header and a client_secret=... query value are masked.
+
+        Scenario:
+            Given a bearer Authorization header and a client_secret=VALUE query assignment
+            When redact() processes each
+            Then the token body and the assigned secret are both replaced by <redacted>.
+
+        Boundaries:
+            - The Authorization-scheme rule and the keyword-assignment rule
+            - Pure string transform
+
+        On failure, first check:
+            - The authorization: and keyword-assignment patterns in _REDACTION_RULES
+        """
+        bearer = "Authorization: Bearer " + "abc123" + "DEF456ghi"
+        # The scheme word is consumed by the rule (only "authorization:\\s*" is captured), so the
+        # mask replaces "Bearer <token>" wholesale - the scheme name is non-sensitive.
+        assert redact(bearer) == "Authorization: <redacted>"
+
+        query = "client_secret=" + "sup3r" + "secretvalue"
+        out = redact(query)
+        assert "sup3r" not in out
+        assert out.startswith("client_secret=<redacted>")
+
+    def test_redact_basic_auth_header(self):
+        """
+        [Unit] redact: an HTTP Basic Authorization header (Atlas client_id:client_secret) is masked.
+
+        Scenario:
+            Given an Authorization: Basic <base64> header
+            When redact() processes it
+            Then the base64 credential body is replaced by <redacted>.
+
+        Boundaries:
+            - The widened auth-scheme alternation covers Basic, not only Bearer
+            - Pure string transform
+
+        On failure, first check:
+            - The (bearer|basic|token|digest) alternation in the Authorization rule
+        """
+        basic = "Authorization: Basic " + "QWxhZGRpbjpvcGVuc2VzYW1l" + "=="
+        out = redact(basic)
+        assert "QWxhZGRpbjpvcGVuc2VzYW1l" not in out
+        assert out == "Authorization: <redacted>"
+
+    def test_redact_private_key_block(self):
+        """
+        [Unit] redact: a complete PEM PRIVATE KEY block collapses to a single marker.
+
+        Scenario:
+            Given a BEGIN..END PRIVATE KEY block with body material
+            When redact() processes it
+            Then the whole block is replaced by <redacted private key> and no body survives.
+
+        Boundaries:
+            - The multiline private-key rule runs first so inner rules can't fragment the body
+            - Pure string transform
+
+        On failure, first check:
+            - The PRIVATE KEY pattern (and its ordering) in _REDACTION_RULES
+        """
+        pem = _FAKE_PEM_BEGIN + "\n" + _FAKE_PEM_BODY + "\n" + _FAKE_PEM_END
+        out = redact(f"cert contents:\n{pem}\n(end)")
+        assert _FAKE_PEM_BODY not in out
+        assert out == "cert contents:\n<redacted private key>\n(end)"
+
+    def test_redact_unterminated_private_key_block(self):
+        """
+        [Unit] redact: a PRIVATE KEY block cut off before its END footer is still fully masked.
+
+        Scenario:
+            Given a BEGIN PRIVATE KEY header and body with no END footer (a truncated log line)
+            When redact() processes it
+            Then the header and the key body to end-of-text are replaced by the marker.
+
+        Boundaries:
+            - The terminator is optional (|\\Z), so a footerless block does not survive verbatim
+            - Pure string transform
+
+        On failure, first check:
+            - The (?:-----END ...|\\Z) terminator in the private-key rule in book_utils.py
+        """
+        truncated = _FAKE_PEM_BEGIN + "\n" + _FAKE_PEM_BODY
+        out = redact(truncated)
+        assert _FAKE_PEM_BODY not in out
+        assert out == "<redacted private key>"
+
+    @pytest.mark.parametrize(
+        "text, leaked",
+        [
+            ('{"client_secret": "abcdef123456"}', "abcdef123456"),
+            ("{'password': 'hunter2pw'}", "hunter2pw"),
+            ('"access_token": "longvalue12345"', "longvalue12345"),
+        ],
+    )
+    def test_redact_quoted_key_json_and_dict_secrets(self, text, leaked):
+        """
+        [Unit] redact: a secret under a quoted key (JSON or dict repr) is masked.
+
+        Scenario:
+            Given text with a quoted key such as "client_secret": "<value>"
+            When redact() processes it
+            Then the value is replaced by the marker and does not survive in the output.
+
+        Boundaries:
+            - Pure string transform; no logging involved
+
+        On failure, first check:
+            - The keyword-assigned secret rule in _REDACTION_RULES still allows a quote before the separator
+        """
+        out = redact(text)
+        assert leaked not in out
+        assert "<redacted>" in out
+
+    def test_redact_leaves_ordinary_text_untouched(self):
+        """
+        [Unit] redact: non-secret text (including plain URLs without userinfo) is returned verbatim.
+
+        Scenario:
+            Given ordinary log text and a credential-free https URL
+            When redact() processes them
+            Then the output is byte-identical to the input.
+
+        Boundaries:
+            - No false positives on plain prose or a userinfo-free URL
+            - Pure string transform
+
+        On failure, first check:
+            - Whether a rule is over-matching (the userinfo rule requires user:pass@)
+        """
+        ordinary = "Scraped 12 books from https://leanpub.com/book; 0 errors."
+        assert redact(ordinary) == ordinary
+        assert redact("") == ""
+
+    def test_redact_is_idempotent(self):
+        """
+        [Unit] redact: redacting already-redacted text is a no-op.
+
+        Scenario:
+            Given a composite string with several secret shapes
+            When redact() is applied once and then again to its own output
+            Then the second pass returns exactly the first pass's result.
+
+        Boundaries:
+            - Markers contain no secret-shaped substring, so the handler's re-redaction is safe
+            - Pure string transform
+
+        On failure, first check:
+            - Whether a <redacted...> marker is itself matched by a rule's value class
+        """
+        composite = (
+            f"uri={_FAKE_MONGO_URI} key=sk-ant-"
+            + ("Z" * 24)
+            + " hdr=Authorization: Bearer "
+            + ("t" * 20)
+            + " pw=password="
+            + ("hunter2" * 2)
+        )
+        once = redact(composite)
+        assert redact(once) == once
+
+
+class TestPruneOldLogs:
+    """Tests for book_utils._prune_old_logs(): a log and its sibling run report prune as one unit."""
+
+    def test_prune_removes_log_and_report_together(self, tmp_path, monkeypatch):
+        """
+        [Unit] _prune_old_logs: an evicted log takes its <stem>.report.json sibling with it.
+
+        Scenario:
+            Given three runs' files in LOG_DIR (each a bookscraper_*.log plus a matching
+            .report.json), with distinct modification times
+            When _prune_old_logs(max_files=2) runs
+            Then the oldest run's log AND its report are deleted together, and the two newest runs'
+            logs and reports all remain.
+
+        Boundaries:
+            - Real file I/O via tmp_path; LOG_DIR is monkeypatched so no real ~/.bookscrapper is
+              touched. Pruning is keyed on the .log files' mtimes.
+
+        On failure, first check:
+            - The with_name(f"{old_file.stem}.report.json").unlink(missing_ok=True) line in
+              _prune_old_logs.
+        """
+
+        monkeypatch.setattr(book_utils_module, "LOG_DIR", tmp_path)
+        stems = ["bookscraper_20260101_000000_1", "bookscraper_20260102_000000_2", "bookscraper_20260103_000000_3"]
+        for index, stem in enumerate(stems):
+            log_file = tmp_path / f"{stem}.log"
+            report_file = tmp_path / f"{stem}.report.json"
+            log_file.write_text("log", encoding="utf-8")
+            report_file.write_text("{}", encoding="utf-8")
+            # Oldest first: ascending mtimes so stems[0] is the eviction candidate.
+            stamp = 1_700_000_000 + index
+            os.utime(log_file, (stamp, stamp))
+            os.utime(report_file, (stamp, stamp))
+
+        book_utils_module._prune_old_logs(max_files=2)
+
+        assert not (tmp_path / f"{stems[0]}.log").exists()
+        assert not (tmp_path / f"{stems[0]}.report.json").exists()
+        for stem in stems[1:]:
+            assert (tmp_path / f"{stem}.log").exists()
+            assert (tmp_path / f"{stem}.report.json").exists()
+
+    def test_prune_tolerates_missing_report_sibling(self, tmp_path, monkeypatch):
+        """
+        [Unit] _prune_old_logs: a log with no report sibling (e.g. rotate-cert) prunes cleanly.
+
+        Scenario:
+            Given three bookscraper_*.log files but no .report.json siblings
+            When _prune_old_logs(max_files=1) runs
+            Then the two oldest logs are removed and no error is raised for the absent reports.
+
+        Boundaries:
+            - Guards the missing_ok=True on the report unlink; real file I/O via tmp_path.
+
+        On failure, first check:
+            - The missing_ok=True argument on the report sibling's unlink in _prune_old_logs.
+        """
+
+        monkeypatch.setattr(book_utils_module, "LOG_DIR", tmp_path)
+        for index in range(3):
+            log_file = tmp_path / f"bookscraper_run_{index}.log"
+            log_file.write_text("log", encoding="utf-8")
+            stamp = 1_700_000_000 + index
+            os.utime(log_file, (stamp, stamp))
+
+        book_utils_module._prune_old_logs(max_files=1)
+
+        assert not (tmp_path / "bookscraper_run_0.log").exists()
+        assert not (tmp_path / "bookscraper_run_1.log").exists()
+        assert (tmp_path / "bookscraper_run_2.log").exists()

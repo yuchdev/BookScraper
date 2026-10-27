@@ -1,7 +1,7 @@
 # 05 - Scheduled audits: dependencies & selector drift
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 04.0 / 08](/docs/roadmap/0001-generic-implementation/04.0-ai-assisted-schema-detection/08-json-report-and-drift-check.md)
 **Role:** Python Expert
 

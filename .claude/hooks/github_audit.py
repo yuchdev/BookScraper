@@ -13,8 +13,19 @@ from _common import allow, append_log, read_event, tool_input
 
 # Argument keys worth recording (kept small and non-sensitive).
 SUMMARY_KEYS = (
-    "owner", "repo", "pull_number", "issue_number", "number",
-    "branch", "ref", "state", "title", "path", "query", "sha", "name",
+    "owner",
+    "repo",
+    "pull_number",
+    "issue_number",
+    "number",
+    "branch",
+    "ref",
+    "state",
+    "title",
+    "path",
+    "query",
+    "sha",
+    "name",
 )
 
 

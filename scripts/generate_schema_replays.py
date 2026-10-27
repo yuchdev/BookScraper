@@ -25,6 +25,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from bookscraper.scraping import ai_common  # noqa: E402
+from bookscraper.scraping.ai_extraction import build_extraction_instruction_block  # noqa: E402
 from bookscraper.scraping.parameters import site_constants  # noqa: E402
 from bookscraper.scraping.schema_detection import (  # noqa: E402
     build_instruction_block,
@@ -37,8 +39,18 @@ from bookscraper.scraping.schema_detection import (  # noqa: E402
 
 FIXTURES_HTML = REPO_ROOT / "tests" / "fixtures" / "html"
 OUT_DIR = REPO_ROOT / "tests" / "fixtures" / "schema_detection"
+AI_EXTRACTION_OUT_DIR = REPO_ROOT / "tests" / "fixtures" / "ai_extraction"
 
 PROVENANCE = "hand-authored; not a recorded live model response"
+
+#: The LLM extraction-fallback golden (task 04.1/05): one amazon detail fixture whose DESCRIPTION
+#: the golden test patches to a non-matching selector so the deterministic path leaves it empty,
+#: then recovers it through this replay. ``value``/``evidence`` MUST be a verbatim, whitespace-
+#: normalized substring of the fixture's visible text so the deterministic evidence + derivable
+#: gates pass. The key below is computed from the fixture file bytes (the Chromium-independent
+#: snapshot); the Chromium golden re-keys this response by its live ``page.content()`` hash.
+AI_EXTRACTION_FIXTURE = FIXTURES_HTML / "amazon" / "cpp_primer_5e.html"
+AI_EXTRACTION_DESCRIPTION = "Neutralized prose omitted from the public test corpus."
 
 
 def _detail_fixtures(site: str) -> list[Path]:
@@ -77,8 +89,41 @@ def _write_replay(out_path: Path, fixtures: list[Path], site: str, page_type: st
     print(f"wrote {out_path.relative_to(REPO_ROOT)} ({len(fixtures)} prompt key(s), page_type={page_type})")
 
 
+def _write_ai_extraction_replay() -> None:
+    """Write the LLM extraction-fallback replay fixture (task 04.1/05).
+
+    One hand-authored response recovering the amazon DESCRIPTION the golden test drops, keyed by the
+    fixture-bytes prompt hash via the real ``ai_extraction`` / ``ai_common`` builders (so the key can
+    never drift from the code). The response carries only this one field, so the recovered record's
+    ``ai_extracted_fields`` is exactly ``["description"]``.
+    """
+    AI_EXTRACTION_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    fields = ["DESCRIPTION"]
+    instruction_block = build_extraction_instruction_block("amazon", fields)
+    snapshot_block = ai_common.build_snapshot_block(
+        ai_common.prune_html(AI_EXTRACTION_FIXTURE.read_text(encoding="utf-8"))
+    )
+    key = ai_common.prompt_hash(instruction_block, snapshot_block)
+    response = json.dumps(
+        {"fields": {"DESCRIPTION": {"value": AI_EXTRACTION_DESCRIPTION, "evidence": AI_EXTRACTION_DESCRIPTION}}},
+        indent=2,
+        sort_keys=True,
+    )
+    payload = {
+        "_provenance": (
+            "hand-authored LLM extraction-fallback response (not a recorded live model reply); "
+            "value/evidence is verbatim visible text of the cpp_primer_5e amazon fixture"
+        ),
+        key: response,
+    }
+    out_path = AI_EXTRACTION_OUT_DIR / "amazon.replay.json"
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {out_path.relative_to(REPO_ROOT)} (1 prompt key, ai_extraction fallback)")
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    _write_ai_extraction_replay()
     for site in ("amazon", "packtpub", "oreilly"):
         fixtures = _detail_fixtures(site)
         if len(fixtures) < 2:

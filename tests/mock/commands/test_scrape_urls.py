@@ -11,11 +11,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 
 from bookscraper import exitcodes
 from bookscraper.backends.storage import JsonBackend, SaveSummary
+from bookscraper.commands._reporting import RunReport
 from bookscraper.commands.scrape_urls import (
     identify_website,
     run,
@@ -259,10 +259,10 @@ async def test_run_missing_url_column_returns_fatal(tmp_path):
 
 async def test_run_unparseable_csv_returns_fatal(tmp_path):
     """
-    [Local] scrape urls: verifies that a pd.errors.ParserError on CSV load returns FATAL.
+    [Local] scrape urls: verifies that a csv.Error on CSV load returns FATAL.
 
     Scenario:
-        Given pd.read_csv patched to raise ParserError("bad csv")
+        Given csv.DictReader patched to raise csv.Error("bad csv")
         When run() is called
         Then run() returns exitcodes.FATAL and save_books is never called.
 
@@ -270,7 +270,7 @@ async def test_run_unparseable_csv_returns_fatal(tmp_path):
         - Covers the CSV-parse exception path; missing column and missing file are separate.
 
     On failure, first check:
-        - The try/except around pd.read_csv in run() and its FATAL return.
+        - The ``except (csv.Error, UnicodeDecodeError)`` clause around the DictReader in run().
     """
     csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
     args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
@@ -278,7 +278,7 @@ async def test_run_unparseable_csv_returns_fatal(tmp_path):
     backend = MagicMock()
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        patch(f"{MODULE}.pd.read_csv", side_effect=pd.errors.ParserError("bad csv")),
+        patch(f"{MODULE}.csv.DictReader", side_effect=csv.Error("bad csv")),
     ):
         code = await run(args)
 
@@ -291,16 +291,16 @@ async def test_run_empty_csv_returns_fatal(tmp_path):
     [Local] scrape urls: verifies that an empty CSV file (no header/rows) returns FATAL.
 
     Scenario:
-        Given an input file that exists but is empty, so pd.read_csv raises EmptyDataError
+        Given an input file that exists but is empty, so DictReader.fieldnames is None
         When run() is called
         Then run() returns exitcodes.FATAL cleanly (no traceback) and save_books is never called.
 
     Boundaries:
-        - Covers the EmptyDataError path; a missing file, missing column and unparseable CSV are
+        - Covers the empty-file path; a missing file, missing column and unparseable CSV are
           separate branches.
 
     On failure, first check:
-        - The pd.errors.EmptyDataError except clause around pd.read_csv in run().
+        - The ``reader.fieldnames is None`` guard around the DictReader in run().
     """
     csv_path = tmp_path / "urls.csv"
     csv_path.write_text("", encoding="utf-8")
@@ -312,6 +312,99 @@ async def test_run_empty_csv_returns_fatal(tmp_path):
 
     assert code == exitcodes.FATAL
     backend.save_books.assert_not_called()
+
+
+async def test_csv_with_bom_and_extra_columns_is_read(tmp_path):
+    """
+    [Local] scrape urls: verifies a UTF-8-BOM CSV with extra columns is read and its URL scraped.
+
+    Scenario:
+        Given a CSV written with a leading UTF-8 BOM, a header of "url,title,rating" and one
+            leanpub data row, resolving to a SUCCESS ScrapeResult
+        When run() is called
+        Then the BOM does not corrupt the "url" header (it is still recognised), only the url
+            column is consumed, and the book is scraped and saved.
+
+    Boundaries:
+        - Covers the utf-8-sig BOM strip and DictReader's tolerance of extra columns in the
+          stdlib csv path that replaced pandas.
+
+    On failure, first check:
+        - The encoding="utf-8-sig" open() and the DictReader fieldnames handling in run().
+    """
+    csv_path = tmp_path / "urls.csv"
+    csv_path.write_text(
+        "url,title,rating\nhttps://leanpub.com/good,Some Book,4.5\n",
+        encoding="utf-8-sig",
+    )
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    pw_factory, browser = _make_playwright_factory()
+    book = {"title": "Some Book", "hash": "abc123"}
+    result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://leanpub.com/good", site="leanpub", book=book)
+    scrape_book = AsyncMock(side_effect=[result])
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", scrape_book),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.OK
+    # The URL (not the BOM-prefixed header, not the extra columns) reached scrape_book and was saved.
+    assert scrape_book.await_count == 1
+    assert scrape_book.await_args.args[0] == "https://leanpub.com/good"
+    backend.save_books.assert_called_once_with([book])
+    browser.close.assert_awaited_once()
+    backend.close.assert_called_once_with()
+
+
+async def test_csv_missing_url_column_exits_with_same_message(tmp_path):
+    """
+    [Local] scrape urls: verifies the missing-"url"-column message matches the pre-pandas wording.
+
+    Scenario:
+        Given a CSV whose only header is "link" (no "url" column)
+        When run() is called
+        Then run() returns exitcodes.FATAL and the exact "does not contain a 'url' column" error
+            string is printed through print_log, unchanged from the pandas implementation.
+
+    Boundaries:
+        - Pins the user-facing message so the stdlib csv rewrite cannot silently reword it; the
+          FATAL return itself is also covered by test_run_missing_url_column_returns_fatal.
+
+    On failure, first check:
+        - The ``"url" not in fieldnames`` branch's print_log message in run().
+    """
+    csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"], header="link")
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+
+    backend = MagicMock()
+    printed: list[tuple[str, str]] = []
+
+    def _record_print(message, severity="info", *args, **kwargs):
+        """Capture (message, severity) for every print_log call."""
+        printed.append((message, severity))
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.print_log", _record_print),
+    ):
+        code = await run(args)
+
+    assert code == exitcodes.FATAL
+    expected = (
+        f"Critical Error: The CSV file '{csv_path}' does not contain a 'url' column. "
+        "Please ensure it has a 'url' header."
+    )
+    assert (expected, "error") in printed
+    backend.save_books.assert_not_called()
+    backend.close.assert_called_once_with()
 
 
 # --------------------------------------------------------------------------- #
@@ -361,12 +454,55 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path):
     assert save_failed.call_args.kwargs["directory"] == "."
 
 
+async def test_run_records_per_site_count_and_save_into_report(tmp_path):
+    """
+    [Local] scrape urls: verifies run() records the per-site count, save summary and flags.
+
+    Scenario:
+        Given a CSV with one amazon URL, a SUCCESS ScrapeResult, and a RunReport passed to run()
+        When run() completes
+        Then report.per_site["amazon"] is {SUCCESS: 1}, report.save reflects the insert,
+        store_backend is "json", and the ai_fallback block is None (no --ai-fallback).
+
+    Boundaries:
+        - Only the report-recording hooks in run(); the save/close contract is a separate test.
+
+    On failure, first check:
+        - The report.record_status / report.set_save / report.set_context calls in scrape_urls.run.
+    """
+    csv_path = _write_csv(tmp_path, ["https://www.amazon.com/dp/B01"])
+    args = SimpleNamespace(input_file=str(csv_path), store_backend="json", ignore_robots=False)
+    report = RunReport("scrape-urls", ["scrape-urls", "--store-backend", "json"])
+
+    backend = MagicMock()
+    backend.save_books.return_value = SaveSummary(inserted=1, duplicates=0, errors=0)
+    pw_factory, _browser = _make_playwright_factory()
+    book = {"title": "Good Book", "site": "amazon", "hash": "abc123"}
+    result = ScrapeResult(ScrapeStatus.SUCCESS, url="https://www.amazon.com/dp/B01", site="amazon", book=book)
+
+    with (
+        patch(f"{MODULE}.resolve_store_backend", return_value=backend),
+        patch(f"{MODULE}.async_playwright", pw_factory),
+        patch(f"{MODULE}.scrape_book", AsyncMock(side_effect=[result])),
+        patch(f"{MODULE}.save_other_links_to_csv"),
+        patch(f"{MODULE}.write_failed_csv"),
+    ):
+        await run(args, report)
+
+    document = report.to_dict()
+    assert document["per_site"]["amazon"] == {"SUCCESS": 1}
+    assert document["save"] == {"inserted": 1, "duplicates": 0, "errors": 0}
+    assert document["store_backend"] == "json"
+    assert document["flags"]["ai_fallback"] is False
+    assert document["ai_fallback"] is None
+
+
 async def test_backend_closed_on_interrupt(tmp_path):
     """
     [Local] scrape urls: verifies a KeyboardInterrupt propagates but the backend is still closed.
 
     Scenario:
-        Given pd.read_csv raising KeyboardInterrupt (Ctrl+C mid-run)
+        Given csv.DictReader raising KeyboardInterrupt (Ctrl+C mid-run)
         When run() is called
         Then KeyboardInterrupt propagates out of run() (to main_sync, which exits 130) and
         backend.close() is still called once by run()'s finally block.
@@ -383,7 +519,7 @@ async def test_backend_closed_on_interrupt(tmp_path):
     backend = MagicMock()
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        patch(f"{MODULE}.pd.read_csv", side_effect=KeyboardInterrupt()),
+        patch(f"{MODULE}.csv.DictReader", side_effect=KeyboardInterrupt()),
         pytest.raises(KeyboardInterrupt),
     ):
         await run(args)
@@ -878,3 +1014,75 @@ async def test_output_dir_created_and_used_for_all_diagnostics(tmp_path):
     assert out_dir.is_dir()
     assert (out_dir / "failed_books.csv").exists()
     assert (out_dir / "other_links.csv").exists()
+
+
+# --------------------------------------------------------------------------- #
+# LLM extraction fallback start-up validation (task 04.1, subtask 05)
+# --------------------------------------------------------------------------- #
+def _ai_args(csv_path: Path, **overrides) -> SimpleNamespace:
+    """Build a scrape-urls Namespace with the --ai-fallback flags set to defaults."""
+    base = {
+        "input_file": str(csv_path),
+        "store_backend": "json",
+        "ignore_robots": False,
+        "ai_fallback": True,
+        "ai_fallback_max_pages": 20,
+        "model": None,
+    }
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+async def test_missing_api_key_with_flag_fails_before_scraping(tmp_path, monkeypatch):
+    """
+    [Local] scrape-urls: --ai-fallback with no ANTHROPIC_API_KEY exits FATAL before any scraping (EXT-7).
+
+    Scenario:
+        Given --ai-fallback set and ANTHROPIC_API_KEY unset in the environment
+        And load_dotenv patched to a no-op so a real .env cannot supply the key
+        When run() is called
+        Then it returns exitcodes.FATAL and resolve_store_backend is never reached (fails at start-up)
+
+    Boundaries:
+        - The start-up create_ai_fallback call precedes resolve_store_backend and the scraping loop
+
+    On failure, first check:
+        - The --ai-fallback start-up block in run(), or create_ai_fallback's resolve_api_key.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    csv_path = _write_csv(tmp_path, ["https://www.amazon.com/dp/B0ABCDEFGH/"])
+    with (
+        patch(f"{MODULE}.load_dotenv"),
+        patch(f"{MODULE}.resolve_store_backend") as resolve,
+    ):
+        code = await run(_ai_args(csv_path))
+
+    assert code == exitcodes.FATAL
+    resolve.assert_not_called()
+
+
+async def test_empty_model_id_with_flag_fails_before_scraping(tmp_path, monkeypatch):
+    """
+    [Local] scrape-urls: --ai-fallback with an empty --model exits FATAL at start-up.
+
+    Scenario:
+        Given --ai-fallback set, a present ANTHROPIC_API_KEY, and --model as whitespace
+        When run() is called
+        Then it returns exitcodes.FATAL and resolve_store_backend is never reached
+
+    Boundaries:
+        - An empty/whitespace model ID is rejected by resolve_model even when the key is present
+
+    On failure, first check:
+        - create_ai_fallback's resolve_model call, or the FATAL return in run().
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-present")
+    csv_path = _write_csv(tmp_path, ["https://www.amazon.com/dp/B0ABCDEFGH/"])
+    with (
+        patch(f"{MODULE}.load_dotenv"),
+        patch(f"{MODULE}.resolve_store_backend") as resolve,
+    ):
+        code = await run(_ai_args(csv_path, model="   "))
+
+    assert code == exitcodes.FATAL
+    resolve.assert_not_called()

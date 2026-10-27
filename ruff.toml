@@ -1,9 +1,17 @@
 src = ["src"]
 line-length = 120
+# Must track pyproject.toml's `requires-python` floor. That floor is re-chosen in
+# task 08.0 subtask 01, which must re-sync this value; today both say 3.13.
 target-version = "py313"
 
 extend-exclude = [
-    "tests/flake8_lint/samples"
+    "tests/flake8_lint/samples",
+    # ruff formats Python fenced code blocks inside Markdown. Our docs (notably
+    # docs/dev/python_*_rules.md) carry intentionally non-conforming example
+    # snippets; reformatting them would corrupt the teaching examples. ruff lints
+    # no Markdown anyway, so excluding it loses nothing and keeps the format gate
+    # Python-only.
+    "*.md",
 ]
 
 [lint]

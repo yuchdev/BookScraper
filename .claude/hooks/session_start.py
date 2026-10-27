@@ -37,11 +37,17 @@ def _open_priority_issues() -> str:
     try:
         out = subprocess.run(
             [
-                "gh", "issue", "list",
-                "--state", "open",
-                "--label", "P0,P1",
-                "--limit", "20",
-                "--json", "number,title,labels",
+                "gh",
+                "issue",
+                "list",
+                "--state",
+                "open",
+                "--label",
+                "P0,P1",
+                "--limit",
+                "20",
+                "--json",
+                "number,title,labels",
                 "--template",
                 "{{range .}}  #{{.number}} {{.title}}\n{{end}}",
             ],

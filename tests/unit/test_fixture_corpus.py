@@ -44,12 +44,12 @@ def _is_expected(path: Path) -> bool:
     return path.name.endswith(_EXPECTED_SUFFIX)
 
 
-# The subtask-07 ``schema_detection/`` subtree holds DERIVED artifacts, not captured pages:
-# hand-authored ``--replay`` recordings and ``.report.txt`` goldens (see tests/fixtures/README.md).
-# They carry no ``.meta.json``/``sha256`` provenance - that integrity model is for captured-page
-# bytes - so they are excluded from the captured-corpus payload checks below. The size budget
-# (``_all_files``) still covers them.
-_NON_CAPTURE_DIRS = frozenset({"schema_detection"})
+# The ``schema_detection/`` (subtask-07) and ``ai_extraction/`` (task 04.1/05) subtrees hold DERIVED
+# artifacts, not captured pages: hand-authored ``--replay`` recordings (and schema_detection's
+# ``.report.txt`` goldens) - see tests/fixtures/README.md. They carry no ``.meta.json``/``sha256``
+# provenance - that integrity model is for captured-page bytes - so they are excluded from the
+# captured-corpus payload checks below. The size budget (``_all_files``) still covers them.
+_NON_CAPTURE_DIRS = frozenset({"schema_detection", "ai_extraction"})
 
 
 def _is_captured_corpus(path: Path) -> bool:

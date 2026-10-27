@@ -153,6 +153,52 @@ async def test_browser_not_launched_when_only_api_providers_selected():
     assert ctx._browser is None
 
 
+async def test_browser_launched_once_reused_and_closed_on_aclose():
+    """
+    [Local] search_providers: SearchContext.browser launches Chromium once, reuses it, aclose tears down.
+
+    Scenario:
+        Given a SearchContext with the resolved headless setting and Playwright patched
+        When browser() is awaited twice and then aclose() is called
+        Then the driver is started once and Chromium launched once with headless=True (second call
+        reuses the cached handle), and aclose() closes the browser, stops the driver, and clears both
+        handles back to None.
+
+    Boundaries:
+        - async_playwright is fully mocked; this pins the lazy-launch guard, the reuse path, and the
+          aclose teardown without touching a real browser.
+
+    On failure, first check:
+        - The `self._browser is None` guard and the `is not None` teardown guards in SearchContext.
+    """
+    fake_browser = MagicMock()
+    fake_browser.close = AsyncMock()
+    fake_driver = MagicMock()
+    fake_driver.chromium.launch = AsyncMock(return_value=fake_browser)
+    fake_driver.stop = AsyncMock()
+    start = AsyncMock(return_value=fake_driver)
+    pw_handle = MagicMock()
+    pw_handle.start = start
+    playwright_factory = MagicMock(return_value=pw_handle)
+
+    ctx = _context()  # headless=True
+    with patch(f"{MODULE}.async_playwright", playwright_factory):
+        first = await ctx.browser()
+        second = await ctx.browser()
+
+        assert first is fake_browser
+        assert second is fake_browser  # cached handle reused, not relaunched
+        start.assert_awaited_once()
+        fake_driver.chromium.launch.assert_awaited_once_with(headless=True)
+
+        await ctx.aclose()
+
+    fake_browser.close.assert_awaited_once()
+    fake_driver.stop.assert_awaited_once()
+    assert ctx._browser is None
+    assert ctx._playwright is None
+
+
 async def test_max_search_pages_flag_reaches_provider():
     """
     [Local] search_providers: LeanpubApiProvider.search forwards max_pages to the API helper.

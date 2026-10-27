@@ -40,19 +40,24 @@ async def test_main_dispatches_to_scrape_urls_run():
     On failure, first check:
         - The "scrape-urls" branch in main()'s command dispatch.
     """
-    args = SimpleNamespace(command="scrape-urls", log_severity="info")
+    args = SimpleNamespace(command="scrape-urls", log_severity="info", report=None)
+    fake_report = Mock()
 
     with (
         patch.object(main, "build_parser", return_value=_fake_parser(args)),
         patch.object(main, "configure_logging") as mock_configure,
+        patch.object(main, "RunReport", return_value=fake_report),
         patch.object(main.scrape_urls, "run", new_callable=AsyncMock) as mock_scrape_run,
         patch.object(main.search, "run", new_callable=AsyncMock) as mock_search_run,
     ):
         await main.main()
 
     mock_configure.assert_called_once_with(logging.INFO)
-    mock_scrape_run.assert_awaited_once_with(args)
+    mock_scrape_run.assert_awaited_once_with(args, fake_report)
     mock_search_run.assert_not_called()
+    # The report is finalized with the command's exit code and written in main()'s finally.
+    fake_report.finalize.assert_called_once()
+    fake_report.write.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -72,18 +77,20 @@ async def test_main_dispatches_to_search_run():
     On failure, first check:
         - The "search" branch in main()'s command dispatch and the debug-level logging setup.
     """
-    args = SimpleNamespace(command="search", log_severity="debug")
+    args = SimpleNamespace(command="search", log_severity="debug", report=None)
+    fake_report = Mock()
 
     with (
         patch.object(main, "build_parser", return_value=_fake_parser(args)),
         patch.object(main, "configure_logging") as mock_configure,
+        patch.object(main, "RunReport", return_value=fake_report),
         patch.object(main.scrape_urls, "run", new_callable=AsyncMock) as mock_scrape_run,
         patch.object(main.search, "run", new_callable=AsyncMock) as mock_search_run,
     ):
         await main.main()
 
     mock_configure.assert_called_once_with(logging.DEBUG)
-    mock_search_run.assert_awaited_once_with(args)
+    mock_search_run.assert_awaited_once_with(args, fake_report)
     mock_scrape_run.assert_not_called()
 
 
@@ -303,11 +310,12 @@ async def test_main_maps_backend_unavailable_to_fatal():
     On failure, first check:
         - The try/except BackendUnavailableError wrapper around the command dispatch in main().
     """
-    args = SimpleNamespace(command="scrape-urls", log_severity="info")
+    args = SimpleNamespace(command="scrape-urls", log_severity="info", report=None)
 
     with (
         patch.object(main, "build_parser", return_value=_fake_parser(args)),
         patch.object(main, "configure_logging"),
+        patch.object(main, "RunReport", return_value=Mock()),
         patch.object(
             main.scrape_urls,
             "run",
@@ -319,3 +327,71 @@ async def test_main_maps_backend_unavailable_to_fatal():
         code = await main.main()
 
     assert code == exitcodes.FATAL
+
+
+@pytest.mark.asyncio
+async def test_report_written_on_interrupt_with_130():
+    """
+    [Local] main: verifies an interrupted run still finalizes and writes the report with exit 130.
+
+    Scenario:
+        Given a search run whose run() raises KeyboardInterrupt (Ctrl+C mid-run)
+        When main() is awaited
+        Then the KeyboardInterrupt propagates (main_sync turns it into exit 130), but main()'s
+        finally first finalizes the report with exitcodes.INTERRUPTED and writes it.
+
+    Boundaries:
+        - Only the interrupt path's report finalization; report content is covered in test_reporting.
+
+    On failure, first check:
+        - The except KeyboardInterrupt (sets exit_code = INTERRUPTED) and the finally in main().
+    """
+    args = SimpleNamespace(command="search", log_severity="info", report=None)
+    fake_report = Mock()
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging"),
+        patch.object(main, "RunReport", return_value=fake_report),
+        patch.object(main.search, "run", new_callable=AsyncMock, side_effect=KeyboardInterrupt()),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        await main.main()
+
+    fake_report.finalize.assert_called_once_with(exitcodes.INTERRUPTED)
+    fake_report.write.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
+async def test_report_write_failure_does_not_mask_exit_code():
+    """
+    [Local] main: verifies a report-write failure warns and never changes the exit code.
+
+    Scenario:
+        Given a migrate run returning exitcodes.OK and a report whose write() raises OSError
+        When main() is awaited
+        Then main() still returns exitcodes.OK (the write failure is swallowed with a warning),
+        and print_log is called for the warning.
+
+    Boundaries:
+        - Only the best-effort write contract in main()'s finally; write()'s own internal
+          best-effort handling is covered in test_reporting.
+
+    On failure, first check:
+        - The try/except around report.finalize/report.write in main()'s finally.
+    """
+    args = SimpleNamespace(command="migrate", log_severity="info", report=None, apply=False)
+    fake_report = Mock()
+    fake_report.write.side_effect = OSError("disk full")
+
+    with (
+        patch.object(main, "build_parser", return_value=_fake_parser(args)),
+        patch.object(main, "configure_logging"),
+        patch.object(main, "RunReport", return_value=fake_report),
+        patch.object(main.migrate, "run", new_callable=AsyncMock, return_value=exitcodes.OK),
+        patch.object(main, "print_log") as mock_print,
+    ):
+        code = await main.main()
+
+    assert code == exitcodes.OK
+    assert mock_print.called

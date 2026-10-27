@@ -25,10 +25,10 @@ aggregate, but:
 | #  | Document                                                              | Status         | Blocks |
 |----|-----------------------------------------------------------------------|----------------|--------|
 | 01 | [Reach ≥90% total line coverage](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/01-reach-ninety-percent-total.md) | ✅ Complete | 02     |
-| 02 | [Enforce the gate in configuration](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/02-enforce-gate-in-config.md) | ⬜ Not started | 03   |
-| 03 | [Per-module floor](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/03-per-module-floor.md)                      | ⬜ Not started | -      |
-| 04 | [Entry-point coverage](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/04-entry-point-coverage.md)              | ⬜ Not started | -      |
-| 05 | [Branch coverage baseline](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/05-branch-coverage-baseline.md)      | ⬜ Not started | -      |
+| 02 | [Enforce the gate in configuration](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/02-enforce-gate-in-config.md) | ✅ Complete | 03   |
+| 03 | [Per-module floor](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/03-per-module-floor.md)                      | ✅ Complete | -      |
+| 04 | [Entry-point coverage](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/04-entry-point-coverage.md)              | ✅ Complete | -      |
+| 05 | [Branch coverage baseline](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/05-branch-coverage-baseline.md)      | ✅ Complete | -      |
 | 06 | [Accurate coverage documentation](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/06-coverage-documentation.md)  | ⬜ Not started | -      |
 
 ## Key constraints

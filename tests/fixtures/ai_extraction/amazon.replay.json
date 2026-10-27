@@ -1,0 +1,4 @@
+{
+  "56d75f702ffd4c0d365cb081e4c0e0761c7e3133d57186e7fec261d77594b392": "{\n  \"fields\": {\n    \"DESCRIPTION\": {\n      \"evidence\": \"Neutralized prose omitted from the public test corpus.\",\n      \"value\": \"Neutralized prose omitted from the public test corpus.\"\n    }\n  }\n}",
+  "_provenance": "hand-authored LLM extraction-fallback response (not a recorded live model reply); value/evidence is verbatim visible text of the cpp_primer_5e amazon fixture"
+}

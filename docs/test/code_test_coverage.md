@@ -1,311 +1,193 @@
-# Coverage Requirements Checklist
+# Test Coverage
 
-## Coverage Quick Start
+Coverage is measured as the **combined line+branch** figure for `src/bookscraper/` and must
+stay at or above **90%** at every level: the aggregate gate and the per-module floor both
+require 90%. `scripts/*.py` is out of scope.
 
-This project requires **85% test coverage** on all code. This is enforced automatically when running tests.
+## Quick Start
 
-### Running Tests with Coverage
+```bash
+# 1. Install dependencies (once per clone)
+uv sync
 
-#### Main Project
+# 2. Run the default suite with coverage (offline, fast)
+uv run pytest --cov
 
-```powershell
-# Install dev dependencies (one-time)
-pip install -e .[dev]
+# 3. Open an HTML report (written to htmlcov/)
+uv run pytest --cov --cov-report=html
+open htmlcov/index.html
 
-# Run tests (coverage check included by default)
-pytest
-
-# View detailed coverage report
-# Open: .htmlcov/index.html
+# 4. Check the per-module floor as well
+uv run pytest --cov --cov-report=json -q
+uv run python scripts/check_module_coverage.py
 ```
 
-### What This Means
+Both `htmlcov/` and `coverage.json` are gitignored.
 
-- ✅ All test runs automatically measure and report code coverage
-- ✅ Tests **fail** if coverage drops below 85%
-- ✅ Failed tests block merging to main branches
-- ✅ Coverage reports are always available in `.htmlcov/` directory
+## Threshold and Enforcement
 
-### If Coverage Check Fails
+Coverage is configured in `pyproject.toml` under `[tool.coverage.*]`:
 
-1. **Identify uncovered code**: Open `.htmlcov/index.html` in a browser
-    - Red lines = not covered by tests
-    - Yellow lines = partially covered
-    - Green lines = fully covered
+- **`[tool.coverage.run] branch = true`** — measures both line and branch coverage so that a
+  taken-but-not-both-arms branch counts as a gap.
+- **`[tool.coverage.report] fail_under = 90`** — `uv run pytest --cov` fails the run when the
+  combined total drops below 90%. There is no separate `--cov-fail-under` flag needed; the
+  configuration is authoritative.
+- **`[tool.coverage.run] source = ["bookscraper"]`** — `--cov` alone is sufficient; omit
+  `--cov=bookscraper`.
 
-2. **Add tests** for the uncovered code, or
+`--cov` is deliberately absent from `addopts` in `[tool.pytest.ini_options]` so a single-file
+focused run stays fast and the `run_tests` pre-commit hook is unaffected. Add `--cov` explicitly
+when you want to measure.
 
-3. **Mark intentional exclusions** with `# pragma: no cover`:
-   ```python
-   def __repr__(self):  # pragma: no cover
-       return f"{self.__class__.__name__}()"
-   ```
+## Test Tiers
 
-4. **Re-run tests**:
-   ```powershell
-   pytest
-   ```
+| Tier | Directory | Marker | Counts toward coverage |
+|------|-----------|--------|------------------------|
+| Unit | `tests/unit/` | (none) | Yes |
+| Mock | `tests/mock/` | (none) | Yes |
+| Mock — offline HTML corpus | `tests/mock/scraping/html/` | `chromium` | Yes (skips cleanly when no browser is available; CI installs Chromium) |
+| Integration | `tests/integration/` | `integration` | Excluded from default run |
 
-### Threshold Details
+The default run (`uv run pytest`) excludes `integration`-marked tests via
+`addopts = "-m \"not integration\""`. Run integration tests explicitly:
 
-- **Why 85%?** Balances quality with pragmatism
-- **Not 100%**: Some code (error paths, UI, etc.) is hard/expensive to test
-- **Not below 85%**: Ensures critical code paths are tested
-
-### Configuration
-
-Coverage settings are in `pyproject.toml` and `.coveragerc`
-
-### Tips
-
-- Run specific tests: `pytest tests/test_module.py --cov`
-- Faster runs locally: `pytest --no-cov` (but CI will still check)
-- Update threshold: Edit `fail_under` in `pyproject.toml` (don't lower!)
-
-## Checklist Before Submitting a Pull Request
-
-### ✅ Local Testing
-
-- [ ] Installed latest dependencies
-  ```powershell
-  pip install -e .[dev]           # Main project
-  ```
-
-- [ ] Ran tests locally with coverage
-  ```powershell
-  pytest              # Coverage check is automatic
-  ```
-
-- [ ] Coverage is ≥ 85%
-  - [ ] Terminal output shows ≥ 85%
-  - [ ] No "FAILED" message from coverage check
-
-### ✅ Code Review
-
-- [ ] Reviewed uncovered code in `.htmlcov/index.html`
-  - [ ] Red lines (uncovered) are intentional or excluded
-  - [ ] If uncovered, added `# pragma: no cover` with explanation
-  - [ ] New code has test coverage ≥ 85%
-
-- [ ] If coverage decreased:
-  - [ ] Added new tests for new code paths
-  - [ ] Documented why exclusions are needed
-  - [ ] Consulted with team if threshold is concerning
-
-### ✅ Commit & Push
-
-- [ ] Commit message references coverage status
-  ```
-  feat: Add new feature with 87% coverage
-  - Added 5 new test cases
-  - Coverage improved from 82% to 87%
-  ```
-
-- [ ] Push to feature branch
-  - [ ] CI/CD pipeline runs successfully
-  - [ ] All coverage checks pass
-  - [ ] Coverage reports available in artifacts
-
-### ✅ Pull Request
-
-- [ ] PR description includes:
-  - [ ] Coverage before/after numbers
-  - [ ] Any code intentionally excluded from coverage
-  - [ ] Testing approach for new code
-
-- [ ] Link to coverage report:
-  ```markdown
-  ## Coverage
-  - **Before**: 84%
-  - **After**: 86%
-  - **Report**: See GitHub Actions artifacts
-  ```
-
-- [ ] All CI checks pass (including coverage)
-  - [ ] ✅ Coverage: 85%
-  - [ ] ✅ All tests pass
-  - [ ] ✅ No regressions
-
-## Adding New Code
-
-### For New Modules
-
-1. **Create test file** first (TDD approach):
-   ```
-   src/book_scrapper/feature/module.py
-   tests/feature/test_module.py  ← Create this first
-   ```
-
-2. **Write tests** for all public functions
-   ```python
-   # tests/feature/test_module.py
-   def test_feature_basic():
-       """Test basic functionality."""
-       result = module.feature(input_data)
-       assert result == expected_output
-   
-   def test_feature_edge_case():
-       """Test edge cases."""
-       # ...
-   ```
-
-3. **Implement module** to pass tests
-4. **Run coverage check**: `pytest`
-5. **Verify** coverage shows new code is tested
-
-### For New Functions in Existing Modules
-
-1. **Add test case** to relevant test file
-2. **Verify test fails** (red):
-
-```powershell
-pytest tests/feature/test_module.py::test_new_function
+```bash
+uv run pytest -m integration
 ```
 
-3. **Implement function** to pass test
-4. **Verify test passes** (green)
-5. **Check coverage** includes new code
+Integration tests hit a real MongoDB Atlas cluster and require credentials in `.env`; see the
+Testing section of `CLAUDE.md` for the credential setup.
 
-### Code Patterns to Test
+## Running Coverage
 
-Make sure you test:
+### Aggregate gate
 
-- ✅ **Happy path**: Normal, expected usage
-  ```python
-  def test_happy_path():
-      result = function(valid_input)
-      assert result == expected_value
-  ```
-
-- ✅ **Edge cases**: Boundary conditions
-  ```python
-  def test_empty_input():
-      result = function([])
-      assert result is not None
-  ```
-
-- ✅ **Error handling**: Invalid inputs
-  ```python
-  def test_invalid_input():
-      with pytest.raises(ValueError):
-          function(invalid_input)
-  ```
-
-- ✅ **Type variations**: Different input types
-  ```python
-  def test_with_string():
-      ...
-  def test_with_int():
-      ...
-  ```
-
-## When Coverage Drops
-
-If local tests show coverage < 85%:
-
-### Step 1: Identify Coverage Gaps
-
-```powershell
-# Open coverage report
-open .htmlcov/index.html
-
-# Look for red lines (uncovered code)
+```bash
+uv run pytest --cov
 ```
 
-### Step 2: Three Options
+Passes when the combined line+branch total is ≥90%; fails with a coverage error otherwise.
+The terminal report shows missing lines (`show_missing = true`) and hides already-covered
+modules (`skip_covered = true`).
 
-**Option A: Add Tests** (Preferred)
-```python
-# Add test for uncovered code path
-def test_missing_coverage():
-    # Test the uncovered line/branch
-    ...
+### HTML report
+
+```bash
+uv run pytest --cov --cov-report=html
+open htmlcov/index.html
 ```
 
-**Option B: Exclude with Pragma** (Justified Cases)
-```python
-def error_handler():  # pragma: no cover
-    # This code path is hard to test in CI environment
-    # Verified manually in local environment
-    ...
+Colors: green = covered, yellow = branch-partially-covered, red = uncovered.
+
+### Per-module floor check
+
+A high aggregate can hide a single under-tested module. After a full run:
+
+```bash
+uv run pytest --cov --cov-report=json -q
+uv run python scripts/check_module_coverage.py
 ```
 
-**Option C: Discuss with Team** (If Threshold Too High)
-- Consensus needed to lower threshold below 85%
-- Document rationale
-- Update `fail_under` in configuration
+`scripts/check_module_coverage.py` reads `coverage.json` (written to the repo root by
+`--cov-report=json`) and fails (exit 1) when any `src/bookscraper/` module falls below 90%,
+printing a table of offenders. Exit 0 means every module clears its floor. Exit 2 signals a
+configuration error (missing `coverage.json` or a malformed exception entry).
 
-### Step 3: Re-verify
+## Excluding Code from Coverage
 
-```powershell
-pytest
-# Should show ≥ 85% and PASS
+`# pragma: no cover` is allowed only for the patterns listed in
+`[tool.coverage.report] exclude_also` in `pyproject.toml`. Those are:
+
+| Pattern | Rationale |
+|---------|-----------|
+| `if TYPE_CHECKING:` | Import-time type annotation blocks, never executed at runtime |
+| `raise NotImplementedError` | Abstract-interface stubs; callers are expected to override these |
+| `^\s*\.\.\.$` | Bare `...` ellipsis bodies (protocol stubs, abstract placeholders) |
+| `if __name__ == .__main__.:` | Script entry-point guards; exercised by the console-script entry point, not by the test suite |
+
+Do not add `# pragma: no cover` outside these cases. Every new annotation must assert an
+observable outcome — tests exist to verify behavior, not just to execute lines.
+
+## Requesting a Floor Exception
+
+When a module genuinely cannot reach 90% yet (for example, because a required subsystem is
+not yet built), add a temporary exception to `tests/coverage_floor_exceptions.toml`:
+
+```toml
+["bookscraper.scraping.example"]
+floor  = 85
+reason = "route_handler branches require a live browser; covered in task 06.0"
+until  = "task-06.0-subtask-04"
 ```
 
-## Troubleshooting
-
-### "Coverage failed: 83% < 85%"
-
-1. Check what's uncovered:
-   ```powershell
-   pytest --cov-report=term-missing
-   ```
-
-2. Open `.htmlcov/index.html` to visualize
-
-3. Add tests or pragma comments
-
-4. Re-run until ≥ 85%
-
-### "Some files show 0% coverage"
-
-1. Verify the source path in `pyproject.toml` matches your package layout,
-   e.g. `src/book_scrapper`.
-
-2. Ensure the test file imports the `book_scrapper` module.
-
-3. Run from correct directory:
-   ```powershell
-   uv run pytest -q
-   ```
-
-### "HTML report not generated"
-
-1. Ensure `--cov-report=html` in pytest options
-2. Check `.htmlcov/` directory exists
-3. Try running with explicit flag:
-   ```powershell
-   pytest --cov --cov-report=html
-   ```
-
-## Resources
-
-- **Quick Guide**: `COVERAGE_QUICKSTART.md`
-- **Full Documentation**: `docs/configuration/coverage.md`
-- **Setup Summary**: `COVERAGE_SETUP_SUMMARY.md`
-- **Validation Script**: `python validate_coverage.py`
-
-## Questions?
-
-1. Check documentation first: `docs/configuration/coverage.md`
-2. Review project PR discussions for similar issues
-3. Ask the team in the development channel
-4. Reference [Coverage.py docs](https://coverage.readthedocs.io/)
-
-## Summary
-
-| Action               | Command                       | Expected Result                |
-|----------------------|-------------------------------|--------------------------------|
-| Run all tests        | `pytest`                      | All pass + 85% coverage        |
-| View coverage        | Open `.htmlcov/index.html`    | Colored per-file view          |
-| Check specific test  | `pytest tests/test_module.py` | Tests pass + coverage reported |
-| Refresh coverage     | `pytest --cov-erase`          | Fresh calculation next run     |
-| Find uncovered lines | Look for **red** in HTML      | Know what to test next         |
+All three fields are required; a missing or blank field causes `check_module_coverage.py` to
+exit 2 so an exception can never be added silently. The file ships empty — every module is
+expected to clear 90% on its own. Remove the entry once the linked task lands.
 
 ---
 
-**Remember**: Coverage ≥ 85% is required. Every PR must pass this check. Great tests = Better code! 🚀
+<!-- BEGIN: branch-coverage baseline (task 06.1 / subtask 05) -->
+## Branch-coverage baseline (2026-10-24)
 
-## Actual Test Layout
+> Added by task 06.1 / subtask 05 when `[tool.coverage.run] branch` was flipped to `true`, so the
+> ≥90% gate (`fail_under = 90`) now applies to the **combined line+branch** figure. The rest of this
+> document still describes an earlier project setup and is reconciled by subtask 06.
 
-No test files were found under `tests/`.
+Measured with `uv run pytest -m "not integration" --cov --cov-report=json -q`.
+
+- **Combined total:** 98.14% (was 98.55% line-only before the flip).
+- **Gate:** `fail_under = 90` kept on the combined figure; `scripts/check_module_coverage.py` (per-module
+  floor 90%) passes with every module clearing the floor. No `fail_under` reduction and no
+  `coverage_floor_exceptions.toml` entry were needed.
+- **Gap closed:** the branch flip dropped `scraping/search_providers.py` to 89.71% (the lazy
+  `SearchContext.browser()` launch/reuse guard and the `aclose()` teardown guards were branch-uncovered);
+  a new lifecycle test (`tests/mock/scraping/test_search_providers.py::test_browser_launched_once_reused_and_closed_on_aclose`)
+  brings it to 100%.
+
+Per-module combined (line+branch) coverage, dated baseline:
+
+| Module | Combined % |
+|--------|-----------:|
+| `backends/local/store.py` | 96.12% |
+| `backends/migration.py` | 100.00% |
+| `backends/mongo/cert_rotation.py` | 98.84% |
+| `backends/mongo/client.py` | 100.00% |
+| `backends/mongo/config.py` | 99.32% |
+| `backends/mongo/database.py` | 98.54% |
+| `backends/mongo/deduplicate.py` | 100.00% |
+| `backends/save_summary.py` | 100.00% |
+| `backends/storage.py` | 98.06% |
+| `book_utils.py` | 95.24% |
+| `cli.py` | 98.41% |
+| `commands/_reporting.py` | 100.00% |
+| `commands/detect_schema.py` | 100.00% |
+| `commands/doctor.py` | 99.58% |
+| `commands/migrate.py` | 98.31% |
+| `commands/rotate_cert.py` | 100.00% |
+| `commands/scrape_urls.py` | 94.07% |
+| `commands/search.py` | 92.05% |
+| `exitcodes.py` | 100.00% |
+| `isbn.py` | 100.00% |
+| `main.py` | 100.00% |
+| `models.py` | 100.00% |
+| `runtime.py` | 100.00% |
+| `scraping/ai_common.py` | 99.43% |
+| `scraping/ai_extraction.py` | 100.00% |
+| `scraping/browser.py` | 100.00% |
+| `scraping/dedup.py` | 96.97% |
+| `scraping/filters.py` | 94.59% |
+| `scraping/normalize.py` | 100.00% |
+| `scraping/parameters.py` | 100.00% |
+| `scraping/politeness.py` | 98.25% |
+| `scraping/results.py` | 100.00% |
+| `scraping/safe_text.py` | 100.00% |
+| `scraping/sanitize.py` | 99.77% |
+| `scraping/schema_detection.py` | 100.00% |
+| `scraping/scrape_details.py` | 93.45% |
+| `scraping/search_providers.py` | 100.00% |
+| `scraping/search_utils.py` | 98.48% |
+| `scraping/text.py` | 100.00% |
+
+Package `__init__.py` files and `__main__.py` (all 100.00%) are omitted for brevity.
+<!-- END: branch-coverage baseline (task 06.1 / subtask 05) -->

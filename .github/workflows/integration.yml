@@ -1,0 +1,82 @@
+name: Integration
+
+# Real-Atlas integration tier (tests/integration/). Manual or weekly only - NEVER on pull_request,
+# pull_request_target or push, so fork code can never reach these credentials (threat model
+# docs/security/2026-10-26-ci-integration-secrets.md, CI-1). The job sits behind the
+# `atlas-integration` GitHub Environment (required reviewers) that holds the three secrets.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+# One run at a time against the shared Atlas identity; never cancel a run mid-test (CI-9).
+concurrency:
+  group: integration
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: integration (atlas)
+    runs-on: ubuntu-latest
+    environment: atlas-integration
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Require integration secrets
+        # An unconfigured Environment makes every test skip and the run exit 0; fail loudly
+        # instead so the regression guard can't be silently disabled (CI-4, CI-10).
+        env:
+          PASS_URI: ${{ secrets.TEST_MONGODB_URI_PASS }}
+          TLS_URI: ${{ secrets.TEST_MONGODB_URI_TLS }}
+          CERT_PEM: ${{ secrets.TEST_X509_CERT_PEM }}
+        run: |
+          for name in PASS_URI TLS_URI CERT_PEM; do
+            if [ -z "${!name}" ]; then
+              echo "::error::integration secrets not configured"
+              exit 1
+            fi
+          done
+
+      - name: Write X.509 client certificate
+        env:
+          CERT_PEM: ${{ secrets.TEST_X509_CERT_PEM }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/home/.bookscrapper"
+          printenv CERT_PEM > "$RUNNER_TEMP/home/.bookscrapper/X509-cert-ci.pem"
+
+      - name: Run integration tests
+        env:
+          HOME: ${{ runner.temp }}/home
+          TEST_MONGODB_URI_PASS: ${{ secrets.TEST_MONGODB_URI_PASS }}
+          TEST_MONGODB_URI_TLS: ${{ secrets.TEST_MONGODB_URI_TLS }}
+        run: |
+          set -o pipefail
+          uv run pytest -m integration -rxXs -q | tee integration.log
+          # Fail if nothing actually ran (all skipped / nothing collected).
+          if ! grep -Eq "[0-9]+ (passed|xfailed|xpassed)" integration.log; then
+            echo "::error::no integration tests executed (all skipped)"
+            exit 1
+          fi
+
+      - name: Remove certificate
+        if: always()
+        run: |
+          cert="$RUNNER_TEMP/home/.bookscrapper/X509-cert-ci.pem"
+          shred -u "$cert" 2>/dev/null || rm -f "$cert"
+          rmdir "$RUNNER_TEMP/home/.bookscrapper" 2>/dev/null || true

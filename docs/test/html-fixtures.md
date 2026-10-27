@@ -144,3 +144,76 @@ per fixture, whether it is live, hand-built, or derived and why.
 
 A maintainer can go from "Amazon changed its markup" to an updated selector and golden by
 following the step-by-step above.
+
+---
+
+## Test harness reference
+
+This section documents how the offline fixture corpus integrates with pytest for developers
+adding or modifying tests.
+
+### `corpus_router` and `httpx_corpus`
+
+`tests/mock/scraping/html/conftest.py` builds the corpus mapping (fixture URL → bytes) from
+each fixture's `.meta.json` `url` field. Two helpers serve this mapping:
+
+- **`corpus_router(browser, mapping)`** — wraps a real headless Chromium so every page load
+  serves the mapped corpus bytes. Any request that is **not** in the mapping is aborted,
+  recorded, and **fails the test** (threat model FIX-8). Corpus routes are installed *after*
+  the production `route_handler` so they take precedence and an unmapped document is never
+  `route.continue_()`d to the network (FIX-9).
+- **`httpx_corpus(mapping)`** — does the same for the Leanpub `httpx` path by injecting an
+  `httpx.MockTransport`. It is a same-signature `httpx.AsyncClient` factory, requiring no
+  production code change.
+
+### Chromium marker
+
+Tests that need a real browser carry `@pytest.mark.chromium` (registered in `pyproject.toml`
+and **included in the default run** — offline and fast). They pick their browser via the
+`BOOKSCRAPER_CHROMIUM_PATH` env var (a system Chromium, for macOS 13 where Playwright's bundled
+Chromium will not launch), falling back to the bundled browser and **skipping cleanly** (never
+failing) when no usable browser is found, so CI can install one.
+
+### Detail-page golden tests (`test_detail_goldens.py`)
+
+`tests/mock/scraping/html/test_detail_goldens.py` runs the unmodified `scrape_book()` /
+`get_leanpub_book_details()` against every non-edge-case fixture and compares the result
+field-by-field against a committed `tests/fixtures/**/<name>.expected.json`.
+
+Goldens record what the code does **today**, including known-wrong output; each such value
+carries a `"_known_issues"` list naming the subtask that will fix it (the key is ignored by the
+comparison). It is split into:
+
+- `test_detail_golden` — Playwright sites, `chromium`-marked
+- `test_detail_golden_leanpub` — the Leanpub JSON path via `httpx_corpus`, unmarked so it
+  runs offline without Chromium
+
+### Search-page golden tests (`test_search_goldens.py`)
+
+`tests/mock/scraping/html/test_search_goldens.py` runs `get_search_results_via_playwright`
+against live-captured Amazon search snapshots (Amazon search is not walled) in real headless
+Chromium (`chromium`-marked, skips without a usable browser) and
+`get_leanpub_search_results_via_api` over `httpx_corpus` (unmarked, offline). Both goldens live
+in `tests/mock/scraping/html/goldens/` (outside `tests/fixtures/`, so diffable and not subject
+to the corpus orphan check) and carry `_known_issues` notes.
+
+### Shared fixtures (`tests/conftest.py`)
+
+- `isolated_config` — monkeypatches `CONFIG_DIR`/`SETTINGS_FILE` to `tmp_path`; a test can
+  never read or write the real `~/.bookscrapper/settings.json`.
+- `isolated_local_store` — monkeypatches `LOCAL_STORE_FILE` to `tmp_path`; a test can never
+  read or write the repo-root `books.json`.
+- `no_real_env` — strips MongoDB env vars for a test's duration so a prior `load_dotenv()` can
+  never leak real values in.
+- `--update-goldens` / `update_goldens` fixture — rewrites `.expected.json` files and then
+  **fails** the run with `"goldens updated - review the diff"`, so regeneration is never
+  silently green.
+
+### Regenerating goldens
+
+```bash
+uv run pytest --update-goldens
+```
+
+This rewrites the affected `.expected.json` files and intentionally fails the run. Review the
+diff before committing.

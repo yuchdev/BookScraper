@@ -15,7 +15,7 @@ Check that the implementation of a subtask matches its specification document.
    - If the argument ends with `.md`, use it as-is relative to repo root.
    - Otherwise, expand to `docs/roadmap/$ARGUMENTS.md`.
    - If the file does not exist, error: "Spec not found: <path>. Pass the path relative to
-     docs/roadmap/ without the .md extension, e.g. `0001-working-implementation/01.0-hello-world-endpoint/01-config-model`."
+     docs/roadmap/ without the .md extension, e.g. `0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks`."
 
 2. **Gather the diff scope.**
    Run `git diff --name-only HEAD` to get changed files. If the working tree is clean

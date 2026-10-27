@@ -1,7 +1,7 @@
 # 02 - Remove template leftovers
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Python Expert
 
 ## Requirements

@@ -37,13 +37,13 @@ X509_XFAIL_REASON = (
 def test_x509_auth_connects():
     """
     [Integration] connection tls auth: verifies x509 auth connects.
-    
+
     Scenario:
         X.509 client-cert auth resolves and pings the live Atlas cluster. Expected XFAIL today due to the Atlas-side cert-validation issue above.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """

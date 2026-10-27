@@ -1,7 +1,7 @@
 # Task 07.0 - Observability & Run Reporting
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Category:** feature | **Priority:** P2
 **Depends on:** [Task 03.0](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/README.md)
 
@@ -23,10 +23,10 @@ but:
 
 | #  | Document                                                          | Status         | Blocks |
 |----|-------------------------------------------------------------------|----------------|--------|
-| 01 | [Secret-redacting log filter](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/01-secret-redacting-log-filter.md) | ⬜ Not started | -  |
-| 02 | [Logger hierarchy & library noise](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/02-logger-hierarchy.md)  | ⬜ Not started | 04     |
-| 03 | [Machine-readable run report](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/03-run-report.md)             | ⬜ Not started | -      |
-| 04 | [Per-task log context](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/04-per-task-log-context.md)          | ⬜ Not started | -      |
+| 01 | [Secret-redacting log filter](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/01-secret-redacting-log-filter.md) | ✅ Complete | -  |
+| 02 | [Logger hierarchy & library noise](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/02-logger-hierarchy.md)  | ✅ Complete | 04     |
+| 03 | [Machine-readable run report](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/03-run-report.md)             | ✅ Complete | -      |
+| 04 | [Per-task log context](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/04-per-task-log-context.md)          | ✅ Complete | -      |
 
 ## Key constraints
 

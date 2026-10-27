@@ -36,7 +36,7 @@ from ..backends import StorageBackend
 from .parameters import site_constants
 from .politeness import DomainRateLimiters, RobotsCache
 from .results import ScrapeResult
-from .scrape_details import LEANPUB_SITE, get_leanpub_book_details, scrape_book
+from .scrape_details import LEANPUB_SITE, AIFallbackRuntime, get_leanpub_book_details, scrape_book
 from .search_utils import get_leanpub_search_results_via_api, get_search_results_via_playwright
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,7 @@ class SearchContext:
         robots: Optional[RobotsCache],
         headless: bool,
         backend: StorageBackend,
+        ai_fallback: Optional[AIFallbackRuntime] = None,
     ):
         """Store the shared collaborators; the browser stays unlaunched until first requested.
 
@@ -109,12 +110,16 @@ class SearchContext:
         :param headless: Whether a lazily launched browser runs headless (from ``RuntimeOptions``).
         :param backend: The resolved storage backend, handed to the Playwright detail scrape for its
             inline duplicate check (see :func:`scrape_candidate`).
+        :param ai_fallback: The per-run LLM extraction fallback runtime (task 04.1) handed to the
+            Playwright detail scrape, or ``None`` when ``--ai-fallback`` is off. The Leanpub API path
+            is never hooked - it has no CSS selectors to drift.
         """
         self._http_client = http_client
         self._limiters = limiters
         self._robots = robots
         self._headless = headless
         self._backend = backend
+        self._ai_fallback = ai_fallback
         self._playwright = None
         self._browser: Optional[Browser] = None
 
@@ -127,6 +132,11 @@ class SearchContext:
     def backend(self) -> StorageBackend:
         """The run's resolved storage backend (used by the Playwright detail scrape)."""
         return self._backend
+
+    @property
+    def ai_fallback(self) -> Optional[AIFallbackRuntime]:
+        """The run's LLM extraction-fallback runtime, or ``None`` when ``--ai-fallback`` is off."""
+        return self._ai_fallback
 
     @property
     def limiters(self) -> DomainRateLimiters:
@@ -390,6 +400,9 @@ async def scrape_candidate(candidate: SearchCandidate, ctx: SearchContext) -> Sc
         storage backend).
     :returns: The :class:`ScrapeResult` for the detail scrape.
     """
+    # The per-task log context (``<site>:<short-id>``, task 07.0/04) is set by the two detail-scrape
+    # primitives this routes to (``get_leanpub_book_details`` / ``scrape_book``), so each concurrent
+    # candidate's log lines stay attributable without this router setting it a second time.
     if candidate.site == LEANPUB_SITE:
         return await get_leanpub_book_details(
             url=candidate.detail_ref,
@@ -405,4 +418,5 @@ async def scrape_candidate(candidate: SearchCandidate, ctx: SearchContext) -> Sc
         ctx.backend,
         limiters=ctx.limiters,
         robots=ctx.robots,
+        ai_fallback=ctx.ai_fallback,
     )

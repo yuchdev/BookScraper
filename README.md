@@ -1,171 +1,179 @@
 # BookScraper
 
-![Python](https://img.shields.io/badge/Python-3.13%2B-blue?style=for-the-badge&logo=python)
+[![Lint](https://github.com/yuchdev/BookScraper/actions/workflows/lint.yml/badge.svg)](https://github.com/yuchdev/BookScraper/actions/workflows/lint.yml)
+[![Tests](https://github.com/yuchdev/BookScraper/actions/workflows/tests.yml/badge.svg)](https://github.com/yuchdev/BookScraper/actions/workflows/tests.yml)
+![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fyuchdev%2FBookScraper%2Fmaster%2Fpyproject.toml&style=for-the-badge&logo=python)
 ![Playwright](https://img.shields.io/badge/Playwright-Chromium-green?style=for-the-badge&logo=playwright)
 ![MongoDB](https://img.shields.io/badge/MongoDB-4.0%2B-47A248?style=for-the-badge&logo=mongodb)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
-## 📚 Overview
-
-`BookScraper` is a powerful and robust web scraping tool designed to extract detailed information about books from
-various online retailers and publishing platforms. Built with `asyncio` and `Playwright`, it efficiently navigates web
-pages, collects data, and provides flexible output options to CSV files or a MongoDB database.
-
-The project emphasizes reliability with features like dynamic user-agent rotation, retry mechanisms, and pre-flight
-checks for output destinations, ensuring a smooth and resilient scraping experience.
+`bookscraper` is an asyncio + Playwright scraper that extracts book metadata (title, authors, ISBNs,
+publication date, description, tags) from Amazon, Packtpub, Leanpub, and O'Reilly, and persists results
+to a MongoDB Atlas collection or a local `books.json` store.
 
 ---
 
-## 🚀 Quick Start During Development
+## Features
 
-To quickly start the application at this stage of development:
-
-1. cd into the BookScraper project folder
-2. run `uv sync` to create `.venv` and install dependencies (this also registers the `bookscraper` command inside
-   the venv), then `uv run playwright install chromium`
-3. Ensure the .env file is set with:
-    ```dotenv
-    MONGODB_URI="mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority"
-    TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client certificates
-    ```
-4. run `uv run bookscraper search --output-to-mongo`
-
----
-
-## ✨ Features
-
-* **Multi-Site Scraping:** Currently supports scraping book details from:
-    * Amazon (`amazon.com`)
-    * Packtpub (`packtpub.com`)
-    * Leanpub (`leanpub.com`)
-    * O'Reilly (`oreilly.com`)
-* **AI-Assisted Schema Detection:** The `detect-schema` subcommand loads sample detail pages with Playwright,
-  asks Claude (via the `anthropic` SDK) to propose CSS selectors for the fields in `site_constants[site]`, validates
-  every proposal against each page's live DOM, and prints a diff-style report — it *proposes* selector updates for a
-  human to apply and never rewrites the schema itself. Needs `ANTHROPIC_API_KEY`. See
-  [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
-* **Asynchronous & Parallel Processing:** Leverages `asyncio` and `Playwright` for high-performance concurrent scraping.
-* **Robustness:**
-    * **Retry Mechanism:** Automatic retries for failed page loads or scraping errors.
-    * **User-Agent Rotation:** Randomly selects user-agents to mimic natural Browse patterns and avoid detection.
-    * **Resource Blocking:** Blocks unnecessary resources (images, media, ads) for faster and more efficient scraping.
-    * **404 Page Detection:** Identifies and skips URLs leading to 404 (Not Found) pages.
-* **Flexible Output:**
-    * **CSV Files:** Export scraped book data, failed URLs, and unhandled URLs to `.csv` files.
-    * **MongoDB Atlas:** Store scraped data directly into a MongoDB database, with unique indexing to prevent duplicate
-      entries.
-* **Pre-flight Checks:** Verifies write permissions for CSV output and establishes MongoDB connection *before* starting
-  the scraping process, preventing late-stage failures.
-* **Comprehensive Logging:** Detailed console output for real-time progress and a timestamped per-run log file under
-  `~/.bookscrapper/logs/` (the 10 most recent runs are kept) for in-depth debugging and historical records, with a
-  configurable `--log-severity` threshold.
-* **Command-Line Interface (CLI):** Easy-to-use arguments for specifying input file and output preferences.
+- **Four scraping targets:** Amazon, Packtpub, Leanpub, and O'Reilly
+- **Two interchangeable storage backends:** `json` (local `books.json`, persistent, accumulates across
+  runs) and `mongo` (MongoDB Atlas, unique hash index); `--store-backend {mongo|json}` is required and
+  explicit on every scraping subcommand — there is no implicit default
+- **Six subcommands:** `scrape-urls`, `search`, `rotate-cert`, `detect-schema`, `migrate`, `doctor`
+- **AI-assisted schema detection (`detect-schema`):** when a site's markup drifts, proposes updated CSS
+  selectors via Playwright + Claude and validates them against live DOM samples; never auto-applies to
+  `parameters.py`; needs `ANTHROPIC_API_KEY`. See
+  [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md)
+- **Opt-in LLM extraction fallback (`--ai-fallback`):** when a deterministic selector leaves an eligible
+  field (description, ISBN-10/13, publication date, authors) empty, asks Claude for just that field from
+  the already-loaded page HTML, then validates the answer through deterministic evidence and normalizer
+  gates before storing. Off by default; never touches the title (which feeds the dedup hash); needs
+  `ANTHROPIC_API_KEY`
+- **Politeness:** per-host rate limiting and `robots.txt` consultation (`--ignore-robots` disables it,
+  prints a one-time warning, and is recorded in the run report)
+- **X.509 certificate rotation (`rotate-cert`):** issues a fresh Atlas certificate via the Admin API,
+  verifies it authenticates, repoints `settings.json`, and prunes superseded certificates. See
+  [`docs/runbooks/x509-certificate-rotation.md`](docs/runbooks/x509-certificate-rotation.md)
+- **Deterministic configuration:** `~/.bookscrapper/settings.json` is the sole auth source of truth when
+  present; a missing field or unrecognised key raises a loud error and aborts rather than silently
+  falling back. See [CLAUDE.md — Authentication configuration](CLAUDE.md)
+- **Exit codes:** `0` OK, `1` FATAL, `3` PARTIAL, `4` DRIFT, `130` interrupted. Full contract in
+  [`docs/cli/cli.md`](docs/cli/cli.md)
+- **Structured per-run logging:** timestamped file under `~/.bookscrapper/logs/` (10 most recent kept);
+  `--log-severity {debug|info|warning|error}` controls the file threshold (console always shows
+  everything)
 
 ---
 
-## 🚀 Getting Started
+## Quick Start
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing
-purposes.
+```bash
+git clone https://github.com/yuchdev/BookScraper.git
+cd BookScraper
+uv sync
+uv run playwright install chromium
+uv run bookscraper doctor
+uv run bookscraper search --store-backend json --query Python --dry-run
+```
+
+`uv sync` creates `.venv`, installs pinned dependencies from `uv.lock`, and registers the `bookscraper`
+console script — there is no separate `pip install` step. `uv run` executes inside `.venv` without
+activating it first; alternatively run `source .venv/bin/activate` and drop the `uv run` prefix.
+
+---
+
+## Installation
 
 ### Prerequisites
 
-* **Python 3.13+**: Make sure you have a compatible Python version installed. You can download it
-  from [python.org](https://www.python.org/downloads/).
-* **[uv](https://docs.astral.sh/uv/)**: This project uses `uv` for dependency management, virtual environments, and
-  packaging (it replaces `pip` + `venv` + `setup.py`). Install it with:
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-* **Playwright Browsers**: Playwright requires browser binaries. After installing project dependencies, you'll need to
-  install them:
-    ```bash
-    # (after uv sync)
-    uv run playwright install chromium
-    ```
-* **MongoDB Atlas Cluster (Optional, for MongoDB output)**: If you plan to use MongoDB output, you'll need access to a
-  MongoDB Atlas cluster. Refer to the [MongoDB Atlas documentation](https://www.mongodb.com/cloud/atlas/getting-started)
-  for setup instructions. You'll need a `MONGODB_URI` and potentially a `TLS_CERT_FILE`.
+- **Python 3.13+** from [python.org](https://www.python.org/downloads/)
+- **[uv](https://docs.astral.sh/uv/)** for dependency and environment management:
 
-### Installation
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
-1. **Clone the repository:**
+- **Playwright Chromium** (installed after `uv sync`):
+
+  ```bash
+  uv run playwright install chromium
+  ```
+
+- **MongoDB Atlas cluster** (optional — only needed for `--store-backend mongo`)
+
+### Steps
+
+1. Clone the repository:
+
    ```bash
-   git clone https://github.com/YannickLalonde/BookScraper.git
+   git clone https://github.com/yuchdev/BookScraper.git
    cd BookScraper
    ```
-2. **Install dependencies and create the virtual environment:**
+
+2. Install dependencies and create the virtual environment:
+
    ```bash
    uv sync
    ```
-   `uv sync` reads `pyproject.toml`/`uv.lock`, creates `.venv` automatically, installs all dependencies pinned in
-   `uv.lock`, and installs the `bookscraper` package itself in editable mode (registering the `bookscraper` console
-   script inside `.venv`) — there's no separate `pip install -e .` step.
-3. **Install Playwright browser binaries:**
+
+   `uv sync` reads `pyproject.toml` / `uv.lock`, creates `.venv`, installs all pinned dependencies,
+   and installs the `bookscraper` package itself in editable mode — there is no separate
+   `pip install -e .` step.
+
+3. Install Playwright browser binaries:
+
    ```bash
    uv run playwright install chromium
    ```
-4. **Run the CLI:**
+
+4. Verify the setup:
+
    ```bash
-   uv run bookscraper --help
+   uv run bookscraper doctor
    ```
-   `uv run` executes a command inside the project's `.venv` without needing to activate it first. Alternatively,
-   activate the venv yourself (`source .venv/bin/activate`) and drop the `uv run` prefix from any command below.
 
-### Configuration (`.env` file)
+---
 
-For MongoDB output, you need to set up environment variables. Create a file named `.env` in the root directory of the
-project (the same directory as `pyproject.toml` and `README.md`).
+## Configuration
 
-```dotenv
-MONGODB_URI="mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority"
-TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client certificates
-````
+`~/.bookscrapper/settings.json` is the preferred, deterministic auth source when present — its declared
+`auth_type` and `{"source": "env"|"literal", "value": "..."}` field shapes are followed exactly, with
+no fallback chain. A missing env var or unrecognised top-level key raises `ConfigError` immediately.
 
-* Replace `<username>`, `<password>`, `<cluster-url>`, and `<database-name>` with your MongoDB Atlas credentials.
-* `TLS_CERT_FILE`: This is optional. If your MongoDB Atlas setup requires client certificate authentication, provide the
-  full path to your `.pem` file. If not needed for your connection, you can omit this line or leave it empty.
-* `ANTHROPIC_API_KEY`: Required **only** for the `detect-schema` subcommand (AI-assisted CSS-selector proposals).
-  None of the scraping/storage subcommands need it. An optional `ANTHROPIC_MODEL` pins/overrides the model used.
+See **[CLAUDE.md — Authentication configuration](CLAUDE.md)** for the complete reference: password
+(SCRAM) and X.509 schemas, the optional `database` block, the strict unknown-key rejection policy, and
+the POSIX permission-hardening warnings. A copy-ready example lives at
+[`docs/examples/settings.example.json`](docs/examples/settings.example.json).
 
-#### Default Configuration
+**Legacy `.env` fallback** (no `settings.json`): place `MONGODB_URI` and optionally `TLS_CERT_FILE` in
+a `.env` file at the repository root — see `CLAUDE.md` *Authentication configuration* for details and
+caveats.
 
-If you don't specify the configuration in the `.env` file, the application will use the following defaults:
+For X.509 certificate lifecycle (issuance, verification, rotation schedule, recovery procedures), see
+the operator runbook:
+[`docs/runbooks/x509-certificate-rotation.md`](docs/runbooks/x509-certificate-rotation.md).
 
-* `MONGODB_URI`: If not defined or empty, the application will try to read it from `~/.bookscrapper/driver_string.txt`.
-  The URI format will be validated before use.
-* `TLS_CERT_FILE`: If not defined or empty, the application will use `~/.bookscrapper/X509-cert-142838411852079927.pem`
-  if it exists.
+`ANTHROPIC_API_KEY` is read only when `detect-schema` or `--ai-fallback` is used; none of the other
+subcommands read it. An optional `ANTHROPIC_MODEL` overrides the default model for both.
 
------
+---
 
-## 💡 Usage
+## Usage
 
-`bookscraper` has six subcommands. The full flag reference, defaults, env overrides, and exit-code
-contract for each one lives in [`docs/cli.md`](docs/cli.md). Run `bookscraper --help` or
-`bookscraper <subcommand> --help` for a quick argparse summary.
+`bookscraper` has six subcommands. The complete flag reference, env overrides, and exit-code contract
+for each live in [`docs/cli/cli.md`](docs/cli/cli.md). Run `bookscraper <subcommand> --help` for a
+quick argparse summary.
 
 ```bash
+# Check the local setup (toolchain, config, cert, backends) — offline and instant:
+uv run bookscraper doctor
+
 # Scrape a curated list of URLs, save to the local JSON store:
 uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
 
 # Search configured sites for new books, save to MongoDB Atlas:
 uv run bookscraper search --store-backend mongo
 
-# Check the active X.509 certificate's expiry (no Atlas contact needed):
+# Search for a specific topic without saving anything:
+uv run bookscraper search --store-backend json --query Python --dry-run
+
+# Scrape with the opt-in LLM extraction fallback enabled (needs ANTHROPIC_API_KEY):
+uv run bookscraper scrape-urls -f content/urls.csv --store-backend json --ai-fallback
+
+# Check the active X.509 certificate's expiry without contacting Atlas:
 uv run bookscraper rotate-cert --check --warn-days 14
 ```
 
-`--store-backend {mongo|json}` is required for `scrape-urls`, `search`, and `migrate`. Use
-`uv run bookscraper <subcommand> --help` for the full flag list, or see
-[`docs/cli.md`](docs/cli.md).
+`--store-backend {mongo|json}` is required for `scrape-urls`, `search`, and `migrate`; omitting it is
+an argparse error (exit `2`).
 
-### Input CSV Format (`scrape-urls`)
+### scrape-urls
 
-`scrape-urls` requires an input CSV file (`-f`/`--input-file`) with a single column named `url`. The
-file must already exist — it is not created automatically.
+Takes a CSV file (with a `url` column), buckets URLs by site, and scrapes each with Playwright.
+Supports `--concurrency` (default: 4, max: 32) and `--dry-run` (reads the backend for duplicate
+detection but saves nothing).
 
-Example content:
+Example CSV:
 
 ```csv
 url
@@ -175,75 +183,117 @@ https://leanpub.com/your-great-book
 https://www.oreilly.com/library/view/programming-language/9780123456789/
 ```
 
------
+### search
 
-## 📊 Output Files
+Searches configured sites for books matching queries, deduplicates against the chosen backend before
+the expensive detail scrape, then scrapes details for new results. Restrict to a site with
+`--site {amazon|packtpub|leanpub|oreilly}` and supply queries with `-q`/`--query` or `--queries-file`.
+Currently only Leanpub is wired end-to-end.
 
-Upon successful execution (and if CSV output is enabled), the following files will be generated in your project root
-(these are run artifacts, not committed to the repo — see `.gitignore`):
+### migrate
 
-* **`books.csv`**: Contains all successfully scraped book details. Each row represents a book with columns for title,
-  authors, ISBNs, publication date, description, tags, URL, site, year, and a unique hash.
-* **`failed_books.csv`**: Lists the URLs that the scraper attempted to process but failed to retrieve details for after
-  multiple retries.
-* **`other_links.csv`**: Contains URLs from your input file that do not belong to the currently supported scraping
-  sites (Amazon, Packtpub, Leanpub, O'Reilly). These URLs are skipped during the scraping process.
+Rewrites stored pre-03.1 v1 documents to the canonical schema-2 `BookRecord` shape, recomputing each
+document's hash. Dry-run by default (`--apply` writes). Idempotent; never deletes a document; writes a
+migration report JSON to `~/.bookscrapper/logs/`.
 
------
-
-## 📝 Logging
-
-The `BookScraper` utilizes a comprehensive logging system:
-
-* **Console Output:** Real-time progress and critical messages are printed to your terminal, often with color-coded
-  statuses (e.g., yellow for info, red for errors). Console output always shows everything passed to it, regardless
-  of `--log-severity`.
-* **Log File:** Each run writes its own timestamped file under `~/.bookscrapper/logs/`
-  (`bookscraper_<YYYYMMDD_HHMMSS>_<pid>.log`), capturing all application logging (from every module, at or above the
-  configured severity) including full tracebacks for errors. Only the 10 most recent run logs are kept — older ones
-  are deleted automatically at the start of each run.
-* **`--log-severity {debug|info|warning|error}`:** **(Optional, both subcommands)** Sets the minimum severity written
-  to the log file (default: `info`). Does not affect console output.
-
------
-
-## 🏗️ Project Structure
-
-```
-BookScraper/
-├── .env                  # Environment variables for MongoDB (ignored by Git)
-├── pyproject.toml        # Project metadata + dependencies (uv/PEP 621)
-├── uv.lock               # Locked, resolved dependency versions (commit this file)
-├── README.md             # This README file
-├── content/
-│   ├── urls.csv           # Curated input: general book/reference URLs for scrape-urls (committed)
-│   └── urls_amazon.csv    # Curated input: Amazon-specific URLs for scrape-urls (committed)
-└── src/
-    └── bookscraper/
-        ├── __init__.py
-        ├── __main__.py        # Enables `python -m bookscraper`
-        ├── cli.py             # Argument parsing (the `bookscraper`/`scrape-urls`/`search` CLI)
-        ├── main.py            # Entry point; dispatches to commands/ (also the console-script target)
-        ├── output.py          # Shared pre-flight checks + interactive (C)SV/(M)ongo/(B)oth/(E)xit prompt
-        ├── commands/
-        │   ├── scrape_urls.py # "I already have URLs" workflow
-        │   └── search.py      # "Discover new books" workflow
-        ├── book_utils.py      # Helper functions (logging, hashing, date extraction, pre-flight checks)
-        ├── database.py        # MongoDB interaction logic
-        ├── parameters.py      # Site-specific constants (selectors, 404 titles)
-        └── scrape_details.py  # Core scraping logic for each site (Playwright interactions)
+```bash
+uv run bookscraper migrate --store-backend json
 ```
 
------
+---
 
-## 🤝 Contributing
+## Storage Backends
 
-Contributions are welcome\! If you find a bug or have an idea for a new feature (e.g., support for a new book site),
-please feel free to open an issue or submit a pull request.
+Both backends store the same canonical `BookRecord` shape and enforce uniqueness by a SHA-256 hash of
+normalised title + authors + year:
 
------
+| Backend | Implementation | Persists across runs |
+|---------|----------------|---------------------|
+| `json` | `books.json` at repo root; atomic write (temp + `fsync` + `os.replace`); one-generation `.bak` backup before each replace | Yes |
+| `mongo` | MongoDB Atlas collection; unique index on `hash`; `insert_many(ordered=False)` | Yes |
 
-## 📄 License
+A corrupt `books.json` (invalid JSON) is refused with `LocalStoreCorruptError` rather than overwritten.
+Override the store path with `--json-store PATH`.
 
-This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for
-details.
+Diagnostic artifacts (`failed_books.csv`, `failed_urls.csv`, `other_links.csv`) are always written as
+CSV best-effort alongside the main store — they are not part of book storage and are not controlled by
+`--store-backend`. Override their output directory with `--output-dir`.
+
+---
+
+## Logging
+
+Each run writes its own timestamped file:
+`~/.bookscrapper/logs/bookscraper_<YYYYMMDD_HHMMSS>_<pid>.log`. The 10 most recent files are kept;
+older ones are pruned at the start of each new run. `--log-severity {debug|info|warning|error}` sets
+the minimum severity written to the log file (default: `info`). Console output is always full-detail
+regardless of the configured severity.
+
+---
+
+## Development
+
+### Tests
+
+Three tiers run under `pytest`:
+
+- **`tests/unit/`** — pure logic, no mocks, no network
+- **`tests/mock/`** — full subcommand coverage with mocked external dependencies; includes an offline
+  HTML fixture harness (real captured pages served locally via Playwright and `httpx`)
+- **`tests/integration/`** — hits real MongoDB Atlas; tagged `@pytest.mark.integration` and excluded
+  from the default run
+
+```bash
+uv run pytest           # unit + mock tiers
+uv run pytest --cov     # same, with combined line+branch coverage report
+uv run pytest -m integration   # Atlas integration tier (needs .env credentials)
+```
+
+See [`docs/test/code_test_coverage.md`](docs/test/code_test_coverage.md) for the 90% combined
+line+branch coverage gate, per-module floors, and the allowed `pragma: no cover` patterns.
+
+### HTML Fixture Corpus
+
+`tests/mock/scraping/html/` runs the unmodified scraper against committed real-HTML fixtures for golden
+(characterisation) tests. Refresh a site's fixtures with:
+
+```bash
+uv run python scripts/capture_fixtures.py --refresh --site leanpub
+```
+
+See [`docs/test/html-fixtures.md`](docs/test/html-fixtures.md) for the full refresh-and-drift workflow.
+
+### CI
+
+Three GitHub Actions workflows (lint, test + coverage, optional Atlas integration) run on every push
+and pull request. See [`docs/dev/ci.md`](docs/dev/ci.md).
+
+---
+
+## Documentation
+
+- [`docs/cli/cli.md`](docs/cli/cli.md) — full CLI reference (flags, defaults, env overrides, exit codes)
+- [`docs/dev/ci.md`](docs/dev/ci.md) — CI workflows and required checks
+- [`docs/runbooks/x509-certificate-rotation.md`](docs/runbooks/x509-certificate-rotation.md) — X.509
+  rotation operator runbook
+- [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md) — AI-assisted schema
+  detection guide
+- [`docs/adr/0002-ai-assisted-schema-detection.md`](docs/adr/0002-ai-assisted-schema-detection.md) —
+  schema detection ADR
+- [`docs/adr/0003-llm-extraction-fallback.md`](docs/adr/0003-llm-extraction-fallback.md) — LLM
+  extraction fallback ADR
+- [`docs/test/code_test_coverage.md`](docs/test/code_test_coverage.md) — coverage gate reference
+- [`docs/test/html-fixtures.md`](docs/test/html-fixtures.md) — fixture corpus guide
+- [`docs/examples/settings.example.json`](docs/examples/settings.example.json) — settings.json template
+
+---
+
+## Contributing
+
+Bug reports and pull requests are welcome. Open an issue or submit a PR against the `master` branch.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.

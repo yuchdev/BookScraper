@@ -1,7 +1,7 @@
 # 02 - Test & coverage workflow
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [01-lint-workflow.md](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/01-lint-workflow.md)
 **Role:** Testing Expert
 

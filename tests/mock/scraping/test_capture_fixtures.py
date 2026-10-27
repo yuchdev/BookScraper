@@ -37,13 +37,13 @@ capture = _load_capture_module()
 async def test_assert_logged_out_passes_for_cookieless_context():
     """
     [Local] capture fixtures: verifies assert logged out passes for cookieless context.
-    
+
     Scenario:
         a fresh context has no cookies and no stored origins.
-    
+
     Boundaries:
         - the assertion returns without raising.
-    
+
     On failure, first check:
         - a clean context would be wrongly rejected.
     """
@@ -54,13 +54,13 @@ async def test_assert_logged_out_passes_for_cookieless_context():
 async def test_assert_logged_out_aborts_when_cookies_persist():
     """
     [Local] capture fixtures: verifies assert logged out aborts when cookies persist.
-    
+
     Scenario:
         the context carries a session cookie even after clearing.
-    
+
     Boundaries:
         - CaptureError is raised; no capture proceeds.
-    
+
     On failure, first check:
         - session cookies would be captured into git history.
     """
@@ -75,13 +75,13 @@ async def test_assert_logged_out_aborts_when_cookies_persist():
 async def test_assert_logged_out_aborts_when_storage_state_has_origins():
     """
     [Local] capture fixtures: verifies assert logged out aborts when storage state has origins.
-    
+
     Scenario:
         FIX-1: a context with stored origins (localStorage) aborts the capture.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -93,13 +93,13 @@ async def test_assert_logged_out_aborts_when_storage_state_has_origins():
 async def test_capture_document_uses_fresh_context_and_reasserts_before_content():
     """
     [Local] capture fixtures: verifies capture document uses fresh context and reasserts before content.
-    
+
     Scenario:
         a well-behaved logged-out context yields the DOM snapshot.
-    
+
     Boundaries:
         - new_context is used (not a persistent profile) and content is returned.
-    
+
     On failure, first check:
         - capture would read a page from a shared/persistent context.
     """
@@ -117,13 +117,13 @@ async def test_capture_document_uses_fresh_context_and_reasserts_before_content(
 async def test_capture_document_aborts_on_dirty_context_without_reading_content():
     """
     [Local] capture fixtures: verifies capture document aborts on dirty context without reading content.
-    
+
     Scenario:
         FIX-1: a dirty context aborts before page.content() and closes the context.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -145,13 +145,13 @@ async def test_capture_document_aborts_on_dirty_context_without_reading_content(
 def test_keep_selectors_excludes_description():
     """
     [Local] capture fixtures: verifies keep selectors excludes description.
-    
+
     Scenario:
         The keep-selector set carries factual selectors but never the description.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -165,13 +165,13 @@ def test_keep_selectors_excludes_description():
 def test_search_selectors_keep_css_but_not_base_url_or_page_count():
     """
     [Local] capture fixtures: verifies search selectors keep css but not base url or page count.
-    
+
     Scenario:
         search_selectors_for keeps the SEARCH_* CSS selectors, not the non-selector keys.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -192,13 +192,13 @@ def test_search_selectors_keep_css_but_not_base_url_or_page_count():
 def test_trim_repeated_blocks_keeps_only_first_n_matches():
     """
     [Local] capture fixtures: verifies trim repeated blocks keeps only first n matches.
-    
+
     Scenario:
         _trim_repeated_blocks drops all but the first N elements matching the selector.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -218,13 +218,13 @@ def test_trim_repeated_blocks_keeps_only_first_n_matches():
 def test_trim_repeated_blocks_returns_input_when_under_limit():
     """
     [Local] capture fixtures: verifies trim repeated blocks returns input when under limit.
-    
+
     Scenario:
         A page with <= limit matches is returned unchanged (no trimming needed).
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """
@@ -236,13 +236,13 @@ def test_trim_repeated_blocks_returns_input_when_under_limit():
 def test_strip_subresources_removes_loaders_but_keeps_anchors():
     """
     [Local] capture fixtures: verifies strip subresources removes loaders but keeps anchors.
-    
+
     Scenario:
         _strip_subresources removes network-triggering nodes/attrs, keeps <a href>.
-    
+
     Boundaries:
         - see test body
-    
+
     On failure, first check:
         - see test body
     """

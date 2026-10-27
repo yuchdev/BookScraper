@@ -6,15 +6,19 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Optional
+from dataclasses import dataclass, replace
+from typing import Any, Optional
 from urllib.parse import urljoin
 
+import anthropic
 import httpx
 from playwright.async_api import Browser, Error as PlaywrightError, Page, Route, TimeoutError
 
 from ..backends import StorageBackend
-from ..book_utils import print_log
-from . import normalize
+from ..book_utils import print_log, scrape_log_context
+from . import ai_common, normalize
+from .ai_common import UsageAccumulator
+from .ai_extraction import AIExtractionError, extract_missing_fields
 from .browser import new_scrape_context
 from .parameters import site_constants
 from .politeness import (
@@ -137,7 +141,238 @@ CONSUMED_DETAIL_KEYS: frozenset[str] = frozenset(
 _TRANSIENT_PLAYWRIGHT_MARKERS: tuple[str, ...] = ("net::err_", "target closed", "navigation failed")
 
 # Get a logger instance specifically for this module
-module_logger = logging.getLogger("scrape_details")
+module_logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+# LLM extraction fallback wiring (task 04.1, subtask 05).
+# --------------------------------------------------------------------------- #
+# The eligible AI-fallback fields, in a FIXED order so the prompt (and therefore its replay
+# ``sha256(prompt)`` key) is deterministic. ``title`` is deliberately absent - it feeds the dedup
+# hash and must never be AI-authored (threat model EXT-2). Each entry maps the prompt/response
+# field KEY to (the raw ``book_details`` key it is merged into, the ``BookRecord`` attribute name it
+# is recorded under in ``ai_extracted_fields``).
+_AI_FIELD_TO_RAW: dict[str, str] = {
+    "DESCRIPTION": "description",
+    "PUBLICATION_DATE": "publication_date",
+    "ISBN13": "isbn13",
+    "ISBN10": "isbn10",
+    "AUTHORS": "authors",
+}
+_AI_FIELD_TO_RECORD: dict[str, str] = {
+    "DESCRIPTION": "description",
+    "PUBLICATION_DATE": "publication_date",
+    "ISBN13": "isbn13",
+    "ISBN10": "isbn10",
+    "AUTHORS": "authors",
+}
+#: The order the eligible fields are evaluated/requested in; also the prompt field order.
+_AI_ELIGIBLE_ORDER: tuple[str, ...] = ("DESCRIPTION", "PUBLICATION_DATE", "ISBN13", "ISBN10", "AUTHORS")
+#: Raw ``book_details`` ISBN sentinel for "not found" (normalized to ``None`` later); treated as empty.
+_ISBN_EMPTY_SENTINELS: frozenset[Optional[str]] = frozenset({None, "", "N/A"})
+
+
+class AICallCap:
+    """A shared, ``asyncio``-safe per-run cap on LLM-fallback **requests** (threat model EXT-4).
+
+    One instance is created per run and threaded into every concurrent ``scrape_book`` task via the
+    shared :class:`AIFallbackRuntime`. :meth:`try_reserve` atomically consumes one slot if the cap is
+    not yet reached; because it performs its check-and-increment with **no** ``await`` in between, the
+    single-threaded event loop cannot interleave two reservations, so the batch of concurrent scrapes
+    can never overshoot the cap (no lock needed, same reasoning as
+    :class:`bookscraper.scraping.ai_common.UsageAccumulator`).
+
+    :ivar _max: The maximum number of requests permitted this run.
+    :ivar _used: The number of slots reserved so far.
+    :ivar _hit: Whether a reservation was ever refused because the cap was reached.
+    """
+
+    def __init__(self, max_requests: int):
+        """Store the per-run request ceiling.
+
+        :param max_requests: The maximum number of fallback requests allowed this run (>= 1).
+        """
+        self._max = max_requests
+        self._used = 0
+        self._hit = False
+
+    def try_reserve(self) -> bool:
+        """Reserve one request slot, returning whether it was granted.
+
+        Atomic by construction: the check and the increment run with no intervening ``await``, so
+        concurrent tasks cannot both reserve the final slot.
+
+        :returns: ``True`` if a slot was available (and is now consumed), ``False`` once the cap is
+            reached.
+        """
+        if self._used >= self._max:
+            self._hit = True
+            return False
+        self._used += 1
+        return True
+
+    @property
+    def used(self) -> int:
+        """The number of request slots reserved so far."""
+        return self._used
+
+    @property
+    def hit(self) -> bool:
+        """Whether the cap was ever reached (a reservation was refused)."""
+        return self._hit
+
+
+@dataclass
+class AIFallbackRuntime:
+    """The per-run LLM-fallback collaborators threaded into every ``scrape_book`` task.
+
+    Built once at start-up by :func:`create_ai_fallback` when ``--ai-fallback`` is set (and only
+    then; without the flag the whole bundle is ``None`` and no Anthropic call or key read ever
+    happens). The ``usage`` accumulator and ``cap`` counter are **shared** across the concurrent
+    scrape batch so token usage sums and the request cap holds run-wide. ``replay`` / ``record`` are
+    always ``None`` in production - the command layer never sets them - and exist only so the offline
+    golden test can drive the fallback from a recorded response with no live client.
+
+    :ivar client: The live anthropic client, or ``None`` (replay mode / tests).
+    :ivar model: The resolved model ID, reported in the run-summary usage line.
+    :ivar usage: The shared token-usage accumulator.
+    :ivar cap: The shared, async-safe per-run request cap.
+    :ivar replay: An offline ``{sha256(prompt): raw_response}`` map, or ``None`` for a live run.
+    :ivar record: A dict to capture live responses into (keyed by prompt hash), or ``None``.
+    :ivar requested: The running count of eligible fields the fallback asked the model for.
+    :ivar filled: The running count of fields the fallback actually merged (passed every gate).
+    """
+
+    client: Optional[Any]
+    model: str
+    usage: UsageAccumulator
+    cap: AICallCap
+    replay: Optional[dict[str, str]] = None
+    record: Optional[dict[str, str]] = None
+    requested: int = 0
+    filled: int = 0
+
+    @property
+    def dropped(self) -> int:
+        """The number of requested fields the validation gates dropped (never merged)."""
+        return max(0, self.requested - self.filled)
+
+    def summary_line(self) -> str:
+        """Format the one-line end-of-run summary (counts + summed usage; no prices, no key).
+
+        The per-field drop *reasons* are logged at debug by the engine (they are page/model-derived,
+        so EXT-6 keeps them out of this console/log summary); the summary carries aggregate counts.
+
+        :returns: The run-summary line.
+        """
+        cap_note = " (per-run cap reached)" if self.cap.hit else ""
+        return (
+            f"AI fallback: {self.cap.used} request(s) made{cap_note}; "
+            f"{self.filled} field(s) filled, {self.dropped} dropped; "
+            f"{self.usage.usage_line(self.model)}"
+        )
+
+
+def create_ai_fallback(*, model: Optional[str], max_pages: int) -> AIFallbackRuntime:
+    """Resolve the key and model and build the live anthropic client for the fallback (start-up).
+
+    Called once by the scraping commands when ``--ai-fallback`` is set, **before any scraping**, so a
+    missing ``ANTHROPIC_API_KEY`` or an empty model ID fails loudly here rather than mid-run
+    (threat model EXT-7; the caller maps the raised error to a ``print_log`` error + exit ``1``). The
+    key is read only into the SDK ``api_key=`` kwarg and never logged (EXT-6). The client is built
+    with ``max_retries`` matched to the shared one-retry bound so transient errors never stack.
+
+    :param model: The ``--model`` flag value (``None`` to use ``ANTHROPIC_MODEL`` / the default).
+    :param max_pages: The resolved ``--ai-fallback-max-pages`` per-run request cap.
+    :returns: The ready-to-use :class:`AIFallbackRuntime`.
+    :raises AIExtractionError: If ``ANTHROPIC_API_KEY`` is unset, the model ID is empty, or the SDK
+        client cannot be constructed (surfaced body-free).
+    """
+
+    api_key = ai_common.resolve_api_key(error_cls=AIExtractionError)
+    resolved_model = ai_common.resolve_model(model, error_cls=AIExtractionError)
+    try:
+        client = anthropic.Anthropic(api_key=api_key, max_retries=ai_common.MAX_API_RETRIES)
+    except Exception as exc:  # noqa: X002 - deliberately uniform; body-free SDK failure surface (redacts to class name + HTTP status; never the response body)
+        raise AIExtractionError(ai_common.sdk_error_summary(exc)) from exc
+    return AIFallbackRuntime(
+        client=client,
+        model=resolved_model,
+        usage=UsageAccumulator(),
+        cap=AICallCap(max_pages),
+    )
+
+
+def _empty_eligible_fields(book_details: dict) -> list[str]:
+    """Return the eligible AI-fallback field keys still empty after the deterministic path.
+
+    ``title`` is never considered (it is not in :data:`_AI_ELIGIBLE_ORDER`), so it can never be
+    AI-filled (EXT-2). The raw ``"N/A"`` ISBN sentinel counts as empty.
+
+    :param book_details: ``scrape_book``'s in-progress raw field dict.
+    :returns: The eligible field keys that are still empty, in :data:`_AI_ELIGIBLE_ORDER` order.
+    """
+    empty: list[str] = []
+    for field in _AI_ELIGIBLE_ORDER:
+        raw_key = _AI_FIELD_TO_RAW[field]
+        value = book_details.get(raw_key)
+        if raw_key in ("isbn10", "isbn13"):
+            if value in _ISBN_EMPTY_SENTINELS:
+                empty.append(field)
+        elif not value:
+            empty.append(field)
+    return empty
+
+
+async def _apply_ai_fallback(
+    page: Page, site: str, book_details: dict, ai_fallback: Optional[AIFallbackRuntime]
+) -> list[str]:
+    """Fill still-empty eligible fields from the page via the LLM fallback; return merged names.
+
+    The single hook point (task 04.1): after the deterministic selectors have run and before the
+    :class:`BookRecord` is built, compute the eligible fields that are still empty, and - if there
+    are any and the shared per-run cap grants a slot - ask Claude for just those fields from the page
+    HTML already in hand. Each surviving value (every one already past the evidence + normalizer
+    gates) is merged into ``book_details`` so the normalizer canonicalizes it exactly like a
+    deterministic value (so an AI-filled ``authors`` list also re-derives the hash). A disabled
+    fallback (``ai_fallback is None``), no empty eligible fields, or a cap already reached is a no-op
+    that returns ``[]``.
+
+    :param page: The loaded Playwright page (its ``content()`` is the untrusted prompt input).
+    :param site: The bare site key (``"amazon"`` / ``"packtpub"`` / ``"oreilly"``).
+    :param book_details: ``scrape_book``'s in-progress raw field dict, mutated in place with any
+        recovered values.
+    :param ai_fallback: The per-run fallback runtime, or ``None`` when ``--ai-fallback`` is off.
+    :returns: The sorted ``BookRecord`` attribute names that were AI-filled (for
+        ``ai_extracted_fields``); empty when nothing was recovered.
+    """
+    if ai_fallback is None:
+        return []
+    empty_fields = _empty_eligible_fields(book_details)
+    if not empty_fields or not ai_fallback.cap.try_reserve():
+        return []
+    try:
+        page_html = await page.content()
+    except PlaywrightError as exc:
+        # A dead/closed page: recover nothing rather than aborting the scrape (EXT-7).
+        module_logger.debug(f"AI fallback could not read page content for {page.url}: {exc}")
+        return []
+    ai_fallback.requested += len(empty_fields)
+    extracted = await extract_missing_fields(
+        page_html,
+        site,
+        empty_fields,
+        client=ai_fallback.client,
+        replay=ai_fallback.replay,
+        record=ai_fallback.record,
+        usage=ai_fallback.usage,
+        model=ai_fallback.model,
+    )
+    record_fields: list[str] = []
+    for field, extracted_value in extracted.items():
+        book_details[_AI_FIELD_TO_RAW[field]] = extracted_value.value
+        record_fields.append(_AI_FIELD_TO_RECORD[field])
+    ai_fallback.filled += len(record_fields)
+    return sorted(set(record_fields))
 
 
 def is_transient(exc: BaseException) -> bool:
@@ -425,6 +660,28 @@ async def get_leanpub_book_details(
     limiters: Optional[DomainRateLimiters] = None,
     robots: Optional[RobotsCache] = None,
 ) -> ScrapeResult:
+    """Fetch one Leanpub book's details, stamping this task's log context for the call.
+
+    A thin wrapper over :func:`_get_leanpub_book_details` (which holds the actual fetch/parse
+    logic): it sets :data:`~bookscraper.book_utils.scrape_context` to ``leanpub:<slug>`` for the
+    duration so every log line this fetch emits is attributable to one book, resetting it on exit.
+
+    :param url: The JSON:API book endpoint.
+    :param client: An existing :class:`httpx.AsyncClient` to reuse, or ``None`` for a dedicated one.
+    :param limiters: The per-run rate limiters, or ``None`` for the shared module-level instance.
+    :param robots: The per-run robots.txt cache, or ``None`` to skip the check.
+    :returns: A :class:`ScrapeResult` for the scrape attempt.
+    """
+    with scrape_log_context(LEANPUB_SITE, url):
+        return await _get_leanpub_book_details(url, client=client, limiters=limiters, robots=robots)
+
+
+async def _get_leanpub_book_details(
+    url: str,
+    client: Optional[httpx.AsyncClient] = None,
+    limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
+) -> ScrapeResult:
     """Fetch detailed information for a single Leanpub book from its JSON:API endpoint.
 
     Every path returns a :class:`ScrapeResult`: a :attr:`ScrapeStatus.SUCCESS` carrying the
@@ -574,6 +831,51 @@ async def scrape_book(
     robots: Optional[RobotsCache] = None,
     breakers: Optional[DomainCircuitBreakers] = None,
     nav_timeout_ms: Optional[int] = None,
+    ai_fallback: Optional[AIFallbackRuntime] = None,
+) -> ScrapeResult:
+    """Scrape one book's detail page, stamping this task's log context for the call.
+
+    A thin wrapper over :func:`_scrape_book` (which holds the navigate/extract/retry/dedup logic):
+    it sets :data:`~bookscraper.book_utils.scrape_context` to ``<site>:<short-id>`` (the ASIN for
+    amazon, else the last URL path segment) for the duration, so every log line this scrape emits
+    is attributable to one book even in a 10-way-concurrent batch, and resets it on exit so the
+    value never leaks to the next scrape on this task.
+
+    :param url: The URL of the book page to scrape (can be relative).
+    :param browser: The Playwright browser instance.
+    :param site: The identifier for the website (e.g. ``"amazon"``, ``"leanpub"``).
+    :param storage_backend: The :class:`StorageBackend` to check duplicates against, or ``None``.
+    :param limiters: The per-run rate limiters, or ``None`` for the shared module-level instance.
+    :param robots: The per-run robots.txt cache, or ``None`` to skip the check.
+    :param breakers: The per-run circuit breakers, or ``None`` for the shared module-level instance.
+    :param nav_timeout_ms: Per-page navigation timeout in ms, or ``None`` for the default.
+    :param ai_fallback: The per-run LLM extraction-fallback runtime, or ``None`` to disable it.
+    :returns: A :class:`ScrapeResult` for the scrape attempt.
+    """
+    with scrape_log_context(site, url):
+        return await _scrape_book(
+            url,
+            browser,
+            site,
+            storage_backend=storage_backend,
+            limiters=limiters,
+            robots=robots,
+            breakers=breakers,
+            nav_timeout_ms=nav_timeout_ms,
+            ai_fallback=ai_fallback,
+        )
+
+
+async def _scrape_book(
+    url: str,
+    browser: Browser,
+    site: str,
+    storage_backend: Optional[StorageBackend] = None,
+    limiters: Optional[DomainRateLimiters] = None,
+    robots: Optional[RobotsCache] = None,
+    breakers: Optional[DomainCircuitBreakers] = None,
+    nav_timeout_ms: Optional[int] = None,
+    ai_fallback: Optional[AIFallbackRuntime] = None,
 ) -> ScrapeResult:
     """Scrape book details from a URL, handle retries, and check for duplicates.
 
@@ -596,6 +898,9 @@ async def scrape_book(
         returns :attr:`ScrapeStatus.BLOCKED` (``error="circuit open"``) with no request.
     :param nav_timeout_ms: Per-page navigation timeout in milliseconds (the resolved
         ``--nav-timeout``), or ``None`` to use the :data:`NAVIGATION_TIMEOUT_MS` default.
+    :param ai_fallback: The per-run :class:`AIFallbackRuntime` when ``--ai-fallback`` is set, or
+        ``None`` to disable the LLM extraction fallback (the default; no Anthropic call, no key
+        read). The Leanpub API path is never hooked - it has no CSS selectors to drift.
     :returns: A :class:`ScrapeResult` for the scrape attempt.
     """
     active_limiters = limiters if limiters is not None else default_limiters()
@@ -822,10 +1127,22 @@ async def scrape_book(
             if tags_selector:
                 book_details["tags"] = await _texts(page, tags_selector, timeout_ms=OPTIONAL_FIELD_TIMEOUT_MS)
 
+            # LLM extraction fallback (task 04.1): AFTER the deterministic selectors, BEFORE the
+            # record is built, fill any still-empty eligible field from the already-loaded page.
+            # A no-op unless --ai-fallback is set; merges only values that passed every gate, and
+            # does so into book_details so the normalizer canonicalizes them (and re-derives the
+            # hash from any AI-filled authors) exactly like a deterministic value.
+            ai_extracted_fields = await _apply_ai_fallback(page, site, book_details, ai_fallback)
+
             # Build the canonical record from the raw field dict: author cleaning, ISBN
             # normalization/validation, date normalization, and the (unchanged) hash input
             # all live in the normalizer (see scraping/normalize.py).
             record = normalize.from_playwright(book_details, site, full_url)
+            # Provenance: mark every field the fallback filled so AI-sourced values stay
+            # distinguishable and re-scrapeable (threat model EXT-9). from_playwright always emits
+            # an empty list, so replacing it here is the only place a non-empty one is set.
+            if ai_extracted_fields:
+                record = replace(record, ai_extracted_fields=ai_extracted_fields)
 
             # Check for duplicates BEFORE returning, if a storage backend is provided
             if storage_backend is not None:

@@ -15,13 +15,13 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 | 03.2 | Politeness & anti-bot resilience   | ✅ Complete    | 6 / 6         | `tests/unit/scraping/test_politeness.py`, `tests/mock/scraping/test_browser.py`, `tests/mock/scraping/test_{scrape_details,search_utils}.py`, `tests/mock/commands/test_{scrape_urls,search}.py` |
 | 03.3 | Multi-site search pipeline         | ✅ Complete    | 6 / 6         | `tests/unit/scraping/test_{dedup,filters}.py`, `tests/mock/scraping/test_search_providers.py`, `tests/mock/commands/test_{search,reporting}.py`, `tests/mock/backends/test_backend_parity.py` |
 | 04.0 | AI-assisted schema detection       | ✅ Complete    | 9 / 9         | `tests/unit/scraping/test_schema_detection.py`, `tests/mock/scraping/test_schema_detection.py`, `tests/mock/commands/test_detect_schema.py` |
-| 04.1 | LLM extraction fallback            | ⬜ Not started | 0 / 5         | -                                                                                                      |
+| 04.1 | LLM extraction fallback            | ✅ Complete    | 5 / 5         | `tests/unit/scraping/test_{ai_common,ai_extraction}.py`, `tests/mock/scraping/test_ai_extraction.py`, `tests/mock/scraping/test_scrape_details.py`, `tests/mock/scraping/html/test_ai_fallback_goldens.py`, `tests/mock/commands/test_scrape_urls.py` |
 | 05.0 | CLI improvements                   | ✅ Complete    | 8 / 8         | `tests/unit/test_{cli,runtime,cli_docs}.py`, `tests/mock/commands/test_{scrape_urls,search,rotate_cert,detect_schema,migrate,doctor,exit_contract}.py` |
 | 06.0 | Real-HTML mock test corpus         | ✅ Complete    | 7 / 7         | `tests/unit/test_fixture_corpus.py`, `tests/mock/scraping/html/`, `tests/unit/scraping/test_{sanitize,fixture_drift}.py` |
-| 06.1 | 90% coverage gate                  | 🔶 In progress | 1 / 6         | whole suite: 344 passed, 95% total (2026-09-24)                                                        |
-| 06.2 | Continuous integration             | ⬜ Not started | 0 / 6         | -                                                                                                      |
-| 07.0 | Observability & run reporting      | ⬜ Not started | 0 / 4         | -                                                                                                      |
-| 08.0 | Repository hygiene & documentation | ⬜ Not started | 0 / 6         | -                                                                                                      |
+| 06.1 | 90% coverage gate                  | ✅ Complete    | 6 / 6         | `tests/unit/test_{coverage_config,check_module_coverage}.py`, `tests/mock/test_entry_points.py`, `tests/mock/scraping/test_{search_utils,search_providers}.py` |
+| 06.2 | Continuous integration             | ✅ Complete    | 6 / 6         | workflows only (`.github/workflows/{lint,tests,integration,audit}.yml`); `docs/dev/ci.md`                |
+| 07.0 | Observability & run reporting      | ✅ Complete    | 4 / 4         | `tests/unit/test_{book_utils,logger_names}.py`, `tests/mock/test_{book_utils,main}.py`, `tests/mock/commands/test_reporting.py` |
+| 08.0 | Repository hygiene & documentation | ✅ Complete    | 6 / 6         | `tests/unit/test_{project_metadata,readme_commands}.py`, `tests/mock/commands/test_scrape_urls.py`      |
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
@@ -362,6 +362,29 @@ below Sonnet 5's 1024-token minimum.
 - an `HEADLESS_BROWSER=False` override for unattended runs;
 - an end-to-end `--record` → `--replay` round-trip test.
 
+## Task 04.1 - LLM extraction fallback
+
+Delivered per [ADR 0003](/docs/adr/0003-llm-extraction-fallback.md) (accepted 2026-10-23) and the
+[threat model](/docs/security/2026-10-23-llm-extraction-fallback.md) (no CRITICAL; six HIGH findings each mapped to
+a guard test). `--ai-fallback` (off by default; `--ai-fallback-max-pages`, `--model`) lets Claude fill empty
+`DESCRIPTION` / `PUBLICATION_DATE` / `ISBN13` / `ISBN10` / `AUTHORS` fields at the end of `scrape_book()`. `title`
+is never eligible. Every value must pass five deterministic gates (shape, verbatim evidence in the page's visible
+text, derivable from that evidence, 03.1 normalizers, `sanitize_untrusted`) and is listed in
+`BookRecord.ai_extracted_fields`.
+
+- **Shared infrastructure (02):** the pruner, fence, sanitizer, model/key resolution, budget pre-flight and replay
+  I/O moved to `scraping/ai_common.py` (`AIRequestError` base, `UsageAccumulator`); 04.0 goldens byte-identical.
+  Anthropic client construction stays in `schema_detection.py` because ~13 mock tests patch `sd.anthropic`.
+- **Engine (03):** `scraping/ai_extraction.py`, one request per page, fail-soft at runtime (`{}`), loud only at
+  start-up (missing key / empty model).
+- **Spike (04):** Markdown snapshots measured, **not adopted** (76.8% median proxy reduction, no values lost, but 1
+  of 10 fixtures is a real capture; table in Notes & decisions).
+- **Integration (05):** shared async-safe `AICallCap`, run-summary line, replay fixture
+  `tests/fixtures/ai_extraction/amazon.replay.json`. Deviation: the summary reports an aggregate dropped count, not
+  drops by reason (reason codes go to the debug log).
+- **Review:** `/pr-review` feature LGTM, security APPROVE. Coverage: `ai_common.py` and `ai_extraction.py` 100%,
+  total 98%.
+
 ## Task 06.0 - Real-HTML mock test corpus
 
 ### Task 06.0 - Real-HTML mock test corpus (✅ 2026-10-02)
@@ -412,6 +435,71 @@ Leanpub page), and 02's success criterion was met with a ratified hand-built cor
 Total line coverage is 95% (344 passed, 8 integration deselected), but the gate is not enforced in configuration,
 `scrape_details.py` (80%) and `search_utils.py` (88%) are below the bar, entry points are uncovered, branch
 coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wrong project.
+
+**Delivered (2026-10-24).** `[tool.coverage]` in `pyproject.toml` gates the combined line+branch figure at
+`fail_under = 90` (`uv run pytest --cov`, which the `run_tests` Stop hook now also uses).
+`scripts/check_module_coverage.py` enforces a 90% per-module floor from `coverage.json` against an empty
+`tests/coverage_floor_exceptions.toml`. `search_utils.py` went from 89% to 100% and `search_providers.py` from
+89.7% (after the branch flip) to 100%; `main.py` and `__main__.py` are at 100% via subprocess smoke tests plus an
+in-process `runpy` test, and the `__main__.py` omit is gone. `docs/test/code_test_coverage.md` was rewritten for this
+project with a dated baseline. Result: 98.14% combined, 1248 passed. The spec's `scrape_details.py` (80%) figure was
+stale; it was already 93-95%.
+
+## Task 06.2 - Continuous integration
+
+**Delivered (2026-10-26).** Four SHA-pinned workflows, all from the frozen `uv.lock`: `lint.yml` (pinned `ruff`),
+`tests.yml` (ubuntu + macOS on Python 3.13, `uv run pytest --cov`, the per-module floor, a cached Chromium install
+and a step that fails if the Chromium corpus tier skipped), `integration.yml` (manual/weekly only, behind the
+`atlas-integration` Environment, fails when secrets are missing or every test skipped; threat model
+`docs/security/2026-10-26-ci-integration-secrets.md`, no CRITICAL/HIGH) and `audit.yml` (weekly `pip-audit --strict`,
+offline selector-drift per site, optional live drift that opens a `Selector drift: <site>` issue). `docs/dev/ci.md`
+documents them and the recommended `master` protection; README badges added. `/pr-review`: feature LGTM, security
+APPROVE (LOW items applied).
+
+**Open items.** The Python matrix is 3.13 only until 08.0/01 re-syncs it. Nothing has run on GitHub yet; the
+offline drift check was verified locally (exit 0 for all three sites, via a system Chromium). `audit.yml`'s
+dependency job will fail until certifi (PYSEC-2026-4320, fix 2026.10.19) and pymongo (4.18.2) are bumped; see
+`docs/reviews/2026-10-24-dep-audit.md`. Branch protection is applied by the repo owner.
+
+## Task 07.0 - Observability & run reporting
+
+**Delivered (2026-10-26).** `book_utils.redact()` (compiled-once, idempotent, linear-time rules: any `scheme://user:pass@`,
+Bearer/Basic/Token/Digest auth, quoted and bare keyword secrets, PEM blocks incl. truncated ones, vendor token prefixes)
+is applied by `RedactingFilter`/`RedactingFormatter` on the root file handler and at the entry of `print_log`; the pattern
+list went beyond the spec after a security review (`docs/security/2026-10-26-log-redaction.md`). Every module now logs via
+`getLogger(__name__)` (AST-guarded); `configure_logging` pins root and third-party loggers (`pymongo`, `httpx`,
+`httpcore`, `anthropic`, `asyncio`) to `WARNING` (override `BOOKSCRAPER_LIB_LOG_LEVEL`) while `bookscraper.*` follows
+`--log-severity`. `scrape-urls`/`search`/`migrate` write `bookscraper_<ts>_<pid>.report.json` (schema 1, `0600`, argv
+redacted, `exit_code` 130 on interrupt, optional `ai_fallback` block with the 04.1 counts, extra copy via `--report`),
+pruned together with the log. File log lines carry `[site:short-id]` from a `ContextVar` (sanitised, console unchanged).
+Result: 1299 passed, 97.99% combined coverage. `/pr-review`: security APPROVE (quoted-key redaction gap fixed), feature
+finding (a shadowed `report` name in `migrate.py`) fixed.
+
+**Follow-ups.** `print_log` message bodies are not stripped of control characters / newlines (pre-existing, LOW). The
+`other_links`-style untrusted text reaching `print_log` could forge a log line.
+
+## Task 08.0 - Repository hygiene & documentation
+
+**Delivered (2026-10-26).** Packaging metadata is now accurate (JSON/MongoDB description, SPDX `license = "MIT"`,
+authors without an email, keywords, project URLs; `setuptools>=77` for the SPDX field), and `pandas` is gone: the
+one-column URL CSV is read with `csv.DictReader` (`utf-8-sig`, extra columns tolerated, same error messages and exit
+codes), which removed pandas, numpy, python-dateutil, six and tzdata from `uv.lock`. A `build` job in `tests.yml`
+builds the wheel, installs it into a clean venv and runs `bookscraper --version`. The cookiecutter leftovers
+(`release_package.py`, `RELEASE_NOTES.json`, `src/__init__.py`) were deleted. `README.md` was rewritten against the code
+and guarded by `tests/unit/test_readme_commands.py` (every `bookscraper` command in a fenced block parses);
+`tests/unit/test_project_metadata.py` pins `requires-python` to ruff's `target-version`. Agent and loop docs
+(`.claude/commands`, `.claude/agents`, the `test-gap` and `verify-subtask` skills) no longer reference the
+pre-restructure package and entry points. `CLAUDE.md` dropped from 791 to about 290 lines: the migration, LLM
+fallback, logging, certificate-rotation behaviour and fixture-harness detail moved into `docs/` (new:
+`docs/scraping/llm-extraction-fallback.md`, `docs/runbooks/migrate-v1-to-v2.md`, `docs/dev/logging.md`), and a
+Roadmap section was added. `/pr-review`: feature LGTM, security APPROVE.
+
+**Decision.** The spec asked for `requires-python >=3.11` (the real code floor per `vermin`), but the project
+deliberately declares 3.13+; the user chose to keep `>=3.13`, so the CI matrix stays 3.13 (plus macOS).
+
+**Follow-ups.** Control characters in an input URL can reach log message bodies (LOW, pre-existing). The certifi and
+pymongo advisories (`docs/reviews/2026-10-24-dep-audit.md`) are still open, so the weekly `audit.yml` will fail until
+they are bumped.
 
 ## Notes & decisions
 
@@ -566,3 +654,31 @@ coverage is unmeasured, and `docs/test/code_test_coverage.md` describes the wron
   [03.3/03](/docs/roadmap/0001-generic-implementation/03.3-multi-site-search-pipeline/03-packtpub-and-oreilly-search.md)'s
   Investigation outcome. Three wall-independent pieces still land under the same subtask: `book_exists_by_url`,
   a wider Cloudflare bot-wall rule, and a refreshed packtpub robots.txt fixture.
+- **2026-10-23 - 04.1/04 Markdown-snapshot spike: MEASURED, NOT ADOPTED.** `scripts/measure_snapshot_formats.py`
+  (stdlib-only `html.parser` Markdown rendering; no `pyproject.toml` dependency added) was run offline against
+  every non-edge-case **detail** fixture, comparing the `ai_common` pruned-HTML snapshot against a Markdown
+  rendering. Tokens are a `chars / 4` **proxy** (the `--count-tokens` SDK path is off by default; no network/API
+  call in the run). Per-fixture token reduction and whether every eligible golden value survived in each format's
+  visible text:
+
+  | Site (fixtures) | Median chars: pruned HTML | Median chars: Markdown | Median token reduction (proxy) | Ground-truth values lost by Markdown |
+  |---|---|---|---|---|
+  | amazon (4) | 1,183 | 203 | 83.3% | none |
+  | oreilly (3) | 719 | 183 | 74.4% | none |
+  | packtpub (3) | 810 | 188 | 76.7% | none |
+  | **all (10)** | **829** | **194** | **76.8%** | **none** |
+
+  The numeric rule is **exceeded**: 76.8% median reduction (>= 30%) and **no** ground-truth value present in the
+  HTML baseline was lost by Markdown on any fixture; the Markdown route is stdlib-only, so there is no dependency
+  to `/dep-audit`. **Despite that, adoption is deferred (not adopted)** because the instruction's "clearly met on
+  *real* measurements" and "if borderline or uncertain, close as measured-not-adopted" bars are not met: only
+  **1 of the 10** detail fixtures (`amazon/a_tour_of_cpp_3e`) is a real live capture - the other 9 are hand-built
+  minimal HTML (the live sites bot-walled the 06.0 capture), and those synthetic pages under-represent real
+  page bloat, so the median is not a trustworthy estimate of production prompt savings. The single real page
+  (98.9% reduction) is a strong but `n=1` signal. Separately, wiring Markdown into the production prompt path
+  would add a new untrusted-input converter to the AI prompt-injection attack surface (Boundary A of the 04.1
+  threat model), which needs threat-model coverage and a `security-auditor` review beyond this time-boxed
+  measurement. `src/bookscraper/scraping/ai_extraction.py` is therefore left **unchanged** (the off-by-default,
+  byte-identical-goldens guarantee is preserved). **Recommendation:** revisit adoption once more real detail
+  captures exist and a hardened in-`src` Markdown converter + threat-model entry can be reviewed, likely alongside
+  04.1/05. The evidence is preserved in `scripts/measure_snapshot_formats.py` (re-runnable offline).

@@ -1,7 +1,7 @@
 # Task 08.0 - Repository Hygiene & Documentation
 
 **Parent milestone:** [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Category:** chore | **Priority:** P2
 **Depends on:** [Task 05.0](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/README.md) (for README / CLI doc alignment)
 
@@ -25,12 +25,12 @@ Accumulated drift between what the repo *says* and what it *is*:
 
 | #  | Document                                                             | Status         | Blocks |
 |----|----------------------------------------------------------------------|----------------|--------|
-| 01 | [Python version alignment](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/01-python-version-alignment.md)     | ⬜ Not started | -      |
-| 02 | [Remove template leftovers](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/02-remove-template-leftovers.md)   | ⬜ Not started | -      |
-| 03 | [README refresh](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/03-readme-refresh.md)                         | ⬜ Not started | -      |
-| 04 | [Packaging metadata & build smoke test](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/04-packaging-metadata.md) | ⬜ Not started | -   |
-| 05 | [Agent tooling docs drift](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/05-agent-tooling-docs-drift.md)     | ⬜ Not started | -      |
-| 06 | [CLAUDE.md consolidation](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/06-claude-md-consolidation.md)       | ⬜ Not started | -      |
+| 01 | [Python version alignment](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/01-python-version-alignment.md)     | ✅ Complete (floor kept at 3.13 by decision) | -      |
+| 02 | [Remove template leftovers](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/02-remove-template-leftovers.md)   | ✅ Complete | -      |
+| 03 | [README refresh](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/03-readme-refresh.md)                         | ✅ Complete | -      |
+| 04 | [Packaging metadata & build smoke test](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/04-packaging-metadata.md) | ✅ Complete | -   |
+| 05 | [Agent tooling docs drift](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/05-agent-tooling-docs-drift.md)     | ✅ Complete | -      |
+| 06 | [CLAUDE.md consolidation](/docs/roadmap/0001-generic-implementation/08.0-repository-hygiene-and-docs/06-claude-md-consolidation.md)       | ✅ Complete | -      |
 
 ## Key constraints
 

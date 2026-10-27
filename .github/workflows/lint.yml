@@ -1,0 +1,36 @@
+name: Lint
+
+# Fast, offline static checks: ruff lint + ruff format + the docs link checker.
+# Everything runs from the frozen uv.lock so CI never resolves new versions and
+# the ruff here is byte-for-byte the pinned one in the dev group (task 06.2/01).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: this workflow only reads the checked-out tree.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Install dev dependencies (frozen)
+        run: uv sync --frozen --only-dev
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format (check only)
+        run: uv run ruff format --check .
+
+      - name: Documentation link check
+        run: uv run python scripts/check_doc_links.py docs/

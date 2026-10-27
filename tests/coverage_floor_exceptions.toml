@@ -1,0 +1,14 @@
+# Per-module coverage-floor allow-list (task 06.1 / 03).
+#
+# This file is INTENTIONALLY EMPTY: every module under src/bookscraper/ is expected to
+# clear the MODULE_FLOOR (90%) enforced by scripts/check_module_coverage.py on its own.
+#
+# Grant a module a temporary lower floor ONLY with a tracked justification. Each entry is a
+# table keyed by the dotted module name and MUST carry all three fields, or the gate fails
+# with a configuration error (exit 2):
+#
+#   "bookscraper.scraping.example" = { floor = 85, reason = "why it is below 90 for now", until = "<task id>" }
+#
+#   floor  - the temporary per-module floor (a number, e.g. 85)
+#   reason - a human explanation of the gap
+#   until  - the roadmap task that will remove the exception

@@ -29,8 +29,9 @@ from urllib.robotparser import RobotFileParser
 from ..book_utils import print_log
 from .parameters import DEFAULT_RATE_LIMIT, RATE_LIMITS
 
-# Dedicated logger so robots.txt decisions land in the run log alongside everything else.
-_robots_logger = logging.getLogger("robots")
+# Module logger (``bookscraper.scraping.politeness``) so robots.txt decisions land in the run log
+# alongside everything else and follow the ``bookscraper`` logger's --log-severity level.
+_robots_logger = logging.getLogger(__name__)
 
 # Injectable collaborators, aliased so signatures stay readable and later subtasks can reuse them:
 # a monotonic time source and an awaitable sleep. The production defaults are

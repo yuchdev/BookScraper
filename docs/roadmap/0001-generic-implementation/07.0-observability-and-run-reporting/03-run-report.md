@@ -1,7 +1,7 @@
 # 03 - Machine-readable run report
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/07.0-observability-and-run-reporting/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [Task 03.0 / 02](/docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/02-typed-scrape-result.md)
 **Role:** Python Expert
 

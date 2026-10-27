@@ -1,7 +1,7 @@
 # 05 - Scraper integration & provenance
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [03-field-extraction-engine.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/03-field-extraction-engine.md),
 05.0 [01](/docs/roadmap/0001-generic-implementation/05.0-cli-improvements/01-shared-parent-parsers.md)
 **Role:** Python Expert

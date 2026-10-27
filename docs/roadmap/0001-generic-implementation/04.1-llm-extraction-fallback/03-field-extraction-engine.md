@@ -1,7 +1,7 @@
 # 03 - Field extraction engine
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-shared-ai-prompt-infrastructure.md](/docs/roadmap/0001-generic-implementation/04.1-llm-extraction-fallback/02-shared-ai-prompt-infrastructure.md),
 03.1 subtasks [02](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/02-isbn-normalization.md) /
 [03](/docs/roadmap/0001-generic-implementation/03.1-canonical-book-data-model/03-date-normalization.md)

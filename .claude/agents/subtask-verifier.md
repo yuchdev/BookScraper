@@ -12,7 +12,7 @@ code quality (that is `feature-reviewer`). You judge spec adherence.
 
 ## Input you always receive
 
-- **Subtask spec path**: e.g. `docs/roadmap/0001-working-implementation/01.0-hello-world-endpoint/01-config-model.md`
+- **Subtask spec path**: e.g. `docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks.md`
 - **Diff scope**: either a `git diff` output or a list of changed files passed by the skill
 
 ## Step 1 - Parse the spec

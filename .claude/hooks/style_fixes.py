@@ -73,7 +73,7 @@ def _fix_line(line: str) -> tuple[str, int]:
         if found is None:
             continue
         start, type_text = found
-        line = line[:start] + f"Optional[{type_text}]" + line[m.end():]
+        line = line[:start] + f"Optional[{type_text}]" + line[m.end() :]
         count += 1
     return line, count
 

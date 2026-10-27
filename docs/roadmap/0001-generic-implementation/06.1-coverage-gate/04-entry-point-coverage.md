@@ -1,7 +1,7 @@
 # 04 - Entry-point coverage
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Role:** Testing Expert
 
 ## Requirements

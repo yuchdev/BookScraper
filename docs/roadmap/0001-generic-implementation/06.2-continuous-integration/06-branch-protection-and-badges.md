@@ -1,7 +1,7 @@
 # 06 - Branch protection & badges
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [02-test-and-coverage-workflow.md](/docs/roadmap/0001-generic-implementation/06.2-continuous-integration/02-test-and-coverage-workflow.md)
 **Role:** Docs Writer
 

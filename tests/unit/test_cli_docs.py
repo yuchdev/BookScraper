@@ -1,6 +1,6 @@
-"""Guard tests ensuring docs/cli.md documents every CLI flag exposed by build_parser().
+"""Guard tests ensuring docs/cli/cli.md documents every CLI flag exposed by build_parser().
 
-A new flag added to cli.py without a matching entry in docs/cli.md will cause
+A new flag added to cli.py without a matching entry in docs/cli/cli.md will cause
 test_every_cli_flag_documented_in_docs_cli_md to fail, making the documentation gap
 visible in CI before it reaches a reviewer.
 """
@@ -13,7 +13,7 @@ from typing import Set
 from bookscraper.cli import build_parser
 
 #: Path to the CLI reference document, relative to the repository root.
-_DOCS_CLI_MD = pathlib.Path(__file__).resolve().parents[2] / "docs" / "cli.md"
+_DOCS_CLI_MD = pathlib.Path(__file__).resolve().parents[2] / "docs" / "cli" / "cli.md"
 
 #: Argparse boilerplate flags that exist on every parser by default and do not
 #: need per-subcommand documentation entries.
@@ -50,12 +50,12 @@ def _collect_all_option_strings() -> Set[str]:
 
 
 def test_every_cli_flag_documented_in_docs_cli_md():
-    """[Unit] cli-docs: every option_string exposed by build_parser() appears in docs/cli.md.
+    """[Unit] cli-docs: every option_string exposed by build_parser() appears in docs/cli/cli.md.
 
     Scenario:
         Given the complete set of option strings from build_parser() (top-level and all
         subcommand parsers, including inherited flags from shared parents) and the text of
-        docs/cli.md read from disk
+        docs/cli/cli.md read from disk
         When each non-boilerplate option string is checked as a literal substring of the doc
         Then no option string is absent from the documentation, so a new flag added to cli.py
         without a docs entry causes this test to fail in CI.
@@ -69,26 +69,26 @@ def test_every_cli_flag_documented_in_docs_cli_md():
           of descriptions or default values (those are the author's responsibility).
 
     On failure, first check:
-        - Which flag string is missing from docs/cli.md (the assertion message names it).
-        - Add a row for that flag to the appropriate subcommand's flag table in docs/cli.md.
+        - Which flag string is missing from docs/cli/cli.md (the assertion message names it).
+        - Add a row for that flag to the appropriate subcommand's flag table in docs/cli/cli.md.
     """
-    assert _DOCS_CLI_MD.exists(), f"docs/cli.md not found at {_DOCS_CLI_MD}"
+    assert _DOCS_CLI_MD.exists(), f"docs/cli/cli.md not found at {_DOCS_CLI_MD}"
     doc_text = _DOCS_CLI_MD.read_text(encoding="utf-8")
 
     option_strings = _collect_all_option_strings()
     missing = sorted(flag for flag in option_strings if flag not in doc_text)
 
     assert not missing, (
-        f"The following CLI flags are not documented in docs/cli.md: {missing}\n"
+        f"The following CLI flags are not documented in docs/cli/cli.md: {missing}\n"
         "Add a row for each flag to the appropriate subcommand's flag table."
     )
 
 
 def test_docs_cli_md_exists_and_is_non_empty():
-    """[Unit] cli-docs: docs/cli.md exists and contains content.
+    """[Unit] cli-docs: docs/cli/cli.md exists and contains content.
 
     Scenario:
-        Given the path docs/cli.md relative to the repository root
+        Given the path docs/cli/cli.md relative to the repository root
         When the file is read
         Then it exists and contains at least one non-empty line, confirming the reference
         document was not accidentally deleted or truncated.
@@ -98,9 +98,9 @@ def test_docs_cli_md_exists_and_is_non_empty():
         - Complements test_every_cli_flag_documented_in_docs_cli_md, which checks content.
 
     On failure, first check:
-        - Whether docs/cli.md was accidentally deleted or its path changed.
+        - Whether docs/cli/cli.md was accidentally deleted or its path changed.
         - The _DOCS_CLI_MD constant in this test module.
     """
-    assert _DOCS_CLI_MD.exists(), f"docs/cli.md not found at {_DOCS_CLI_MD}"
+    assert _DOCS_CLI_MD.exists(), f"docs/cli/cli.md not found at {_DOCS_CLI_MD}"
     content = _DOCS_CLI_MD.read_text(encoding="utf-8").strip()
-    assert content, "docs/cli.md exists but is empty"
+    assert content, "docs/cli/cli.md exists but is empty"

@@ -7,7 +7,7 @@ terminates-when: The target task's row in the milestone status.md shows ✅ Comp
 
 # implement-subtasks - per-subtask implementation loop for one task
 
-This loop takes **one task** (e.g. "Hello World Endpoint", task `1.0`) and drives it to
+This loop takes **one task** (e.g. "Scraping Engine Hardening", task `3.0`) and drives it to
 completion. Each iteration implements **exactly one** pending subtask, verifies it against
 its spec, runs the relevant quality-gate skills, and records progress. The loop
 re-schedules itself until the whole task is ✅ Complete.
@@ -30,7 +30,7 @@ docs/roadmap/{NNNN}-{milestone-slug}/plan.md          → find the task in ## Ta
 - `0001/1.0` or `0001 1.0` - explicit milestone + task number.
 - `1.0` - task number only; resolve the milestone by scanning every
   `docs/roadmap/{NNNN}-*/plan.md` `## Tasks` table for that number.
-- `"Hello World Endpoint"` - task name; matched (case-insensitive, substring) against the
+- `"Scraping Engine Hardening"` - task name; matched (case-insensitive, substring) against the
   `Name` column of the same tables.
 
 If the argument matches zero or more than one task, **stop** and ask the user to
@@ -55,14 +55,14 @@ Instead, resolve once and persist a small cursor:
 ```
 ```json
 {
-  "milestone_path": "docs/roadmap/0001-working-implementation",
-  "task_number": "1.0",
-  "task_name": "Hello World Endpoint",
-  "task_folder": "docs/roadmap/0001-working-implementation/01.0-hello-world-endpoint",
+  "milestone_path": "docs/roadmap/0001-generic-implementation",
+  "task_number": "3.0",
+  "task_name": "Scraping Engine Hardening",
+  "task_folder": "docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening",
   "subtask_heading": "## Subtasks",
   "subtask_queue": [
-    {"nn": "01", "slug": "config-model", "status": "complete"},
-    {"nn": "02", "slug": "...", "status": "not_started"}
+    {"nn": "01", "slug": "page-lifecycle-and-leaks", "status": "complete"},
+    {"nn": "02", "slug": "typed-scrape-result", "status": "not_started"}
   ],
   "next_index": 1
 }
@@ -141,16 +141,22 @@ pasting a spec bills it twice (once in your context, once in theirs):
 - The cross-cutting rules in `@docs/dev/python_coding_standard.md` - full annotations, ruff,
   RAII, this project's log-redaction mechanism (if it has one), no bare `except:`, unit +
   mocked-integration tests.
-  Also name the repo-root `CLAUDE.md` and three of its sections: **"Known inconsistencies to
-  watch for"** (the `README.md` is stale on the module path, the input-file default, and log
-  rotation - verify behavior against the code, never the README; the scraper output CSVs are
-  committed rather than gitignored; `init_template.py` and `release_package.py` are cookiecutter
-  leftovers outside the scraping workflow), **"Running"** (the two entry points use incompatible
-  import styles, so `src/scrape_existing_books.py` runs as a script while
-  `search_and_scrape` runs only as `PYTHONPATH=src python -m bookscraper.search_and_scrape`),
-  and **"Testing"** (there is no real suite yet, so an agent reporting a green baseline is
-  reporting something that does not exist). If the milestone's `plan.md` carries its own
-  cross-cutting guidelines section, name it for the agent to read.
+  Also name the repo-root `CLAUDE.md` and its key sections:
+  - **"Known inconsistencies to watch for"**: `init_template.py` and `release_package.py` are
+    cookiecutter leftovers outside the scraping workflow; run output artifacts (`books.json`,
+    `failed_books.csv`, etc.) are gitignored and written to the repo root — don't add new default
+    output filenames without gitignoring them.
+  - **"Running"**: `--store-backend {mongo|json}` is required; invocation is `uv run bookscraper
+    <subcommand>`; six subcommands are `scrape-urls`, `search`, `rotate-cert`, `detect-schema`,
+    `migrate`, `doctor` — see `docs/cli/cli.md` for the full reference.
+  - **"Testing"**: the three-tier suite (`tests/unit/`, `tests/mock/`, `tests/integration/`) is the
+    real test infrastructure; integration tests are excluded by default (`-m "not integration"`);
+    the canonical full-suite command is `uv run pytest --cov`; coverage must stay ≥ 90%.
+  - **"Architecture"**: import direction is one-way — `commands/` → `scraping/` + `backends/`;
+    `backends/` → `book_utils.py`; nothing under `backends/` or `scraping/` ever imports from
+    `commands/`.
+  If the milestone's `plan.md` carries its own cross-cutting guidelines section, name it for the
+  agent to read.
 
 **Return discipline (keeps the parent context lean):** instruct every spawned agent to return
 a **compact structured summary** - files changed, symbols added, pass/fail, coverage delta -
@@ -204,9 +210,9 @@ do not spawn an agent that can only find nothing.** Each gate is module-scoped, 
 
 | Condition                                                | Skill                                                                                                                                |
 |----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| Always                                                   | `/test-gap src/book_scrapper/<subtask-module>/` - report coverage delta; if < 85 % delegate missing tests to `testing-expert`. |
+| Always                                                   | `/test-gap src/bookscraper/<subtask-module>/` - report coverage delta; if < 90% delegate missing tests to `testing-expert`. |
 | `pyproject.toml` or any `requirements*.txt` changed      | `/dep-audit`                                                                                                                         |
-| Any file under an API route, auth, or middleware path changed, or anywhere handling credentials/tokens | `/secret-scan src/book_scrapper/<changed-module>/` |
+| Any file under an API route, auth, or middleware path changed, or anywhere handling credentials/tokens | `/secret-scan src/bookscraper/<changed-module>/` |
 | Subtask touches docs / public API                        | `/link-check docs/` - inbound references still resolve.                                                                              |
 
 ### Step 7 - record the subtask, then check the task
@@ -229,7 +235,7 @@ do not spawn an agent that can only find nothing.** Each gate is module-scoped, 
 
 - **Task not yet complete** → go to Step 8 (reschedule for the next subtask).
 - **Task complete** → this is the **one** place the whole suite runs: execute
-  `uv run pytest tests/unit/ -q --cov=book_scrapper` once (summary line only), then run
+  `uv run pytest --cov` once (the canonical command; summary line only), then run
   `/pr-review` (must reach LGTM or have REQUEST_CHANGES resolved). Then update
   `{milestone_path}/status.md` `## Current status` with a **targeted row edit**:
   - Set the task row's Status cell to `✅ Complete` (note any deferred subtasks inline,

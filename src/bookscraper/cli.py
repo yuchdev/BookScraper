@@ -84,6 +84,27 @@ def _bounded_concurrency(value: str) -> int:
     return parsed
 
 
+def _bounded_fallback_pages(value: str) -> int:
+    """
+    ``argparse`` type for ``--ai-fallback-max-pages``: an integer in the inclusive range 1-200.
+
+    This is the hard per-run cap on LLM extraction-fallback **requests** (threat model EXT-4): a
+    non-positive value would make the fallback pointless and an unbounded one re-opens the
+    cost-exhaustion vector, so both are rejected at parse time.
+
+    :param value: The raw command-line token.
+    :returns: The parsed integer.
+    :raises argparse.ArgumentTypeError: If ``value`` is not an integer or is outside 1-200.
+    """
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be an integer, got {value!r}") from None
+    if not 1 <= parsed <= 200:
+        raise argparse.ArgumentTypeError(f"must be between 1 and 200, got {parsed}")
+    return parsed
+
+
 def _positive_float(value: str) -> float:
     """
     ``argparse`` type for a strictly positive float (> 0), used by ``--nav-timeout`` (seconds).
@@ -225,6 +246,43 @@ def _scrape_runtime_parent() -> argparse.ArgumentParser:
         help="Path of the json backend's store file (default: books.json). Only valid with "
         "--store-backend json; combining it with --store-backend mongo is a usage error. The "
         "write-permission pre-flight checks this file's directory.",
+    )
+    parent.add_argument(
+        "--report",
+        dest="report",
+        default=None,
+        help="Also write the machine-readable run report (schema 1: command, argv, versions, "
+        "per-site status counts, save summary, exit code) to this path. A copy is always written "
+        "next to the run log under ~/.bookscrapper/logs/ regardless of this flag.",
+    )
+    # LLM extraction fallback (task 04.1). Off by default: with it unset no Anthropic call is
+    # ever made and ANTHROPIC_API_KEY is never read. With it set, a missing key or empty model ID
+    # fails loudly at start-up, before any scraping (see commands/scrape_urls.py, commands/search.py).
+    parent.add_argument(
+        "--ai-fallback",
+        dest="ai_fallback",
+        action="store_true",
+        help="Enable the opt-in LLM extraction fallback: when a deterministic selector leaves an "
+        "eligible field (description, publication date, ISBN-10/13, authors; never the title) "
+        "empty, ask Claude for just that field from the already-loaded page and store it only if it "
+        "passes the deterministic evidence + normalizer gates. Off by default; needs "
+        "ANTHROPIC_API_KEY.",
+    )
+    parent.add_argument(
+        "--ai-fallback-max-pages",
+        dest="ai_fallback_max_pages",
+        type=_bounded_fallback_pages,
+        default=20,
+        help="Hard per-run cap on the number of fallback requests, 1-200 (default: 20). A shared "
+        "async-safe counter enforces it across the concurrent scrape batch, so a site-wide drift "
+        "cannot drive unbounded Anthropic spend.",
+    )
+    parent.add_argument(
+        "--model",
+        dest="model",
+        default=None,
+        help="Anthropic model ID for the --ai-fallback requests (default: ANTHROPIC_MODEL, else "
+        "claude-sonnet-5). An empty value is rejected at start-up. Ignored without --ai-fallback.",
     )
     return parent
 
@@ -544,6 +602,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the migrated documents to the store. Without it the command is a dry run that "
         "reports what would change and writes nothing to the store.",
+    )
+    migrate_parser.add_argument(
+        "--report",
+        dest="report",
+        default=None,
+        help="Also write the machine-readable run report (schema 1) to this path. A copy is always "
+        "written next to the run log under ~/.bookscrapper/logs/ regardless of this flag.",
     )
 
     doctor_parser = subparsers.add_parser(

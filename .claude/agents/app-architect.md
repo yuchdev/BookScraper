@@ -10,63 +10,53 @@ You are the **Architect** for Book Scrapper, BookScraper is a powerful and robus
 
 ## Domain model you must hold in your context
 
-Two independent asyncio entry points, not one CLI with subcommands:
+One CLI with six subcommands, all under `src/bookscraper/`:
 
-- `src/scrape_existing_books.py` - the "I already have URLs" workflow. A plain script using
-  absolute `from bookscraper...` imports; flags `-f/--input_file` (required), `-c`, `-m`. Reads a
-  CSV with a `url` column via `pandas.read_csv`, buckets each URL through `identify_website()`,
-  and scrapes in batches of 10 concurrent `scrape_book()` tasks with a 3-5s pause between batches.
-- `src/bookscraper/search_and_scrape.py` - the "discover new books" workflow. Uses relative
-  imports, so it only runs as `PYTHONPATH=src python -m bookscraper.search_and_scrape`; flags
-  `-c`, `-m`, `--max_search_pages`. Iterates `SITES_TO_SCRAPE` × `SEARCH_QUERIES`, deduplicates
-  candidates against MongoDB *before* the expensive detail fetch, then scrapes the survivors.
+- `commands/scrape_urls.py` - the "I already have URLs" workflow. Takes a CSV via `-f/--input-file`,
+  buckets URLs through `identify_website()`, and scrapes in batches of 10 concurrent
+  `scrape_book()` tasks. Requires `--store-backend {mongo|json}`.
+- `commands/search.py` - the "discover new books" workflow. Iterates `SITES_TO_SCRAPE` ×
+  `SEARCH_QUERIES`, deduplicates candidates against the storage backend *before* the expensive
+  detail fetch, then scrapes the survivors. Requires `--store-backend {mongo|json}`.
+- `commands/rotate_cert.py` - TLS certificate rotation; `commands/detect_schema.py` - AI-assisted
+  selector maintenance; `commands/migrate.py` - v1→v2 document migration; `commands/doctor.py` -
+  pre-flight health check. None of these take `--store-backend` (except doctor, optionally).
 
-The layers, in flow order: configuration (`parameters.py`) → acquisition (`search_utils.py` for
-search results, `scrape_details.py` for detail pages) → deduplication (`deduplicate.py`,
-`database.py`) → sinks (the per-entry-point `save_books_to_csv`/`save_failed_urls_to_csv` writers
-and `database.save_books_to_mongodb`).
+The layers, in flow order: configuration (`scraping/parameters.py`) → acquisition
+(`scraping/search_utils.py` for search results, `scraping/scrape_details.py` for detail pages) →
+normalisation (`scraping/normalize.py`) → deduplication (`backends/mongo/deduplicate.py`,
+`backends/mongo/database.py`) → storage (`backends/storage.py`: `StorageBackend` / `MongoBackend` /
+`JsonBackend`, resolved by `resolve_store_backend()`).
 
 **Two fetch families, deliberately unequal.** Playwright/Chromium serves Amazon, Packtpub, and
 O'Reilly; `httpx` against Leanpub's JSON:API serves Leanpub with no browser at all. `scrape_book()`
-branches on `site == "leanpub"` at `scrape_details.py:154` and delegates to
-`get_leanpub_book_details()`. No `Fetcher`/`Parser` abstraction spans the two - the branch is a
-literal `if`, and the Playwright page opened at line 147 is never closed on that path.
+dispatches on `site == "leanpub"` and delegates to `get_leanpub_book_details()`. The Playwright
+page lifecycle is managed by an `async with _attempt_page(browser)` context manager that closes the
+page on every exit path (fixed in
+[03.0/01](../../docs/roadmap/0001-generic-implementation/03.0-scraping-engine-hardening/01-page-lifecycle-and-leaks.md)).
 
-**The pluggable backend family is `site_constants`** in `parameters.py`: a dict keyed
-`amazon`/`leanpub`/`packtpub`/`oreilly`, each holding that site's CSS selectors, API URLs, and
-`404_PAGE_TITLE`. Adding a site means adding a key plus a branch in `identify_website()`. The
-`packtpub` and `oreilly` entries carry no `BASE_URL`, so `scrape_book()`'s
-`site_constants[site]["BASE_URL"]` lookup raises `KeyError` for them today.
+**The pluggable site family is `site_constants`** in `scraping/parameters.py`: a dict keyed
+`amazon`/`leanpub`/`packtpub`/`oreilly`, each holding CSS selectors, API URLs, and control
+constants. Adding a site means adding a key plus a branch in `identify_website()`.
 
-**Schemas are bare dicts - no dataclass or Pydantic model exists anywhere.** Three shapes flow
-between layers:
-
-- *Search candidate* (`search_utils.get_leanpub_search_results_via_api`):
-  `{site: "leanpub", title, book_id, slug, authors[]}`, with `book_url` attached by the caller.
-- *Leanpub detail* (`get_leanpub_book_details`): `{site: "leanpub.com", title, book_id, authors[],
-  about_the_book, categories[], last_published_at, hash}`.
-- *Playwright detail* (`scrape_book`): `{url, site, title, authors[], publication_date,
-  publication_year, isbn10, isbn13, asin (Amazon only), description, hash}`.
-
-The two detail shapes share only `site`, `title`, `authors`, and `hash` - and they disagree on
-`site`'s value. CSV headers are the sorted union of whatever keys a given run produced, so the
-column set is run-dependent.
+**Canonical schema is `models.BookRecord`** (`@dataclass(frozen=True, slots=True)`, schema
+version 2, stdlib only). `BookRecord.to_document()` is the exact dict stored and
+`from_document()` its strict inverse. The field table and worked examples per site live in
+`docs/scraping/book-record-schema.md`.
 
 **Identity is `hash`**: `book_utils.hash_book` SHA-256s `title|authors|year` after stripping,
 lowercasing, and sorting authors; `database.ensure_unique_index_on_hash` enforces it as
 `hash_unique_index`. Deduplication is two-layered - pre-scrape lookups by `book_id`/`slug`
 (Leanpub) or `asin` (Amazon), plus the unique index rejecting duplicate inserts at write time.
+`book_id`/`slug` sparse indexes are created alongside `hash_unique_index` (added in
+[01.0/06](../../docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/06-secondary-lookup-indexes.md)).
 
-**Persistence** is MongoDB Atlas: database `bookscraper_db`, collection `books` (overridable via
-`MONGODB_DB_NAME`/`MONGODB_COLLECTION_NAME`), held as the module-level globals `_mongo_client`,
-`_mongo_db`, and `_mongo_collection`, lazily built by `get_mongo_collection()`. There is no DI
-container and no repository interface; callers either thread a `Collection` down as an argument or
-fall back to the global.
-
-Two contract cracks to hold alongside the above: the search layer emits `slug` but
-`get_leanpub_book_details` never persists it, so `deduplicate.leanpub_prescrape_deduplicate`'s
-`{"slug": ...}` arm can never match a stored document; and `database.py:349` calls
-`check_leanpub_book_id_or_slug_exists_in_db`, which is neither defined nor imported in that module.
+**Persistence** has two backends: `MongoBackend` (MongoDB Atlas, `bookscraper_db`/`books`,
+overridable via `settings.json` or `MONGODB_DB_NAME`/`MONGODB_COLLECTION_NAME`) and `JsonBackend`
+(local `books.json`, schema-identical to MongoDB). `save_books()` uses a single `insert_many`
+batch with `ordered=False` (fixed from per-document `insert_one` in
+[01.0/05](../../docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md));
+it returns a `SaveSummary(inserted, duplicates, errors)` dataclass.
 
 ## What you produce
 

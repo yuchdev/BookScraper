@@ -1,12 +1,32 @@
 [project]
 name = "bookscraper"
 version = "1.0.0"
-description = "Asyncio + Playwright scraper for book metadata from Amazon, Packtpub, Leanpub, and O'Reilly, with CSV/MongoDB output."
+description = "Asyncio + Playwright scraper for book metadata from Amazon, Packtpub, Leanpub, and O'Reilly, with JSON or MongoDB Atlas storage."
 readme = "README.md"
 requires-python = ">=3.13"
+license = "MIT"
+authors = [
+    { name = "Yurii Cherkasov" },
+]
+keywords = [
+    "scraper",
+    "books",
+    "metadata",
+    "playwright",
+    "asyncio",
+    "mongodb",
+    "amazon",
+    "leanpub",
+    "packtpub",
+    "oreilly",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "playwright>=1.50.0",
-    "pandas>=2.2.3",
     "python-dotenv>=1.0.1",
     "pymongo>=4.11.2",
     "httpx>=0.28.1",
@@ -14,12 +34,22 @@ dependencies = [
     "cryptography>=50.0.1",
 ]
 
+[project.urls]
+Repository = "https://github.com/yuchdev/BookScraper"
+Issues = "https://github.com/yuchdev/BookScraper/issues"
+Documentation = "https://github.com/yuchdev/BookScraper/tree/master/docs"
+
 [project.scripts]
 bookscraper = "bookscraper.main:main_sync"
 
 [build-system]
+# PEP 639 SPDX license expression (`license = "MIT"`) requires setuptools>=77; uv's isolated
+# build env resolves the newest setuptools, and the floor is bumped here so a build never picks
+# an older setuptools that would reject the SPDX string. Backend stays setuptools (no concrete
+# reason to switch to hatchling/uv_build; the stray egg-info is cleaned by the build step, not a
+# backend defect).
 requires = [
-    "setuptools>=42",
+    "setuptools>=77",
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
@@ -34,6 +64,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "mongomock>=4.3.0",
     "flakeforge==1.1.0",
+    "ruff==0.16.7",
 ]
 
 [tool.pytest.ini_options]
@@ -74,3 +105,18 @@ noqa_allowed = []
 # Blacklist: files/directories where `# noqa` is strictly forbidden (violations always fire).
 # Blacklist always wins over `noqa_allowed`.
 noqa_forbidden = []
+
+[tool.coverage.run]
+source = ["bookscraper"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    '^\s*\.\.\.$',
+    "if __name__ == .__main__.:",
+]

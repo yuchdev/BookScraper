@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import logging
 import os
 import re
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
+from urllib.parse import urlsplit
 
 # --- Global logging setup ---
 # Define basic ANSI color codes (customize as needed)
@@ -31,34 +34,319 @@ MAX_LOG_FILES = 10
 # suffix keeps two runs started within the same second from colliding.
 LOG_FILE_PATH = LOG_DIR / f"bookscraper_{datetime.now():%Y%m%d_%H%M%S}_{os.getpid()}.log"
 
-# Set up a dedicated logger for bookscraper output. Its own level is left NOTSET (never call
-# .setLevel() on it) so it always defers to whatever level configure_logging() sets on the
-# root logger below.
-logger = logging.getLogger("bookscraper_app")
+# This module's logger: ``bookscraper.book_utils``, a child of the ``bookscraper`` logger whose
+# level configure_logging() sets from --log-severity. Named via __name__ like every other module
+# (task 07.0/02) so the whole package shares one configurable logger hierarchy rather than a flat
+# set of ad hoc names.
+logger = logging.getLogger(__name__)
+
+# Third-party loggers clamped to WARNING by configure_logging() so a `--log-severity debug` run
+# doesn't drown in library internals (pymongo topology events, httpx/httpcore wire logs, the
+# anthropic SDK, asyncio). BOOKSCRAPER_LIB_LOG_LEVEL (a level name, e.g. DEBUG) raises or lowers
+# them in one place, e.g. when diagnosing a TLS handshake.
+_THIRD_PARTY_LOGGERS: tuple[str, ...] = ("pymongo", "httpx", "httpcore", "anthropic", "asyncio")
+_LIB_LOG_LEVEL_ENV = "BOOKSCRAPER_LIB_LOG_LEVEL"
+_DEFAULT_LIB_LOG_LEVEL = logging.WARNING
+
+
+# --- Per-task scrape log context (task 07.0/04) ---
+# Each detail scrape sets this ContextVar to "<site>:<short-id>" (an ASIN, a Leanpub slug, or a URL
+# path segment) for the duration of its call; the ContextFilter below stamps its current value onto
+# every log record as the file formatter's ``[%(ctx)s]`` field. asyncio tasks inherit a COPY of the
+# context at creation, so the 10-way-concurrent scrape batch keeps each book's log lines separable
+# (``grep "amazon:1098131029" <run log>`` isolates one book's full history). A record emitted
+# outside any scrape carries SCRAPE_CONTEXT_DEFAULT.
+SCRAPE_CONTEXT_DEFAULT = "-"
+scrape_context: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "bookscraper_scrape_context", default=SCRAPE_CONTEXT_DEFAULT
+)
+
+
+# --- Secret redaction (task 07.0/01) ---
+# Defence-in-depth: every string that reaches a log file or the console is run through redact()
+# so a credential that slipped past an upstream control (e.g. a third-party exception embedding a
+# connection URI) never lands in ~/.bookscrapper/logs/ or a CI transcript. Patterns are compiled
+# once. Ordering is load-bearing in two places: the multiline PRIVATE KEY block runs FIRST so the
+# single-line rules can never fragment a PEM body, and the Anthropic ``sk-ant-`` rule precedes the
+# generic OpenAI ``sk-`` rule (both redact to the same shape, so beyond that the order is cosmetic
+# because each replacement injects only a ``<redacted...>`` marker). Every pattern is linear (prefix
+# anchor or non-overlapping negated classes with a single quantifier; the one ``[\s\S]*?`` is bound
+# by a literal-or-``\Z`` terminator), so the set is ReDoS-free. See the threat model
+# docs/security/2026-10-26-log-redaction.md for the derivation of each rule.
+_REDACTION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Private-key PEM block. The terminator is optional (``|\Z``) so a truncated block - a cut-off
+    # line or a size-limited record - is still redacted to end-of-text instead of surviving verbatim.
+    (
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)"),
+        "<redacted private key>",
+    ),
+    # Any ``scheme://user:pass@`` userinfo (subsumes the mongodb+srv URI and the Postgres DSN type).
+    (re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)[^/\s:@]+:[^/\s@]+@"), r"\1<redacted>@"),
+    # Authorization header, any auth scheme (Bearer/Basic/Token/Digest). Basic carries the Atlas
+    # Service Account client_id:client_secret pair, so Bearer-only redaction would leak it.
+    (
+        re.compile(r"(?i)(authorization:\s*)(?:bearer|basic|token|digest)\s+[A-Za-z0-9._\-=/+~]+"),
+        r"\1<redacted>",
+    ),
+    # Keyword-assigned secret, quoted or bare, ``=`` or ``:`` (dict/JSON reprs, query strings).
+    (
+        re.compile(
+            r"(?i)\b(password|passwd|secret|client_secret|access_token|api[_-]?key)"
+            r"(['\"]?\s*[=:]\s*)['\"]?[^\s\"',}]{6,}"
+        ),
+        r"\1\2<redacted>",
+    ),
+    # Vendor-prefix API tokens (prefix-anchored, zero-ReDoS, reused verbatim from the secret-scan
+    # catalog so the two cannot drift). sk-ant- is ordered before the generic OpenAI sk- rule.
+    (re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{10,}"), "sk-ant-<redacted>"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "<redacted aws key>"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"), "<redacted github token>"),
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "<redacted google key>"),
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"), "<redacted slack token>"),
+    (re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9]{20,}"), "sk-<redacted>"),
+)
+
+
+def redact(text: str) -> str:
+    """
+    Return *text* with every known secret shape replaced by a ``<redacted...>`` marker.
+
+    This is the single choke point every log/console sink runs through. It is idempotent -
+    the injected markers contain no secret-shaped substring, so re-running ``redact`` on an
+    already-redacted string is a no-op (the handler filter re-redacts the console copy
+    :func:`print_log` already redacted, and must not corrupt it).
+
+    :param text: The raw string that may embed a credential.
+    :returns: The same string with MongoDB/Postgres userinfo, Authorization headers, PEM
+        private-key blocks, keyword-assigned secrets, and vendor API tokens masked. A falsy
+        input is returned unchanged.
+    """
+    if not text:
+        return text
+    for pattern, replacement in _REDACTION_RULES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+class RedactingFilter(logging.Filter):
+    """
+    Logging filter that masks secrets in a record's fully ``%``-formatted message.
+
+    Attached to the root **file handler** (not a logger) by :func:`configure_logging`, so it
+    runs for every record propagated up from any module's ``logging.getLogger(__name__)``.
+    It redacts :meth:`logging.LogRecord.getMessage` output - the message *after* ``%``-arg
+    substitution - then collapses ``msg``/``args`` so a secret living only in a ``%``-arg
+    (e.g. ``logger.error("conn failed: %s", uri)``) cannot survive by escaping the template.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """
+        Redact *record* in place and always allow it through.
+
+        :param record: The log record to sanitise.
+        :returns: ``True`` always - this filter sanitises, it never drops a record.
+        """
+        record.msg = redact(record.getMessage())
+        record.args = ()
+        return True
+
+
+class ContextFilter(logging.Filter):
+    """Logging filter that stamps the current per-task scrape context onto every record.
+
+    Attached to the root **file handler** (like :class:`RedactingFilter`, never to a logger) by
+    :func:`configure_logging`, so a record from any logger - the ``bookscraper.*`` hierarchy or a
+    third-party library - gets a ``ctx`` attribute by the time the :class:`RedactingFormatter`'s
+    ``[%(ctx)s]`` field is rendered. The value is read from :data:`scrape_context`, which each
+    detail scrape sets to ``<site>:<short-id>`` for the duration of its call; a record emitted
+    outside any scrape carries :data:`SCRAPE_CONTEXT_DEFAULT`.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Stamp :data:`scrape_context`'s current value onto ``record.ctx`` and allow it through.
+
+        :param record: The log record to annotate.
+        :returns: ``True`` always - this filter annotates, it never drops a record.
+        """
+        record.ctx = scrape_context.get()
+        return True
+
+
+class RedactingFormatter(logging.Formatter):
+    """
+    Formatter that redacts the **whole** formatted record, message plus appended traceback.
+
+    Overriding :meth:`format` (rather than only ``formatException``) is deliberate:
+    :class:`logging.Formatter` caches a formatted traceback in ``record.exc_text`` after the
+    first handler formats it, so redacting the final returned string is the only placement
+    immune to another handler having populated that cache first. This is what strips a
+    credential embedded in third-party exception text (pymongo/httpx) under ``exc_info=True``.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format *record* via the base implementation, then redact the complete result.
+
+        A record that reaches formatting without having passed a :class:`ContextFilter` (e.g. a
+        handler not carrying one) still formats: a missing ``ctx`` defaults to
+        :data:`SCRAPE_CONTEXT_DEFAULT` so the ``[%(ctx)s]`` field never raises.
+
+        :param record: The log record to format.
+        :returns: The formatted line (message + any traceback) with secrets masked.
+        """
+        if not hasattr(record, "ctx"):
+            record.ctx = SCRAPE_CONTEXT_DEFAULT
+        return redact(super().format(record))
+
+
+# --- Per-task scrape log context helpers (task 07.0/04) ---
+# A short-id segment comes from UNTRUSTED page/URL data (an ASIN, a Leanpub slug, or a URL path
+# segment), so before it can reach a log line it is stripped of control characters / newlines /
+# line-separators, run through redact(), and length-bounded.
+# Control chars (C0/C1/DEL) plus the Unicode line/paragraph separators U+2028/U+2029; the latter are
+# built with chr() so the source file carries no literal separator byte (one would shift tooling that
+# counts lines with str.splitlines()).
+_CTX_CONTROL_RE = re.compile("[\x00-\x1f\x7f-\x9f" + chr(0x2028) + chr(0x2029) + "]")
+_CTX_MAX_LEN = 60
+# Amazon product URLs carry the stable ASIN in a /dp/<ASIN> or /gp/product/<ASIN> segment; this is
+# the same pattern scrape_book uses, so the context id matches the ASIN it later records.
+_AMAZON_ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})")
+
+
+def _sanitise_ctx_segment(value: str) -> str:
+    """Return *value* as a log-safe context segment: control-stripped, redacted, length-bounded.
+
+    :param value: A raw site key or URL-derived short id (untrusted).
+    :returns: The cleaned segment, or :data:`SCRAPE_CONTEXT_DEFAULT` when nothing usable remains.
+    """
+    cleaned = redact(_CTX_CONTROL_RE.sub("", value or "")).strip()
+    if len(cleaned) > _CTX_MAX_LEN:
+        cleaned = cleaned[:_CTX_MAX_LEN]
+    return cleaned or SCRAPE_CONTEXT_DEFAULT
+
+
+def short_id_from_url(url: str) -> str:
+    """Return a short identifier for a scrape target: its last non-empty URL path segment.
+
+    A trailing ``.json`` (the Leanpub JSON:API book endpoint) is stripped so the id reads as the
+    bare slug. Query string and fragment are ignored.
+
+    :param url: The target URL (absolute or relative).
+    :returns: The last path segment (``.json`` stripped), or :data:`SCRAPE_CONTEXT_DEFAULT` when the
+        path carries no segment.
+    """
+    segments = [segment for segment in urlsplit(url).path.split("/") if segment]
+    if not segments:
+        return SCRAPE_CONTEXT_DEFAULT
+    segment = segments[-1]
+    if segment.endswith(".json"):
+        segment = segment[: -len(".json")]
+    return segment or SCRAPE_CONTEXT_DEFAULT
+
+
+def scrape_short_id(site: str, url: str) -> str:
+    """Derive a scrape target's short id: the ASIN for amazon, else the last URL path segment.
+
+    :param site: The site key (e.g. ``"amazon"`` / ``"leanpub"``).
+    :param url: The target URL the scrape fetches.
+    :returns: The derived short id (not yet sanitised; :func:`scrape_log_context` sanitises it).
+    """
+    if site == "amazon":
+        match = _AMAZON_ASIN_RE.search(url)
+        if match:
+            return match.group(1)
+    return short_id_from_url(url)
+
+
+@contextmanager
+def scrape_log_context(site: str, url: str) -> Iterator[None]:
+    """Set :data:`scrape_context` to ``<site>:<short-id>`` for the duration of a single scrape.
+
+    Both segments are sanitised (control-stripped, redacted, length-bounded) because the short id
+    is derived from untrusted page/URL data. The ContextVar token is reset in a ``finally`` so the
+    value never leaks past this call (a later sequential scrape on the same task starts clean).
+
+    :param site: The site key the scrape targets.
+    :param url: The URL the scrape fetches, used to derive the short id.
+    :returns: A context manager that yields nothing and restores the previous context on exit.
+    """
+    label = f"{_sanitise_ctx_segment(site)}:{_sanitise_ctx_segment(scrape_short_id(site, url))}"
+    token = scrape_context.set(label)
+    try:
+        yield
+    finally:
+        scrape_context.reset(token)
 
 
 def _prune_old_logs(max_files: int = MAX_LOG_FILES):
-    """Delete the oldest run logs in LOG_DIR beyond the `max_files` most recently modified."""
+    """Delete the oldest run logs in LOG_DIR beyond the `max_files` most recently modified.
+
+    Each run writes two sibling files sharing a stem - ``<stem>.log`` and ``<stem>.report.json``
+    (the machine-readable run report, task 07.0 subtask 03) - so a pruned log takes its report with
+    it; otherwise orphan reports would accumulate unbounded. Pruning is keyed on the ``.log`` files'
+    modification times (the report may not exist for every log, e.g. a ``rotate-cert`` run).
+    """
     log_files = sorted(LOG_DIR.glob("bookscraper_*.log"), key=lambda p: p.stat().st_mtime)
     for old_file in log_files[:-max_files]:
         old_file.unlink(missing_ok=True)
+        old_file.with_name(f"{old_file.stem}.report.json").unlink(missing_ok=True)
+
+
+def _resolve_library_log_level() -> int:
+    """
+    Resolve the level applied to third-party loggers from ``BOOKSCRAPER_LIB_LOG_LEVEL``.
+
+    :returns: The numeric level named by the env var (case-insensitive level name, e.g.
+        ``DEBUG``), or :data:`logging.WARNING` when the var is unset/empty or names an
+        unrecognised level. An invalid value is ignored with a one-line warning rather than
+        raising, so a typo never aborts start-up.
+    """
+    raw = os.environ.get(_LIB_LOG_LEVEL_ENV)
+    if not raw:
+        return _DEFAULT_LIB_LOG_LEVEL
+    candidate = getattr(logging, raw.strip().upper(), None)
+    if isinstance(candidate, int):
+        return candidate
+    logger.warning(
+        "Ignoring invalid %s=%r; expected a level name (DEBUG/INFO/WARNING/ERROR/CRITICAL). "
+        "Defaulting third-party loggers to WARNING.",
+        _LIB_LOG_LEVEL_ENV,
+        raw,
+    )
+    return _DEFAULT_LIB_LOG_LEVEL
 
 
 def configure_logging(level: int = logging.INFO):
     """
-    Write every log record in the process to this run's file under ~/.bookscrapper/logs/ at the
-    given severity, and prune old run logs down to MAX_LOG_FILES.
+    Write every log record in the process to this run's file under ~/.bookscrapper/logs/, set the
+    per-logger levels of the logger hierarchy, and prune old run logs down to MAX_LOG_FILES.
 
-    The handler is attached to the ROOT logger rather than `logger` above: other modules in
-    this package create their own loggers via `logging.getLogger(__name__)` or ad hoc names
-    (database.py, search_utils.py, deduplicate.py, scrape_details.py, commands/search.py) that
-    aren't children of "bookscraper_app", so a handler placed there would miss them. Every
-    logger propagates to the root by default, so attaching there is the only way one call
-    reliably captures all application logging regardless of which logger name a module uses.
+    The redacting file handler is attached to the ROOT logger (never removed; it carries the
+    task 07.0/01 RedactingFilter + RedactingFormatter and the task 07.0/04 ContextFilter), so a
+    record from any logger - the ``bookscraper.*`` hierarchy or a third-party library - reaches it
+    by propagation and is both redacted and stamped with the current per-task scrape context
+    (``[%(ctx)s]``) once on the way out. Levels are set per-logger rather than on the root so
+    library noise never follows ``--log-severity``:
+
+    - the root logger stays at WARNING, so an unclamped third-party logger defaults quiet;
+    - ``logging.getLogger("bookscraper")`` is set to ``level`` - the app's own messages (every
+      module uses ``logging.getLogger(__name__)``, i.e. a ``bookscraper.*`` child) follow
+      ``--log-severity``;
+    - the named third-party loggers (pymongo/httpx/httpcore/anthropic/asyncio) are pinned to
+      WARNING unless ``BOOKSCRAPER_LIB_LOG_LEVEL`` overrides them.
+
+    Idempotent: callable more than once (book_utils imports call it once at INFO; main.py calls
+    it again with the chosen level). The file handler is added - and old logs pruned - only on
+    the first call; the per-logger levels are re-applied on every call.
     """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    root_logger.setLevel(logging.WARNING)
+    logging.getLogger("bookscraper").setLevel(level)
+
+    library_level = _resolve_library_log_level()
+    for name in _THIRD_PARTY_LOGGERS:
+        logging.getLogger(name).setLevel(library_level)
 
     resolved_path = os.path.abspath(str(LOG_FILE_PATH))
     if not any(
@@ -66,7 +354,11 @@ def configure_logging(level: int = logging.INFO):
         for handler in root_logger.handlers
     ):
         file_handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
-        file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        file_handler.setFormatter(RedactingFormatter("%(asctime)s %(levelname)s [%(ctx)s] %(name)s: %(message)s"))
+        # Both filters live on the HANDLER (not a logger) so records propagated from every logger
+        # get both the redaction pass and the per-task scrape-context stamp before formatting.
+        file_handler.addFilter(ContextFilter())
+        file_handler.addFilter(RedactingFilter())
         root_logger.addHandler(file_handler)
         _prune_old_logs()
 
@@ -83,6 +375,11 @@ def print_log(text: str, status: str = "info"):
     Logs the given text with color-coding for console output,
     and plain text for file logs.
     """
+    # Redact at entry so BOTH sinks are covered: the direct sys.stdout write below bypasses the
+    # logging handler (and thus its RedactingFilter), so masking here is the only control on the
+    # console copy. The logged copy is redacted again by the handler filter; redact() is idempotent.
+    text = redact(text)
+
     # Get the appropriate logging method (info, error, warning, etc.)
     log_method = getattr(logger, status.lower(), logger.info)  # Use .lower() for status consistency
 

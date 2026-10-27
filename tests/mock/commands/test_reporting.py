@@ -7,13 +7,16 @@ via tmp_path; no network and no real ~/.bookscrapper or books.json is touched.
 """
 
 import csv
+import json
+import stat
 import time
 from collections import Counter
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
 from bookscraper.commands import _reporting, scrape_urls, search
-from bookscraper.commands._reporting import elapsed_since, format_status_breakdown, write_failed_csv
+from bookscraper.commands._reporting import RunReport, elapsed_since, format_status_breakdown, write_failed_csv
 from bookscraper.scraping.results import ScrapeStatus
 
 MODULE = "bookscraper.commands._reporting"
@@ -369,3 +372,245 @@ def test_elapsed_since_returns_nonnegative_duration():
     delta = elapsed_since(start)
     assert isinstance(delta, float)
     assert delta >= 0
+
+
+# --------------------------------------------------------------------------- #
+# RunReport (task 07.0 subtask 03)
+# --------------------------------------------------------------------------- #
+def _fake_ai_runtime(**overrides) -> SimpleNamespace:
+    """Build a duck-typed stand-in for AIFallbackRuntime with the attributes RunReport reads."""
+    totals = overrides.pop(
+        "totals",
+        {
+            "requests": 2,
+            "replayed": 0,
+            "input_tokens": 100,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "output_tokens": 30,
+        },
+    )
+    defaults = {
+        "cap": SimpleNamespace(used=2, hit=True),
+        "filled": 3,
+        "dropped": 1,
+        "usage": SimpleNamespace(totals=lambda: totals),
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_report_written_next_to_log_with_same_stem(tmp_path, monkeypatch):
+    """
+    [Local] reporting: verifies write() creates <log-stem>.report.json next to the run log.
+
+    Scenario:
+        Given book_utils.LOG_FILE_PATH pointed at tmp_path/bookscraper_X.log
+        When a finalized RunReport.write() is called with no extra path
+        Then tmp_path/bookscraper_X.report.json exists, is owner-only (0600), and parses to a
+        schema-1 document carrying the command and exit code.
+
+    Boundaries:
+        - Real file I/O via tmp_path; no real ~/.bookscrapper is touched. The --report extra copy
+          is a separate test.
+
+    On failure, first check:
+        - _default_report_path() deriving the sibling path from book_utils.LOG_FILE_PATH's stem.
+    """
+    log_path = tmp_path / "bookscraper_20260101_000000_42.log"
+    monkeypatch.setattr(_reporting.book_utils, "LOG_FILE_PATH", log_path)
+
+    report = RunReport("search", ["search", "--store-backend", "json"])
+    report.finalize(0)
+    report.write()
+
+    report_path = tmp_path / "bookscraper_20260101_000000_42.report.json"
+    assert report_path.exists()
+    assert stat.S_IMODE(report_path.stat().st_mode) == 0o600
+    document = json.loads(report_path.read_text(encoding="utf-8"))
+    assert document["schema"] == 1
+    assert document["command"] == "search"
+    assert document["exit_code"] == 0
+    assert document["duration_s"] is not None
+    assert set(document["versions"]) == {"bookscraper", "python", "playwright", "chromium"}
+
+
+def test_report_flag_writes_additional_copy(tmp_path, monkeypatch):
+    """
+    [Local] reporting: verifies write(extra_path) writes both the default and the extra copy.
+
+    Scenario:
+        Given a finalized RunReport and an explicit --report path
+        When write(extra_path) is called
+        Then both the log-sibling report and the extra copy exist and parse to the same document.
+
+    Boundaries:
+        - Both targets written atomically; a write failure on either is the best-effort test.
+
+    On failure, first check:
+        - The targets list (default + extra_path) in RunReport.write.
+    """
+    log_path = tmp_path / "bookscraper_run.log"
+    monkeypatch.setattr(_reporting.book_utils, "LOG_FILE_PATH", log_path)
+    extra = tmp_path / "out" / "run-report.json"
+
+    report = RunReport("scrape-urls", ["scrape-urls", "--store-backend", "json"])
+    report.finalize(0)
+    report.write(str(extra))
+
+    default_copy = json.loads((tmp_path / "bookscraper_run.report.json").read_text(encoding="utf-8"))
+    extra_copy = json.loads(extra.read_text(encoding="utf-8"))
+    assert default_copy == extra_copy
+    assert extra_copy["command"] == "scrape-urls"
+
+
+def test_report_counts_match_scrape_results():
+    """
+    [Local] reporting: verifies record_status tallies per-site status counts for the report.
+
+    Scenario:
+        Given SUCCESS x2 and DUPLICATE for amazon and BLOCKED for oreilly
+        When they are recorded and the report is rendered
+        Then per_site is {"amazon": {SUCCESS: 2, DUPLICATE: 1}, "oreilly": {BLOCKED: 1}}.
+
+    Boundaries:
+        - Pure accumulation; no I/O. A cron wrapper decides alert-or-not from per_site + exit_code.
+
+    On failure, first check:
+        - RunReport.record_status's per-site Counter keyed by ScrapeStatus.value.
+    """
+    report = RunReport("search", ["search"])
+    report.record_status("amazon", ScrapeStatus.SUCCESS)
+    report.record_status("amazon", ScrapeStatus.SUCCESS)
+    report.record_status("amazon", ScrapeStatus.DUPLICATE)
+    report.record_status("oreilly", ScrapeStatus.BLOCKED)
+
+    per_site = report.to_dict()["per_site"]
+    assert per_site == {
+        "amazon": {"SUCCESS": 2, "DUPLICATE": 1},
+        "oreilly": {"BLOCKED": 1},
+    }
+
+
+def test_report_argv_redacted():
+    """
+    [Local] reporting: verifies a secret passed on the command line is redacted in argv.
+
+    Scenario:
+        Given argv carrying a mongodb+srv URI with an inline password
+        When a RunReport is built
+        Then report.argv masks the userinfo (no plaintext password) and keeps the other tokens.
+
+    Boundaries:
+        - Only argv redaction; the redact() rule set is unit-tested in test_book_utils.
+
+    On failure, first check:
+        - The [redact(token) for token in argv] comprehension in RunReport.__init__.
+    """
+    secret_uri = "mongodb+srv://user:SuperSecret@cluster0.mongodb.net/db"
+    report = RunReport("search", ["search", "--store-backend", "mongo", secret_uri])
+    joined = " ".join(report.argv)
+    assert "SuperSecret" not in joined
+    assert "<redacted>" in joined
+    assert "--store-backend" in report.argv
+
+
+def test_report_ai_fallback_block_present_when_attached():
+    """
+    [Local] reporting: verifies an attached AI-fallback runtime yields the ai_fallback block.
+
+    Scenario:
+        Given a duck-typed runtime (2 requests, cap hit, 3 filled, 1 dropped, token totals)
+        When attached and the report rendered
+        Then ai_fallback carries requests/filled/dropped/cap_hit and the token totals dict - and no
+        API key or prices.
+
+    Boundaries:
+        - Block shape only; the counts come straight from the runtime/UsageAccumulator.
+
+    On failure, first check:
+        - RunReport._ai_fallback_block reading cap.used/filled/dropped/cap.hit/usage.totals().
+    """
+    report = RunReport("scrape-urls", ["scrape-urls"])
+    report.attach_ai_fallback(_fake_ai_runtime())
+    block = report.to_dict()["ai_fallback"]
+    assert block["requests"] == 2
+    assert block["filled"] == 3
+    assert block["dropped"] == 1
+    assert block["cap_hit"] is True
+    assert block["tokens"]["input_tokens"] == 100
+    assert "key" not in block and "price" not in block
+
+
+def test_report_ai_fallback_block_absent_when_not_run():
+    """
+    [Local] reporting: verifies the ai_fallback block is null when the fallback never ran.
+
+    Scenario:
+        Given a report with no AI-fallback runtime attached (or attached None)
+        When rendered
+        Then ai_fallback is None.
+
+    Boundaries:
+        - The None guard in _ai_fallback_block.
+
+    On failure, first check:
+        - attach_ai_fallback(None) and the None return in _ai_fallback_block.
+    """
+    report = RunReport("scrape-urls", ["scrape-urls"])
+    assert report.to_dict()["ai_fallback"] is None
+    report.attach_ai_fallback(None)
+    assert report.to_dict()["ai_fallback"] is None
+
+
+def test_report_write_is_best_effort_on_oserror(tmp_path, monkeypatch):
+    """
+    [Local] reporting: verifies a write OSError is swallowed with a warning, not raised.
+
+    Scenario:
+        Given atomic_write_bytes patched to raise OSError
+        When RunReport.write() is called
+        Then no exception propagates and print_log is called with a warning.
+
+    Boundaries:
+        - The write path's best-effort contract; main()'s finally has its own guard too.
+
+    On failure, first check:
+        - The try/except OSError around atomic_write_bytes in RunReport.write.
+    """
+    log_path = tmp_path / "bookscraper_run.log"
+    monkeypatch.setattr(_reporting.book_utils, "LOG_FILE_PATH", log_path)
+    report = RunReport("migrate", ["migrate"])
+    report.finalize(0)
+
+    with (
+        patch(f"{MODULE}.atomic_write_bytes", side_effect=OSError("no space")),
+        patch(f"{MODULE}.print_log") as mock_print,
+    ):
+        report.write()  # must not raise
+
+    assert mock_print.called
+
+
+def test_report_chromium_version_is_best_effort_null(monkeypatch):
+    """
+    [Local] reporting: verifies an unavailable Chromium version yields null, never a raise.
+
+    Scenario:
+        Given the chromium probe raising internally (simulated via a broken playwright import path)
+        When _chromium_version() is called
+        Then it returns None rather than propagating.
+
+    Boundaries:
+        - Only the chromium best-effort guard; the other versions come from importlib metadata.
+
+    On failure, first check:
+        - The broad except in _chromium_version returning None.
+    """
+
+    def _boom(*_args, **_kwargs):
+        """Force the chromium probe's json.loads to blow up so the except branch is taken."""
+        raise ValueError("boom")
+
+    monkeypatch.setattr(_reporting.json, "loads", _boom)
+    assert _reporting._chromium_version() is None

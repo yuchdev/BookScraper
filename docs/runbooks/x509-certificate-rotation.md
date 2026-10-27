@@ -408,3 +408,73 @@ uv run bookscraper rotate-cert --check
 | `~/.bookscrapper/settings.json is a symlink` (warning) | `settings.json` is a symbolic link | `ls -la ~/.bookscrapper/settings.json` | Replace with a regular file: `cp settings.json settings.json.bak && rm settings.json && cp settings.json.bak settings.json && chmod 600 settings.json` |
 | `~/.bookscrapper/settings.json is not owned by the current user` (warning) | File owned by a different UID | `ls -ln ~/.bookscrapper/settings.json` | Recreate the file as your own user: copy, delete original, `chmod 600` |
 | `Skipping cert pruning: the active certificate could not be resolved` | `ConfigError` from `config.resolve_mongo_connection()` after repointing | Fix `settings.json` errors (see ConfigError rows above), then run `rotate-cert` again | Resolve the `settings.json` issue first; pruning skips rather than deleting on uncertainty |
+
+---
+
+## Behavior reference
+
+This section documents the code-level behavior of `commands/rotate_cert.py` and
+`backends/mongo/cert_rotation.py` for developers and on-call engineers.
+
+### Verify-before-repoint
+
+After the new PEM is written but *before* `settings.json` is repointed,
+`cert_rotation.verify_certificate()` pings Atlas with the new cert. Verification builds a client
+**only** via `backends/mongo/client.build_mongo_client(uri, new_cert, TLS_CA_FILE)` and pings via
+`client.ping` — reusing the single client factory so it inherits the redaction contract (a
+failure surfaces as a `MongoConnectionError` carrying only the pymongo `code`/`codeName`, never
+the URI, host, DB user, cert contents, or Atlas response body).
+
+The URI is `config.resolve_mongo_connection()[0]`; if none is configured, verification is skipped
+with a status line. Atlas can take a short while to propagate a freshly issued cert, so a
+connection failure is retried up to `--verify-attempts N` (default `5`) times with a fixed delay,
+closing the client after every attempt.
+
+On **final** failure: `settings.json` is **not** repointed (the previously configured cert keeps
+working), the new PEM is left on disk, a `WARNING:` line names the new path and the redacted
+error code, and the command exits `1`. If `config.resolve_mongo_connection()` raises `ConfigError`,
+rotation fails loudly (`RotationError`, exit `1`) without repointing.
+
+### Old-certificate pruning
+
+After a successful (or skipped) verification, `cert_rotation.prune_old_certificates()` removes
+superseded certs, keeping only the newest `--keep N` (default `2`, must be ≥ 1) plus the active
+cert.
+
+The **protected** set is: `{cert just written} ∪ {cert resolved by config after repointing} ∪
+{TLS_CERT_FILE if set}`. Candidates and protected paths are compared canonically (`Path.resolve()`)
+so a symlink-, relative-, or `..`-spelled reference to the active cert is never deleted.
+
+Candidates come **only** from `config.CONFIG_DIR.glob("X509-cert-*.pem")` — a `--output` cert
+written elsewhere is never pruned. The matched glob path is unlinked directly (a symlink
+candidate's target outside the directory is left alone); a failed unlink is a `WARNING:` status
+line, not a crash.
+
+Pruning is **skipped entirely** (with a status line) if the active cert cannot be resolved
+(`ConfigError`). `--no-prune` disables pruning. `--no-verify` also suppresses pruning: without a
+positive authentication signal, old certs are kept to avoid a self-inflicted lockout.
+
+### Expiry and pre-flight warning
+
+`cert_rotation.read_certificate_expiry()` and `cert_rotation.cert_expiry_warning()` parse **only
+the first `CERTIFICATE` PEM block** of the combined key+cert file (via the `cryptography`
+package). The private-key block is never read or logged; a missing file / absent-or-unparseable
+certificate block raises `RotationError` naming only the file path, never its contents.
+
+`resolve_store_backend("mongo")` runs a non-raising pre-flight call to
+`cert_rotation.cert_expiry_warning(cert_path, warn_days=30)` and `print_log`s any warning
+*before* connecting; a parse failure there is a warning, never a crash.
+
+After a successful (or skipped) verification, the command also prints the **new** cert's expiry
+date, parsed from the just-written file — this line appears right after
+`Certificate written to <path>` and before the verification/repoint status lines.
+
+### Atlas error 8000 status — UNVERIFIED
+
+Earlier revisions stated as fact that Atlas rejects this cluster's X.509 certificates
+server-side. That conclusion is not currently reproducible and was never backed by a recorded
+run. As of 2026-09-23, `~/.bookscrapper/` contains only `logs/` (no `settings.json`, no
+`X509-cert-*.pem`), so no client certificate is ever presented to Atlas, and the eight
+`tests/integration/` tests **skip** at the first gate. The root cause is still open —
+re-diagnose from a real run before repeating the "server-side issue" claim. The `xfail(strict=False)`
+markers on the x509 integration legs are inert until credentials return.

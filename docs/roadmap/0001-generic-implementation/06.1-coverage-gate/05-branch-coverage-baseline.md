@@ -1,7 +1,7 @@
 # 05 - Branch coverage baseline
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** [03-per-module-floor.md](/docs/roadmap/0001-generic-implementation/06.1-coverage-gate/03-per-module-floor.md)
 **Role:** Testing Expert
 
@@ -26,4 +26,5 @@
 
 ## Success criteria
 
-- [ ] `branch = true` is committed and the gate is green.
+- [x] `branch = true` is committed and the gate is green (combined total 98.14%, `fail_under = 90`
+  unchanged, per-module floor passes; baseline recorded in `docs/test/code_test_coverage.md`).
