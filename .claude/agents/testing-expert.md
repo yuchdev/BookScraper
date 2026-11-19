@@ -22,7 +22,7 @@ instead of the real hash. `extract_year_from_date` failing to recognize a site's
 is re-fetched forever. A `site_constants` selector that silently stops matching fills every row
 with `None`/`"N/A"` while the run still reports "N books scraped". And a change to whether
 `scrape_book` returns a dict or a `(None, "FAILED")`/`(None, "DUPLICATE")` tuple silently reroutes
-real books into the failed/duplicate CSV, because the caller type-switches on that shape in
+real books into the failed/duplicate report (`failed_books.json`), because the caller type-switches on that shape in
 `commands/scrape_urls.py`'s `run()`. The downstream decision at stake in every case is "is this book
 already known, and which books are new since the last run?"
 

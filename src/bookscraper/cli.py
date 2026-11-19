@@ -15,15 +15,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     scrape_parser = subparsers.add_parser(
         "scrape-urls",
-        help="Scrape book details from a CSV of known URLs.",
-        description="Scrape book details from URLs listed in a CSV file (via Playwright).",
+        help="Scrape book details from a JSON file of known URLs.",
+        description="Scrape book details from URLs listed in a JSON file (via Playwright).",
     )
     scrape_parser.add_argument(
         "-f",
         "--input-file",
         dest="input_file",
         required=True,
-        help="Path to the CSV file containing URLs to scrape (must have a 'url' column).",
+        help="Path to a JSON file holding an array of book documents (the books.json / MongoDB "
+        "schema); each document's 'url' field is scraped, other fields are ignored.",
     )
     scrape_parser.add_argument(
         "--store-backend",

@@ -139,24 +139,34 @@ above). `backends/__init__.py` re-exports `StorageBackend`, `MongoBackend`, `Jso
   functions (`save_books_to_mongodb`, `check_book_exists_in_db`, `check_amazon_asin_exists_in_db`) plus
   `backends/mongo/deduplicate.py`'s `leanpub_prescrape_deduplicate`.
 - **`json`** (`storage.JsonBackend`, backed by `backends/local/store.py`) — a local `books.json` at the repo root:
-  one JSON array of book documents, schema-identical to what a MongoDB `insert_one` would receive. Unlike the CSV
-  output it replaces (a disposable, per-run-overwritten dump that was never read back), `books.json` **persists
-  and accumulates across runs**, and enforces the same uniqueness-by-`hash` semantics as MongoDB's unique index —
+  one JSON array of book documents, schema-identical to what a MongoDB `insert_one` would receive (the only difference
+  is MongoDB's own server-assigned `_id`, which never appears in `books.json`). `books.json` **persists and
+  accumulates across runs**, and enforces the same uniqueness-by-`hash` semantics as MongoDB's unique index —
   a book saved in one run is still there, and still correctly detected as a duplicate, in the next. This is what
   makes the two backends behave identically from the caller's perspective, and what "local storage matches
   database content one-to-one" means in practice.
-- Diagnostic reports that aren't database content — `failed_urls.csv` / `failed_books.csv` / `other_links.csv` —
-  are unrelated to `--store-backend` and are always written as CSV best-effort by both subcommands, since MongoDB
-  itself never stores failed/skipped attempts either.
+- Diagnostic reports that aren't database content — `failed_books.json` (`{url, status}` records) /
+  `other_links.json` (`{url}`) from `scrape-urls`, `failed_urls.json` (`{url, site, error}`) from `search` — are
+  unrelated to `--store-backend` and are always written best-effort by both subcommands, since MongoDB itself never
+  stores failed/skipped attempts either. They are overwritten each run and not written at all when empty.
+- **There is no CSV anywhere** — input, store, and reports are all JSON. Every JSON file the tool writes goes through
+  `book_utils.dumps_documents()` (one top-level array of objects, 2-space indent, UTF-8 verbatim, non-JSON-native
+  values stringified), so `books.json` and the reports can't drift into different on-disk formats; reports are
+  written via `book_utils.save_json_report()`.
+- **`scrape-urls` input** (`-f`/`--input-file`) is a JSON array of book documents in that same schema — so a
+  `books.json` is itself valid input. Only each document's `url` is used; other fields are ignored.
+  `commands/scrape_urls.py`'s `load_input_urls()` rejects the **whole file** (`InputFileError` → critical log +
+  `print_log` error + exit 1) if it's missing, not valid JSON, not an array, or any entry lacks a non-empty string
+  `url` — the same fail-loudly rule as the rest of the project, never a silent per-entry skip.
 
 ## Running
 
 ```bash
 # `uv sync` (see Setup above) already registers the `bookscraper` console script inside .venv.
 
-# scrape-urls: scrapes a fixed list of URLs from a CSV (works for all 4 sites via Playwright).
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend mongo
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
+# scrape-urls: scrapes a fixed list of URLs from a JSON file of book documents (all 4 sites, via Playwright).
+uv run bookscraper scrape-urls -f content/urls.json --store-backend mongo
+uv run bookscraper scrape-urls -f content/urls.json --store-backend json
 
 # search: searches sites for books matching queries defined in parameters.py, then scrapes details.
 uv run bookscraper search --store-backend mongo
@@ -174,7 +184,7 @@ uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/
 uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
 
 # Without `uv run` (inside an activated .venv), or via `python -m` directly:
-python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
+python -m bookscraper scrape-urls -f content/urls.json --store-backend json
 python -m bookscraper search --store-backend json
 python -m bookscraper rotate-cert
 python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/x/9780123456789/"
@@ -289,13 +299,14 @@ Root-level entry points and shared utilities:
 - **`book_utils.py`** — `print_log()` (color-coded console + plain-text file logging), `configure_logging(level)`
   (attaches a single `FileHandler` to the **root** logger, pointed at a fresh per-run file under
   `~/.bookscrapper/logs/` — see below), pre-flight checks (`check_local_write_permission`, `check_mongodb_connection`),
-  `extract_year_from_date` (handles several site-specific date formats), `hash_book`. Stays at the package root
+  `extract_year_from_date` (handles several site-specific date formats), `hash_book`, and the shared JSON
+  serializer/report writer (`dumps_documents`, `save_json_report`). Stays at the package root
   since every subpackage below imports from it and it has no backend/scraping-specific logic of its own.
 
 **`commands/`** — the CLI workflows. The two scraping ones each call `resolve_store_backend()` (from `backends/`) once
 up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
-- **`scrape_urls.py`** — the "I already have URLs" workflow: takes a CSV of book URLs, buckets them by site via
-  `identify_website()`, and scrapes each in batches of 10 concurrent Playwright tasks via
+- **`scrape_urls.py`** — the "I already have URLs" workflow: takes a JSON array of book documents (see Storage
+  backend above), buckets their URLs by site via `identify_website()`, and scrapes each in batches of 10 concurrent Playwright tasks via
   `scraping.scrape_details.scrape_book()`, passing it the resolved `StorageBackend` for inline duplicate checks.
 - **`search.py`** — the "discover new books" workflow: for each site in `SITES_TO_SCRAPE` and each query in
   `SEARCH_QUERIES` (both in `scraping/parameters.py`), it searches for candidate books, deduplicates them against
@@ -379,9 +390,9 @@ filters what reaches the log file, not the console, which always prints everythi
   returned `None` — a pre-existing, cosmetic logging bug (the real success/failure state is still reported
   correctly to the caller via the return value). Not yet fixed; this file wasn't in scope of the CLI restructuring
   that touched its callers.
-- Curated input URL lists (`content/urls.csv`, `content/urls_amazon.csv`) live under `content/` and are committed —
+- Curated input URL lists (`content/urls.json`, `content/urls_amazon.json`) live under `content/` and are committed —
   they're hand-maintained candidate lists for `scrape-urls -f`, not run output. Actual run artifacts (`books.json`
-  for `--store-backend json`; `failed_books.csv`, `failed_urls.csv`, `other_links.csv` diagnostics regardless of
+  for `--store-backend json`; `failed_books.json`, `failed_urls.json`, `other_links.json` diagnostics regardless of
   backend) are gitignored and written to the repo root by default; don't add new default output filenames without
   gitignoring them too. Unlike the diagnostics, `books.json` is meant to persist across runs — don't delete it
   casually, it's the entire point of the `json` backend (see Storage backend above).

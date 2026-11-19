@@ -14,7 +14,7 @@
   - Honors `Crawl-delay` when present, by lowering that host's `RateLimiter` rate to `1 / crawl_delay` if that's
     slower than configured.
 - A disallowed URL → `ScrapeResult(status=SKIPPED_ROBOTS)`. Add that member to `ScrapeStatus` (task 03.0 subtask
-  02). It is counted in the summary and written to `failed_books.csv`.
+  02). It is counted in the summary and written to `failed_books.json`.
 - **Opt-out:** `--ignore-robots` flag on `scrape-urls` and `search` (task 05.0), off by default. When set, print a
   one-time warning and record it in the run report (task 07.0 subtask 03).
 - The Leanpub JSON API paths (`/api/v1/...`) go through the same check. If `robots.txt` disallows them, the check

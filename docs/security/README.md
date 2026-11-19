@@ -34,8 +34,9 @@ for point-in-time reviews.
 >
 > **1. Scope.** Two locally-run CLI entry points (`src/scrape_existing_books.py`,
 > `src/bookscraper/search_and_scrape.py`). Trust boundaries: the operator-supplied URL
-> CSV; four third-party sites/APIs the project does not control; MongoDB Atlas over
-> TLS; the local filesystem (CSV exports, `~/.bookscrapper/logs/*.log`, `.env`,
+> JSON input file; four third-party sites/APIs the project does not control; MongoDB Atlas over
+> TLS; the local filesystem (`books.json` and the JSON diagnostic reports,
+> `~/.bookscrapper/logs/*.log`, `.env`,
 > `~/.bookscrapper/`).
 >
 > **2. Assets.** `MONGODB_URI` with inline Atlas credentials (from `.env`, falling back
@@ -45,7 +46,7 @@ for point-in-time reviews.
 > and third-party copyrighted descriptions; the per-run log files under `~/.bookscrapper/logs/`.
 >
 > **3. Threat actors.** A compromised or hostile scrape target serving crafted
-> markup/JSON; anyone who can write the input URL CSV; anyone with read access to
+> markup/JSON; anyone who can write the input URL JSON file; anyone with read access to
 > `~/.bookscrapper/`, since up to 10 retained run logs can accumulate sensitive data over time
 > (all severities from every module's logger land there, gated only by `--log-severity`); a
 > network attacker on the Atlas path.
@@ -54,18 +55,18 @@ for point-in-time reviews.
 > - *Spoofing* - `identify_website()` routes on a bare substring match, so a URL merely
 >   containing `amazon.com` is parsed with Amazon's selectors. No scheme/host allowlist;
 >   `validators` is pinned in `requirements.txt` but never imported.
-> - *Tampering* - scraped values reach MongoDB documents and CSV rows unvalidated;
->   `$`-prefixed and dotted keys and leading `=`/`+`/`-`/`@` cells are unguarded.
+> - *Tampering* - scraped values reach MongoDB documents and `books.json` unvalidated;
+>   `$`-prefixed and dotted keys are unguarded. (CSV formula injection via leading
+>   `=`/`+`/`-`/`@` cells no longer applies: no input or output is CSV any more.)
 >   `scrape_details.py:60-65` strips HTML from `about_the_book` with regex, not a parser.
 > - *Repudiation* - each run log under `~/.bookscrapper/logs/` has no integrity control
 >   (`_prune_old_logs()` silently deletes the oldest beyond the 10-file cap with no archival).
 > - *Information disclosure* - `exc_info=True` logging of MongoDB failures can write
 >   connection strings containing credentials into the run log; since `configure_logging()`
 >   attaches the file handler to the root logger, every module's log calls (not just
->   `book_utils.print_log()`) now reach this file, widening what could land there. Run-artifact
->   CSVs
->   (`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`,
->   `failed_urls.csv`) are now gitignored rather than committed; only the curated,
+>   `book_utils.print_log()`) now reach this file, widening what could land there. Run
+>   artifacts (`books.json`, `failed_books.json`, `other_links.json`, `failed_urls.json`)
+>   are gitignored rather than committed; only the curated,
 >   hand-maintained input lists under `content/` are tracked.
 > - *Denial of service* - `get_leanpub_search_results_via_api` paginates `while True`
 >   with no cap and accumulates in memory; `search_and_scrape` gathers every detail fetch

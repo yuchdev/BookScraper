@@ -5,18 +5,19 @@ asyncio.sleep) is mocked; no network, no browser, and no real ~/.bookscrapper or
 books.json is ever touched because resolve_store_backend is always patched.
 """
 
-import csv
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 
 from bookscraper.commands.scrape_urls import (
+    InputFileError,
     identify_website,
+    load_input_urls,
     run,
-    save_failed_urls_to_csv,
-    save_other_links_to_csv,
+    save_failed_urls_to_json,
+    save_other_links_to_json,
 )
 
 MODULE = "bookscraper.commands.scrape_urls"
@@ -40,76 +41,146 @@ def test_identify_website_all_branches(url: str, expected: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# save_failed_urls_to_csv  (scrape_urls variant: csv.writer, (url, status) tuples)
+# save_failed_urls_to_json  (scrape_urls variant: (url, status) tuples -> objects)
 # --------------------------------------------------------------------------- #
 def test_save_failed_urls_empty_creates_no_file(tmp_path) -> None:
-    target = tmp_path / "failed_books.csv"
-    save_failed_urls_to_csv([], filename=str(target))
+    target = tmp_path / "failed_books.json"
+    save_failed_urls_to_json([], filename=str(target))
     assert not target.exists()
 
 
-def test_save_failed_urls_writes_header_and_rows(tmp_path) -> None:
-    target = tmp_path / "failed_books.csv"
+def test_save_failed_urls_writes_json_records(tmp_path) -> None:
+    target = tmp_path / "failed_books.json"
     rows = [
         ("https://leanpub.com/a", "DUPLICATE"),
         ("https://www.amazon.com/dp/1", "FAILED"),
         ("https://example.com/x", "UNKNOWN_ERROR"),
     ]
-    save_failed_urls_to_csv(rows, filename=str(target))
+    save_failed_urls_to_json(rows, filename=str(target))
 
-    with open(target, encoding="utf-8", newline="") as fh:
-        read_rows = list(csv.reader(fh))
-
-    assert read_rows[0] == ["url", "status"]
-    assert read_rows[1:] == [list(r) for r in rows]
+    assert json.loads(target.read_text(encoding="utf-8")) == [{"url": u, "status": st} for u, st in rows]
 
 
-def test_save_failed_urls_open_failure_is_swallowed(tmp_path) -> None:
-    target = tmp_path / "failed_books.csv"
-    with patch("builtins.open", side_effect=OSError("disk full")):
+def test_save_failed_urls_write_failure_is_swallowed(tmp_path) -> None:
+    target = tmp_path / "failed_books.json"
+    with patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
         # Must not propagate: the caller relies on best-effort diagnostic writes.
-        save_failed_urls_to_csv([("u", "FAILED")], filename=str(target))
+        save_failed_urls_to_json([("u", "FAILED")], filename=str(target))
     assert not target.exists()
 
 
 # --------------------------------------------------------------------------- #
-# save_other_links_to_csv  (csv.writer, single "url" column)
+# save_other_links_to_json  ({"url": ...} objects)
 # --------------------------------------------------------------------------- #
 def test_save_other_links_empty_creates_no_file(tmp_path) -> None:
-    target = tmp_path / "other_links.csv"
-    save_other_links_to_csv([], filename=str(target))
+    target = tmp_path / "other_links.json"
+    save_other_links_to_json([], filename=str(target))
     assert not target.exists()
 
 
-def test_save_other_links_writes_header_and_rows(tmp_path) -> None:
-    target = tmp_path / "other_links.csv"
+def test_save_other_links_writes_json_records(tmp_path) -> None:
+    target = tmp_path / "other_links.json"
     links = ["https://example.com/a", "https://example.org/b"]
-    save_other_links_to_csv(links, filename=str(target))
+    save_other_links_to_json(links, filename=str(target))
 
-    with open(target, encoding="utf-8", newline="") as fh:
-        read_rows = list(csv.reader(fh))
-
-    assert read_rows[0] == ["url"]
-    assert read_rows[1:] == [[link] for link in links]
+    assert json.loads(target.read_text(encoding="utf-8")) == [{"url": link} for link in links]
 
 
-def test_save_other_links_open_failure_is_swallowed(tmp_path) -> None:
-    target = tmp_path / "other_links.csv"
-    with patch("builtins.open", side_effect=OSError("read-only fs")):
-        save_other_links_to_csv(["https://example.com/a"], filename=str(target))
+def test_save_other_links_write_failure_is_swallowed(tmp_path) -> None:
+    target = tmp_path / "other_links.json"
+    with patch("pathlib.Path.write_text", side_effect=OSError("read-only fs")):
+        save_other_links_to_json(["https://example.com/a"], filename=str(target))
     assert not target.exists()
+
+
+# --------------------------------------------------------------------------- #
+# load_input_urls
+# --------------------------------------------------------------------------- #
+def _write_json(tmp_path, payload, name: str = "urls.json"):
+    target = tmp_path / name
+    target.write_text(json.dumps(payload), encoding="utf-8")
+    return target
+
+
+def _write_input(tmp_path, urls):
+    """An input file of minimal book documents, one per URL."""
+    return _write_json(tmp_path, [{"title": f"Book {i}", "url": url} for i, url in enumerate(urls)])
+
+
+def test_load_input_urls_reads_url_field_and_ignores_other_fields(tmp_path) -> None:
+    path = _write_json(
+        tmp_path,
+        [
+            {"title": "A", "authors": ["X"], "hash": "h1", "url": "https://leanpub.com/a"},
+            {"url": "  https://www.amazon.com/dp/1  "},
+        ],
+    )
+    assert load_input_urls(str(path)) == ["https://leanpub.com/a", "https://www.amazon.com/dp/1"]
+
+
+def test_load_input_urls_accepts_empty_array(tmp_path) -> None:
+    assert load_input_urls(str(_write_json(tmp_path, []))) == []
+
+
+def test_load_input_urls_accepts_utf8_bom(tmp_path) -> None:
+    path = tmp_path / "bom.json"
+    path.write_bytes(b"\xef\xbb\xbf" + json.dumps([{"url": "https://leanpub.com/a"}]).encode())
+    assert load_input_urls(str(path)) == ["https://leanpub.com/a"]
+
+
+def test_load_input_urls_accepts_books_json_store_output(tmp_path) -> None:
+    # A books.json written by the json backend is itself valid scrape-urls input.
+    from bookscraper.book_utils import dumps_documents
+
+    path = tmp_path / "books.json"
+    path.write_text(dumps_documents([{"title": "T", "hash": "h", "url": "https://leanpub.com/t"}]), encoding="utf-8")
+    assert load_input_urls(str(path)) == ["https://leanpub.com/t"]
+
+
+def test_load_input_urls_missing_file_raises(tmp_path) -> None:
+    with pytest.raises(InputFileError, match="was not found"):
+        load_input_urls(str(tmp_path / "nope.json"))
+
+
+def test_load_input_urls_invalid_json_raises(tmp_path) -> None:
+    path = tmp_path / "bad.json"
+    path.write_text("url\nhttps://leanpub.com/a\n", encoding="utf-8")  # an old CSV, say
+    with pytest.raises(InputFileError, match="Could not parse"):
+        load_input_urls(str(path))
+
+
+def test_load_input_urls_unreadable_file_raises(tmp_path) -> None:
+    path = tmp_path / "binary.json"
+    path.write_bytes(b"\xff\xfe\x00garbage")
+    with pytest.raises(InputFileError, match="Could not read"):
+        load_input_urls(str(path))
+
+
+def test_load_input_urls_top_level_object_raises(tmp_path) -> None:
+    with pytest.raises(InputFileError, match="must contain an array"):
+        load_input_urls(str(_write_json(tmp_path, {"url": "https://leanpub.com/a"})))
+
+
+@pytest.mark.parametrize(
+    "bad_entry",
+    [
+        {"link": "https://leanpub.com/a"},  # no url key
+        {"url": ""},
+        {"url": "   "},
+        {"url": None},
+        {"url": 42},
+        "https://leanpub.com/a",  # a bare string, not a document
+    ],
+)
+def test_load_input_urls_bad_entry_rejects_whole_file(tmp_path, bad_entry) -> None:
+    path = _write_json(tmp_path, [{"url": "https://leanpub.com/ok"}, bad_entry])
+    with pytest.raises(InputFileError, match="Entry #1"):
+        load_input_urls(str(path))
 
 
 # --------------------------------------------------------------------------- #
 # helpers for run()
 # --------------------------------------------------------------------------- #
-def _write_csv(tmp_path, urls, header: str = "url"):
-    target = tmp_path / "urls.csv"
-    lines = [header, *urls]
-    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return target
-
-
 def _make_playwright_factory():
     """Builds an async_playwright() stand-in.
 
@@ -135,8 +206,8 @@ def _make_playwright_factory():
 # run() - early-exit / error branches
 # --------------------------------------------------------------------------- #
 async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> None:
-    csv_path = _write_csv(tmp_path, ["https://example.com/book"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    json_path = _write_input(tmp_path, ["https://example.com/book"])
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     pw_factory, _browser = _make_playwright_factory()
@@ -144,8 +215,8 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> N
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend) as resolve,
         patch(f"{MODULE}.async_playwright", pw_factory),
-        patch(f"{MODULE}.save_other_links_to_csv") as save_other,
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.save_other_links_to_json") as save_other,
+        patch(f"{MODULE}.save_failed_urls_to_json") as save_failed,
         pytest.raises(SystemExit) as exc_info,
     ):
         await run(args)
@@ -154,14 +225,14 @@ async def test_run_no_valid_urls_saves_other_links_and_exits_zero(tmp_path) -> N
     resolve.assert_called_once_with("json")
     # The single "other" URL is handed to the skipped-links writer.
     save_other.assert_called_once_with(["https://example.com/book"])
-    # Never reaches the browser section, never saves books, never writes failed CSV.
+    # Never reaches the browser section, never saves books, never writes the failed report.
     pw_factory.assert_not_called()
     save_failed.assert_not_called()
     backend.save_books.assert_not_called()
 
 
 async def test_run_missing_input_file_exits_one(tmp_path) -> None:
-    missing = tmp_path / "does_not_exist.csv"
+    missing = tmp_path / "does_not_exist.json"
     args = SimpleNamespace(input_file=str(missing), store_backend="json")
 
     backend = MagicMock()
@@ -175,9 +246,9 @@ async def test_run_missing_input_file_exits_one(tmp_path) -> None:
     backend.save_books.assert_not_called()
 
 
-async def test_run_missing_url_column_exits_one(tmp_path) -> None:
-    csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"], header="link")
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+async def test_run_entry_without_url_exits_one(tmp_path) -> None:
+    json_path = _write_json(tmp_path, [{"link": "https://leanpub.com/a"}])
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     with (
@@ -190,14 +261,14 @@ async def test_run_missing_url_column_exits_one(tmp_path) -> None:
     backend.save_books.assert_not_called()
 
 
-async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
-    csv_path = _write_csv(tmp_path, ["https://leanpub.com/a"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+async def test_run_unparseable_json_exits_one(tmp_path) -> None:
+    json_path = tmp_path / "urls.json"
+    json_path.write_text("[{not json", encoding="utf-8")
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     with (
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
-        patch(f"{MODULE}.pd.read_csv", side_effect=pd.errors.ParserError("bad csv")),
         pytest.raises(SystemExit) as exc_info,
     ):
         await run(args)
@@ -210,8 +281,8 @@ async def test_run_unparseable_csv_exits_one(tmp_path) -> None:
 # run() - scraping loop / result type-switch
 # --------------------------------------------------------------------------- #
 async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None:
-    csv_path = _write_csv(tmp_path, ["https://leanpub.com/good"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    json_path = _write_input(tmp_path, ["https://leanpub.com/good"])
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     pw_factory, browser = _make_playwright_factory()
@@ -222,8 +293,8 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
-        patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.save_other_links_to_json"),
+        patch(f"{MODULE}.save_failed_urls_to_json") as save_failed,
     ):
         await run(args)
 
@@ -243,8 +314,8 @@ async def test_run_successful_book_is_saved_and_backend_closed(tmp_path) -> None
     ],
 )
 async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, expected_status: str) -> None:
-    csv_path = _write_csv(tmp_path, ["https://leanpub.com/x"])
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    json_path = _write_input(tmp_path, ["https://leanpub.com/x"])
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     pw_factory, browser = _make_playwright_factory()
@@ -254,8 +325,8 @@ async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, 
         patch(f"{MODULE}.resolve_store_backend", return_value=backend),
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
-        patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv") as save_failed,
+        patch(f"{MODULE}.save_other_links_to_json"),
+        patch(f"{MODULE}.save_failed_urls_to_json") as save_failed,
     ):
         await run(args)
 
@@ -264,7 +335,7 @@ async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, 
     backend.close.assert_called_once_with()
     browser.close.assert_awaited_once()
 
-    # The failed/duplicate diagnostic CSV gets exactly the one status tuple.
+    # The failed/duplicate diagnostic report gets exactly the one status tuple.
     save_failed.assert_called_once()
     (recorded,), _ = save_failed.call_args
     assert recorded == [("https://leanpub.com/x", expected_status)]
@@ -273,8 +344,8 @@ async def test_run_non_dict_results_recorded_not_saved(tmp_path, scrape_result, 
 async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> None:
     # 11 recognized URLs => two batches (batch_size hardcoded at 10) => one pause.
     urls = [f"https://leanpub.com/book-{i}" for i in range(11)]
-    csv_path = _write_csv(tmp_path, urls)
-    args = SimpleNamespace(input_file=str(csv_path), store_backend="json")
+    json_path = _write_input(tmp_path, urls)
+    args = SimpleNamespace(input_file=str(json_path), store_backend="json")
 
     backend = MagicMock()
     pw_factory, browser = _make_playwright_factory()
@@ -287,8 +358,8 @@ async def test_run_more_than_ten_urls_triggers_inter_batch_pause(tmp_path) -> No
         patch(f"{MODULE}.async_playwright", pw_factory),
         patch(f"{MODULE}.scrape_book", scrape_book),
         patch(f"{MODULE}.asyncio.sleep", sleep),
-        patch(f"{MODULE}.save_other_links_to_csv"),
-        patch(f"{MODULE}.save_failed_urls_to_csv"),
+        patch(f"{MODULE}.save_other_links_to_json"),
+        patch(f"{MODULE}.save_failed_urls_to_json"),
     ):
         await run(args)
 

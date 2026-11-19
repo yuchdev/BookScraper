@@ -85,10 +85,10 @@ Isolated selector matches are not proof the pipeline produces correct data. Run 
 of known URLs through the real scraper and inspect the output:
 
 ```bash
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
+uv run bookscraper scrape-urls -f content/urls.json --store-backend json
 ```
 
-Check `books.json` for correct titles/authors/ISBNs/dates and `failed_books.csv` for URLs
+Check `books.json` for correct titles/authors/ISBNs/dates and `failed_books.json` for URLs
 that failed - a selector can match yet still extract the wrong text.
 
 ### 6. Repeat on drift

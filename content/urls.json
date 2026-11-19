@@ -1,0 +1,2476 @@
+[
+  {
+    "title": "C++14",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://raw.githubusercontent.com/cplusplus/draft/master/papers/n4296.pdf",
+    "site": "raw.githubusercontent.com",
+    "hash": "e39abab07f6d7103103c2d759ceba8c092e5d9c9206653f7ebfedf785b08423d"
+  },
+  {
+    "title": "C++17",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/n4659.pdf",
+    "site": "www.open-std.org",
+    "hash": "f4877e593048e86dd361d09722078abbcd4d5316d57813398b1bf6540fa10728"
+  },
+  {
+    "title": "C++20",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://isocpp.org/files/papers/N4860.pdf",
+    "site": "isocpp.org",
+    "hash": "2bca0e904970d11b4ba4c2da794fd20b01b513d01d7c2fd5853c53591276e42b"
+  },
+  {
+    "title": "C++23",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://open-std.org/jtc1/sc22/wg21/docs/papers/2023/n4950.pdf",
+    "site": "open-std.org",
+    "hash": "f122fcbb6125ef28cfdf3260c97c1e44074bb835761a357244195d872ab88a04"
+  },
+  {
+    "title": "cppreference.com",
+    "authors": [
+      "and [offline version](https://en.cppreference.com/w/Cppreference:Archives"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://en.cppreference.com/w/",
+    "site": "en.cppreference.com",
+    "hash": "ba3a8773627a33fe25b54f7f4152547c6414c1a18227a6bfd84f21ed02d59c06"
+  },
+  {
+    "title": "C++ Core Guidelines",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md",
+    "site": "github.com",
+    "hash": "f05817ce7cf9dfda456feb02fb57f09395ecaf8addd4f453fe48fcb257bd12f8"
+  },
+  {
+    "title": "ISO C++ FAQ",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Reference and ISO Standard",
+    "url": "https://isocpp.org/faq",
+    "site": "isocpp.org",
+    "hash": "4875abbf19ba19161761a0c5be47b083ab044911f87367444d8b31214271b26a"
+  },
+  {
+    "title": "C++ Primer 5th Edition",
+    "authors": [
+      "Stanley B. Lippman"
+    ],
+    "publication_year": 2012,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/0321714113",
+    "site": "www.amazon.com",
+    "hash": "fb7de5c34a24a81a9dbb743ffe577181fe62369559980d447b0c7b11b14cf928"
+  },
+  {
+    "title": "Programming: Principles and Practice Using C++ 3rd Edition",
+    "authors": [
+      "Bjarne Stroustrup"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/0138308683",
+    "site": "www.amazon.com",
+    "hash": "67ef06fd0670375e5a36a27fe0430a17cfe3b6e5f1c38559adf7d33db434b2a4"
+  },
+  {
+    "title": "Beginning C++ Through Game Programming 4th Edition",
+    "authors": [
+      "Michael Dawson"
+    ],
+    "publication_year": 2014,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/B00LZW07P0",
+    "site": "www.amazon.com",
+    "hash": "332dea5b5a34a945066811ea0d76733f5af0c18e479f3fe299c189167a2f18d5"
+  },
+  {
+    "title": "Beginning C++ Game Programming",
+    "authors": [
+      "John Horton"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/1838648577",
+    "site": "www.amazon.com",
+    "hash": "fd6491f9640b6644f0eec2c0d7fba18fff885922f1eaad0ea99ef65f3b50abe7"
+  },
+  {
+    "title": "Starting Out with C++ from Control Structures to Objects",
+    "authors": [
+      "Tony Gaddis"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/0134498372",
+    "site": "www.amazon.com",
+    "hash": "763c6029cf02d0f4484e1ef2b7f3229ba949c58681c518a9887741aa9a743d1a"
+  },
+  {
+    "title": "C++ How to Program 10th Edition",
+    "authors": [
+      "Paul Deitel",
+      "Harvey Deitel"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to Programming",
+    "url": "https://www.amazon.com/dp/0134448235",
+    "site": "www.amazon.com",
+    "hash": "572df063bd5fcc8a53e4bd251071a573aa465c842faa10808d3ff1c224b0803d"
+  },
+  {
+    "title": "A Tour of C++ 3rd Edition",
+    "authors": [
+      "Bjarne Stroustrup"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to C++",
+    "url": "https://www.amazon.com/dp/0136816487",
+    "site": "www.amazon.com",
+    "hash": "1bdbc4763ebc7c950dae43a0d14e491bcc634dfb4729d655a2bcf14c7caa5def"
+  },
+  {
+    "title": "Beginning C++23",
+    "authors": [
+      "Ivor Horton",
+      "Peter Van Weert"
+    ],
+    "publication_year": 2023,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to C++",
+    "url": "https://www.amazon.com/dp/1484293428",
+    "site": "www.amazon.com",
+    "hash": "ddd6aa81674c374bfc4bb739579455c813a049702990130125b0ea6deb330c76"
+  },
+  {
+    "title": "C and C++ Under the Hood",
+    "authors": [
+      "Anthony J. Dos Reis"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to C++",
+    "url": "https://www.amazon.com/dp/1793302898/",
+    "site": "www.amazon.com",
+    "hash": "efa76c6cbd8c1777df6deafbfa1d839e5691f4fb360c3bc7637905e663bb3da5"
+  },
+  {
+    "title": "Discovering Modern C++, 2nd Edition",
+    "authors": [
+      "Peter Gottschling"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to C++",
+    "url": "https://www.amazon.com/Discovering-Modern-Depth-Peter-Gottschling/dp/0136677649/",
+    "site": "www.amazon.com",
+    "hash": "0fbd4dc91e07c2a62ac0ce2c018f1b8bfbc502305455222f9c66d67a60335848"
+  },
+  {
+    "title": "C++ How to Program: An Objects-Natural Approach",
+    "authors": [
+      "Paul Deitel",
+      "Harvey Deitel"
+    ],
+    "publication_year": 2023,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Beginner to C++",
+    "url": "https://www.amazon.com/dp/B0CF4TX8XG",
+    "site": "www.amazon.com",
+    "hash": "333ab369ecc1a99fa145938ed7656b9169da86bfcc8fc986b463ef8681a4438b"
+  },
+  {
+    "title": "Professional C++ 6th Edition",
+    "authors": [
+      "Marc Gregoire"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/1394193173",
+    "site": "www.amazon.com",
+    "hash": "2af20f1dcc00c8a10d8d03f4ff2e8f66e88e5afc3b081ce0055459c84e6d22ab"
+  },
+  {
+    "title": "C++ Common Knowledge: Essential Intermediate Programming",
+    "authors": [
+      "Stephen C. Dewhurst"
+    ],
+    "publication_year": 2005,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0321321928",
+    "site": "www.amazon.com",
+    "hash": "1d05c5bc6c612840cc6c226c63e61484cb0a11eeddf1a0294f9ea71bc5f9a63e"
+  },
+  {
+    "title": "C++ Cookbook: Solutions and Examples for C++ Programmers",
+    "authors": [
+      "D. Ryan Stephens"
+    ],
+    "publication_year": 2005,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0596007612",
+    "site": "www.amazon.com",
+    "hash": "b600319afef54a7da2fb5605dab9890631fbe5d83880457fccc1e3aee825b828"
+  },
+  {
+    "title": "Effective C++: 55 Specific Ways to Improve Your Programs and Designs 3rd Edition",
+    "authors": [
+      "Scott Meyers"
+    ],
+    "publication_year": 2005,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0321334876",
+    "site": "www.amazon.com",
+    "hash": "6cad65dda9d9982cbb02835957786f8bc53b33ddef6eea0c3ee9d6d72fb4311d"
+  },
+  {
+    "title": "Effective STL: 50 Specific Ways to Improve Your Use of the Standard Template Library",
+    "authors": [
+      "Scott Meyers"
+    ],
+    "publication_year": 2001,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0201749629",
+    "site": "www.amazon.com",
+    "hash": "0acdc63dd949613a48a2375393eecee7dcbdae68d8ad1d2ee280e0d1299159ed"
+  },
+  {
+    "title": "Exceptional C++: 47 Engineering Puzzles, Programming Problems, and Solutions",
+    "authors": [
+      "Herb Sutter"
+    ],
+    "publication_year": 1999,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0201615622",
+    "site": "www.amazon.com",
+    "hash": "9fc968bd25f5468e66394091f20896fd81d6f64985aeec7914c6dec4d819aebf"
+  },
+  {
+    "title": "More Exceptional C++: 40 New Engineering Puzzles, Programming Problems, and Solutions",
+    "authors": [
+      "Herb Sutter"
+    ],
+    "publication_year": 2001,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/020170434X",
+    "site": "www.amazon.com",
+    "hash": "8c19ca819af80969485aff3fe1ba273b8eadd8738468eaf4050f49389edadb18"
+  },
+  {
+    "title": "Exceptional C++ Style: 40 New Engineering Puzzles, Programming Problems, and Solutions",
+    "authors": [
+      "Herb Sutter"
+    ],
+    "publication_year": 2004,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0201760428",
+    "site": "www.amazon.com",
+    "hash": "1ca02a573c1aef0dc8ab7897c55f8500744a6f6d3ffe7c3f22bea0c4d57dd1ca"
+  },
+  {
+    "title": "C++ Coding Standards: 101 Rules, Guidelines, and Best Practices",
+    "authors": [
+      "Herb Sutter",
+      "Andrei Alexandrescu"
+    ],
+    "publication_year": 2004,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0321113586",
+    "site": "www.amazon.com",
+    "hash": "cbf1de76ab6c978ad3852ff8a9320da98f963afbb51d1474c8848f974a8de147"
+  },
+  {
+    "title": "C++ Programming Language 4th Edition",
+    "authors": [
+      "Bjarne Stroustrup"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0321958322",
+    "site": "www.amazon.com",
+    "hash": "c622049683606ddc3db0ce18490d9e9012c5a8b4ef59b4d73ddfa91736b27355"
+  },
+  {
+    "title": "C++ Standard Library: A Tutorial and Reference 2nd Edition",
+    "authors": [
+      "Nicolai M. Josuttis"
+    ],
+    "publication_year": 2012,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0321623215",
+    "site": "www.amazon.com",
+    "hash": "653c3be4ced950dd230176bb3ed76fc41e268c979745f53237e1fe72bf1479a4"
+  },
+  {
+    "title": "Standard C++ Iostreams and Locales: Advanced Programmer's Guide and Reference",
+    "authors": [
+      "Angelika Langer"
+    ],
+    "publication_year": 2000,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "General Books on C++",
+    "url": "https://www.amazon.com/dp/0201183951",
+    "site": "www.amazon.com",
+    "hash": "07960f986167f2dc0fff970b83a1c16c735923fd09439aa20939e6f2432b20f9"
+  },
+  {
+    "title": "C++ Move Semantics - The Complete Guide",
+    "authors": [
+      "Nicolai M. Josuttis"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/3967309002",
+    "site": "www.amazon.com",
+    "hash": "6bfbd563354ece07ca0438dcf38e300febe64142ed05c78117d4e6cd83976366"
+  },
+  {
+    "title": "Functional Programming in C++: How to improve your C++ programs using functional techniques",
+    "authors": [
+      "Ivan Cukic"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/1617293814",
+    "site": "www.amazon.com",
+    "hash": "3ecbb6166ff2d6832bd16317da99c22f82fae1874423b9b817fcdcef5c7a7824"
+  },
+  {
+    "title": "C++ High Performance: Master the art of optimizing the functioning of your C++ code 2nd Edition",
+    "authors": [
+      "Björn Andrist"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/1839216549",
+    "site": "www.amazon.com",
+    "hash": "ad90c4524d842c345db0592069792ad63ed00544b2761dc48a84475218bba937"
+  },
+  {
+    "title": "Memory Management Algorithms And Implementation In C/C++",
+    "authors": [
+      "Bill Blunden"
+    ],
+    "publication_year": 2002,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/1556223471",
+    "site": "www.amazon.com",
+    "hash": "23fd9b09db2506cbbea87bf04bdcea66b57599b7bb06461c6324ccc2cc3e2f03"
+  },
+  {
+    "title": "Optimizing software in C++: An optimization guide for Windows, Linux and Mac platforms",
+    "authors": [
+      "pdf"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.agner.org/optimize/optimizing_cpp.pdf",
+    "site": "www.agner.org",
+    "hash": "a415f2727de571614984d917f1834833723fc86eef4911e97df90bc41247ae4f"
+  },
+  {
+    "title": "Optimizing subroutines in assembly language: An optimization guide for x86 platforms",
+    "authors": [
+      "pdf"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.agner.org/optimize/optimizing_assembly.pdf",
+    "site": "www.agner.org",
+    "hash": "c6f5d559911cfaac879a346dfce89672c36623cc27989577e3caf368d2aa9e4f"
+  },
+  {
+    "title": "Calling conventions for different C++ compilers and operating systems",
+    "authors": [
+      "pdf"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.agner.org/optimize/calling_conventions.pdf",
+    "site": "www.agner.org",
+    "hash": "70f75dd8d20c3cc4d282065ab9779be4d138c6678d3e6bcd05b23791feda4e1c"
+  },
+  {
+    "title": "What Every Programmer Should Know About Memory",
+    "authors": [
+      "pdf"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.gwern.net/docs/cs/2007-drepper.pdf",
+    "site": "www.gwern.net",
+    "hash": "fd1787c9cbc7ab6da37445517168d670d7bb40a15fa98cfed7efaae9373d62df"
+  },
+  {
+    "title": "Learning Boost C++ Libraries",
+    "authors": [
+      "Arindam Mukherjee"
+    ],
+    "publication_year": 2015,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.packtpub.com/product/learning-boost-c-libraries/9781783551217",
+    "site": "www.packtpub.com",
+    "hash": "9a9ed0b90e516dbccdeca442b3ca1699c17ffa693514ed523584e499aa398e38"
+  },
+  {
+    "title": "Boost C++ Application Development Cookbook 2nd Edition",
+    "authors": [
+      "Antony Polukhin"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/B06Y2WTZPR",
+    "site": "www.amazon.com",
+    "hash": "6ce20c71c761856a12f7fa7e375e33eba23eafef11fa4be88054ff5157f0df38"
+  },
+  {
+    "title": "The Art of Writing Efficient Programs",
+    "authors": [
+      "Fedor G. Pikus"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/1800208111",
+    "site": "www.amazon.com",
+    "hash": "edd2aa137e1e620f77c9f6a1db1f85b5cda5b30c5a79a984168be12700a0cc7d"
+  },
+  {
+    "title": "C++ Best Practices",
+    "authors": [
+      "Jason Turner"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://leanpub.com/cppbestpractices",
+    "site": "leanpub.com",
+    "hash": "cd45110fd352e788ffb9394d05ca7516b83968939610e67d3fc2c9222d93cff6"
+  },
+  {
+    "title": "Beautiful C++: 30 Core Guidelines for Writing Clean, Safe, and Fast Code",
+    "authors": [
+      "J. Davidson",
+      "Kate Gregory"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Advanced Books on C++",
+    "url": "https://www.amazon.com/dp/0137647840",
+    "site": "www.amazon.com",
+    "hash": "4606e785afc81733c1835dd62796211afcf59df089382b5e71f4b4fa44e8d171"
+  },
+  {
+    "title": "C++ Templates: The Complete Guide 2nd Edition",
+    "authors": [
+      "David Vandevoorde",
+      "Nicolai Josuttis"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Templates and Metaprogramming",
+    "url": "https://www.amazon.com/dp/0321714121",
+    "site": "www.amazon.com",
+    "hash": "bd5da8605de829c57af0a36f91e27de6b696948bdac60a18ff40196995940e61"
+  },
+  {
+    "title": "Advanced C++ Metaprogramming in Classic C++",
+    "authors": [
+      "Davide Di Gennaro"
+    ],
+    "publication_year": 2015,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Templates and Metaprogramming",
+    "url": "https://www.amazon.com/dp/B01JCOFWD4",
+    "site": "www.amazon.com",
+    "hash": "5ca4398d4c3829f5c4db802630a849a59281ec9e28b9f80adc6256bdf1cb3b04"
+  },
+  {
+    "title": "Practical C++ Metaprogramming",
+    "authors": [
+      "Edouard Alligand",
+      "Joel Falcou"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Templates and Metaprogramming",
+    "url": "https://www.oreilly.com/library/view/practical-c-metaprogramming/9781492042778/",
+    "site": "www.oreilly.com",
+    "hash": "e5f61939652f4b929c74f362e75b59bd2a441bf2cebef1bb627d0907b5ffced0"
+  },
+  {
+    "title": "Template Metaprogramming with C++: Learn everything about C++ templates and unlock the power of template metaprogramming",
+    "authors": [
+      "Marius Bancila"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Templates and Metaprogramming",
+    "url": "https://www.amazon.com/dp/B09ZHZFTKV",
+    "site": "www.amazon.com",
+    "hash": "816fb6780ec6906fa8d4a4f14f22f4b103c01f735e84bd3d2aa1bcaba32cd34a"
+  },
+  {
+    "title": "C++ Concurrency in Action, Second Edition",
+    "authors": [
+      "Anthony Williams"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Concurrency and Distributed Programming",
+    "url": "https://www.amazon.com/dp/1617294691",
+    "site": "www.amazon.com",
+    "hash": "baabbb927955751ad817837bb067f67f0f1bffc056cad3aa96b00b09cd84b9e8"
+  },
+  {
+    "title": "C++ Reactive Programming",
+    "authors": [
+      "Praseed Pai",
+      "Peter Abraham"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Concurrency and Distributed Programming",
+    "url": "https://www.amazon.com/dp/1788629779",
+    "site": "www.amazon.com",
+    "hash": "435c0b5817cd3fbe7359fefb9668e5970a5060369df6b0d469963729739b50ac"
+  },
+  {
+    "title": "The Art of Multiprocessor Programming 2nd Edition",
+    "authors": [
+      "Maurice Herlihy"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Concurrency and Distributed Programming",
+    "url": "https://www.amazon.com/dp/0124159508",
+    "site": "www.amazon.com",
+    "hash": "16059168497a8f3810f95b42dee605b5110083bef940d7d985f535b7a46b23ca"
+  },
+  {
+    "title": "C++ Multithreading Cookbook",
+    "authors": [
+      "Miloš Ljumovic"
+    ],
+    "publication_year": 2014,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Concurrency and Distributed Programming",
+    "url": "https://www.packtpub.com/product/c-multithreading-cookbook/9781783289790",
+    "site": "www.packtpub.com",
+    "hash": "c60fb25a2592c5b8c50347906a8d4756d223f5dd2390f790ea354f28e5c7b969"
+  },
+  {
+    "title": "Concurrency with Modern C++: What every professional C++ programmer should know about concurrency",
+    "authors": [
+      "Rainer Grimm"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Concurrency and Distributed Programming",
+    "url": "https://www.amazon.com/dp/B0CT41Q1FF",
+    "site": "www.amazon.com",
+    "hash": "5e10c33bd768d16f420a97f8625a955d6bf60db5a5e49fc2b7660501fa54af40"
+  },
+  {
+    "title": "Computer Systems: A Programmer's Perspective",
+    "authors": [
+      "Randal Bryant",
+      "David O'Hallaron"
+    ],
+    "publication_year": 2015,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "High-Performance Optimizations in C++",
+    "url": "https://www.amazon.com/dp/013409266X",
+    "site": "www.amazon.com",
+    "hash": "9a5e5e0e6c903a0cf51c31a609abc06c94a87f442063b42903a84a1c6a8474fc"
+  },
+  {
+    "title": "Parallel Programming: Concepts and Practice",
+    "authors": [
+      "Bertil Schmidt",
+      "Jorge Gonzalez-Dominguez",
+      "Christian Hundt"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "High-Performance Optimizations in C++",
+    "url": "https://www.amazon.com/dp/0128498900",
+    "site": "www.amazon.com",
+    "hash": "8a0b2bf371fe214a1db63f4ea9a070b285704b2575d4a710728fe8e74de997b8"
+  },
+  {
+    "title": "Is Parallel Programming Hard, And, If So, What Can You Do About It?",
+    "authors": [
+      "Paul McKinley"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "High-Performance Optimizations in C++",
+    "url": "https://cdn.kernel.org/pub/linux/kernel/people/paulmck/perfbook/perfbook.html",
+    "site": "cdn.kernel.org",
+    "hash": "c491a9b506583fd440b318408489c84cac43e2b046f23f0477adf070b63971d0"
+  },
+  {
+    "title": "A Complete Guide to Standard C++ Algorithms",
+    "authors": [
+      "Šimon Tóth"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://leanpub.com/cpp-algorithms-guide",
+    "site": "leanpub.com",
+    "hash": "dc9fa17495c77a1ec728485ddb0e2d7ce05f66237d2eed5322ff2fc88c387eaa"
+  },
+  {
+    "title": "Implementing Useful Algorithms in C++",
+    "authors": [
+      "Dmytro Kedyk"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/B08PXHJCXY",
+    "site": "www.amazon.com",
+    "hash": "f54c28fd949954d9b4ed9bdd72aff90795dd26d041253393df0d42ed26f67835"
+  },
+  {
+    "title": "Algorithms in C++ 3rd Edition",
+    "authors": [
+      "Robert Sedgewick"
+    ],
+    "publication_year": 2001,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/020172684X",
+    "site": "www.amazon.com",
+    "hash": "3d1eedecb82d5d8482e5648783a32648be7fc3405ac76bb41e9415e7cb5615f2"
+  },
+  {
+    "title": "Data Structures and Algorithms in C++ 2nd Edition",
+    "authors": [
+      "Michael T. Goodrich"
+    ],
+    "publication_year": 2011,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/0470383275",
+    "site": "www.amazon.com",
+    "hash": "96c279b66ce74af39016aad487702ee508e8b60f832b7daddafadcca0ba20b26"
+  },
+  {
+    "title": "Data Structures and Algorithm Analysis in C++ 4th Edition",
+    "authors": [
+      "Mark Weiss"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/013284737X",
+    "site": "www.amazon.com",
+    "hash": "629a6ebd1eb5107d14106f3df3c8395e682a9f4af600d78ce6bca17267e5c61d"
+  },
+  {
+    "title": "Hacker's Delight",
+    "authors": [
+      "Henry Warren"
+    ],
+    "publication_year": 2012,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/0321842685",
+    "site": "www.amazon.com",
+    "hash": "9452c821b53e5f6703e2a477b488ba43f6c9c63ff8336371d3c094a7a8232480"
+  },
+  {
+    "title": "Elements of Programming Interviews",
+    "authors": [
+      "Adnan Aziz"
+    ],
+    "publication_year": 2012,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Algorithms in C and C++",
+    "url": "https://www.amazon.com/dp/1479274836",
+    "site": "www.amazon.com",
+    "hash": "a7d26fe6ea5e86d2d6eb2b671eab524e8e37ce5803750299c15c4ef894df8f99"
+  },
+  {
+    "title": "C++11 for Programmers 2nd Edition",
+    "authors": [
+      "Paul Deitel",
+      "Harvey Deitel"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++11/14",
+    "url": "https://www.amazon.com/dp/0133439852",
+    "site": "www.amazon.com",
+    "hash": "658894c02907fc30231a756ccbca0e698fa77f53d2e64b0f5991e8355d92dc4c"
+  },
+  {
+    "title": "Effective Modern C++: 42 Specific Ways to Improve Your Use of C++11 and C++14",
+    "authors": [
+      "Scott Meyers"
+    ],
+    "publication_year": 2014,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++11/14",
+    "url": "https://www.amazon.com/dp/1491903996",
+    "site": "www.amazon.com",
+    "hash": "adcc368b589173acf8bda4466471e543644b78af3a50f668cce159a9e23bab2f"
+  },
+  {
+    "title": "C++17 STL Cookbook",
+    "authors": [
+      "Jacek Galowicz"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++17",
+    "url": "https://www.amazon.com/dp/B01MTSADN8",
+    "site": "www.amazon.com",
+    "hash": "742125682f8e6a76a45057ed065b037cbea369e6d256c9821a46f07d857ca3a1"
+  },
+  {
+    "title": "C++17 in Detail",
+    "authors": [
+      "Bartlomiej Filipek"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++17",
+    "url": "https://leanpub.com/cpp17indetail",
+    "site": "leanpub.com",
+    "hash": "aa04919399e0b8609233b33993db8a1cd1dcfaa82bc69cbc9165fd594fc59e3e"
+  },
+  {
+    "title": "C++17 The Complete Guide",
+    "authors": [
+      "Nicolai M. Josuttis"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++17",
+    "url": "https://leanpub.com/cpp17",
+    "site": "leanpub.com",
+    "hash": "a5f7a34d86a4803beae6246d0197fe5d2c892b43a985dd0715d3bc66b07311ca"
+  },
+  {
+    "title": "The Modern C++ Challenge",
+    "authors": [
+      "Marius Bancila"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++17",
+    "url": "https://www.amazon.com/dp/1788993861",
+    "site": "www.amazon.com",
+    "hash": "4e6647fb8cd00049edb8d57657b0ab5499b607a1afdc190bf239d22da53cd39a"
+  },
+  {
+    "title": "Mastering the C++17 STL",
+    "authors": [
+      "Arthur O'Dwyer"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++17",
+    "url": "https://www.packtpub.com/product/mastering-the-c-17-stl/9781787126824",
+    "site": "www.packtpub.com",
+    "hash": "c38cea8ad1a2267b5a0f9c6e08ce2a3fcd6474a4cd5725ddc2503bb042330ddc"
+  },
+  {
+    "title": "C++ 20",
+    "authors": [
+      "Rainer Grimm"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://leanpub.com/c20",
+    "site": "leanpub.com",
+    "hash": "bd3fd0571d43a456f7a8fc45af4ec120fd50dd0143231c674a5e8e7c474091ab"
+  },
+  {
+    "title": "C++ Lambda Story: Everything you need to know about Lambda Expressions in Modern C++",
+    "authors": [
+      "Bartlomiej Filipek"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://www.amazon.com/dp/B08VLM1R76",
+    "site": "www.amazon.com",
+    "hash": "2a5ffffdf8482b87b02a3628706f6173189eb4c82011d47076aea247befe19c3"
+  },
+  {
+    "title": "Modern C++ Programming Cookbook 2nd Edition",
+    "authors": [
+      "Marius Bancila"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://www.amazon.com/dp/1800208987",
+    "site": "www.amazon.com",
+    "hash": "3b3f47aef4bac21779fdee48db5fe4224519ad4d573aca28d46d67b1eec2df01"
+  },
+  {
+    "title": "Exploring C++20: The Programmer's Introduction to C++",
+    "authors": [
+      "Ray Lischner"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://www.amazon.com/dp/1484259602",
+    "site": "www.amazon.com",
+    "hash": "16fd6aab914ab2822ae924b86f793a6e847da01dd5cb209496b6ca659ba4d295"
+  },
+  {
+    "title": "The C++ Standard Library",
+    "authors": [
+      "Rainer Grimm"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://leanpub.com/cpplibrary",
+    "site": "leanpub.com",
+    "hash": "9cf7ae60145f7ef3c54a4e794eeb67e5354b2ded28e7f5f8c7f25cc11621d18c"
+  },
+  {
+    "title": "Programming with C++20",
+    "authors": [
+      "Andreas Fertig"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://leanpub.com/programming-with-cpp20",
+    "site": "leanpub.com",
+    "hash": "2d0946a8ef14d6fdbfc0b28dc6ab5680567ceadc7a90d17cec09583ff8e0b7a4"
+  },
+  {
+    "title": "C++20 - The Complete Guide",
+    "authors": [
+      "Nicolai M. Josuttis"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://leanpub.com/cpp20",
+    "site": "leanpub.com",
+    "hash": "8a9ff65ba16bdafd937e88a01d57d3edfa37b23794e26b90709d12ddfd991358"
+  },
+  {
+    "title": "C++ Concepts",
+    "authors": [
+      "Sandor Dargo"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://leanpub.com/cppconcepts",
+    "site": "leanpub.com",
+    "hash": "c1ad40831fa2efd3efc575c56d319798147e8e0819bb48017f0f8a958c967937"
+  },
+  {
+    "title": "C++ Programming Cookbook",
+    "authors": [
+      "Anais Sutherland"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++20",
+    "url": "https://www.amazon.com/dp/B0CYCV5748",
+    "site": "www.amazon.com",
+    "hash": "d451d6eb132f5bf6703dc11b2aa4a0bc73820352f5581f5ee2b9913561dd0a5e"
+  },
+  {
+    "title": "Modern C++ Programming Cookbook 3rd Edition",
+    "authors": [
+      "Marius Bancila"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Latest Features Review: C++23",
+    "url": "https://www.amazon.com/dp/1835080545",
+    "site": "www.amazon.com",
+    "hash": "0e1692e77bc7c8855c008a7b4a494c8c31a6bf362d5857afdba86c11e9667359"
+  },
+  {
+    "title": "Hands-On Design Patterns with C++ 2nd Edition",
+    "authors": [
+      "Fedor G. Pikus"
+    ],
+    "publication_year": 2023,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/1804611557",
+    "site": "www.amazon.com",
+    "hash": "c40f8ebda48ed1fb23c93eaf19af87933c76dd59bb1d3ebdc10fff94d1bc0e28"
+  },
+  {
+    "title": "Design Patterns in Modern C++",
+    "authors": [
+      "Dmitri Nesteruk"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/1484236025",
+    "site": "www.amazon.com",
+    "hash": "d15868ca4a85016a26ce507cc957a577d64b54a5443fbe25de9b6cc0c05ee6e6"
+  },
+  {
+    "title": "Software Architecture with C++",
+    "authors": [
+      "Adrian Ostrowski",
+      "Piotr Gaczkowski"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.packtpub.com/product/software-architecture-with-c/9781838554590",
+    "site": "www.packtpub.com",
+    "hash": "fc3e3f092a3d15d82be306954c0011e24ac80099851d051f2e84d3fbb75d444d"
+  },
+  {
+    "title": "Large-Scale C++ Volume I: Process and Architecture",
+    "authors": [
+      "John Debbie Lafferty"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/0201717069",
+    "site": "www.amazon.com",
+    "hash": "71a08db537536af529487337c4b3f43186ebb14e6e33d02f813bb9a8ee3895ea"
+  },
+  {
+    "title": "Large-Scale C++ Volume II: Design and Implementation",
+    "authors": [
+      "John Debbie Lafferty"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/0134694694",
+    "site": "www.amazon.com",
+    "hash": "524b969b80af7a2fe0905d63be7f8148f939dd3dbf988c49814470feff7fbb91"
+  },
+  {
+    "title": "API Design for C++",
+    "authors": [
+      "Martin Reddy"
+    ],
+    "publication_year": 2011,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/B004NNUZ6O/",
+    "site": "www.amazon.com",
+    "hash": "cc5068c8f13bacb65dd2f132a05a0e18785f9ede762fff06c20b4774d3a22249"
+  },
+  {
+    "title": "Object-Oriented Software Design in C++",
+    "authors": [
+      "Ronald Mak"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/163343950X/",
+    "site": "www.amazon.com",
+    "hash": "a5419c57b52d1a39b92a2cd67d75a9c8a198cf07fec2e28e14cfc776cd234b19"
+  },
+  {
+    "title": "C++ Software Design: Design Principles and Patterns for High-Quality Software",
+    "authors": [
+      "Klaus Iglberger"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Software Design and Design Patterns in C++",
+    "url": "https://www.amazon.com/dp/1098113160",
+    "site": "www.amazon.com",
+    "hash": "ef835bcf7b230abf43415847dfbbb55d0f9c292c84dd50fbc55c1d6550a46bea"
+  },
+  {
+    "title": "Qt 6 C++ GUI Programming Cookbook - Third Edition: Practical recipes for building cross-platform GUI applications, widgets, and animations",
+    "authors": [
+      "Lee Zhi Eng"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "GUI Programming",
+    "url": "https://www.amazon.com/dp/1805122630",
+    "site": "www.amazon.com",
+    "hash": "269de18b7c1833723871bc998e651b38e0df18428ef4dfad4a13c7ec47758eb5"
+  },
+  {
+    "title": "Advanced Qt Programming",
+    "authors": [
+      "Mark Summerfield"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "GUI Programming",
+    "url": "https://www.amazon.com/dp/0321635906",
+    "site": "www.amazon.com",
+    "hash": "6a9ae1dffaac8f97e9ce8025737e342724466253f2edfe858617d3f3d0e51de7"
+  },
+  {
+    "title": "Programming Windows 10 Via UWP",
+    "authors": [
+      "Roger Deutsch"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "GUI Programming",
+    "url": "https://www.amazon.com/dp/1973438771",
+    "site": "www.amazon.com",
+    "hash": "000636876bfca1c818798f57bbc2d4bcaa9cd8d5389fef80c99c27b7a0affafd"
+  },
+  {
+    "title": "Writing Secure Code",
+    "authors": [
+      "David LeBlanc"
+    ],
+    "publication_year": 2002,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Secure Programming Practices",
+    "url": "https://www.amazon.com/dp/B00JDMP718",
+    "site": "www.amazon.com",
+    "hash": "6f37c8753f3e15b16a83a01636917a8a2fd43a2066d566663467c5a98ea62532"
+  },
+  {
+    "title": "Embracing Modern C++ Safely",
+    "authors": [
+      "John Lakos",
+      "Vittorio Romeo",
+      "Rostislav Khlebnikov",
+      "Alisdair Meredith"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Secure Programming Practices",
+    "url": "https://www.amazon.com/dp/0137380356",
+    "site": "www.amazon.com",
+    "hash": "387b24d7302aa4d437a5db2ee1bb2386bf92f5aeb1ce30861dc7590c3838f3a2"
+  },
+  {
+    "title": "Secure Coding in C and C++",
+    "authors": [
+      "Robert C. Seacord"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Secure Programming Practices",
+    "url": "https://www.amazon.com/dp/B00C0OBZI0",
+    "site": "www.amazon.com",
+    "hash": "48e907fcef251c307664363bf44ee9cccf0f56711b1f61c7edc980243ea01f50"
+  },
+  {
+    "title": "Windows via C/C++ 5th Edition",
+    "authors": [
+      "Jeffrey M. Richter"
+    ],
+    "publication_year": 2007,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0735624240",
+    "site": "www.amazon.com",
+    "hash": "b3c8581d493a546a15276945c41d73fdaa1bda7a49e3d7c7e357f2a6f410a67c"
+  },
+  {
+    "title": "Windows Via C/C++ Reprint Edition",
+    "authors": [
+      "Pavel Yosifovich",
+      "Jeffrey M. Richter"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0135953391",
+    "site": "www.amazon.com",
+    "hash": "51c07abc91d5fd108a77a133aa2c95afaa5e7baf7e7437464281cf11c74e02e1"
+  },
+  {
+    "title": "C++ Windows Programming",
+    "authors": [
+      "Stefan Björnander"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.packtpub.com/product/c-windows-programming/9781786464224",
+    "site": "www.packtpub.com",
+    "hash": "00846d8a22a700495cddd9c87e1203232f821f559de406c8b5bf317151393b5c"
+  },
+  {
+    "title": "Windows 10 System Programming, Part 1",
+    "authors": [
+      "Pavel Yosifovich"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/B086Y6M7LH",
+    "site": "www.amazon.com",
+    "hash": "7c9bfd6b1d3df76fa122a5a056df4a9922e1df3001a30cc01234c586bc2bb7d7"
+  },
+  {
+    "title": "Windows 10 System Programming, Part 2",
+    "authors": [
+      "Pavel Yosifovich"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://leanpub.com/windows10systemprogrammingpart2",
+    "site": "leanpub.com",
+    "hash": "6f0377738cea7155cda319676344acf3e6953645e8b1b405617c09313f73a071"
+  },
+  {
+    "title": "Programming Windows 6th Edition",
+    "authors": [
+      "Charles Petzold"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/B00JDMPJ8E",
+    "site": "www.amazon.com",
+    "hash": "652788bcd0e5d7dc115a48ea10cd2b5ddda883043ed996a5191259bb2b01f240"
+  },
+  {
+    "title": "Windows System Programming 4th Edition",
+    "authors": [
+      "Johnson M. Hart"
+    ],
+    "publication_year": 2010,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0321657748",
+    "site": "www.amazon.com",
+    "hash": "1a0fe3fa0c0405bed82250e15d32dc4700eed6a1c0ce1399c61c78e2063b2c99"
+  },
+  {
+    "title": "Programming Windows Security",
+    "authors": [
+      "Keith Brown"
+    ],
+    "publication_year": 2010,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0201604426",
+    "site": "www.amazon.com",
+    "hash": "c73aa2699a2144af96bf5e26f0708fe223b885a705a96cee05bd55793c4907ce"
+  },
+  {
+    "title": "Windows 64-bit Assembly Language",
+    "authors": [
+      "Robert Dunne"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/B07G2WJFZK",
+    "site": "www.amazon.com",
+    "hash": "f801aec9cccdcda6a6f77fb1595a30707bc1644b8f617105443ecac159a2f996"
+  },
+  {
+    "title": "Inside Windows Debugging",
+    "authors": [
+      "Tarik Soulami"
+    ],
+    "publication_year": 2012,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0735662789",
+    "site": "www.amazon.com",
+    "hash": "8d8524c5952922ba4f1924987bc6a4507b649bfac9d5d1bce7f360720294dd5d"
+  },
+  {
+    "title": "Getting Started with WinDbg",
+    "authors": [
+      "MS documentation page"
+    ],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/getting-started-with-windbg",
+    "site": "docs.microsoft.com",
+    "hash": "2f8c8917acfff19f0464faa82aa96060c2e705384b288200ef0320e56e2a17da"
+  },
+  {
+    "title": "Programming Server-Side Applications for Microsoft Windows",
+    "authors": [
+      "Jeffrey Richter"
+    ],
+    "publication_year": 2000,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows System Programming",
+    "url": "https://www.amazon.com/dp/0735607532",
+    "site": "www.amazon.com",
+    "hash": "3a967f77c7e5bb84ae23a7e1bad1e5b30adecf9a13ecccad5af93951ab1df986"
+  },
+  {
+    "title": "Windows Internals, Part 1: System architecture, processes, threads, memory management",
+    "authors": [
+      "Pavel Yosifovich"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows Kernel Programming",
+    "url": "https://www.amazon.com/dp/0735684189",
+    "site": "www.amazon.com",
+    "hash": "364d139ee45d532d5025304821707f414cbbb5dacdfe73c7782061d334613398"
+  },
+  {
+    "title": "Windows Internals, Part 2",
+    "authors": [
+      "Andrea Allievi",
+      "Mark Russinovich"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows Kernel Programming",
+    "url": "https://www.amazon.com/dp/0135462401",
+    "site": "www.amazon.com",
+    "hash": "ac4aebe6b309c76d4dc6876c1ee39ce0bb6fb143efbe331c186679b83a732b7c"
+  },
+  {
+    "title": "Windows Kernel Programming",
+    "authors": [
+      "Pavel Yosifovich"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Windows Kernel Programming",
+    "url": "https://www.amazon.com/dp/B08WZHBQYC",
+    "site": "www.amazon.com",
+    "hash": "1d0d504b088a227420a75115ba41248e306197bb4f86ff5bfefd429a4e17a5ee"
+  },
+  {
+    "title": "Linux System Programming Techniques",
+    "authors": [
+      "Jack-Benny Persson"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/1789951283",
+    "site": "www.amazon.com",
+    "hash": "fcad12cc883a17dbf3664d3521de278478a7a68b7643b1519c07e84ec892d048"
+  },
+  {
+    "title": "The Linux Programming Interface: A Linux and UNIX System Programming Handbook",
+    "authors": [
+      "Michael Kerrisk"
+    ],
+    "publication_year": 2010,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/1593272200",
+    "site": "www.amazon.com",
+    "hash": "f26517329b66feccd3653c1f0225cc52b20ccbd3806595346946af61774401e4"
+  },
+  {
+    "title": "Advanced Programming in the UNIX Environment 3rd Edition",
+    "authors": [
+      "W.Stevens",
+      "Stephen Rago"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/0321637739",
+    "site": "www.amazon.com",
+    "hash": "dd44d0e5e699d3d7e1edc8413df60c0f40491779ad68607b867bc22205b6f420"
+  },
+  {
+    "title": "Beginning Linux Programming 4th Edition",
+    "authors": [
+      "Neil Matthew"
+    ],
+    "publication_year": 2007,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/0470147628",
+    "site": "www.amazon.com",
+    "hash": "3fd989116cf478abfbf1ca620df70c39d24b72eab016e50e9f1cb65ef5b62b89"
+  },
+  {
+    "title": "Linux System Programming: Talking Directly to the Kernel",
+    "authors": [
+      "Robert Love"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/1449339530",
+    "site": "www.amazon.com",
+    "hash": "6f1d7fddbb556048cbdfcf108ce6af020f9de4e8c8c487757b4a6569be8d3794"
+  },
+  {
+    "title": "The Art of UNIX Programming",
+    "authors": [
+      "Eric Raymond"
+    ],
+    "publication_year": 2003,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/0131429019",
+    "site": "www.amazon.com",
+    "hash": "95f1d9c7d3548d648f846f23833226a4ea49bb3d3371997348d9ad99777a70bf"
+  },
+  {
+    "title": "Hands-On System Programming with C++",
+    "authors": [
+      "Rian Quinn"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/B07GVNFTWD",
+    "site": "www.amazon.com",
+    "hash": "c6b15f81e73a78d2c830eae092e483ec7b089cb5276532cf431ad570bcbbf2cf"
+  },
+  {
+    "title": "Hands-On System Programming with Linux",
+    "authors": [
+      "Kaiwan N Billimoria"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux System Programming",
+    "url": "https://www.amazon.com/dp/1788998472",
+    "site": "www.amazon.com",
+    "hash": "3b55b92551063da4d0c009bf19498ebb7604b5a386ad09343b0197beee5a8bd3"
+  },
+  {
+    "title": "Linux Kernel Development",
+    "authors": [
+      "Jack-Benny Persson"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/0672329468",
+    "site": "www.amazon.com",
+    "hash": "885618bc759f091cf9692fcefd52a3fada3796f57a107d8587fa2c1746293cb7"
+  },
+  {
+    "title": "Linux Kernel Networking: Implementation and Theory ",
+    "authors": [
+      "Rami Rosen"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/143026196X",
+    "site": "www.amazon.com",
+    "hash": "9b94010b2e918d9b0807a0020ed8ffbed64717f5010e5585bac169be9c6bc4d8"
+  },
+  {
+    "title": "Linux Kernel Programming - Second Edition: A comprehensive and practical guide to kernel internals, writing modules, and kernel synchronization",
+    "authors": [
+      "Kaiwan N Billimoria"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/1803232226",
+    "site": "www.amazon.com",
+    "hash": "7644f41975de106d367c7995ec2ee7f1ff2e4699dc0cd4ebdbf6436b45f13ae2"
+  },
+  {
+    "title": "Linux Kernel Programming Part 2 - Char Device Drivers and Kernel Synchronization",
+    "authors": [
+      "Kaiwan N Billimoria"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/180107951X",
+    "site": "www.amazon.com",
+    "hash": "cb69f87bdf04fba8289d184a7a08b7cba833dbaf4c80d489f6704f058e69a7cc"
+  },
+  {
+    "title": "Linux Kernel Debugging",
+    "authors": [
+      "Kaiwan N Billimoria"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/1801075034",
+    "site": "www.amazon.com",
+    "hash": "b537de5849c9acd46fcf888dc4dd62f92ef1c1cd7e39febf59fc91acf530221b"
+  },
+  {
+    "title": "Mastering Linux Device Driver Development",
+    "authors": [
+      "John Madieu"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/178934204X",
+    "site": "www.amazon.com",
+    "hash": "254ec700378433680d352c590c0075dcaa00f4df40e3c8cfafafd007861a05c4"
+  },
+  {
+    "title": "Linux Device Drivers Development 2nd Edition",
+    "authors": [
+      "John Madieu"
+    ],
+    "publication_year": 2022,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/1803240067",
+    "site": "www.amazon.com",
+    "hash": "234b01996bc1266b15f34554c00c46d8fb06938302694ab9ced4cbaedaa4e40a"
+  },
+  {
+    "title": "Linux Device Driver Development Cookbook",
+    "authors": [
+      "Rodolfo Giometti"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Linux Kernel Programming",
+    "url": "https://www.amazon.com/dp/1838558802",
+    "site": "www.amazon.com",
+    "hash": "aa26a778653cccd7effae42fc93b65e0e90c4134c822bf00b09ffa54376c1f81"
+  },
+  {
+    "title": "Mastering Embedded Linux Programming 3rd Edition",
+    "authors": [
+      "Chris Simmonds",
+      "Frank Vasquez"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/1789530385",
+    "site": "www.amazon.com",
+    "hash": "d97b6e7c568ffd4ae058038efef535ba3f73e8bd35191989ac293cd753cec302"
+  },
+  {
+    "title": "Embedded Linux Development Using Yocto Project Cookbook 2nd Edition",
+    "authors": [
+      "Alex Gonzalez"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/1788399218",
+    "site": "www.amazon.com",
+    "hash": "c1e1bd996abcd80e75a104c1cbf73fbf93840ea0c9c50153b44a1eec134cd4fa"
+  },
+  {
+    "title": "Embedded Linux Systems with the Yocto Project",
+    "authors": [
+      "Rudolf Streif"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/0133443248",
+    "site": "www.amazon.com",
+    "hash": "1c8936f86e80558b3d00036e670538247d53a71bc67f9ceb63bd55994fd8c56d"
+  },
+  {
+    "title": "Hands-On Embedded Programming with C++17",
+    "authors": [
+      "Maya Posch"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.packtpub.com/product/hands-on-embedded-programming-with-c-17/9781788629300",
+    "site": "www.packtpub.com",
+    "hash": "e51e5b3f4847910a25daa292523df4cf1d8a03848bf7da8b1090287c9cfe3513"
+  },
+  {
+    "title": "Practical Robotics in C++",
+    "authors": [
+      "Lloyd Brombach"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/9389423465",
+    "site": "www.amazon.com",
+    "hash": "128e33d4ef0ad607c1366f4151bc06ba892f6e49dbd8d77888218ca0a44fce50"
+  },
+  {
+    "title": "Embedded Systems Architecture",
+    "authors": [
+      "Daniele Lacamera"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/1788832507",
+    "site": "www.amazon.com",
+    "hash": "b4c2791fe0be522ebb3f4552aa117c594fc81358566541df4bfa16826449f3b3"
+  },
+  {
+    "title": "Real-Time C++: Efficient Object-Oriented and Template Microcontroller Programming",
+    "authors": [
+      "Christopher Kormanyos"
+    ],
+    "publication_year": 2021,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "C++ Embedded Programming",
+    "url": "https://www.amazon.com/dp/B099J441CH",
+    "site": "www.amazon.com",
+    "hash": "988189252170e72c10ac56a2ec4b512a3c96a6118f2d481e77b077c3b254f0e4"
+  },
+  {
+    "title": "Boost.Asio C++ Network Programming Cookbook",
+    "authors": [
+      "Dmytro Radchuk"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Network Programming",
+    "url": "https://www.packtpub.com/product/boost-asio-c-network-programming-cookbook/9781783986545",
+    "site": "www.packtpub.com",
+    "hash": "552793d3285593b42d0048b1516409f7b7d6cc384067e157b1fe81493714e475"
+  },
+  {
+    "title": "Boost.Asio C++ Network Programming 2nd Edition",
+    "authors": [
+      "Wisnu Anggoro",
+      "John Torjo"
+    ],
+    "publication_year": 2015,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Network Programming",
+    "url": "https://www.packtpub.com/product/boost-asio-c-network-programming-second-edition/9781785283079",
+    "site": "www.packtpub.com",
+    "hash": "dcccfc14e45854774b566128eed2b12f99befe03ec377804e57dea4ad7292d84"
+  },
+  {
+    "title": "Hands-On Network Programming with C",
+    "authors": [
+      "Lewis Van Winkle"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Network Programming",
+    "url": "https://www.amazon.com/dp/1789349869",
+    "site": "www.amazon.com",
+    "hash": "fa09f5b7c1d04e8ddf179d9fc53a23b9ae1dffbf4c0e5086febeb4010844b741"
+  },
+  {
+    "title": "Understanding Linux Network Internals",
+    "authors": [
+      "Christian Benvenuti"
+    ],
+    "publication_year": 2006,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Network Programming",
+    "url": "https://www.amazon.com/dp/0596002556",
+    "site": "www.amazon.com",
+    "hash": "77112c0f46f101a8b580859cce9b6b16a6eb93335f8b250c7c85f01d003f0d1f"
+  },
+  {
+    "title": "OpenGL 4 Shading Language Cookbook",
+    "authors": [
+      "David Wolff"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Computer Graphics in C++",
+    "url": "https://www.amazon.com/dp/1789342252",
+    "site": "www.amazon.com",
+    "hash": "d70ce049ada0ac7c46011d26b3da3a849d3c409873e07ad006fb04812a7475ba"
+  },
+  {
+    "title": "Computer Graphics Programming in OpenGL with C++ 3rd Edition",
+    "authors": [
+      "V. Scott Gordon"
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Computer Graphics in C++",
+    "url": "https://www.amazon.com/dp/1501522590",
+    "site": "www.amazon.com",
+    "hash": "18dc343696761f37cd3d6ae8e25275227f32adc0f272d7fadafa36f8b22bd9f1"
+  },
+  {
+    "title": "Learn OpenGL",
+    "authors": [
+      "Joey de Vries"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Computer Graphics in C++",
+    "url": "https://www.amazon.com/dp/9090332561",
+    "site": "www.amazon.com",
+    "hash": "8ec8a4a2b53975e98e683552096c3168daeac50aba28efe487a093fad4d3657e"
+  },
+  {
+    "title": "Direct3D Rendering Cookbook",
+    "authors": [
+      "Justin Stenning"
+    ],
+    "publication_year": 2014,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Computer Graphics in C++",
+    "url": "https://www.amazon.com/dp/B00HYQFGYI",
+    "site": "www.amazon.com",
+    "hash": "65f1b474d61e9e71d53b4663336375c9e93954adcf4644dc0c76bfd76d9e9e0a"
+  },
+  {
+    "title": "Introduction to 3D Game Programming with DirectX 12",
+    "authors": [
+      "Frank Luna"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Computer Graphics in C++",
+    "url": "https://www.amazon.com/dp/1942270062",
+    "site": "www.amazon.com",
+    "hash": "8038026b6c62cd69499b00253370e4a40d129529a9243c2c442fd1ffb306cb18"
+  },
+  {
+    "title": "C++ Game Development By Example",
+    "authors": [
+      "Joey de Vries"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/B07RG9H8CR",
+    "site": "www.amazon.com",
+    "hash": "b93ec75688d5bf6d97e9418b6312ed2549a267b0244c6e56d753055c84590428"
+  },
+  {
+    "title": "Foundations of Game Engine Development, Volume 1: Mathematics",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/0985811749",
+    "site": "www.amazon.com",
+    "hash": "255648ecbeb7898997c81e01d53afbcda344a93060d015ccad2da2eb8cbec33b"
+  },
+  {
+    "title": "Game Programming Patterns",
+    "authors": [
+      "Robert Nystrom"
+    ],
+    "publication_year": 2014,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/0990582906",
+    "site": "www.amazon.com",
+    "hash": "b0d328da1c491daf577664ab207da27a6def512497a473604dddb4399a16f10c"
+  },
+  {
+    "title": "Hands-On C++ Game Animation Programming",
+    "authors": [
+      "Gabor Szauer"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/1800208081",
+    "site": "www.amazon.com",
+    "hash": "de242cf6af80ca73b1612db060bff3e3b1dfdaf7cfb032542d0ebf00c3075c77"
+  },
+  {
+    "title": "Game Programming in C++: Creating 3D Games",
+    "authors": [
+      "Sanjay Madhav"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/0134597206",
+    "site": "www.amazon.com",
+    "hash": "43ab9d4128f58147a99985f4035c9f162ea83ceecc89b063b47a58be2cd16316"
+  },
+  {
+    "title": "Getting Started with C++ Audio Programming for Game Development",
+    "authors": [
+      "David Gouveia"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.packtpub.com/product/getting-started-with-c-audio-programming-for-game-development/9781849699099",
+    "site": "www.packtpub.com",
+    "hash": "481e3c702b69db61cf1d0383899e37b349c1d4996bf326bc8ad2e6b72019807a"
+  },
+  {
+    "title": "Unreal Engine 4 Game Development Quick Start Guide",
+    "authors": [
+      "Rachel Cordone"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/1789950686",
+    "site": "www.amazon.com",
+    "hash": "18f553ab3e8cde07031232f3ee35e2c6a7ac325f405a0384a0f72556740f65af"
+  },
+  {
+    "title": "Unreal Engine 4 Virtual Reality Projects",
+    "authors": [
+      "Kevin Mack"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/1789132878",
+    "site": "www.amazon.com",
+    "hash": "f9e99674c79860a53d73e062dd106b3a5aaa007112b6015418eee24c42f98f5f"
+  },
+  {
+    "title": "Unreal Engine 4 Scripting with C++ Cookbook",
+    "authors": [
+      "William Sherif",
+      "Stephen Whittle"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.packtpub.com/product/unreal-engine-4-scripting-with-c-cookbook/9781785885549",
+    "site": "www.packtpub.com",
+    "hash": "07868876a7eafdb699342d52924fc18e5288a8a81cd80ea73da6e04e57618470"
+  },
+  {
+    "title": "Unreal Engine C++ the Ultimate Developer's Handbook",
+    "authors": [
+      "Stephen Seth Ulibarri"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/B089M2H7J1",
+    "site": "www.amazon.com",
+    "hash": "9852e50c079c8ce0e0a622e7049180606707a1e79a568e949d26cfd0595426e6"
+  },
+  {
+    "title": "Unreal Engine 5 Game Development with C++ Scripting: Become a professional game developer and create fully functional, high-quality games",
+    "authors": [
+      "Zhenyu George Li"
+    ],
+    "publication_year": 2023,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/1804613932",
+    "site": "www.amazon.com",
+    "hash": "72bc8b976f11c2ca2218d93b463db4d05b95b585772e0ffa0c8d16e6fbf931bc"
+  },
+  {
+    "title": "Game Development Patterns with Unreal Engine 5: Build maintainable and scalable systems with C++ and Blueprint",
+    "authors": [
+      "Stuart Butler",
+      "Tom Oliver",
+      ""
+    ],
+    "publication_year": 2024,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/1803243252",
+    "site": "www.amazon.com",
+    "hash": "ebf4a57a4a9e441e072e0d4fcc53467cb27791e4b8fe9c3fa405b974e86b3c1c"
+  },
+  {
+    "title": "Financial Instrument Pricing Using C++ 2nd Edition",
+    "authors": [
+      "Daniel J. Duffy"
+    ],
+    "publication_year": 2018,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Financial Applications of C++",
+    "url": "https://www.amazon.com/dp/B07H51DPQP",
+    "site": "www.amazon.com",
+    "hash": "431166d1be64746f8df434b97ec1f06746faa652283b422e06b0918b2048b06a"
+  },
+  {
+    "title": "Quantitative Finance: An Object-Oriented Approach in C++",
+    "authors": [
+      "Erik Schlogl"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Financial Applications of C++",
+    "url": "https://www.amazon.com/dp/1584884797",
+    "site": "www.amazon.com",
+    "hash": "d64bb6c6c9a23cdac2a772bcc40ed7495977c0edb7fec4d0b1bb638e70cd9fca"
+  },
+  {
+    "title": "Building Financial Risk Management Applications with C++",
+    "authors": [
+      "Robert Brooks"
+    ],
+    "publication_year": 2013,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Financial Applications of C++",
+    "url": "https://www.amazon.com/dp/147835075X",
+    "site": "www.amazon.com",
+    "hash": "b56e8137ed7a1bbda0d0eda1a938a745078168b17c0532ffa725d4c47f664613"
+  },
+  {
+    "title": "C++ for Financial Mathematics",
+    "authors": [
+      "John Armstrong"
+    ],
+    "publication_year": 2017,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Financial Applications of C++",
+    "url": "https://www.amazon.com/dp/B01N4V75RJ",
+    "site": "www.amazon.com",
+    "hash": "58436f5aafc5adb192ea12d2076a398613cea0ef85b3d76e3f7b53c7d8133b6b"
+  },
+  {
+    "title": "Hedge Fund Modelling and Analysis: An Object Oriented Approach Using C++",
+    "authors": [
+      "David Hampton",
+      "Paul Darbyshire"
+    ],
+    "publication_year": 2016,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Financial Applications of C++",
+    "url": "https://www.amazon.com/dp/B01M2A5XWX",
+    "site": "www.amazon.com",
+    "hash": "55078fcc4d39be21f236c230a2a0cf181f90aaa190b7d36f76feb1dd410653e3"
+  },
+  {
+    "title": "SystemC: From the Ground Up",
+    "authors": [
+      "David C. Black",
+      "Jack Donovan"
+    ],
+    "publication_year": 2009,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Hardware Design in C++",
+    "url": "https://www.amazon.com/dp/B008BBVWPW",
+    "site": "www.amazon.com",
+    "hash": "2a7730ca13c4a48d6a5459b2457e2ee696a0bd8087baeea5fb6670ec288efaa7"
+  },
+  {
+    "title": "Simulation, Design Abstraction, and SystemC",
+    "authors": [
+      "Ed Harcourt"
+    ],
+    "publication_year": 2007,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Hardware Design in C++",
+    "url": "https://myslu.stlawu.edu/~ehar/papers/cse_systemc.pdf",
+    "site": "myslu.stlawu.edu",
+    "hash": "611dbaa18d53ef0dd23f65b066d554568c2e5ae6e1fab558ec8eb447bd638c1e"
+  },
+  {
+    "title": "An Introduction to System Level Modeling in SystemC 2.0",
+    "authors": [
+      "Stuart Swan"
+    ],
+    "publication_year": 2001,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Hardware Design in C++",
+    "url": "https://class.ece.uw.edu/542/peckol/doc/SystemC/systemC-2.0.10verView.pdf",
+    "site": "class.ece.uw.edu",
+    "hash": "b9d251feb60ce550a6a8167ca22b855e9e418dfad9e5be33591121b7453bc016"
+  },
+  {
+    "title": "Effective C: An Introduction to Professional C Programming",
+    "authors": [
+      "Robert C. Seacord"
+    ],
+    "publication_year": 2020,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Modern C Programming",
+    "url": "https://www.amazon.com/dp/1718501048",
+    "site": "www.amazon.com",
+    "hash": "27efdfd75b0ab617412a45a8149416475be393557b852265bd3da98a28710285"
+  },
+  {
+    "title": "Modern C",
+    "authors": [
+      "Jens Gustedt"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Modern C Programming",
+    "url": "https://www.amazon.com/dp/1617295817",
+    "site": "www.amazon.com",
+    "hash": "8c9d38a124e7e168b32d49a19f3569fe41c4d5780ca3aeb485c0f3122d8f414b"
+  },
+  {
+    "title": "Extreme C: Taking you to the limit in Concurrency, OOP, and the most advanced capabilities of C",
+    "authors": [
+      "Kamran Amini"
+    ],
+    "publication_year": 2019,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Modern C Programming",
+    "url": "https://www.amazon.com/dp/1789343623",
+    "site": "www.amazon.com",
+    "hash": "f6532599b47e5f9907cad8a55205398bdc8bbbf13dea2f7f692fe43acabcd309"
+  },
+  {
+    "title": "C Programming: A Modern Approach",
+    "authors": [
+      "K. N. King"
+    ],
+    "publication_year": 2008,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Modern C Programming",
+    "url": "https://www.amazon.com/dp/0393979504",
+    "site": "www.amazon.com",
+    "hash": "cbcd030cbf63d2a4aff85145617d7e48dcf446cc5b3c076d90d1459a35942464"
+  },
+  {
+    "title": "Object-Oriented Programming With ANSI C",
+    "authors": [
+      "Axel Schreiner"
+    ],
+    "publication_year": 2011,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Modern C Programming",
+    "url": "https://www.amazon.com/dp/B00930I6TK",
+    "site": "www.amazon.com",
+    "hash": "589186463409873ce3df91cad347283d3cba6abe9f05a85db8bbdb460b8159a2"
+  },
+  {
+    "title": "Effective C++: 50 Specific Ways to Improve Your Programs and Designs Subsequent Edition",
+    "authors": [
+      "Scott Meyers"
+    ],
+    "publication_year": 1997,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201924889",
+    "site": "www.amazon.com",
+    "hash": "07ae62925569cb275504b2ad0e0f2d52a628e280b3fa6f51824e818a9d51a239"
+  },
+  {
+    "title": "More Effective C++: 35 New Ways to Improve Your Programs and Designs",
+    "authors": [
+      "Scott Meyers"
+    ],
+    "publication_year": 1996,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/020163371X",
+    "site": "www.amazon.com",
+    "hash": "7cffdfeda9a4b3a764856509e223bffcc32a449cf360db6cda406c69b6d98ad3"
+  },
+  {
+    "title": "Advanced C++ Programming Styles and Idioms",
+    "authors": [
+      "James O. Coplien"
+    ],
+    "publication_year": 1991,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201548550",
+    "site": "www.amazon.com",
+    "hash": "82c7d9ad40121cdb9aab71defa419dce934c974ab5000d4f9e1a4d888feca4be"
+  },
+  {
+    "title": "Design and Evolution of C++",
+    "authors": [
+      "Bjarne Stroustrup"
+    ],
+    "publication_year": 1994,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201543303",
+    "site": "www.amazon.com",
+    "hash": "82cb21f93d7d29a4b123b1e920b66f741c364956c76b597d7bc118fe9e6c9980"
+  },
+  {
+    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+    "authors": [
+      "GoF"
+    ],
+    "publication_year": 1994,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201633612",
+    "site": "www.amazon.com",
+    "hash": "2bd15baceb4be0111a2c72de686156f9be64541c86817c89b1d93a95bf43eb76"
+  },
+  {
+    "title": "Large-Scale C++ Software Design",
+    "authors": [
+      "John Lakos"
+    ],
+    "publication_year": 1996,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201633620",
+    "site": "www.amazon.com",
+    "hash": "b52194864812f0a60efffc724dde9a356a13284bb2b242ace1e73876ca92bc36"
+  },
+  {
+    "title": "C++ for Real Programmers Revised Edition",
+    "authors": [
+      "Jeff Alger"
+    ],
+    "publication_year": 1998,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0120499428",
+    "site": "www.amazon.com",
+    "hash": "fa66f02a031aca9af7f60f99b4be4c96f2e7d8da539adbc1979a528baf91c24b"
+  },
+  {
+    "title": "Thinking in C++, Vol. 1: Introduction to Standard C++",
+    "authors": [
+      "Bruce Eckel"
+    ],
+    "publication_year": 2000,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0139798099",
+    "site": "www.amazon.com",
+    "hash": "3c3f83bd83c33e1b6e4645c78f48606034b315521aadbdbf148b1cf84451fbaa"
+  },
+  {
+    "title": "Thinking in C++, Volume 2: Practical Programming",
+    "authors": [
+      "Bruce Eckel"
+    ],
+    "publication_year": 2003,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0130353132",
+    "site": "www.amazon.com",
+    "hash": "1bbce4486523bacfa016b43d0726602f43fa57a10acac31617e7bb3ef43c6fd6"
+  },
+  {
+    "title": "Modern C++ Design: Generic Programming and Design Patterns Applied",
+    "authors": [
+      "Andrei Alexandrescu"
+    ],
+    "publication_year": 2001,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Old and Classic books on C++",
+    "url": "https://www.amazon.com/dp/0201704315",
+    "site": "www.amazon.com",
+    "hash": "b3fea2cf87199110fae3f8654410215ea5cb36035c031b526e9d916ca7e34fe0"
+  },
+  {
+    "title": "Foundations of Game Engine Development, Volume 2: Rendering",
+    "authors": [],
+    "publication_year": null,
+    "isbn": null,
+    "description": null,
+    "tags": [],
+    "category": "Game Development in C++",
+    "url": "https://www.amazon.com/dp/0985811757",
+    "site": "www.amazon.com",
+    "hash": "255648ecbeb7898997c81e01d53afbcda344a93060d015ccad2da2eb8cbec33b"
+  }
+]

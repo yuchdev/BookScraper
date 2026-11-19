@@ -10,13 +10,13 @@
 | Flag            | `dest`        | Applies to               | Behavior                                                                                  |
 |-----------------|---------------|--------------------------|-------------------------------------------------------------------------------------------|
 | `--dry-run`     | `dry_run`     | `scrape-urls`, `search`  | Run everything (including backend **reads** for dedup), but call no `save_books`; print what *would* be saved (title, site, hash) |
-| `--output-dir`  | `output_dir`  | `scrape-urls`, `search`  | Directory for `failed_*.csv`, `other_links.csv`, `filtered_books.csv`; created if missing; default `.` |
+| `--output-dir`  | `output_dir`  | `scrape-urls`, `search`  | Directory for `failed_*.json`, `other_links.json`, `filtered_books.json`; created if missing; default `.` |
 | `--json-store`  | `json_store`  | `scrape-urls`, `search`  | Path of the `json` backend file (default `books.json`); an error if combined with `--store-backend mongo` |
 
 - Dry run still requires `--store-backend` (dedup reads need a backend) and still runs the pre-flight.
 - `--json-store` is threaded into `JsonBackend(path)`, which gains a constructor parameter (default
   `LOCAL_STORE_FILE`). The write-permission pre-flight checks **that** file's directory, not `.`.
-- The diagnostic CSV writers accept a directory. Their hard-coded filenames stay the same.
+- The diagnostic JSON report writers accept a directory. Their hard-coded filenames stay the same.
 - The end-of-run summary starts with `DRY RUN - nothing was saved.` when applicable.
 
 ## Files

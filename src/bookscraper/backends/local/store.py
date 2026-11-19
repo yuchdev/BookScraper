@@ -1,8 +1,7 @@
 """
 JSON-backed local storage, the `json` counterpart to database.py's MongoDB storage.
 
-Unlike the old CSV output (a disposable, per-run, overwritten dump), this store is
-persistent and accumulates across runs - one JSON array of book documents at
+This store is persistent and accumulates across runs - one JSON array of book documents at
 LOCAL_STORE_FILE, written with the exact same fields a MongoDB insert would use. This
 is what makes `--store-backend json` and `--store-backend mongo` produce the same
 duplicate-check behavior: a book saved in one run is still there, and still detected
@@ -16,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from ...book_utils import print_log
+from ...book_utils import dumps_documents, print_log
 
 module_logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ def _load_books(path: Path = LOCAL_STORE_FILE) -> list[dict]:
 
 
 def _write_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:
-    path.write_text(json.dumps(books, indent=2, default=str), encoding="utf-8")
+    path.write_text(dumps_documents(books) + "\n", encoding="utf-8")
 
 
 def save_books(books: list[dict], path: Path = LOCAL_STORE_FILE) -> None:

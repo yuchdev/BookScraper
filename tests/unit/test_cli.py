@@ -16,7 +16,7 @@ def test_scrape_urls_parses_full_valid_arg_set() -> None:
         [
             "scrape-urls",
             "-f",
-            "content/urls.csv",
+            "content/urls.json",
             "--store-backend",
             "mongo",
             "--log-severity",
@@ -24,14 +24,14 @@ def test_scrape_urls_parses_full_valid_arg_set() -> None:
         ]
     )
     assert args.command == "scrape-urls"
-    assert args.input_file == "content/urls.csv"
+    assert args.input_file == "content/urls.json"
     assert args.store_backend == "mongo"
     assert args.log_severity == "debug"
 
 
 def test_scrape_urls_long_input_file_flag() -> None:
-    args = build_parser().parse_args(["scrape-urls", "--input-file", "x.csv", "--store-backend", "json"])
-    assert args.input_file == "x.csv"
+    args = build_parser().parse_args(["scrape-urls", "--input-file", "x.json", "--store-backend", "json"])
+    assert args.input_file == "x.json"
     assert args.store_backend == "json"
 
 
@@ -55,7 +55,7 @@ def test_search_parses_full_valid_arg_set() -> None:
 
 def test_scrape_urls_requires_store_backend() -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["scrape-urls", "-f", "content/urls.csv"])
+        build_parser().parse_args(["scrape-urls", "-f", "content/urls.json"])
 
 
 def test_search_requires_store_backend() -> None:
@@ -70,7 +70,7 @@ def test_scrape_urls_requires_input_file() -> None:
 
 def test_invalid_store_backend_choice_rejected() -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "sqlite"])
+        build_parser().parse_args(["scrape-urls", "-f", "x.json", "--store-backend", "sqlite"])
 
 
 def test_invalid_log_severity_choice_rejected() -> None:
@@ -89,7 +89,7 @@ def test_search_max_search_pages_type_is_int() -> None:
 
 
 def test_log_severity_defaults_to_info_on_both_subcommands() -> None:
-    scrape_args = build_parser().parse_args(["scrape-urls", "-f", "x.csv", "--store-backend", "mongo"])
+    scrape_args = build_parser().parse_args(["scrape-urls", "-f", "x.json", "--store-backend", "mongo"])
     search_args = build_parser().parse_args(["search", "--store-backend", "mongo"])
     assert scrape_args.log_severity == "info"
     assert search_args.log_severity == "info"

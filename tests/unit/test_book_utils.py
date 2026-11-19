@@ -7,10 +7,15 @@ same effect. check_mongodb_connection is intentionally NOT covered here (it
 needs mocking; it belongs to the mock tier).
 """
 
+import json
+from datetime import datetime
+
 from bookscraper.book_utils import (
     check_local_write_permission,
+    dumps_documents,
     extract_year_from_date,
     hash_book,
+    save_json_report,
 )
 
 
@@ -155,3 +160,37 @@ class TestCheckLocalWritePermission:
 
         monkeypatch.setattr("builtins.open", raise_runtime_error)
         assert check_local_write_permission(str(tmp_path)) is False
+
+
+class TestDumpsDocuments:
+    """The single serializer behind books.json and every diagnostic report."""
+
+    def test_round_trips_as_top_level_array(self) -> None:
+        docs = [{"title": "T", "authors": ["A"], "publication_year": 2020, "isbn": None}]
+        assert json.loads(dumps_documents(docs)) == docs
+
+    def test_non_ascii_written_verbatim(self) -> None:
+        text = dumps_documents([{"title": "Programmieren in C++ für Einsteiger"}])
+        assert "für" in text
+
+    def test_non_json_native_values_are_stringified(self) -> None:
+        text = dumps_documents([{"scraped_at": datetime(2026, 1, 2, 3, 4, 5)}])
+        assert json.loads(text) == [{"scraped_at": "2026-01-02 03:04:05"}]
+
+
+class TestSaveJsonReport:
+    def test_writes_records(self, tmp_path) -> None:
+        target = tmp_path / "report.json"
+        save_json_report([{"url": "u"}], str(target), "links")
+        assert json.loads(target.read_text(encoding="utf-8")) == [{"url": "u"}]
+
+    def test_empty_records_write_no_file(self, tmp_path) -> None:
+        target = tmp_path / "report.json"
+        save_json_report([], str(target), "links")
+        assert not target.exists()
+
+    def test_overwrites_previous_run(self, tmp_path) -> None:
+        target = tmp_path / "report.json"
+        save_json_report([{"url": "old"}], str(target), "links")
+        save_json_report([{"url": "new"}], str(target), "links")
+        assert json.loads(target.read_text(encoding="utf-8")) == [{"url": "new"}]

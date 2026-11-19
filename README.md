@@ -9,7 +9,7 @@
 
 `BookScraper` is a powerful and robust web scraping tool designed to extract detailed information about books from
 various online retailers and publishing platforms. Built with `asyncio` and `Playwright`, it efficiently navigates web
-pages, collects data, and provides flexible output options to CSV files or a MongoDB database.
+pages, collects data, and stores it in either a MongoDB database or a local JSON file with the same document schema.
 
 The project emphasizes reliability with features like dynamic user-agent rotation, retry mechanisms, and pre-flight
 checks for output destinations, ensuring a smooth and resilient scraping experience.
@@ -28,7 +28,7 @@ To quickly start the application at this stage of development:
     MONGODB_URI="mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority"
     TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client certificates
     ```
-4. run `uv run bookscraper search --output-to-mongo`
+4. run `uv run bookscraper search --store-backend mongo`
 
 ---
 
@@ -50,12 +50,14 @@ To quickly start the application at this stage of development:
     * **User-Agent Rotation:** Randomly selects user-agents to mimic natural Browse patterns and avoid detection.
     * **Resource Blocking:** Blocks unnecessary resources (images, media, ads) for faster and more efficient scraping.
     * **404 Page Detection:** Identifies and skips URLs leading to 404 (Not Found) pages.
-* **Flexible Output:**
-    * **CSV Files:** Export scraped book data, failed URLs, and unhandled URLs to `.csv` files.
+* **Interchangeable Storage Backends** (`--store-backend {mongo|json}`):
     * **MongoDB Atlas:** Store scraped data directly into a MongoDB database, with unique indexing to prevent duplicate
       entries.
-* **Pre-flight Checks:** Verifies write permissions for CSV output and establishes MongoDB connection *before* starting
-  the scraping process, preventing late-stage failures.
+    * **Local JSON:** A persistent `books.json` holding the exact documents a MongoDB insert would receive, with the
+      same hash-based duplicate detection, so the two backends behave identically.
+* **JSON Everywhere:** Input URL lists and diagnostic reports (failed URLs, unhandled URLs) are JSON too.
+* **Pre-flight Checks:** Verifies local write permission or MongoDB connectivity for the chosen backend *before*
+  starting the scraping process, preventing late-stage failures.
 * **Comprehensive Logging:** Detailed console output for real-time progress and a timestamped per-run log file under
   `~/.bookscrapper/logs/` (the 10 most recent runs are kept) for in-depth debugging and historical records, with a
   configurable `--log-severity` threshold.
@@ -161,116 +163,104 @@ inconsistently), and prints a diff-style report (optionally also to `--output <p
 Configuration above). Takes no `--store-backend`: it never touches book storage. Full writeup, including
 the manual selector loop it automates, is in [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
 
-### Input CSV Format (`scrape-urls`)
+### Input JSON Format (`scrape-urls`)
 
-`scrape-urls` requires an input CSV file (`-f`/`--input-file`) with a single column named `url`. The file must
-already exist — it is not created automatically.
+`scrape-urls` requires an input JSON file (`-f`/`--input-file`): an array of book documents in the same schema the
+storage backends write (`books.json` / the MongoDB collection). Only each document's `url` field is used; every other
+field is optional and ignored, so a minimal entry is just `{"url": "..."}`, and an existing `books.json` is itself
+valid input. The file must already exist. A file that isn't valid JSON, isn't an array, or has any entry without a
+non-empty string `url` is rejected as a whole (exit code 1), rather than silently skipping entries.
 
 Example content:
 
-```csv
-url
-[https://www.amazon.com/Product-Title/dp/B00ABCD123](https://www.amazon.com/Product-Title/dp/B00ABCD123)
-[https://www.packtpub.com/product/another-book/9781234567890](https://www.packtpub.com/product/another-book/9781234567890)
-[https://leanpub.com/your-great-book](https://leanpub.com/your-great-book)
-[https://www.oreilly.com/library/view/programming-language/9780123456789/](https://www.oreilly.com/library/view/programming-language/9780123456789/)
-[https://unsupported-site.com/book/some-title](https://unsupported-site.com/book/some-title)
+```json
+[
+  {"title": "Some Amazon Book", "authors": ["Jane Doe"], "url": "https://www.amazon.com/Product-Title/dp/B00ABCD123"},
+  {"url": "https://www.packtpub.com/product/another-book/9781234567890"},
+  {"url": "https://leanpub.com/your-great-book"},
+  {"url": "https://www.oreilly.com/library/view/programming-language/9780123456789/"},
+  {"url": "https://unsupported-site.com/book/some-title"}
+]
 ```
+
+The curated lists in `content/` (`urls.json`, `urls_amazon.json`) are full documents (`title`, `authors`,
+`publication_year`, `category`, `site`, `hash`, ...) and serve as working examples.
 
 ### Command-Line Arguments
 
 **`scrape-urls`** — scrape details for a known list of URLs:
 
-* `-f` or `--input-file <path/to/urls.csv>`: **(Required)** Path to your input CSV file containing book URLs (e.g.
-  the curated lists checked into `content/`).
-* `-c` or `--output-to-csv`: **(Optional)** If present, scraped data will be saved to `books.csv`, `failed_books.csv`,
-  and `other_links.csv` in the current directory.
-* `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
-  database.
+* `-f` or `--input-file <path/to/urls.json>`: **(Required)** Path to your input JSON file containing book documents
+  (e.g. the curated lists checked into `content/`).
+* `--store-backend {mongo|json}`: **(Required)** Storage backend used for both duplicate checks and saving scraped
+  books: `mongo` (your configured MongoDB Atlas database) or `json` (local `books.json`).
 * `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
   under `~/.bookscrapper/logs/` (default: `info`).
 
 **`search`** — discover new books by searching configured sites, then scrape their details:
 
-* `-c` or `--output-to-csv`: **(Optional)** If present, scraped data will be saved to `scraped_books.csv` and
-  `failed_urls.csv` in the current directory.
-* `-m` or `--output-to-mongo`: **(Optional)** If present, scraped data will be saved to your configured MongoDB Atlas
-  database.
+* `--store-backend {mongo|json}`: **(Required)** As for `scrape-urls`.
 * `--max-search-pages <n>`: **(Optional)** Maximum number of search-result pages to fetch per query per site
   (default: `3`).
 * `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
   under `~/.bookscrapper/logs/` (default: `info`).
+
+There is no implicit default and no interactive prompt: omitting `--store-backend` is an argparse error, so which
+store a run touched is always explicit from its command line.
 
 ### Examples
 
 All examples below use `uv run`, which runs the command inside `.venv` without activating it. If you've activated
 `.venv` yourself, drop the `uv run` prefix and call `bookscraper` (or `python -m bookscraper`) directly.
 
-1. **Scrape a known list of URLs, save to CSV only:**
+1. **Scrape a known list of URLs, save to the local JSON store:**
    ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -c
+   uv run bookscraper scrape-urls -f content/urls.json --store-backend json
    ```
-2. **Scrape a known list of URLs, save to MongoDB only:**
+2. **Scrape a known list of URLs, save to MongoDB:**
    ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -m
+   uv run bookscraper scrape-urls -f content/urls.json --store-backend mongo
    ```
-3. **Scrape a known list of URLs, save to both CSV and MongoDB:**
+3. **Search configured sites for new books, save to the local JSON store:**
    ```bash
-   uv run bookscraper scrape-urls -f content/urls.csv -c -m
+   uv run bookscraper search --store-backend json
    ```
-4. **Search configured sites for new books, save to CSV only:**
+4. **Search configured sites for new books, save to MongoDB, up to 5 result pages per query:**
    ```bash
-   uv run bookscraper search -c
+   uv run bookscraper search --store-backend mongo --max-search-pages 5
    ```
-5. **Search configured sites for new books, save to MongoDB only, up to 5 result pages per query:**
+5. **Without `uv run`, use `python -m bookscraper` inside an activated venv:**
    ```bash
-   uv run bookscraper search -m --max-search-pages 5
+   python -m bookscraper scrape-urls -f content/urls.json --store-backend json
+   python -m bookscraper search --store-backend json
    ```
-6. **Without `uv run`, use `python -m bookscraper` inside an activated venv:**
-   ```bash
-   python -m bookscraper scrape-urls -f content/urls.csv -c -m
-   python -m bookscraper search -c -m
-   ```
-7. **Display help messages:**
+6. **Display help messages:**
    ```bash
    uv run bookscraper --help
    uv run bookscraper scrape-urls --help
    uv run bookscraper search --help
    ```
 
-### Interactive Output Selection
-
-If you run either subcommand without specifying `-c` or `-m` (e.g., `bookscraper scrape-urls -f content/urls.csv`), it will
-perform pre-flight checks for CSV write permissions and MongoDB connectivity. Based on the successful checks, it will
-then prompt you to choose your desired output destination interactively:
-
-```
-Running pre-flight checks for output destinations...
-  Checking CSV write permissions...
-  CSV write permission: OK
-  Checking MongoDB connection...
-  MongoDB connection: OK
-
-No valid output destination specified via command line arguments (-c, -m).
-Do you want to save to (C)SV, (M)ongoDB, or (B)oth, or (E)xit?
-```
-
-If a destination (e.g., MongoDB) fails its pre-flight check, it will not be offered as an option in the interactive
-prompt.
-
 -----
 
 ## 📊 Output Files
 
-Upon successful execution (and if CSV output is enabled), the following files will be generated in your project root
-(these are run artifacts, not committed to the repo — see `.gitignore`):
+All output is JSON, written to your current directory (these are run artifacts, not committed to the repo — see
+`.gitignore`). Every file is a top-level JSON array of objects.
 
-* **`books.csv`**: Contains all successfully scraped book details. Each row represents a book with columns for title,
-  authors, ISBNs, publication date, description, tags, URL, site, year, and a unique hash.
-* **`failed_books.csv`**: Lists the URLs that the scraper attempted to process but failed to retrieve details for after
-  multiple retries.
-* **`other_links.csv`**: Contains URLs from your input file that do not belong to the currently supported scraping
-  sites (Amazon, Packtpub, Leanpub, O'Reilly). These URLs are skipped during the scraping process.
+* **`books.json`** (`--store-backend json` only): every successfully scraped book, as the exact document a MongoDB
+  insert would receive — title, authors, ISBNs, publication date and year, description, tags, URL, site, and a unique
+  `hash`. Unlike the reports below, it **persists and accumulates across runs**: books already present (by `hash`) are
+  skipped, mirroring MongoDB's unique index. With `--store-backend mongo` the same documents go to the database
+  instead.
+* **`failed_books.json`** (`scrape-urls`): `{"url", "status"}` records for URLs that failed to scrape (`FAILED`,
+  `UNKNOWN_ERROR`) or were skipped as already stored (`DUPLICATE`).
+* **`other_links.json`** (`scrape-urls`): `{"url"}` records for input URLs that don't belong to a supported site
+  (Amazon, Packtpub, Leanpub, O'Reilly) and were skipped.
+* **`failed_urls.json`** (`search`): `{"url", "site", "error"}` records for detail scrapes that failed.
+
+The three reports are diagnostics, not book data: they're written regardless of `--store-backend`, overwritten on
+every run, and not written at all when there's nothing to report.
 
 -----
 
@@ -299,8 +289,8 @@ BookScraper/
 ├── uv.lock               # Locked, resolved dependency versions (commit this file)
 ├── README.md             # This README file
 ├── content/
-│   ├── urls.csv           # Curated input: general book/reference URLs for scrape-urls (committed)
-│   └── urls_amazon.csv    # Curated input: Amazon-specific URLs for scrape-urls (committed)
+│   ├── urls.json          # Curated input: general book/reference URLs for scrape-urls (committed)
+│   └── urls_amazon.json   # Curated input: Amazon-specific URLs for scrape-urls (committed)
 └── src/
     └── bookscraper/
         ├── __init__.py

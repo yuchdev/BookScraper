@@ -85,9 +85,9 @@ at `MAX_LOG_FILES`=10 by `book_utils.py`'s `configure_logging()`, level set via 
 applied to the root logger so every module's logger reaches it) which currently receive full
 tracebacks via `exc_info=True` alongside MongoDB failure strings that can embed the connection
 URI; and scraped author names, which are personal data. Run artifacts
-(`books.csv`, `scraped_books.csv`, `failed_books.csv`, `other_links.csv`, `failed_urls.csv`) are
-gitignored, not committed; the curated input lists under `content/` (`urls.csv`, `urls_amazon.csv`)
-are committed intentionally since they're hand-maintained data, not scrape output.
+(`books.json`, `failed_books.json`, `other_links.json`, `failed_urls.json`) are gitignored, not
+committed; the curated input lists under `content/` (`urls.json`, `urls_amazon.json`) are committed
+intentionally since they're hand-maintained data, not scrape output.
 
 ### Docs
 
