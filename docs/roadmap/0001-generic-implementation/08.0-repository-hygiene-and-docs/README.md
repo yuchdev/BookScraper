@@ -13,7 +13,7 @@ Accumulated drift between what the repo *says* and what it *is*:
 |------------------------------------|--------------------------------------------------------------|-----------------------------------------------------------|
 | `pyproject.toml` `requires-python` | `>=3.9`                                                      | Code uses `datetime.UTC` (3.11+) and `zip(strict=True)` (3.10+); `ruff.toml` targets `py312` |
 | README badge                       | Python 3.9+                                                  | as above                                                  |
-| README quick start                 | `uv run bookscraper search --output-to-mongo`                | That flag doesn't exist; `--store-backend` is required     |
+| README quick start                 | (already rewritten by milestone 0002 to scrape → review → push) | Remaining scope: verify every command in the refreshed README parses cleanly |
 | README features                    | CSV output, CSV pre-flight                                   | CSV book output was replaced by the `json` backend        |
 | `pyproject.toml` description       | "…with CSV/MongoDB output"                                   | JSON / MongoDB                                            |
 | Repo root                          | `release_package.py`, `RELEASE_NOTES.json`                   | Cookiecutter leftovers that read a nonexistent `setup.cfg` |

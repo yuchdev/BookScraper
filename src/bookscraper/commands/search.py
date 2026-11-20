@@ -4,12 +4,14 @@ import argparse
 import asyncio
 import logging
 import time
+from pathlib import Path
 
-from ..backends import resolve_store_backend
+from ..backends import resolve_dedup_source
 from ..book_utils import print_log, save_json_report
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
 from ..scraping.scrape_details import get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
+from .staging_output import print_step_one_summary, save_to_staging, warn_about_legacy_store
 
 module_logger = logging.getLogger(__name__)
 
@@ -38,7 +40,9 @@ async def run(args: argparse.Namespace) -> None:
     start_time = time.time()
     module_logger.info("Application started.")
 
-    storage_backend = resolve_store_backend(args.store_backend)
+    staging_file = Path(args.staging_file)
+    warn_about_legacy_store(staging_file)
+    dedup_source = resolve_dedup_source(staging_file, args.check_mongo)
 
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
@@ -68,7 +72,7 @@ async def run(args: argparse.Namespace) -> None:
                         book_slug = book.get("slug")
                         book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
                         book["book_url"] = book_url
-                        exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
+                        exists = await asyncio.to_thread(dedup_source.leanpub_book_exists, book_id, book_slug)
 
                         if not exists:
                             # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
@@ -80,7 +84,7 @@ async def run(args: argparse.Namespace) -> None:
                         else:
                             total_duplicates_skipped += 1
                             print_log(
-                                f"{site_name.title()} - Book already in database: {book_title}",
+                                f"{site_name.title()} - Book already staged or in the database: {book_title}",
                                 "warning",
                             )
 
@@ -161,21 +165,17 @@ async def run(args: argparse.Namespace) -> None:
         f"{len(failed_scrape_attempts)} URLs failed during detailed scrape.",
         "warning" if len(failed_scrape_attempts) > 0 else "info",
     )
-    print_log(f"{total_duplicates_skipped} books already in the database and skipped.")
+    print_log(f"{total_duplicates_skipped} books already staged (or in MongoDB) and skipped.")
 
     # --- Output Saving ---
     print_log("\n--- Output Summary ---", "step")
-    # failed_urls.json is a process diagnostic, not database content, so it's always
-    # written as JSON best-effort, independent of --store-backend.
+    # failed_urls.json is a process diagnostic, not book data, so it's always written best-effort.
     save_failed_urls_to_json(failed_scrape_attempts)
 
-    if scraped_books_data:
-        print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
-        storage_backend.save_books(scraped_books_data)
-    else:
-        print_log("No new books to save.")
-
-    storage_backend.close()
+    # Step 1's only write: append to the staging file for review (ADR 0003). Never MongoDB.
+    summary = save_to_staging(staging_file, scraped_books_data, source="search")
+    dedup_source.close()
+    print_step_one_summary(staging_file, summary, skipped_as_known=total_duplicates_skipped)
 
     print_log("\nApplication finished.", "step")
     module_logger.info("Application finished.")

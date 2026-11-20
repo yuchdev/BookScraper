@@ -6,10 +6,14 @@
 
 ## Context
 
-Pre-scrape deduplication runs one `find_one` per candidate: `{"asin": ...}` for Amazon
-(`check_amazon_asin_exists_in_db`) and `{"$or": [{"book_id": ...}, {"slug": ...}]}` for Leanpub
-(`deduplicate.leanpub_prescrape_deduplicate`). Only `hash` is indexed (`ensure_unique_index_on_hash`), so every
-lookup is a full collection scan. A `search` run checks hundreds of candidates, so that's hundreds of scans.
+Pre-scrape deduplication now goes through `MongoDedupSource` (called only when `--check-mongo` is given), which
+runs one `find_one` per candidate: `{"asin": ...}` for Amazon (`check_amazon_asin_exists_in_db`) and
+`{"$or": [{"book_id": ...}, {"slug": ...}]}` for Leanpub (`deduplicate.leanpub_prescrape_deduplicate`). Only
+`hash` is indexed (`ensure_unique_index_on_hash`), so every lookup on the `--check-mongo` path is a full
+collection scan. A `search --check-mongo` run checks hundreds of candidates, so that's hundreds of scans.
+
+Index creation must happen **only** on the writer path (`push` via `database.get_mongo_collection(ensure_indexes=True)`),
+never in read-only connections such as `--check-mongo` (which calls `get_mongo_collection(ensure_indexes=False)`).
 
 ## Requirements
 
@@ -28,6 +32,8 @@ lookup is a full collection scan. A `search` run checks hundreds of candidates, 
 - A failure creating one secondary index logs a warning and continues. A failure creating the unique `hash` index
   keeps today's behavior.
 - No index is **unique** except `hash`: two editions can legitimately share a slug across sites.
+- `MongoDedupSource` (called on the `--check-mongo` path) benefits from these indexes because it uses the same
+  `check_amazon_asin_exists_in_db` / `leanpub_prescrape_deduplicate` functions as today.
 
 ## Files
 
@@ -44,5 +50,5 @@ lookup is a full collection scan. A `search` run checks hundreds of candidates, 
 
 ## Success criteria
 
-- [ ] On a live cluster, `db.books.getIndexes()` lists all four names after one run (manual check, noted in the PR).
-- [ ] `explain()` of an `asin` lookup shows `IXSCAN`, not `COLLSCAN` (manual, noted in the PR).
+- [ ] On a live cluster, `db.books.getIndexes()` lists all four names after one `push` run (manual check, noted in the PR).
+- [ ] `explain()` of an `asin` lookup on the `--check-mongo` path shows `IXSCAN`, not `COLLSCAN` (manual, noted in the PR).

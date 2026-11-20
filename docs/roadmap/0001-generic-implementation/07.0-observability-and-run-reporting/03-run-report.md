@@ -15,13 +15,14 @@
   {
     "schema": 1,
     "command": "search",
-    "argv": ["search", "--store-backend", "json", "--site", "amazon"],
+    "argv": ["search", "--site", "amazon"],
     "started_at": "…Z", "finished_at": "…Z", "duration_s": 123.4,
     "versions": {"bookscraper": "…", "python": "…", "playwright": "…", "chromium": "…"},
-    "store_backend": "json",
+    "staging_file": "staging/books.json",
+    "check_mongo": false,
     "flags": {"dry_run": false, "ignore_robots": false, "filters_enabled": true},
     "per_site": {"amazon": {"SUCCESS": 12, "DUPLICATE": 3, "BLOCKED": 1, "FILTERED": 4}},
-    "save": {"inserted": 12, "duplicates": 0, "errors": 0},
+    "staged": {"appended": 12, "duplicates": 3, "errors": 0},
     "exit_code": 3
   }
   ```

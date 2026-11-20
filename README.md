@@ -23,12 +23,15 @@ To quickly start the application at this stage of development:
 1. cd into the BookScraper project folder
 2. run `uv sync` to create `.venv` and install dependencies (this also registers the `bookscraper` command inside
    the venv), then `uv run playwright install chromium`
-3. Ensure the .env file is set with:
+3. **Step 1 - scrape** into the local staging file (no database needed):
+   `uv run bookscraper search` (or `uv run bookscraper scrape-urls -f content/urls.json`)
+4. **Review** `staging/books.json` in any editor - fix fields, or mark a document `"_staging": {"status": "rejected"}`
+5. **Step 2 - push** to MongoDB Atlas (needs the `.env` below): `uv run bookscraper push --dry-run`, then
+   `uv run bookscraper push`
     ```dotenv
     MONGODB_URI="mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority"
     TLS_CERT_FILE="/path/to/your/tls_certificate.pem" # Optional if not using client certificates
     ```
-4. run `uv run bookscraper search --store-backend mongo`
 
 ---
 
@@ -50,14 +53,17 @@ To quickly start the application at this stage of development:
     * **User-Agent Rotation:** Randomly selects user-agents to mimic natural Browse patterns and avoid detection.
     * **Resource Blocking:** Blocks unnecessary resources (images, media, ads) for faster and more efficient scraping.
     * **404 Page Detection:** Identifies and skips URLs leading to 404 (Not Found) pages.
-* **Interchangeable Storage Backends** (`--store-backend {mongo|json}`):
-    * **MongoDB Atlas:** Store scraped data directly into a MongoDB database, with unique indexing to prevent duplicate
-      entries.
-    * **Local JSON:** A persistent `books.json` holding the exact documents a MongoDB insert would receive, with the
-      same hash-based duplicate detection, so the two backends behave identically.
-* **JSON Everywhere:** Input URL lists and diagnostic reports (failed URLs, unhandled URLs) are JSON too.
-* **Pre-flight Checks:** Verifies local write permission or MongoDB connectivity for the chosen backend *before*
-  starting the scraping process, preventing late-stage failures.
+* **Review Before It Reaches the Database** ([ADR 0003](docs/adr/0003-staged-review-and-two-way-sync.md)):
+    * **Step 1 - scrape to a staging file:** `scrape-urls` and `search` only ever append to `staging/books.json`; your
+      edits in that file are never overwritten by later scrapes.
+    * **Step 2 - `push`:** validates the whole file, shows a dry-run plan (insert / duplicate / update / unchanged),
+      and applies it to MongoDB Atlas in one bulk write. Updates to existing documents need `--allow-updates`;
+      nothing is ever deleted.
+    * **Reverse - `pull`:** exports the entire MongoDB collection to the same JSON format, so you can bulk-edit it and
+      push the corrections back.
+* **JSON Everywhere:** Input URL lists, the staging file, exports, and diagnostic reports are all JSON.
+* **Fail Loudly:** a corrupt or invalid staging file stops the run with every problem listed - nothing is guessed,
+  nothing half-written.
 * **Comprehensive Logging:** Detailed console output for real-time progress and a timestamped per-run log file under
   `~/.bookscrapper/logs/` (the 10 most recent runs are kept) for in-depth debugging and historical records, with a
   configurable `--log-severity` threshold.
@@ -85,7 +91,7 @@ purposes.
     # (after uv sync)
     uv run playwright install chromium
     ```
-* **MongoDB Atlas Cluster (Optional, for MongoDB output)**: If you plan to use MongoDB output, you'll need access to a
+* **MongoDB Atlas Cluster (for `push` / `pull`)**: Scraping into the staging file needs no database; to push it, you'll need access to a
   MongoDB Atlas cluster. Refer to the [MongoDB Atlas documentation](https://www.mongodb.com/cloud/atlas/getting-started)
   for setup instructions. You'll need a `MONGODB_URI` and potentially a `TLS_CERT_FILE`.
 
@@ -116,7 +122,7 @@ purposes.
 
 ### Configuration (`.env` file)
 
-For MongoDB output, you need to set up environment variables. Create a file named `.env` in the root directory of the
+For `push`, `pull`, and `--check-mongo`, you need to set up environment variables. Create a file named `.env` in the root directory of the
 project (the same directory as `pyproject.toml` and `README.md`).
 
 ```dotenv
@@ -143,10 +149,20 @@ If you don't specify the configuration in the `.env` file, the application will 
 
 ## 💡 Usage
 
-`bookscraper` has three subcommands: `scrape-urls` (scrape details for a known list of URLs), `search` (discover
-new books by searching configured sites, then scrape their details), and `detect-schema` (an AI-assisted
-developer-maintenance tool that proposes CSS-selector updates for a site's detail page). Run `bookscraper
---help` or `bookscraper <subcommand> --help` for full option listings.
+The workflow is **scrape → review → push**:
+
+```
+scrape-urls / search ──► staging/books.json ──► [you review & edit] ──► push ──► MongoDB Atlas
+                                                                          ▲          │
+                                [edit] ◄── staging/books_mongo.json ◄── pull ◄───────┘
+```
+
+`bookscraper` subcommands: `scrape-urls` (step 1: scrape details for a known list of URLs), `search` (step 1:
+discover new books by searching configured sites, then scrape their details), `push` (step 2: apply a reviewed
+staging file to MongoDB), `pull` (export the whole MongoDB collection to JSON), `rotate-cert` (rotate the Atlas X.509
+client certificate), and `detect-schema` (an AI-assisted developer-maintenance tool that proposes CSS-selector
+updates for a site's detail page). Run `bookscraper --help` or `bookscraper <subcommand> --help` for full option
+listings. The staging file format is documented in [`docs/dev/staging-file-format.md`](docs/dev/staging-file-format.md).
 
 **`detect-schema`** — propose CSS-selector updates for a site's detail page (dev maintenance):
 
@@ -160,15 +176,14 @@ It loads each `--url` with Playwright, asks Claude to propose selectors for the 
 `site_constants[site]`, validates them against every sample page's live DOM (flagging any that match
 inconsistently), and prints a diff-style report (optionally also to `--output <path>`). It never writes to
 `parameters.py` — you apply the changes you agree with by hand. Requires `ANTHROPIC_API_KEY` (see
-Configuration above). Takes no `--store-backend`: it never touches book storage. Full writeup, including
+Configuration above). It never touches book data (no staging file, no MongoDB). Full writeup, including
 the manual selector loop it automates, is in [`docs/scraping/schema-detection.md`](docs/scraping/schema-detection.md).
 
 ### Input JSON Format (`scrape-urls`)
 
-`scrape-urls` requires an input JSON file (`-f`/`--input-file`): an array of book documents in the same schema the
-storage backends write (`books.json` / the MongoDB collection). Only each document's `url` field is used; every other
-field is optional and ignored, so a minimal entry is just `{"url": "..."}`, and an existing `books.json` is itself
-valid input. The file must already exist. A file that isn't valid JSON, isn't an array, or has any entry without a
+`scrape-urls` requires an input JSON file (`-f`/`--input-file`): an array of book documents in the staging-file
+schema. Only each document's `url` field is used; every other field is optional and ignored, so a minimal entry is
+just `{"url": "..."}`, and a staging file or a `pull` export is itself valid input. The file must already exist. A file that isn't valid JSON, isn't an array, or has any entry without a
 non-empty string `url` is rejected as a whole (exit code 1), rather than silently skipping entries.
 
 Example content:
@@ -192,53 +207,79 @@ The curated lists in `content/` (`urls.json`, `urls_amazon.json`) are full docum
 
 * `-f` or `--input-file <path/to/urls.json>`: **(Required)** Path to your input JSON file containing book documents
   (e.g. the curated lists checked into `content/`).
-* `--store-backend {mongo|json}`: **(Required)** Storage backend used for both duplicate checks and saving scraped
-  books: `mongo` (your configured MongoDB Atlas database) or `json` (local `books.json`).
+* `--staging-file <path>`: **(Optional)** Staging file new books are appended to (default: `staging/books.json`).
+  Books already in it are skipped; documents you've edited are never changed.
+* `--check-mongo`: **(Optional)** Also skip books that already exist in MongoDB (read-only lookups; needs the
+  `.env` credentials). Without it, step 1 never contacts MongoDB.
 * `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
   under `~/.bookscrapper/logs/` (default: `info`).
 
 **`search`** — discover new books by searching configured sites, then scrape their details:
 
-* `--store-backend {mongo|json}`: **(Required)** As for `scrape-urls`.
+* `--staging-file <path>`, `--check-mongo`: **(Optional)** As for `scrape-urls`.
 * `--max-search-pages <n>`: **(Optional)** Maximum number of search-result pages to fetch per query per site
   (default: `3`).
-* `--log-severity {debug|info|warning|error}`: **(Optional)** Minimum severity written to this run's log file
-  under `~/.bookscrapper/logs/` (default: `info`).
+* `--log-severity {debug|info|warning|error}`: **(Optional)** As above.
 
-There is no implicit default and no interactive prompt: omitting `--store-backend` is an argparse error, so which
-store a run touched is always explicit from its command line.
+**`push`** — validate a reviewed staging file and apply it to MongoDB:
+
+* `--staging-file <path>`: **(Optional)** The file to push (default: `staging/books.json`); a `pull` export works too.
+* `--dry-run`: **(Optional)** Validate and print the plan, write the report, change nothing in MongoDB.
+* `--allow-updates`: **(Optional)** Allow replacing existing MongoDB documents (those with an `_id`, from `pull`)
+  that you edited. Without it, a plan containing updates is refused before anything is written.
+* `--approved-only`: **(Optional)** Push only documents marked `"_staging": {"status": "approved"}` (default:
+  everything not marked `rejected`).
+* `--report-file <path>`: **(Optional)** Per-document outcome report (default: `push_report.json`).
+* `--log-severity {debug|info|warning|error}`: **(Optional)** As above.
+
+Exit codes: `0` success (or dry run), `1` refused before writing anything (invalid file, connection failure, updates
+without `--allow-updates`), `3` written, but some documents failed (see the report). `push` never deletes documents
+and never modifies the staging file.
+
+**`pull`** — export the whole MongoDB collection to a staging-format JSON file:
+
+* `-o` or `--output <path>`: **(Required)** File to write, e.g. `staging/books_mongo.json`.
+* `--force`: **(Optional)** Overwrite `--output` if it exists (otherwise refused, to protect review work).
+* `--log-severity {debug|info|warning|error}`: **(Optional)** As above.
+
+The old `--store-backend` flag no longer exists: scraping always writes the staging file, and only `push` writes
+MongoDB.
 
 ### Examples
 
 All examples below use `uv run`, which runs the command inside `.venv` without activating it. If you've activated
 `.venv` yourself, drop the `uv run` prefix and call `bookscraper` (or `python -m bookscraper`) directly.
 
-1. **Scrape a known list of URLs, save to the local JSON store:**
+1. **Scrape a known list of URLs into the staging file:**
    ```bash
-   uv run bookscraper scrape-urls -f content/urls.json --store-backend json
+   uv run bookscraper scrape-urls -f content/urls.json
    ```
-2. **Scrape a known list of URLs, save to MongoDB:**
+2. **Search configured sites for new books, skipping ones already in MongoDB, up to 5 result pages per query:**
    ```bash
-   uv run bookscraper scrape-urls -f content/urls.json --store-backend mongo
+   uv run bookscraper search --check-mongo --max-search-pages 5
    ```
-3. **Search configured sites for new books, save to the local JSON store:**
+3. **Preview, then push the reviewed staging file to MongoDB:**
    ```bash
-   uv run bookscraper search --store-backend json
+   uv run bookscraper push --dry-run
+   uv run bookscraper push
    ```
-4. **Search configured sites for new books, save to MongoDB, up to 5 result pages per query:**
+4. **Bulk-correct the database: pull, edit, push the changes back:**
    ```bash
-   uv run bookscraper search --store-backend mongo --max-search-pages 5
+   uv run bookscraper pull -o staging/books_mongo.json
+   # ... edit staging/books_mongo.json ...
+   uv run bookscraper push --staging-file staging/books_mongo.json --dry-run
+   uv run bookscraper push --staging-file staging/books_mongo.json --allow-updates
    ```
 5. **Without `uv run`, use `python -m bookscraper` inside an activated venv:**
    ```bash
-   python -m bookscraper scrape-urls -f content/urls.json --store-backend json
-   python -m bookscraper search --store-backend json
+   python -m bookscraper scrape-urls -f content/urls.json
+   python -m bookscraper push --dry-run
    ```
 6. **Display help messages:**
    ```bash
    uv run bookscraper --help
    uv run bookscraper scrape-urls --help
-   uv run bookscraper search --help
+   uv run bookscraper push --help
    ```
 
 -----
@@ -248,19 +289,22 @@ All examples below use `uv run`, which runs the command inside `.venv` without a
 All output is JSON, written to your current directory (these are run artifacts, not committed to the repo — see
 `.gitignore`). Every file is a top-level JSON array of objects.
 
-* **`books.json`** (`--store-backend json` only): every successfully scraped book, as the exact document a MongoDB
-  insert would receive — title, authors, ISBNs, publication date and year, description, tags, URL, site, and a unique
-  `hash`. Unlike the reports below, it **persists and accumulates across runs**: books already present (by `hash`) are
-  skipped, mirroring MongoDB's unique index. With `--store-backend mongo` the same documents go to the database
-  instead.
+* **`staging/books.json`** (`scrape-urls`, `search`): the staging file — every newly scraped book (title, authors,
+  ISBNs, publication date and year, description, tags, URL, site, and a unique `hash`) plus a `_staging` review
+  block. It **persists and accumulates across runs**: books already present (by `hash`) are skipped, and documents
+  you've edited are never touched. Format: [`docs/dev/staging-file-format.md`](docs/dev/staging-file-format.md).
+* **`staging/books_mongo.json`** (or whatever you pass to `pull -o`): a full export of the MongoDB collection.
+* **`push_report.json`** (`push`): one record per staging document — planned action, outcome, `_id`, changed
+  fields, and an error class/code if a write failed. Written on every push, including dry runs.
 * **`failed_books.json`** (`scrape-urls`): `{"url", "status"}` records for URLs that failed to scrape (`FAILED`,
   `UNKNOWN_ERROR`) or were skipped as already stored (`DUPLICATE`).
 * **`other_links.json`** (`scrape-urls`): `{"url"}` records for input URLs that don't belong to a supported site
   (Amazon, Packtpub, Leanpub, O'Reilly) and were skipped.
 * **`failed_urls.json`** (`search`): `{"url", "site", "error"}` records for detail scrapes that failed.
 
-The three reports are diagnostics, not book data: they're written regardless of `--store-backend`, overwritten on
-every run, and not written at all when there's nothing to report.
+The three scrape reports are diagnostics, not book data: they're overwritten on every run, and not written at all
+when there's nothing to report. Everything under `staging/` is gitignored — it's your review work and database
+content, so don't commit it.
 
 -----
 

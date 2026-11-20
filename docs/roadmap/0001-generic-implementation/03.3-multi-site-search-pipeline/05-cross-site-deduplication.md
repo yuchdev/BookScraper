@@ -19,8 +19,10 @@ subtitles) and author spellings defeat it. The only cross-site identity that's r
   `DEDUP_SITE_PRIORITY = ["oreilly", "packtpub", "leanpub", "amazon"]` (publisher sites carry richer metadata
   than a reseller). Dropped candidates are logged at info level with the kept one's URL.
 - **Against the store, after the detail scrape:** new contract method
-  `StorageBackend.book_exists_by_isbn13(isbn13: str) -> bool` (both backends; sparse Mongo index
-  `isbn13_lookup_index`; parity scenario). A detail record whose `isbn13` already exists → `DUPLICATE`, not saved.
+  `DedupSource.book_exists_by_isbn13(isbn13: str) -> bool`, implemented by `StagingDedupSource` (via `StagingIndex`)
+  and `MongoDedupSource` (sparse Mongo index `isbn13_lookup_index`; extends task 01.0 subtask 06).
+  `StorageBackend` and `backends/local/store.py` no longer exist. A detail record whose `isbn13` already exists →
+  `DUPLICATE`, not saved to staging.
 - Pure helpers `normalize_title`, `normalize_author`, `dedup_key` in `scraping/dedup.py`, unit-tested with a
   table of real title pairs gathered from the 06.0 fixtures.
 - No fuzzy/Levenshtein matching in this subtask (a false merge loses a book forever). Record it as a possible
@@ -29,10 +31,10 @@ subtitles) and author spellings defeat it. The only cross-site identity that's r
 ## Files
 
 - Create `src/bookscraper/scraping/dedup.py`.
-- Modify `src/bookscraper/commands/search.py`, `src/bookscraper/backends/storage.py`,
-  `backends/mongo/database.py`, `backends/local/store.py`.
+- Modify `src/bookscraper/commands/search.py`, `src/bookscraper/backends/dedup.py`,
+  `backends/local/staging.py`, `backends/mongo/database.py`.
 - Create `tests/unit/scraping/test_dedup.py`; modify `tests/mock/commands/test_search.py`,
-  `tests/mock/backends/test_backend_parity.py`, `tests/mock/backends/mongo/test_database.py`.
+  `tests/mock/backends/mongo/test_database.py`.
 
 ## Tests
 

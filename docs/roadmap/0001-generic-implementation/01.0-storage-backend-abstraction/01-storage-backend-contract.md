@@ -4,6 +4,12 @@
 **Status:** ✅ Complete
 **Role:** Architect → Python Expert
 
+> **Historical note (superseded):** `backends/storage.py` and the `StorageBackend` class were deleted by
+> milestone 0002. The read/write contract became a read-only `DedupSource` interface (`backends/dedup.py`) with
+> `StagingDedupSource`, `MongoDedupSource`, and `CompositeDedupSource` implementations; writes moved exclusively to
+> `backends/mongo/push_writer.py`. See [0002 02.0/02](/docs/roadmap/0002-staged-review-and-mongo-sync/02.0-scrape-to-staging/02-dedup-source-refactor.md).
+> Requirements below are historical context.
+
 ## Context
 
 Before this task, the scrapers wrote to MongoDB directly and optionally dumped a throwaway CSV nobody read back.

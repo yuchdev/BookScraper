@@ -10,9 +10,6 @@ from pymongo import MongoClient, server_api
 from pymongo.collection import Collection
 from pymongo.errors import (
     ConnectionFailure,
-    DuplicateKeyError,
-    InvalidDocument,
-    OperationFailure,
     ServerSelectionTimeoutError,
 )
 
@@ -84,9 +81,13 @@ _mongo_db = None
 _mongo_collection = None
 
 
-def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Collection]]:
+def _initialize_mongodb_connection(
+    ensure_indexes: bool = True,
+) -> Tuple[Optional[MongoClient], Optional[Collection]]:
     """
     Initializes the MongoDB client and books collection.
+    ensure_indexes=False skips creating the unique 'hash' index, for read-only callers
+    (scrape --check-mongo, pull, push --dry-run) that must never modify the database.
     This function should only be called once when the application starts or if the connection is lost.
     Sets the global _mongo_client, _mongo_db, and _mongo_collection variables.
     """
@@ -160,8 +161,9 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         _mongo_db = _mongo_client[os.environ.get("MONGODB_DB_NAME", "bookscraper_db")]
         _mongo_collection = _mongo_db[os.environ.get("MONGODB_COLLECTION_NAME", "books")]
 
-        # Ensure a unique index on 'hash' to prevent duplicate insertions
-        ensure_unique_index_on_hash(_mongo_collection)
+        # Ensure a unique index on 'hash' to prevent duplicate insertions (writers only)
+        if ensure_indexes:
+            ensure_unique_index_on_hash(_mongo_collection)
 
         return _mongo_client, _mongo_collection
 
@@ -187,19 +189,21 @@ def _initialize_mongodb_connection() -> Tuple[Optional[MongoClient], Optional[Co
         return None, None
 
 
-def get_mongo_collection() -> Optional[Collection]:
+def get_mongo_collection(*, ensure_indexes: bool = True) -> Optional[Collection]:
     """
     Returns the globally managed MongoDB collection.
-    Initializes the connection if it doesn't exist.
+    Initializes the connection if it doesn't exist. Pass ensure_indexes=False from read-only
+    callers so connecting never creates an index.
     """
     global _mongo_client, _mongo_db, _mongo_collection
 
     if _mongo_collection is None:
         try:
             # Attempt to initialize the connection if it's not already set up
-            _mongo_client, _mongo_collection = _initialize_mongodb_connection()
-            print_log("Connection to MongoDB Atlas successful.", "success")
-            module_logger.info("Connection to MongoDB Atlas successful.")
+            _mongo_client, _mongo_collection = _initialize_mongodb_connection(ensure_indexes=ensure_indexes)
+            if _mongo_collection is not None:
+                print_log("Connection to MongoDB Atlas successful.", "success")
+                module_logger.info("Connection to MongoDB Atlas successful.")
         except Exception as e:
             print_log(
                 f"MongoDB connection: FAILED. MongoDB output will not be available: {e}",
@@ -220,83 +224,6 @@ def close_mongo_connection() -> None:
         _mongo_db = None
         _mongo_collection = None
         module_logger.info("MongoDB connection closed.")
-
-
-def save_books_to_mongodb(books: list[dict], mongo_collection: Optional[Collection] = None) -> None:
-    """
-    Saves a list of book dictionaries to MongoDB.
-    Optionally accepts a pre-established MongoDB collection; otherwise,
-    uses the globally managed MongoDB collection.
-
-    Returns:
-            A dictionary containing insertion summary (num_inserted, num_duplicates, num_errors).
-    """
-    # Use the passed collection if provided, otherwise get the global one
-    books_collection = mongo_collection if mongo_collection is not None else get_mongo_collection()
-
-    if books_collection is None:  # If it's still None after trying to get it, log error and return
-        module_logger.error("MongoDB collection not available. Cannot save books.")
-        print_log("Error: MongoDB collection not available. Cannot save books.", "error")
-
-    num_inserted = 0
-    num_duplicates = 0
-    num_errors = 0
-
-    for book in books:
-        try:
-            result = books_collection.insert_one(book)
-            if result.acknowledged:
-                num_inserted += 1
-                module_logger.info(f"Inserted book: {book.get('title', 'Unknown Title')} (ID: {result.inserted_id})")
-            else:
-                module_logger.warning(f"Insertion not acknowledged for {book.get('title', 'Unknown Title')}.")
-                print_log(
-                    f"Warning: Insertion not acknowledged for {book.get('title', 'Unknown Title')}.",
-                    "warning",
-                )
-                num_errors += 1
-        except DuplicateKeyError:
-            module_logger.info(f"Duplicate book found by hash '{book['hash']}'. Skipping insertion.")
-            # print_log(f"Info: Duplicate book found by hash '{book['hash']}'. Skipping insertion.", "info")
-            num_duplicates += 1
-        except InvalidDocument as e:
-            module_logger.error(
-                f"Invalid document for insertion: {e}. Book: {book.get('title', 'Unknown Title')}",
-                exc_info=True,
-            )
-            print_log(
-                f"Error: Invalid document for insertion: {e}. Book: {book.get('title', 'Unknown Title')}",
-                "error",
-            )
-            num_errors += 1
-        except OperationFailure as e:
-            module_logger.error(
-                f"MongoDB operation failed for {book.get('title', 'Unknown Title')}: {e}",
-                exc_info=True,
-            )
-            print_log(
-                f"Error: MongoDB operation failed for {book.get('title', 'Unknown Title')}: {e}",
-                "error",
-            )
-            num_errors += 1
-        except Exception as e:
-            module_logger.error(
-                f"Unexpected error during insertion of {book.get('title', 'Unknown Title')}: {e}",
-                exc_info=True,
-            )
-            print_log(
-                f"Error: Unexpected error during insertion of {book.get('title', 'Unknown Title')}: {e}",
-                "error",
-            )
-            num_errors += 1
-
-    module_logger.info(
-        f"MongoDB insertion summary: {num_inserted} new, {num_duplicates} duplicate{'s' if num_duplicates != 1 else ''}, {num_errors} error{'s' if num_errors != 1 else ''}."
-    )
-    print_log(
-        f"MongoDB insertion summary: {num_inserted} new, {num_duplicates} duplicates, {num_errors} errors.",
-        "success",
-    )
 
 
 def check_amazon_asin_exists_in_db(asin: str, mongo_collection: Optional[Collection] = None) -> bool:

@@ -1,7 +1,12 @@
 # bookscraper run artifacts (curated input lists live in content/)
-# --store-backend json local store; persists/accumulates across runs, don't delete casually.
+# Staging area (ADR 0003): scraped books awaiting review + pull exports. Holds review work and
+# database content - don't delete casually, never commit.
 # (Comments must be on their own line: gitignore has no trailing comments.)
+/staging/
+# Legacy --store-backend json local store, from before the staged pipeline.
 /books.json
+# Per-run push outcome report.
+/push_report.json
 # Diagnostic reports, overwritten on every run.
 /failed_books.json
 /failed_urls.json

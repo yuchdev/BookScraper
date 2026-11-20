@@ -5,6 +5,11 @@
 **Depends on:** [01-storage-backend-contract.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/01-storage-backend-contract.md)
 **Role:** Python Expert
 
+> **Historical note (superseded):** `backends/local/store.py` was deleted by milestone 0002 and replaced by
+> `backends/local/staging.py`, which handles the staging-file format, atomic I/O, and the in-memory dedup index
+> for the `--staging-file` path. See [0002 01.0/03](/docs/roadmap/0002-staged-review-and-mongo-sync/01.0-staging-contract-and-adr/03-staging-file-io.md).
+> Requirements below are historical context.
+
 ## Context
 
 The `json` backend replaces the disposable CSV dump with a store that *behaves like* the Mongo collection: it

@@ -5,6 +5,12 @@
 **Depends on:** [01-storage-backend-contract.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/01-storage-backend-contract.md)
 **Role:** Python Expert
 
+> **Historical note (superseded):** `MongoBackend` and `backends/storage.py` were deleted by milestone 0002.
+> Read-only Mongo lookups are now handled by `MongoDedupSource` in `backends/dedup.py`; writes go through
+> `backends/mongo/push_writer.py` only. `save_books_to_mongodb` was deleted; `database.py` retains
+> read-only helpers. See [0002 02.0/02](/docs/roadmap/0002-staged-review-and-mongo-sync/02.0-scrape-to-staging/02-dedup-source-refactor.md).
+> Requirements below are historical context.
+
 ## Context
 
 The MongoDB functions already existed in `backends/mongo/database.py` and `backends/mongo/deduplicate.py`; this

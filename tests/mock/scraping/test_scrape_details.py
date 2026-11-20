@@ -118,6 +118,9 @@ async def test_get_leanpub_book_details_happy_path():
     assert result["title"] == "Example Book"
     assert result["book_id"] == "book-123"
     assert result["slug"] == "example-book"
+    # Public book page (milestone 0002): every staged document carries a url, so a staging
+    # file is always valid `scrape-urls -f` input.
+    assert result["url"] == "https://leanpub.com/example-book"
     assert result["authors"] == ["Jane Doe"]
     assert result["categories"] == ["Python"]
     assert result["last_published_at"] == "2023-05-01"
@@ -288,7 +291,7 @@ async def test_scrape_book_duplicate_hash_returns_duplicate():
     storage = MagicMock()
     storage.book_exists_by_hash = MagicMock(return_value=True)
 
-    result = await scrape_book(url, browser, "amazon", storage_backend=storage)
+    result = await scrape_book(url, browser, "amazon", dedup_source=storage)
 
     assert result == (None, "DUPLICATE")
     storage.book_exists_by_hash.assert_called_once()
@@ -303,7 +306,7 @@ async def test_scrape_book_non_duplicate_returns_book():
     storage = MagicMock()
     storage.book_exists_by_hash = MagicMock(return_value=False)
 
-    result = await scrape_book(url, browser, "amazon", storage_backend=storage)
+    result = await scrape_book(url, browser, "amazon", dedup_source=storage)
 
     assert isinstance(result, dict)
     assert result["title"] == "Great Python Book"

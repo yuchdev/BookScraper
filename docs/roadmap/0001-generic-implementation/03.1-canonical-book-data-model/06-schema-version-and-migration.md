@@ -8,8 +8,16 @@
 ## Requirements
 
 - `scripts/migrate_books.py` (out of the coverage scope like other `scripts/`, but with its own tests), exposed as
-  `bookscraper migrate --store-backend {mongo|json} [--apply]`. It is a new subcommand in `cli.py`, dispatched
-  via `commands/migrate.py`, so it reuses `resolve_store_backend`.
+  `bookscraper migrate --staging-file FILE [--apply]`. It is a new subcommand in `cli.py`, dispatched via
+  `commands/migrate.py`. `--store-backend` no longer exists; the command operates on a staging-format file (e.g. a
+  `pull` export). MongoDB changes reach the database via `push --allow-updates` after migration.
+
+  > **Architecture note (judgment call):** Milestone 0002 eliminated the write path from `scrape-urls`/`search`
+  > and made all Mongo writes go through `push`. The `migrate` command follows the same discipline: it transforms
+  > a staging-format file in place (the `json` path), then the operator runs `push --allow-updates` to apply the
+  > changes to Mongo. This is the only subtask in this milestone where the removal of `--store-backend` forced a
+  > mechanism change rather than just a flag rename.
+
   - **Dry-run by default.** It prints a per-field change summary and writes nothing without `--apply`.
   - v1 → v2 mapping: `about_the_book`→`description`; `categories`→`tags`; `last_published_at`→`publication_date`
     (through `normalize_date`); raw `publication_date` → normalized; `"N/A"` ISBNs → `None` or normalized;
@@ -18,16 +26,17 @@
   - **Hash guard:** recompute the hash for each migrated document. If it differs from the stored one, do **not**
     change `hash`. List the document in a `hash_drift` section of the report and leave that document at
     `schema_version: 1`, for a human to decide.
-  - `json` backend: goes through the atomic write from task 01.0 subtask 07, with `books.json.bak` created first.
-  - `mongo` backend: `bulk_write` of `ReplaceOne({"_id": id, "schema_version": {"$ne": 2}}, new_doc)` in
-    batches of 500. It is idempotent and safe to re-run.
+  - File path: goes through the atomic write from `staging.write_staging()` (the `backends/local/staging.py`
+    replacement for the deleted `store.py` / `books.json.bak` pattern).
+  - For Mongo: run `bookscraper pull -o FILE` first to get a staging-format copy of the collection, run
+    `migrate --staging-file FILE --apply`, then `bookscraper push --allow-updates --staging-file FILE` to apply.
 - Report: `migration-report-<timestamp>.json` in the run log directory, with counts per change type and
   `hash_drift` entries (`_id`/`hash`/`title` only).
 
 ## Files
 
 - Create `src/bookscraper/commands/migrate.py`; modify `src/bookscraper/cli.py`, `src/bookscraper/main.py`.
-- Create `src/bookscraper/backends/migration.py` (pure v1→v2 transform + per-backend apply).
+- Create `src/bookscraper/backends/migration.py` (pure v1→v2 transform + file apply via `staging.py`).
 - Create `tests/unit/backends/test_migration.py`, `tests/mock/commands/test_migrate.py`.
 - Modify CLAUDE.md (*Running*, *Storage backend*).
 
@@ -36,12 +45,12 @@
 - `test_transform_maps_every_legacy_field`
 - `test_transform_is_idempotent_on_v2_documents`
 - `test_hash_drift_document_left_at_v1_and_reported`
-- `test_dry_run_writes_nothing` (both backends)
-- `test_apply_json_creates_backup_first`
-- `test_apply_mongo_uses_guarded_replace_one_batches`
-- `test_cli_migrate_requires_store_backend`
+- `test_dry_run_writes_nothing`
+- `test_apply_staging_file_uses_atomic_write`
+- `test_apply_mongo_workflow_is_pull_migrate_push` (documents the three-step workflow; no live Mongo needed)
+- `test_cli_migrate_requires_staging_file`
 
 ## Success criteria
 
-- [ ] Running `migrate --apply` twice produces zero changes the second time.
+- [ ] Running `migrate --apply` twice on the same file produces zero changes the second time.
 - [ ] After migration, every v2 document passes `validate_document()`.

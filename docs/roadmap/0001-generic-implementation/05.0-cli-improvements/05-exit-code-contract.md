@@ -18,8 +18,10 @@
   | `INTERRUPTED`        | 130   | Ctrl+C                                                                  |
 
 - Each `commands/*.run()` **returns** an exit code instead of calling `sys.exit` mid-function (the
-  `scrape-urls` no-URLs path, `resolve_store_backend`'s exits, etc.). `resolve_store_backend` raises a new
-  `BackendUnavailableError`, which `main()` maps to `FATAL`.
+  `scrape-urls` no-URLs path, staging-load errors, etc.). `resolve_dedup_source` raises a new
+  `BackendUnavailableError`, which `main()` maps to `FATAL`. Note: `push` exit codes 0 (ok) / 1 (refused before
+  any write) / 3 (partial write errors) and `pull` exit codes 0 / 1 are already defined by milestone 0002 and
+  must be folded into this contract (`backends/storage.py` no longer exists).
 - `main_sync()` wraps `asyncio.run(main())` and calls `sys.exit(code)`. `KeyboardInterrupt` → a one-line
   `print_log("Interrupted.", "warning")` and exit `130`, with no traceback. The backend still gets `close()`d:
   commands close it in `finally`.
@@ -28,7 +30,8 @@
 ## Files
 
 - Create `src/bookscraper/exitcodes.py`.
-- Modify `src/bookscraper/main.py`, every `src/bookscraper/commands/*.py`, `src/bookscraper/backends/storage.py`.
+- Modify `src/bookscraper/main.py`, every `src/bookscraper/commands/*.py`, `src/bookscraper/backends/dedup.py`
+  (note: `backends/storage.py` was deleted by milestone 0002).
 - Tests: `tests/mock/test_main.py`, `tests/mock/commands/*`, `tests/mock/backends/test_storage.py`.
 
 ## Tests

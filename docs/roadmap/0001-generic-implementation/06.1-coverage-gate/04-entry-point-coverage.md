@@ -9,7 +9,8 @@
 - Subprocess smoke tests that exercise the real entry points exactly as a user would, without network:
   - `python -m bookscraper --help` → exit 0, output lists all subcommands.
   - `bookscraper --help` via the console script (`shutil.which("bookscraper")` in the venv; skip if absent).
-  - `python -m bookscraper search` (missing `--store-backend`) → exit 2 with an argparse message.
+  - `python -m bookscraper scrape-urls` (missing `-f`/`--input-file`) → exit 2 with an argparse message
+    (note: `--store-backend` no longer exists; `scrape-urls` without `-f` is the equivalent missing-required-arg case).
 - Subprocess coverage: set `COVERAGE_PROCESS_START` and add a `sitecustomize`-free approach using
   `coverage run -m bookscraper` inside the test, **or** accept that subprocesses aren't measured and cover
   `__main__.py` with an in-process `runpy.run_module("bookscraper", run_name="__main__")` under a patched

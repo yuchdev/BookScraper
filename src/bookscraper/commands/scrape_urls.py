@@ -6,13 +6,15 @@ import json
 import random
 import sys
 import time
+from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-from ..backends import resolve_store_backend
+from ..backends import resolve_dedup_source
 from ..book_utils import logger, print_log, save_json_report
 from ..scraping.parameters import HEADLESS_BROWSER
 from ..scraping.scrape_details import scrape_book
+from .staging_output import print_step_one_summary, save_to_staging, warn_about_legacy_store
 
 
 class InputFileError(Exception):
@@ -23,8 +25,8 @@ def load_input_urls(filepath: str) -> list[str]:
     """
     Reads the URLs to scrape from a JSON input file.
 
-    The file is a JSON array of book documents in the same schema the storage backends
-    write (books.json / the MongoDB collection), so a books.json export is itself valid
+    The file is a JSON array of book documents in the staging-file schema (see
+    docs/dev/staging-file-format.md), so a staging file or a `pull` export is itself valid
     input. Only each document's 'url' field is used; any other fields are ignored.
 
     Raises:
@@ -95,7 +97,9 @@ def identify_website(url: str) -> str:
 async def run(args: argparse.Namespace) -> None:
     start_time = time.time()
 
-    storage_backend = resolve_store_backend(args.store_backend)
+    staging_file = Path(args.staging_file)
+    warn_about_legacy_store(staging_file)
+    dedup_source = resolve_dedup_source(staging_file, args.check_mongo)
 
     # Store URLs to scrape within a dictionary
     website_urls = {
@@ -137,6 +141,7 @@ async def run(args: argparse.Namespace) -> None:
             "info",
         )
         save_other_links_to_json(website_urls["other"])
+        dedup_source.close()
         sys.exit(0)
 
     # Playwright Browser Setup and Scraping Loop
@@ -156,9 +161,9 @@ async def run(args: argparse.Namespace) -> None:
             tasks = []
             for url in batch_urls:
                 site = identify_website(url)
-                # Pass the storage_backend to scrape_book for immediate duplicate check
+                # Pass the read-only dedup source to scrape_book for an immediate duplicate check
                 # scrape_book will return a dict on success, or (None, "DUPLICATE"), or (None, "FAILED")
-                tasks.append(scrape_book(url, browser, site, storage_backend))
+                tasks.append(scrape_book(url, browser, site, dedup_source))
 
             results = await asyncio.gather(*tasks)
 
@@ -208,15 +213,12 @@ async def run(args: argparse.Namespace) -> None:
         await browser.close()
 
     # Diagnostic reports (failed/duplicate URLs, skipped "other" links) are process
-    # diagnostics, not database content, so they're always written as JSON best-effort,
-    # independent of --store-backend.
+    # diagnostics, not book data, so they're always written as JSON best-effort.
     save_failed_urls_to_json(failed_urls_with_status)
     save_other_links_to_json(website_urls["other"])
 
-    print_log(f"Saving scraped books via '{args.store_backend}' storage backend...", "info")
-    if books:
-        await asyncio.to_thread(storage_backend.save_books, books)
-    else:
-        print_log("No new unique books scraped to save.", "info")
-
-    storage_backend.close()
+    # Step 1's only write: append to the staging file for review (ADR 0003). Never MongoDB.
+    summary = save_to_staging(staging_file, books, source="scrape-urls")
+    dedup_source.close()
+    skipped_as_known = sum(1 for _, status in failed_urls_with_status if status == "DUPLICATE")
+    print_step_one_summary(staging_file, summary, skipped_as_known=skipped_as_known)

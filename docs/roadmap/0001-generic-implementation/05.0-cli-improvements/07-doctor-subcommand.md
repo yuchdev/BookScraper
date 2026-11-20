@@ -13,8 +13,9 @@ report in one screen.
 
 ## Requirements
 
-- `bookscraper doctor [--store-backend {mongo|json}] [--online]`, via `commands/doctor.py`. Each check returns
-  `CheckResult(name, status: OK|WARN|FAIL|SKIP, detail: str)`:
+- `bookscraper doctor [--check-mongo] [--online]`, via `commands/doctor.py`. The staging file is always
+  checked; `--check-mongo` opts in to the read-only Mongo check (`--store-backend` no longer exists). Each
+  check returns `CheckResult(name, status: OK|WARN|FAIL|SKIP, detail: str)`:
 
   | Check                    | How                                                                          | Needs `--online` |
   |--------------------------|------------------------------------------------------------------------------|------------------|
@@ -24,7 +25,7 @@ report in one screen.
   | `.env` present           | file exists (never print its contents)                                        | no               |
   | settings.json            | `config.load_settings()` + resolve; reports mode (`settings`/`legacy`), `auth_type`, permission warning | no |
   | Client cert              | resolved path exists; expiry via `read_certificate_expiry`                    | no               |
-  | JSON store               | path writable; file parses; book count                                        | no               |
+  | Staging file             | path writable; file parses (staging format); document count                   | no               |
   | Log dir                  | writable; number of retained logs                                            | no               |
   | `ANTHROPIC_API_KEY`      | **presence only** (`set` / `not set`)                                        | no               |
   | `ATLAS_*` vars           | presence only, per variable                                                  | no               |
@@ -52,4 +53,4 @@ report in one screen.
 ## Success criteria
 
 - [ ] On the 2026-09-23 machine state, `doctor` would have reported "no settings.json (legacy mode), no client
-      cert, MONGODB_URI not set" in one run.
+      cert, MONGODB_URI not set, staging file absent" in one run (`--check-mongo` for the Mongo ping).

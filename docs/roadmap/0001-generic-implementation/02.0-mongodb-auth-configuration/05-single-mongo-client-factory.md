@@ -14,7 +14,7 @@
 | `TLS_CA_FILE`              | honored                                   | **ignored**                            |
 | Missing cert file          | critical + abort                          | **silently connects without the cert** |
 | `serverSelectionTimeoutMS` | **unset (pymongo default 30 s)**          | 5000                                   |
-| Called by the app          | yes (`resolve_store_backend`)             | **no - tests only**                    |
+| Called by the app          | yes (push / pull / `--check-mongo` via `get_mongo_collection`) | **no - tests only** |
 
 A diagnosis done through one path doesn't carry over to the other. That is exactly the "client or server?"
 ambiguity behind the unverified Atlas error-8000 report.

@@ -4,6 +4,11 @@
 **Status:** 🔶 In progress
 **Category:** feature | **Priority:** P0
 
+**Superseded in part by** [milestone 0002](/docs/roadmap/0002-staged-review-and-mongo-sync/plan.md) /
+[ADR 0003](/docs/adr/0003-staged-review-and-two-way-sync.md). The read/write `StorageBackend` abstraction was
+replaced by a read-only `DedupSource` interface; `backends/storage.py` and `backends/local/store.py` were deleted
+and replaced by `backends/dedup.py` and `backends/local/staging.py`.
+
 ## Scope
 
 One `StorageBackend` contract (`save_books`, `book_exists_by_hash`, `book_exists_by_asin`, `leanpub_book_exists`,
@@ -18,16 +23,16 @@ re-parses the whole file on every lookup, and pre-scrape lookups on `asin` / `bo
 
 ## Subtasks
 
-| #  | Document                                                                    | Status         | Blocks |
-|----|-----------------------------------------------------------------------------|----------------|--------|
-| 01 | [StorageBackend contract](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/01-storage-backend-contract.md)                   | ✅ Complete    | 02, 03 |
-| 02 | [JSON local store](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/02-json-local-store.md)                                  | ✅ Complete    | 04, 07 |
-| 03 | [Mongo backend wrapper](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/03-mongo-backend-wrapper.md)                        | ✅ Complete    | 04, 05 |
-| 04 | [`--store-backend` selection & pre-flight](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/04-store-backend-selection.md)   | ✅ Complete    | 08     |
-| 05 | [Mongo save hardening](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md)                          | ⬜ Not started | 08     |
-| 06 | [Secondary lookup indexes](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/06-secondary-lookup-indexes.md)                  | ⬜ Not started | -      |
-| 07 | [JSON store atomic write & index cache](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md) | ⬜ Not started | 08 |
-| 08 | [Backend parity contract tests](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/08-backend-parity-contract-tests.md)        | ⬜ Not started | -      |
+| #  | Document                                                                    | Status                             | Blocks |
+|----|-----------------------------------------------------------------------------|------------------------------------|--------|
+| 01 | [StorageBackend contract](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/01-storage-backend-contract.md)                   | ✅ Complete (superseded by 0002)   | 02, 03 |
+| 02 | [JSON local store](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/02-json-local-store.md)                                  | ✅ Complete (superseded by 0002)   | 04, 07 |
+| 03 | [Mongo backend wrapper](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/03-mongo-backend-wrapper.md)                        | ✅ Complete (superseded by 0002)   | 04, 05 |
+| 04 | [`--store-backend` selection & pre-flight](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/04-store-backend-selection.md)   | ✅ Complete (reverted by 0002)     | 08     |
+| 05 | [Mongo save hardening](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md)                          | ✅ Superseded by 0002 03.0/02      | 08     |
+| 06 | [Secondary lookup indexes](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/06-secondary-lookup-indexes.md)                  | ⬜ Not started                     | -      |
+| 07 | [JSON store atomic write & index cache](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md) | ✅ Superseded by 0002 01.0/03 | 08 |
+| 08 | [Backend parity contract tests](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/08-backend-parity-contract-tests.md)        | ✅ Superseded by 0002 04.0/03      | -      |
 
 ## Key constraints
 

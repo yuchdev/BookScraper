@@ -39,5 +39,5 @@
 
 ## Success criteria
 
-- [ ] `bookscraper search --store-backend json --query "Rust" --max-search-pages 1` searches exactly one query and
-      one page per site (mock-verified).
+- [ ] `bookscraper search --query "Rust" --max-search-pages 1` searches exactly one query and one page per site
+      (mock-verified; `--store-backend` no longer exists).

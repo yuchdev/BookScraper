@@ -38,5 +38,5 @@
 
 ## Success criteria
 
-- [ ] `search --site amazon --query Python --max-search-pages 2 --store-backend json --dry-run` lists
-      candidates from exactly two pages (manual live smoke run, output excerpt in the PR).
+- [ ] `search --site amazon --query Python --max-search-pages 2 --dry-run` lists candidates from exactly two
+      pages (manual live smoke run, output excerpt in the PR).

@@ -56,3 +56,4 @@ absolute-from-repo-root Markdown link:
 | #    | Milestone                                                        | Spec                                                          | Status                                                               |
 |------|------------------------------------------------------------------|---------------------------------------------------------------|----------------------------------------------------------------------|
 | 0001 | Generic implementation (backends, X509, CLI, Playwright, …)      | [plan.md](/docs/roadmap/0001-generic-implementation/plan.md)  | [status.md](/docs/roadmap/0001-generic-implementation/status.md)     |
+| 0002 | Staged review & two-way Mongo sync (scrape → JSON → push, pull)    | [plan.md](/docs/roadmap/0002-staged-review-and-mongo-sync/plan.md) | [status.md](/docs/roadmap/0002-staged-review-and-mongo-sync/status.md) |

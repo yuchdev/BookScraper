@@ -19,13 +19,15 @@ Two independent asyncio entry points, not one CLI with subcommands:
 - `src/bookscraper/search_and_scrape.py` - the "discover new books" workflow. Uses relative
   imports, so it only runs as `PYTHONPATH=src python -m bookscraper.search_and_scrape`; flags
   `-c`, `-m`, `--max_search_pages`. Iterates `SITES_TO_SCRAPE` × `SEARCH_QUERIES`, deduplicates
-  candidates against MongoDB *before* the expensive detail fetch, then scrapes the survivors.
+  candidates against the staging file (plus MongoDB, read-only, with `--check-mongo`) *before*
+  the expensive detail fetch, then scrapes the survivors.
 
 The layers, in flow order: configuration (`parameters.py`) → acquisition (`search_utils.py` for
 search results, `scrape_details.py` for detail pages) → deduplication (`deduplicate.py`,
-`database.py`) → sinks (the selected storage backend - `books.json` via `backends/local/store.py`, or
-`database.save_books_to_mongodb` - plus the JSON diagnostic-report writers, which all go through
-`book_utils.save_json_report`).
+`database.py`, read-only via `backends/dedup.py`) → sink (the staging file, `backends/local/staging.py`)
+→ human review → `push` (`backends/mongo/push_plan.py` + `push_writer.py`, the only MongoDB writer); `pull`
+(`backends/mongo/export.py`) is the reverse path. JSON diagnostic reports go through
+`book_utils.save_json_report` (ADR 0003).
 
 **Two fetch families, deliberately unequal.** Playwright/Chromium serves Amazon, Packtpub, and
 O'Reilly; `httpx` against Leanpub's JSON:API serves Leanpub with no browser at all. `scrape_book()`

@@ -5,6 +5,12 @@
 **Depends on:** [02-json-local-store.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/02-json-local-store.md), [03-mongo-backend-wrapper.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/03-mongo-backend-wrapper.md)
 **Role:** Python Expert
 
+> **Historical note (reverted by 0002):** `--store-backend` was removed outright by milestone 0002; passing it is
+> now an argparse exit-2 error. `scrape-urls` and `search` instead use `--staging-file` (default
+> `staging/books.json`) and `resolve_dedup_source(staging_file, check_mongo)` for dedup. The write path moved to
+> `bookscraper push`. See [0002 02.0/01](/docs/roadmap/0002-staged-review-and-mongo-sync/02.0-scrape-to-staging/01-cli-staging-file-flag.md).
+> Requirements below are historical context.
+
 ## Context
 
 The old interactive `(C)/(M)/(B)/(E)` prompt made it impossible to tell from a command line which store a run

@@ -9,7 +9,8 @@
 
 - Rewrite `README.md` sections against the code as it is:
   - **Quick start:** `uv sync` → `uv run playwright install chromium` → `uv run bookscraper doctor` →
-    `uv run bookscraper search --store-backend json --query Python --dry-run`.
+    `uv run bookscraper search --query Python --dry-run` → `uv run bookscraper push --dry-run`
+    (the README was already rewritten by milestone 0002 to reflect the scrape → review → push flow).
   - **Features:** the `json` / `mongo` backends (no CSV book output), X.509 rotation, `detect-schema`, politeness
     (rate limit, robots.txt), exit codes. Remove "CSV pre-flight".
   - **Configuration:** a short summary with a link to CLAUDE.md *Authentication configuration* and the runbook

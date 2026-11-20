@@ -85,7 +85,7 @@ Isolated selector matches are not proof the pipeline produces correct data. Run 
 of known URLs through the real scraper and inspect the output:
 
 ```bash
-uv run bookscraper scrape-urls -f content/urls.json --store-backend json
+uv run bookscraper scrape-urls -f content/urls.json --staging-file staging/selector-check.json
 ```
 
 Check `books.json` for correct titles/authors/ISBNs/dates and `failed_books.json` for URLs
@@ -102,7 +102,7 @@ what Part 2 automates.
 
 `bookscraper detect-schema` automates steps 1-3 of the manual loop and produces a report
 for you to apply in step 4. It is a **developer-maintenance tool**, not part of a scheduled
-scrape, and it does **not** take `--store-backend` - it never touches book storage.
+scrape, and it never touches book data (no staging file, no MongoDB).
 
 ### What it does
 
@@ -197,5 +197,5 @@ them.
   actually clicking through the page.
 
 In practice the two compose: run `detect-schema` to get a validated draft, then use the
-manual loop's step 5 (`scrape-urls` end-to-end against `--store-backend json`) to confirm
-the selectors you applied produce correct data in `books.json`.
+manual loop's step 5 (`scrape-urls` end-to-end into a throwaway staging file) to confirm
+the selectors you applied produce correct data in that file before anything is pushed.

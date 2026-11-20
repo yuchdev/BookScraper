@@ -15,7 +15,7 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 - There is no dry run, no way to redirect output files, no `--version`, and no one-shot environment check.
 - Exit codes are ad hoc: the `scrape-urls` "no valid URLs" path calls `sys.exit(0)` mid-function, partial failures
   exit 0, and Ctrl+C prints a traceback from `asyncio.run`.
-- `--log-severity` is defined four times and `--store-backend` twice, copy-pasted.
+- `--log-severity` is defined four times in `cli.py`, copy-pasted (`--store-backend` no longer exists).
 
 ## Subtasks
 
@@ -34,5 +34,6 @@ The `bookscraper` CLI (`cli.py` + `main.py` + `commands/*`) works, but it has ga
 
 - `cli.py` stays argparse-only (no new CLI framework dependency), and every flag keeps an explicit `dest=`.
 - Flags beat env vars, and env vars beat `parameters.py` defaults, everywhere (same rule as `rotate-cert`).
-- `--store-backend` remains required, with no implicit default.
+- `--staging-file` defaults to `staging/books.json` but must be overridable on the command line; `--check-mongo`
+  is off by default (`--store-backend` no longer exists).
 - Every new flag gets a `tests/unit/test_cli.py` parse test and a mock-tier behavior test.

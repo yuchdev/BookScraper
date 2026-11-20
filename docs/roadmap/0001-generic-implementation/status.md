@@ -7,7 +7,7 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 | Task | Name                               | Status         | Subtasks done | Tests                                                                                                  |
 |------|------------------------------------|----------------|---------------|--------------------------------------------------------------------------------------------------------|
-| 01.0 | Storage backend abstraction        | 🔶 In progress | 4 / 8         | `tests/unit/backends/local/test_store.py`, `tests/mock/backends/test_storage.py`                       |
+| 01.0 | Storage backend abstraction        | 🔶 In progress | 7 / 8         | superseded - see [0002 status](/docs/roadmap/0002-staged-review-and-mongo-sync/status.md) |
 | 02.0 | MongoDB auth configuration         | 🔶 In progress | 3 / 6         | `tests/unit/backends/mongo/test_config.py`, `tests/mock/backends/mongo/test_database.py`, `tests/integration/test_connection_settings.py` |
 | 02.1 | X.509 certificate rotation         | 🔶 In progress | 5 / 10        | `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py` |
 | 03.0 | Scraping engine hardening          | ⬜ Not started | 0 / 6         | -                                                                                                      |
@@ -24,15 +24,17 @@ Tracks progress against [plan.md](/docs/roadmap/0001-generic-implementation/plan
 
 **Legend:** ✅ Complete · 🔶 In progress / partial · ⬜ Not started
 
-**Totals:** 17 / 94 subtasks complete.
+**Totals:** 20 / 94 subtasks complete.
 
 ## Task 01.0 - Storage backend abstraction
 
-Delivered before this milestone was written down: the `StorageBackend` contract, `JsonBackend` (persistent
-`books.json` with hash uniqueness), `MongoBackend` (delegating to `database.py` / `deduplicate.py`), and the
-required `--store-backend` flag with a pre-flight check. Open: `save_books_to_mongodb` continues after a `None`
-collection and returns nothing; the JSON store writes non-atomically and re-reads the file per lookup; no
-indexes on `asin` / `book_id` / `slug`; no cross-backend parity test.
+Delivered (subtasks 01-04): the `StorageBackend` contract, `JsonBackend` (persistent `books.json`), `MongoBackend`
+(delegating to `database.py` / `deduplicate.py`), and the `--store-backend` flag with a pre-flight check.
+Subsequently superseded in part by milestone 0002 ([ADR 0003](/docs/adr/0003-staged-review-and-two-way-sync.md)):
+subtask 05 (Mongo save hardening) → `push_writer.bulk_write()` returns per-document outcomes (0002 03.0/02);
+subtask 07 (JSON store atomic write) → absorbed by `staging.py` atomic writes (0002 01.0/03); subtask 08
+(backend parity tests) → replaced by round-trip fidelity tests (0002 04.0/03). Open: subtask 06 (secondary
+lookup indexes for the `--check-mongo` / `MongoDedupSource` path; index creation on push only).
 
 ## Task 02.0 - MongoDB auth configuration
 

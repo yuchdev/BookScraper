@@ -18,7 +18,9 @@
 
 ## Files
 
-- Modify `src/bookscraper/models.py`, `src/bookscraper/backends/storage.py` (or the two backend modules).
+- Modify `src/bookscraper/models.py`, `src/bookscraper/backends/local/staging.py` (staging-append path),
+  `src/bookscraper/backends/mongo/push_writer.py` (push write path; note: `backends/storage.py` was deleted by
+  milestone 0002).
 - Modify `tests/unit/test_models.py`, `tests/mock/backends/test_storage.py`,
   `tests/mock/backends/test_backend_parity.py`.
 

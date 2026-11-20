@@ -1,9 +1,15 @@
 # 05 - Mongo save hardening
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Superseded by 0002 03.0/02
 **Depends on:** [03-mongo-backend-wrapper.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/03-mongo-backend-wrapper.md)
 **Role:** Python Expert
+
+> **Superseded:** The goals of this subtask are addressed by milestone 0002's
+> [03.0/02 Mongo bulk writer](/docs/roadmap/0002-staged-review-and-mongo-sync/03.0-push-to-mongo/02-mongo-bulk-writer.md):
+> `push_writer.bulk_write()` returns per-document outcomes (insert / duplicate / update / error), refuses with
+> exit 1 when the collection is `None` before writing, and replaces the per-book `insert_one` loop with one
+> `bulk_write(ordered=False)`. `save_books_to_mongodb` was deleted. Requirements below are historical context.
 
 ## Context
 
