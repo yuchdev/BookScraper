@@ -105,7 +105,7 @@ def test_wrong_required_field_type_reported(field: str, value) -> None:
     assert _paths(validate_staging_documents([_new_doc(**{field: value})])) == [field]
 
 
-@pytest.mark.parametrize(("field", "value"), [("url", ""), ("url", 5), ("hash", 123)])
+@pytest.mark.parametrize(("field", "value"), [("url", ""), ("url", None), ("url", 5), ("hash", 123)])
 def test_optional_field_types_checked_when_present(field: str, value) -> None:
     """
     [Unit] staging validation: verifies optional field types checked when present.
@@ -117,7 +117,7 @@ def test_optional_field_types_checked_when_present(field: str, value) -> None:
 
     Boundaries:
         - Focus: optional field types checked when present
-        - Fixtures/params: field, value (parametrized, 3 cases)
+        - Fixtures/params: field, value (parametrized, 4 cases)
         - Scope: assertions and setup in this test case only
 
     On failure, first check:
@@ -283,6 +283,37 @@ def test_bad_object_id_rejected(bad_id) -> None:
     """
     problems = validate_staging_documents([_new_doc(_id=bad_id)])
     assert "_id" in _paths(problems)
+
+
+def test_duplicate_object_id_rejected() -> None:
+    """
+    [Unit] staging validation: verifies a repeated `_id` is reported on every later copy.
+
+    Scenario:
+        Given three pulled documents sharing one `_id` (one of them marked rejected) plus a distinct one
+        When validate_staging_documents runs
+        Then the second and third copies are reported against document #0, and the distinct `_id` is not.
+
+    Boundaries:
+        - Focus: whole-file `_id` uniqueness (two ReplaceOnes on one document would lose edits)
+        - Fixtures/params: none
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - The first_index_by_id loop in staging.validate_staging_documents
+        - Whether review status was wrongly allowed to exempt a duplicate
+        - Recent changes in code paths exercised by staging validation
+    """
+    other_id = "0" * 24
+    documents = [
+        _new_doc(_id=PULLED_ID),
+        _new_doc(_id=PULLED_ID, title="Edited copy"),
+        _new_doc(_id=other_id),
+        _new_doc(_id=PULLED_ID, _staging={"status": "rejected"}),
+    ]
+    problems = validate_staging_documents(documents)
+    assert [(p.index, p.path) for p in problems] == [(1, "_id"), (3, "_id")]
+    assert all("document #0" in p.message for p in problems)
 
 
 def test_unknown_review_status_rejected() -> None:

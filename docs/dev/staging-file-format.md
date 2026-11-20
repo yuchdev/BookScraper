@@ -57,6 +57,9 @@ so documents hashed under an older rule never show up as spurious updates.
   `"6744e7c2a1b2c3d4e5f60718"`. Never Extended JSON (`{"$oid": ...}`). `push` compares the document with the
   live one: identical → `unchanged`; different → `update` (requires `--allow-updates`).
 - Do **not** hand-edit or invent an `_id`. An `_id` that does not exist in MongoDB is an error that stops the push.
+- Each `_id` may appear **only once** in a file, whatever its review status. Two copies would become two
+  replacements of the same MongoDB document, and one copy's edits would be silently lost, so validation refuses
+  the push and names the earlier copy. Merge the edits into one document instead.
 - `push` never deletes: removing a pulled document from the file leaves it untouched in MongoDB.
 
 ### `_staging` - review metadata, never sent to MongoDB
@@ -124,7 +127,7 @@ Required-field coverage of each site's step 1 output (`scraping/scrape_details.p
 | Site                     | `title` | `site` | `authors` | `url` | Year source          |
 |--------------------------|---------|--------|-----------|-------|----------------------|
 | Amazon / Packtpub / O'Reilly (Playwright) | yes, but `null` when the selector misses | yes | yes (list, may be empty) | yes | `publication_year` (absent if the site has no date selector) |
-| Leanpub (JSON API)       | yes     | yes (`leanpub.com`) | yes (list) | yes - added in milestone 0002 (public `https://leanpub.com/<slug>`) | `last_published_at` |
+| Leanpub (JSON API)       | yes     | yes (`leanpub.com`) | yes (list) | yes - added in milestone 0002 (public `https://leanpub.com/<slug>`); omitted, never `null`, if the API returns no slug | `last_published_at` |
 
 A Playwright scrape whose title selector missed produces `"title": null`; `push` rejects it until the reviewer
 fills in the title or marks the document `rejected`.

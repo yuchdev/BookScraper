@@ -355,8 +355,25 @@ def _validate_document(index: int, document: Any) -> list[ValidationProblem]:
 def validate_staging_documents(documents: list[Any]) -> list[ValidationProblem]:
     """Every problem in the file, in document order - never just the first one."""
     problems: list[ValidationProblem] = []
+    first_index_by_id: dict[str, int] = {}
     for index, document in enumerate(documents):
         problems.extend(_validate_document(index, document))
+        # Whole-file rule: two documents with one `_id` would become two ReplaceOnes on the same
+        # live document in an unordered bulk write, and whichever lands last silently discards the
+        # other's edits. Checked regardless of review status - identity is structural.
+        object_id = document.get(RESERVED_ID_KEY) if isinstance(document, dict) else None
+        if isinstance(object_id, str):
+            if object_id in first_index_by_id:
+                problems.append(
+                    ValidationProblem(
+                        index,
+                        RESERVED_ID_KEY,
+                        f"duplicates the _id of document #{first_index_by_id[object_id]}; "
+                        "each pulled document may appear only once",
+                    )
+                )
+            else:
+                first_index_by_id[object_id] = index
     return problems
 
 

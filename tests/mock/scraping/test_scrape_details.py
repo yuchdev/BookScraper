@@ -11,6 +11,7 @@ import httpx
 import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from bookscraper.backends.local.staging import validate_staging_documents
 from bookscraper.scraping import scrape_details
 from bookscraper.scraping.scrape_details import (
     get_leanpub_book_details,
@@ -126,6 +127,35 @@ async def test_get_leanpub_book_details_happy_path():
     assert result["last_published_at"] == "2023-05-01"
     assert result["site"] == "leanpub.com"
     assert isinstance(result["hash"], str) and result["hash"]
+
+
+@pytest.mark.parametrize("slug", [None, ""])
+async def test_get_leanpub_book_details_without_slug_omits_url(slug):
+    """
+    [Mock] get_leanpub_book_details: verifies a slug-less book has no `url` key rather than `url: None`.
+
+    Scenario:
+        Given a Leanpub API payload whose slug is missing or empty
+        When get_leanpub_book_details parses it
+        Then the result has no `url` key and passes staging validation.
+
+    Boundaries:
+        - Focus: the scraper/validator seam - a present-but-None url refuses the whole push
+        - Fixtures/params: slug (parametrized, 2 cases); httpx.AsyncClient faked
+        - Scope: assertions and setup in this test case only
+
+    On failure, first check:
+        - The `if slug := ...` url assignment in scrape_details.get_leanpub_book_details
+        - The optional-url rule in staging._validate_document
+        - Recent changes in code paths exercised by Leanpub detail scraping
+    """
+    response = FakeResponse(json_data=_leanpub_payload(slug=slug))
+    with _patch_httpx(responses=[response]):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result is not None
+    assert "url" not in result
+    assert validate_staging_documents([result]) == []
 
 
 async def test_get_leanpub_book_details_cleans_html_description():

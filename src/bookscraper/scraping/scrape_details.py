@@ -70,17 +70,18 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
                 "title": attributes.get("title"),
                 "book_id": book_data.get("id"),
                 "slug": attributes.get("slug"),
-                # Public book page, so every staged document carries a 'url' and a staging file is
-                # always valid `scrape-urls -f` input (the API URL we fetched is not user-facing).
-                "url": f"{site_constants['leanpub']['BASE_URL']}/{attributes.get('slug')}"
-                if attributes.get("slug")
-                else None,
                 "authors": [],
                 "about_the_book": about_the_book,
                 "categories": [],
                 "last_published_at": None,
                 "hash": "",
             }
+            # Public book page, so a staged document carries a 'url' and a staging file is valid
+            # `scrape-urls -f` input (the API URL we fetched is not user-facing). Without a slug the
+            # key is omitted, never set to None: the staging validator rejects a present-but-empty
+            # 'url', so one None would refuse the whole push.
+            if slug := attributes.get("slug"):
+                extracted_details["url"] = f"{site_constants['leanpub']['BASE_URL']}/{slug}"
 
             # Extract Last published at
             last_published_at_str = attributes.get("last_published_at")
