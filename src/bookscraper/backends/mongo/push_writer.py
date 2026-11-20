@@ -104,6 +104,11 @@ def restore_bson_types(staged: Any, live: Any) -> Any:
         return parsed if parsed is not None else staged
     if isinstance(staged, dict) and isinstance(live, dict):
         return {key: restore_bson_types(value, live.get(key)) for key, value in staged.items()}
+    if isinstance(staged, list) and isinstance(live, list):
+        return [
+            restore_bson_types(value, live[index] if index < len(live) else None)
+            for index, value in enumerate(staged)
+        ]
     return staged
 
 

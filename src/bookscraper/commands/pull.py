@@ -52,7 +52,7 @@ async def run(args: argparse.Namespace) -> None:
         database.close_mongo_connection()
 
     try:
-        write_staging(output, documents)
+        write_staging(output, documents, overwrite=args.force)
     except OSError as e:
         print_log(f"Could not write {output}: {e}", "error")
         sys.exit(1)

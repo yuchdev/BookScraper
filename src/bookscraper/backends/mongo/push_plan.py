@@ -66,8 +66,20 @@ def changed_fields(staged: dict, live: dict) -> list[str]:
     """Top-level fields that differ (added, removed, or changed), sorted."""
     keys = set(staged) | set(live)
     return sorted(
-        k for k in keys if k != RESERVED_ID_KEY and (k not in staged or k not in live or staged[k] != live[k])
+        k
+        for k in keys
+        if k != RESERVED_ID_KEY and (k not in staged or k not in live or not _values_equal(staged[k], live[k]))
     )
+
+
+def _values_equal(staged, live) -> bool:
+    if isinstance(staged, bool) or isinstance(live, bool):
+        return isinstance(staged, bool) and isinstance(live, bool) and staged is live
+    if isinstance(staged, dict) and isinstance(live, dict):
+        return staged.keys() == live.keys() and all(_values_equal(staged[key], live[key]) for key in staged)
+    if isinstance(staged, list) and isinstance(live, list):
+        return len(staged) == len(live) and all(_values_equal(a, b) for a, b in zip(staged, live))
+    return staged == live
 
 
 def build_push_plan(

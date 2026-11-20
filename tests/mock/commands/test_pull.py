@@ -96,6 +96,27 @@ async def test_existing_output_without_force_exits_before_connecting(tmp_path) -
     assert output.read_text(encoding="utf-8") == "[]  my review work"
 
 
+async def test_output_created_during_export_is_not_overwritten(tmp_path) -> None:
+    """Mock: a file created after pull starts is not overwritten without --force.
+
+    Scenario: an editor creates review work while the collection is being exported.
+    Boundaries: mocked MongoDB collection; real filesystem publication under tmp_path.
+    On failure: a concurrent output silently loses the editor's work.
+    """
+    output = tmp_path / "review.json"
+    collection = FakeCollection(read_only=True)
+
+    def create_review_file_during_export(_collection):
+        output.write_text("review work created during export", encoding="utf-8")
+        return []
+
+    with patch.object(pull, "export_collection", side_effect=create_review_file_during_export):
+        code, _, _ = await _pull(collection, output)
+
+    assert code == 1
+    assert output.read_text(encoding="utf-8") == "review work created during export"
+
+
 async def test_force_overwrites_atomically(tmp_path) -> None:
     """
     [Unit] pull: verifies force overwrites atomically.

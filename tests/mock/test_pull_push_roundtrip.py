@@ -179,6 +179,31 @@ def test_field_removal_propagates() -> None:
     assert stored["last_published_at"] == LEANPUB_DATETIME
 
 
+def test_datetime_values_inside_lists_survive_replacement() -> None:
+    """Mock: replacement restores datetimes in arrays and dictionaries nested within arrays.
+
+    Scenario: pull a document with nested history values, edit an unrelated field, and push it.
+    Boundaries: FakeCollection; export and replacement through the normal round-trip path.
+    On failure: the replacement silently changes BSON datetimes inside arrays to strings.
+    """
+    collection = _seed_collection()
+    timestamp = datetime(2026, 2, 3, 4, 5, 6, tzinfo=UTC)
+    raw = collection.documents[0]
+    raw["history"] = [{"at": timestamp, "events": [{"metadata": {"at": timestamp}}]}]
+    export = _export(collection)
+    target = next(document for document in export if document["site"] == "amazon")
+    target["description"] = "Edited independently of history."
+
+    plan, prepared, existing = _plan(collection, export)
+    outcomes = apply_push_plan(collection, plan, prepared, existing)
+
+    assert sum(outcome.outcome == "updated" for outcome in outcomes) == 1
+    stored = collection.get(ObjectId(target["_id"]))
+    assert stored["history"] == [{"at": timestamp, "events": [{"metadata": {"at": timestamp}}]}]
+    assert isinstance(stored["history"][0]["at"], datetime)
+    assert isinstance(stored["history"][0]["events"][0]["metadata"]["at"], datetime)
+
+
 def test_new_document_inserted() -> None:
     """Mock: appending a freshly scraped document is exactly one insert.
 

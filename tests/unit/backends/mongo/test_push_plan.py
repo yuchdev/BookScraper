@@ -406,6 +406,40 @@ def test_changed_fields_ignores_id() -> None:
     assert changed_fields({"_id": "x", "a": 1}, {"_id": "y", "a": 1, "b": 2}) == ["b"]
 
 
+def test_boolean_to_number_is_a_direct_change() -> None:
+    """Unit: boolean-to-number edits on a top-level field require an update.
+
+    Scenario: a pulled live boolean is edited to its numerically equal value.
+    Boundaries: pure planner comparison.
+    On failure: Python's bool/int equality hides a review edit.
+    """
+    live = _live(ID_A, "Book", available=True)
+    plan, _ = _plan(
+        [_pulled(live, available=1)],
+        existing_hashes={live["hash"]: ID_A},
+        existing_by_id={ID_A: live},
+    )
+    assert plan.items[0].action == "update"
+    assert plan.items[0].changed_fields == ["available"]
+
+
+def test_boolean_to_number_is_a_nested_change() -> None:
+    """Unit: boolean-to-number edits nested in lists require an update.
+
+    Scenario: a boolean inside a dictionary and list is edited to an integer.
+    Boundaries: pure planner comparison.
+    On failure: recursive comparison treats bool and int as equal.
+    """
+    live = _live(ID_A, "Book", metadata={"flags": [True]})
+    plan, _ = _plan(
+        [_pulled(live, metadata={"flags": [1]})],
+        existing_hashes={live["hash"]: ID_A},
+        existing_by_id={ID_A: live},
+    )
+    assert plan.items[0].action == "update"
+    assert plan.items[0].changed_fields == ["metadata"]
+
+
 def test_format_plan_lists_non_unchanged() -> None:
     """
     [Unit] push plan: verifies format plan lists non unchanged.

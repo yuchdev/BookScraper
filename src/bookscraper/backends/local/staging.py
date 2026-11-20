@@ -99,12 +99,13 @@ def load_staging(path: Path, *, missing_ok: bool) -> list[dict]:
     return documents
 
 
-def write_staging(path: Path, documents: list[dict]) -> None:
+def write_staging(path: Path, documents: list[dict], *, overwrite: bool = True) -> None:
     """
     Atomically writes documents as a staging file: a sibling temp file is written, fsynced,
-    and os.replace()d over the target, so a failure at any point leaves the previous file
-    byte-identical. Creates the parent directory if needed and keeps an existing file's
-    permission bits.
+    then published. With overwrite=True, os.replace() installs it over the target; otherwise,
+    a hard link publishes it only if the target does not already exist. A failure leaves any
+    previous file byte-identical. Creates the parent directory if needed and keeps an existing
+    file's permission bits when overwriting.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,15 +117,23 @@ def write_staging(path: Path, documents: list[dict]) -> None:
             fh.write(dumps_documents(documents) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
-        if existing_mode is not None:
+        if overwrite and existing_mode is not None:
             os.chmod(tmp_name, existing_mode)
-        os.replace(tmp_name, path)
+        if overwrite:
+            os.replace(tmp_name, path)
+        else:
+            os.link(tmp_name, path)
     except BaseException:
         try:
             os.unlink(tmp_name)
         except OSError:
             pass
         raise
+    if not overwrite:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------- #
