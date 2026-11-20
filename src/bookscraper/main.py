@@ -5,7 +5,7 @@ import logging
 
 from .book_utils import configure_logging
 from .cli import build_parser
-from .commands import detect_schema, rotate_cert, scrape_urls, search
+from .commands import detect_schema, pull, push, rotate_cert, scrape_urls, search
 
 
 async def main() -> None:
@@ -17,6 +17,10 @@ async def main() -> None:
         await scrape_urls.run(args)
     elif args.command == "search":
         await search.run(args)
+    elif args.command == "push":
+        await push.run(args)
+    elif args.command == "pull":
+        await pull.run(args)
     elif args.command == "rotate-cert":
         await rotate_cert.run(args)
     elif args.command == "detect-schema":

@@ -1,9 +1,15 @@
 # 07 - JSON store atomic write & index cache
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Superseded by 0002 01.0/03
 **Depends on:** [02-json-local-store.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/02-json-local-store.md)
 **Role:** Python Expert
+
+> **Superseded:** Absorbed by milestone 0002's
+> [01.0/03 Staging file I/O](/docs/roadmap/0002-staged-review-and-mongo-sync/01.0-staging-contract-and-adr/03-staging-file-io.md).
+> `backends/local/staging.py` provides atomic writes (temp file + `os.replace`), an in-memory `StagingIndex`
+> for dedup lookups, and load/write helpers that never lose a reviewer's edits. The `store.py` module it replaces
+> was deleted. Requirements below are historical context.
 
 ## Context
 

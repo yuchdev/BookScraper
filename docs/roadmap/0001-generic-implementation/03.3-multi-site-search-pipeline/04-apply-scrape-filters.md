@@ -29,7 +29,7 @@ This is dead config today: grep finds no reader.
     rarely have ISBNs, so add per-site overrides:
     `SCRAPE_FILTERS["per_site"] = {"leanpub": {"min_isbns_required": 0}}`.
 - Validate `SCRAPE_FILTERS` shape at import time in the unit sanity test (unknown keys → test failure).
-- Filtered-out books are counted per reason in the run summary and written to `filtered_books.csv` (new,
+- Filtered-out books are counted per reason in the run summary and written to `filtered_books.json` (new,
   gitignored diagnostic). They are never saved to the store.
 - CLI `--no-filters` (task 05.0) disables both stages.
 
@@ -48,7 +48,7 @@ This is dead config today: grep finds no reader.
 - `test_rating_filter_disabled_keeps_everything`
 - `test_min_isbns_required_counts_non_null_isbns`
 - `test_per_site_override_applies_to_leanpub`
-- `test_filtered_books_written_to_csv_and_not_saved`
+- `test_filtered_books_written_to_json_and_not_saved`
 - `test_scrape_filters_shape_is_valid`
 
 ## Success criteria

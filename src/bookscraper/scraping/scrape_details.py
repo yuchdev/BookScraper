@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 import httpx
 from playwright.async_api import Browser, Route, TimeoutError
 
-from ..backends import StorageBackend
+from ..backends import DedupSource
 from ..book_utils import extract_year_from_date, hash_book, print_log
 from .parameters import USER_AGENTS, site_constants
 
@@ -76,6 +76,12 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
                 "last_published_at": None,
                 "hash": "",
             }
+            # Public book page, so a staged document carries a 'url' and a staging file is valid
+            # `scrape-urls -f` input (the API URL we fetched is not user-facing). Without a slug the
+            # key is omitted, never set to None: the staging validator rejects a present-but-empty
+            # 'url', so one None would refuse the whole push.
+            if slug := attributes.get("slug"):
+                extracted_details["url"] = f"{site_constants['leanpub']['BASE_URL']}/{slug}"
 
             # Extract Last published at
             last_published_at_str = attributes.get("last_published_at")
@@ -134,7 +140,7 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
 
 
 async def scrape_book(
-    url: str, browser: Browser, site: str, storage_backend: Optional[StorageBackend] = None
+    url: str, browser: Browser, site: str, dedup_source: Optional[DedupSource] = None
 ) -> Optional[Union[dict, tuple[None, str]]]:
     """
     Scrapes book details from a given URL, handles retries, and checks for duplicates.
@@ -143,7 +149,7 @@ async def scrape_book(
         url: The URL of the book page to scrape (can be relative).
         browser: The Playwright browser instance.
         site: The identifier for the website (e.g., "amazon", "leanpub").
-        storage_backend: The StorageBackend (mongo or json) to check for duplicates against.
+        dedup_source: Read-only duplicate lookups (the staging file, plus MongoDB with --check-mongo).
 
     Returns:
         A dictionary of book details on successful scrape, (None, "DUPLICATE") if already exists,
@@ -322,12 +328,12 @@ async def scrape_book(
                 book_details["title"], book_details["authors"], book_details["publication_year"]
             )
 
-            # Check for duplicates BEFORE returning, if a storage backend is provided
-            if storage_backend is not None:
-                is_duplicate = storage_backend.book_exists_by_hash(book_details["hash"])
+            # Check for duplicates BEFORE returning, if a dedup source is provided
+            if dedup_source is not None:
+                is_duplicate = dedup_source.book_exists_by_hash(book_details["hash"])
                 if is_duplicate:
                     module_logger.info(
-                        f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) already exists in DB. Skipping URL: {url}"
+                        f"Book with hash '{book_details.get('hash')}' (ISBN10: {book_details.get('isbn10')}, ISBN13: {book_details.get('isbn13')}) is already staged or in the database. Skipping URL: {url}"
                     )
                     print_log(f"Skipping duplicate book for URL: {url}", "warning")
                     await page.close()

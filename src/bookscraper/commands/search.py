@@ -2,73 +2,47 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
 import logging
 import time
+from pathlib import Path
 
-from ..backends import resolve_store_backend
-from ..book_utils import print_log
+from ..backends import resolve_dedup_source
+from ..book_utils import print_log, save_json_report
 from ..scraping.parameters import SEARCH_QUERIES, SITES_TO_SCRAPE, site_constants
 from ..scraping.scrape_details import get_leanpub_book_details
 from ..scraping.search_utils import get_leanpub_search_results_via_api
+from .staging_output import print_step_one_summary, save_to_staging, warn_about_legacy_store
 
 module_logger = logging.getLogger(__name__)
 
 
-def save_failed_urls_to_csv(failed_urls: list[dict], filename: str = "failed_urls.csv") -> None:
+FAILED_URL_FIELDS = ("url", "site", "error")
+
+
+def save_failed_urls_to_json(failed_urls: list[dict], filename: str = "failed_urls.json") -> None:
     """
-    Saves a list of dictionaries with failed URLs and their errors to a CSV file.
-    Each dictionary should contain 'url', 'site', and 'error'.
+    Saves failed detail-scrape attempts as a JSON array of {"url", "site", "error"} objects.
+
+    Every record is normalized to exactly those three keys, in that order: a missing key
+    becomes "" and any extra key is dropped. This keeps one fixed record shape no matter
+    what the producing code put in the dict, as the old CSV's fixed header columns did.
 
     Args:
-                    failed_urls (list[dict]): A list of dictionaries, each containing the following keys:
-                                    - 'url': The URL that failed to scrape.
-                                    - 'site': The site from which the URL was scraped.
-                                    - 'error': The error message associated with the failure.
-
-    Returns:
-                    None
+        failed_urls: Dicts each carrying 'url' (the URL that failed to scrape), 'site'
+            (the site it belongs to), and 'error' (the associated error message).
+        filename: The JSON file to create.
     """
-    if not failed_urls:
-        module_logger.info(f"No failed URLs to save to {filename}.")
-        return
-
-    try:
-        fieldnames = ["url", "site", "error"]  # Explicit fieldnames
-        module_logger.info(f"Saving failed URLs to CSV: {filename}")
-        print_log(f"Saving {len(failed_urls)} failed URLs to {filename}...", "info")
-
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-            writer.writeheader()
-            for item in failed_urls:
-                try:
-                    writer.writerow(item)
-                except ValueError as ve:
-                    module_logger.error(f"Error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {ve}")
-                except Exception as e:
-                    module_logger.error(
-                        f"Unexpected error writing failed URL {item.get('url', 'Unknown URL')} to CSV: {e}",
-                        exc_info=True,
-                    )
-        print_log(f"Failed URLs successfully saved to {filename}.", "success")
-        module_logger.info(f"Failed URLs successfully saved to {filename}.")
-    except IOError as e:
-        module_logger.error(f"I/O error saving failed URLs to CSV {filename}: {e}")
-        print_log(f"Error saving failed URLs to {filename}: {e}", "error")
-    except Exception as e:
-        module_logger.critical(
-            f"An unexpected error occurred while saving failed URLs to CSV {filename}: {e}",
-            exc_info=True,
-        )
-        print_log(f"Critical Error saving failed URLs to {filename}. Check log file.", "error")
+    records = [{field: item.get(field, "") for field in FAILED_URL_FIELDS} for item in failed_urls]
+    save_json_report(records, filename, "failed URLs")
 
 
 async def run(args: argparse.Namespace) -> None:
     start_time = time.time()
     module_logger.info("Application started.")
 
-    storage_backend = resolve_store_backend(args.store_backend)
+    staging_file = Path(args.staging_file)
+    warn_about_legacy_store(staging_file)
+    dedup_source = resolve_dedup_source(staging_file, args.check_mongo)
 
     # --- Main Scraping Logic Starts Here ---
     scraped_books_data = []  # List to store successfully scraped, detailed book dictionaries to save
@@ -98,7 +72,7 @@ async def run(args: argparse.Namespace) -> None:
                         book_slug = book.get("slug")
                         book_url = site_constants["leanpub"]["SINGLE_BOOK_API"].replace("[slug]", book_slug)
                         book["book_url"] = book_url
-                        exists = await asyncio.to_thread(storage_backend.leanpub_book_exists, book_id, book_slug)
+                        exists = await asyncio.to_thread(dedup_source.leanpub_book_exists, book_id, book_slug)
 
                         if not exists:
                             # Format: {'site', 'title', 'book_id', 'slug', 'authors', 'book_url'}
@@ -110,7 +84,7 @@ async def run(args: argparse.Namespace) -> None:
                         else:
                             total_duplicates_skipped += 1
                             print_log(
-                                f"{site_name.title()} - Book already in database: {book_title}",
+                                f"{site_name.title()} - Book already staged or in the database: {book_title}",
                                 "warning",
                             )
 
@@ -191,21 +165,17 @@ async def run(args: argparse.Namespace) -> None:
         f"{len(failed_scrape_attempts)} URLs failed during detailed scrape.",
         "warning" if len(failed_scrape_attempts) > 0 else "info",
     )
-    print_log(f"{total_duplicates_skipped} books already in the database and skipped.")
+    print_log(f"{total_duplicates_skipped} books already staged (or in MongoDB) and skipped.")
 
     # --- Output Saving ---
     print_log("\n--- Output Summary ---", "step")
-    # failed_urls.csv is a process diagnostic, not database content, so it's always
-    # written as CSV best-effort, independent of --store-backend.
-    save_failed_urls_to_csv(failed_scrape_attempts)
+    # failed_urls.json is a process diagnostic, not book data, so it's always written best-effort.
+    save_failed_urls_to_json(failed_scrape_attempts)
 
-    if scraped_books_data:
-        print_log(f"Saving newly scraped books via '{args.store_backend}' storage backend...")
-        storage_backend.save_books(scraped_books_data)
-    else:
-        print_log("No new books to save.")
-
-    storage_backend.close()
+    # Step 1's only write: append to the staging file for review (ADR 0003). Never MongoDB.
+    summary = save_to_staging(staging_file, scraped_books_data, source="search")
+    dedup_source.close()
+    print_step_one_summary(staging_file, summary, skipped_as_known=total_duplicates_skipped)
 
     print_log("\nApplication finished.", "step")
     module_logger.info("Application finished.")

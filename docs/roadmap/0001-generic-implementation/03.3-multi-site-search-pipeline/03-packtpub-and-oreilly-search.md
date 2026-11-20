@@ -23,15 +23,17 @@ more stable than DOM scraping.
    where available, and ISBN-13 when the listing exposes it (O'Reilly URLs embed it:
    `/library/view/<slug>/<isbn13>/`).
 3. `already_stored`: no site-native ID exists, so check by `url` via a new contract method
-   `StorageBackend.book_exists_by_url(url) -> bool`, implemented in both backends, with a sparse index in Mongo
-   (extends task 01.0 subtask 06) and parity scenarios (extends task 01.0 subtask 08).
+   `DedupSource.book_exists_by_url(url) -> bool`, implemented by `StagingDedupSource` (via `StagingIndex` in
+   `backends/local/staging.py`) and `MongoDedupSource` (via a new `check_book_exists_by_url_in_db` helper in
+   `backends/mongo/database.py`), with a sparse index in Mongo (extends task 01.0 subtask 06).
+   `StorageBackend` and `backends/local/store.py` no longer exist.
 4. Update `parameters.py` with the verified selectors or endpoints and delete the speculative comments.
 
 ## Files
 
 - Create `docs/scraping/search-sources.md`.
 - Modify `src/bookscraper/scraping/search_providers.py`, `search_utils.py`, `parameters.py`,
-  `src/bookscraper/backends/storage.py`, `backends/mongo/database.py`, `backends/local/store.py`.
+  `src/bookscraper/backends/dedup.py`, `backends/local/staging.py`, `backends/mongo/database.py`.
 - Fixtures: `tests/fixtures/{html,json}/{packtpub,oreilly}/search_*.{html,json}`.
 - Tests: `tests/mock/scraping/test_search_providers.py`, `tests/mock/backends/test_backend_parity.py`.
 

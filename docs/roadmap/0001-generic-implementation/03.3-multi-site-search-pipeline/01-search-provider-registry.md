@@ -27,7 +27,7 @@
       site: str
       needs_browser: bool
       async def search(self, query: str, max_pages: int, ctx: "SearchContext") -> list[SearchCandidate]: ...
-      def already_stored(self, c: SearchCandidate, backend: StorageBackend) -> bool: ...
+      def already_stored(self, c: SearchCandidate, dedup: "DedupSource") -> bool: ...
 
   PROVIDERS: dict[str, SearchProvider]
   ```
@@ -35,8 +35,10 @@
   `SearchContext` bundles the shared httpx client, the lazily launched Playwright browser (launched only if some
   selected provider has `needs_browser=True`), the rate limiters, and the robots cache.
 - Port Leanpub into `LeanpubApiProvider` (wraps `get_leanpub_search_results_via_api`; `already_stored` →
-  `backend.leanpub_book_exists`). Behavior must be identical, as proven by the existing
+  `dedup.leanpub_book_exists`). Behavior must be identical, as proven by the existing
   `tests/mock/commands/test_search.py` cases passing.
+  `dedup` is the `DedupSource` resolved by `resolve_dedup_source(staging_file, check_mongo)` (from
+  `backends/dedup.py`; `StorageBackend` no longer exists).
 - `commands/search.run()` becomes a site-agnostic loop over `PROVIDERS[s] for s in sites`. Unknown site keys
   → an argparse-level error (task 05.0's `--site` uses `choices=sorted(PROVIDERS)`).
 - `max_pages` comes from `args.max_search_pages` (finally wiring the flag).

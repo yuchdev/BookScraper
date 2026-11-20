@@ -143,8 +143,8 @@ pasting a spec bills it twice (once in your context, once in theirs):
   mocked-integration tests.
   Also name the repo-root `CLAUDE.md` and three of its sections: **"Known inconsistencies to
   watch for"** (the `README.md` is stale on the module path, the input-file default, and log
-  rotation - verify behavior against the code, never the README; the scraper output CSVs are
-  committed rather than gitignored; `init_template.py` and `release_package.py` are cookiecutter
+  rotation - verify behavior against the code, never the README; the scraper's JSON run
+  artifacts are gitignored, but `books.json` persists across runs and must not be deleted casually; `init_template.py` and `release_package.py` are cookiecutter
   leftovers outside the scraping workflow), **"Running"** (the two entry points use incompatible
   import styles, so `src/scrape_existing_books.py` runs as a script while
   `search_and_scrape` runs only as `PYTHONPATH=src python -m bookscraper.search_and_scrape`),

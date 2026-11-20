@@ -2,10 +2,10 @@
 Shared fixtures for the unit/ and mock/ tiers.
 
 CRITICAL: the real ~/.bookscrapper/settings.json holds real production MongoDB Atlas
-credentials (see CLAUDE.md's Authentication configuration section), and the repo-root
-books.json is the real local store. No unit/mock test may ever read or write either -
-use isolated_config / isolated_local_store below instead of touching bookscraper.backends.mongo.config
-or bookscraper.backends.local.store's real paths directly.
+credentials (see CLAUDE.md's Authentication configuration section), and the repo's staging/
+directory holds a reviewer's real work. No unit/mock test may ever read or write either -
+use isolated_config / isolated_staging_file below instead of touching
+bookscraper.backends.mongo.config or the default staging path directly.
 """
 
 import os
@@ -28,14 +28,12 @@ def isolated_config(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def isolated_local_store(monkeypatch, tmp_path):
-    """Points bookscraper.backends.local.store's LOCAL_STORE_FILE at a tmp_path instead
-    of the repo-root books.json."""
-    from bookscraper.backends.local import store
-
-    store_path = tmp_path / "books.json"
-    monkeypatch.setattr(store, "LOCAL_STORE_FILE", store_path)
-    return store_path
+def isolated_staging_file(monkeypatch, tmp_path):
+    """Runs the test from tmp_path and returns tmp_path/staging/books.json, so the default
+    staging path, the legacy repo-root books.json check, and any report written to a relative
+    path all resolve under tmp_path - never in the repository."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path / "staging" / "books.json"
 
 
 @pytest.fixture

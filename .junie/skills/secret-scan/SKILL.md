@@ -19,6 +19,6 @@ Use this skill when changed files may contain hardcoded credentials, tokens, pas
 ## Rules
 
 - Never repeat a full secret value back to the user.
-- Treat logs, fixtures, docs, CSVs, and code comments as equally in-scope for leaks.
+- Treat logs, fixtures, docs, JSON data files, and code comments as equally in-scope for leaks.
 - If a value might be real and you cannot safely verify that it is fake, treat it as sensitive.
 - If the task is only a manual scan, do not change logic; confine edits to removing or redacting the secret material.

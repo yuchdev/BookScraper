@@ -5,11 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this project is
 
 `bookscraper` is an asyncio + Playwright scraper that pulls book metadata (title, authors, ISBNs, publication date,
-description, tags) from Amazon, Packtpub, Leanpub, and O'Reilly, and writes results to one of two interchangeable
-storage backends — a MongoDB Atlas collection, or a local `books.json` file schema-identical to it (see **Storage
-backend** below). It exposes one CLI (`bookscraper`) with four subcommands — two scraping workflows, MongoDB Atlas
-X.509 certificate rotation (`rotate-cert`), and an AI-assisted selector-schema detection maintenance tool
-(`detect-schema`) — see Architecture below.
+description, tags) from Amazon, Packtpub, Leanpub, and O'Reilly through a **two-step, human-in-the-loop pipeline**:
+scraping writes only to a local JSON staging file, a human reviews and edits it, and `push` applies it to the MongoDB
+Atlas collection (the single system of record); `pull` exports the collection back to JSON (see **Data flow** below
+and ADR [0003](docs/adr/0003-staged-review-and-two-way-sync.md)). It exposes one CLI (`bookscraper`) with six
+subcommands — two step-1 scraping workflows (`scrape-urls`, `search`), step 2 (`push`), the reverse export (`pull`),
+MongoDB Atlas X.509 certificate rotation (`rotate-cert`), and an AI-assisted selector-schema detection maintenance
+tool (`detect-schema`) — see Architecture below.
 
 ## Setup
 
@@ -26,7 +28,8 @@ uv run playwright install chromium
 command inside the venv via `uv run <cmd>`, or activate it yourself with `source .venv/bin/activate` and drop the
 `uv run` prefix.
 
-MongoDB output needs an auth method configured — see **Authentication configuration** below for the deterministic
+`push`, `pull`, and `--check-mongo` need a MongoDB auth method configured (step 1 without `--check-mongo` needs no
+credentials at all) — see **Authentication configuration** below for the deterministic
 `~/.bookscrapper/settings.json` mechanism (preferred) and the legacy `.env`-only fallback it supersedes.
 `~/.bookscrapper/` is intentionally minimal: `settings.json`, one or more `X509-cert-*.pem` files, and `logs/`
 (run logs — see Logging below) are the only things that belong there. Nothing else does — see Authentication
@@ -123,65 +126,112 @@ carry `authMechanism=MONGODB-X509` (with `authSource=$external`), since pymongo 
 client certificate — `database.uri_selects_x509_auth()` now logs a diagnostic when a cert is paired with a URI that
 omits it.
 
-## Storage backend
+## Data flow
 
-`--store-backend {mongo|json}` is **required** on both subcommands and picks a single backend used for *both*
-reads (duplicate checks) and writes (saving scraped books) — there is no dual-write and no implicit default, so
-which store a run touched is always explicit from its command line. `src/bookscraper/backends/storage.py` defines
-the contract (`StorageBackend.save_books()` / `.book_exists_by_hash()` / `.book_exists_by_asin()` /
-`.leanpub_book_exists()` / `.close()`) and `resolve_store_backend(name)`, which runs a pre-flight check for the
-requested backend (MongoDB ping, or local write-permission test) and exits the process if it's unusable — the same
-"explicit, no ambiguous fallback" approach as `config.resolve_mongo_connection()` (see Authentication configuration
-above). `backends/__init__.py` re-exports `StorageBackend`, `MongoBackend`, `JsonBackend`, and
-`resolve_store_backend` for `from ..backends import ...` elsewhere in the package.
+Scraping and the database are **sequential stages, not alternatives** (ADR
+[0003](docs/adr/0003-staged-review-and-two-way-sync.md); the old `--store-backend {mongo|json}` flag is gone and is
+now an argparse error):
 
-- **`mongo`** (`storage.MongoBackend`) — thin wrapper over `backends/mongo/database.py`'s existing MongoDB
-  functions (`save_books_to_mongodb`, `check_book_exists_in_db`, `check_amazon_asin_exists_in_db`) plus
-  `backends/mongo/deduplicate.py`'s `leanpub_prescrape_deduplicate`.
-- **`json`** (`storage.JsonBackend`, backed by `backends/local/store.py`) — a local `books.json` at the repo root:
-  one JSON array of book documents, schema-identical to what a MongoDB `insert_one` would receive. Unlike the CSV
-  output it replaces (a disposable, per-run-overwritten dump that was never read back), `books.json` **persists
-  and accumulates across runs**, and enforces the same uniqueness-by-`hash` semantics as MongoDB's unique index —
-  a book saved in one run is still there, and still correctly detected as a duplicate, in the next. This is what
-  makes the two backends behave identically from the caller's perspective, and what "local storage matches
-  database content one-to-one" means in practice.
-- Diagnostic reports that aren't database content — `failed_urls.csv` / `failed_books.csv` / `other_links.csv` —
-  are unrelated to `--store-backend` and are always written as CSV best-effort by both subcommands, since MongoDB
-  itself never stores failed/skipped attempts either.
+```
+scrape-urls / search ──► staging/books.json ──► [human review & edit] ──► push ──► MongoDB Atlas
+                                                                            ▲          │
+                                  [edit] ◄── staging/books_mongo.json ◄── pull ◄───────┘
+```
+
+- **Step 1 — `scrape-urls` / `search` write only the staging file** (`--staging-file`, default `staging/books.json`;
+  `staging/` is gitignored and created on first write). New results are **appended**; existing documents — and a
+  reviewer's edits, approvals, and rejections — are never modified or reordered, and the file is re-read at write
+  time so edits saved mid-run survive. Duplicate checks read the staging file through an in-memory `StagingIndex`;
+  `--check-mongo` additionally consults MongoDB **read-only** (`find_one` only, no index creation), and without it
+  step 1 never contacts MongoDB at all. Scrapers get a `backends/dedup.py` `DedupSource`, which has lookups only —
+  there is no save method to call. A corrupt staging file is never treated as empty: the run exits 1, and if it was
+  corrupted mid-run the results are dumped to a sibling `books.unsaved-<timestamp>.json` instead. A legacy repo-root
+  `books.json` (from `--store-backend json` days) only triggers a hint to `mv` it into `staging/` — never an
+  automatic move.
+- **Review.** The format, required fields, and reserved keys are specified in
+  [docs/dev/staging-file-format.md](docs/dev/staging-file-format.md). Two reserved keys: `_id` (MongoDB's ObjectId
+  as a 24-hex string — present **only** on pulled documents; this reverses the old "`_id` never appears in
+  `books.json`" rule) and `_staging` (`status` `pending`|`approved`|`rejected`, `scraped_at`, `source`, `note`;
+  stripped before any write).
+- **Step 2 — `push`** (`commands/push.py`): load → **validate the whole file** (`staging.validate_staging_documents`
+  lists every problem in one pass; any problem, or any key starting with `$` / containing `.`, refuses the run) →
+  connect → `push_writer.fetch_existing` → **plan** (`push_plan.build_push_plan`, pure: each document is `insert`,
+  `duplicate`, `update`, `unchanged`, `skipped_rejected`, or `skipped_unapproved`) → [`--dry-run` stops here] →
+  refuse if the plan has updates and `--allow-updates` is absent → one `bulk_write(ordered=False)`
+  (`push_writer.apply_push_plan`). Identity is `_id`, not `hash`: no `_id` → insert (or duplicate if the `hash`
+  exists); `_id` → compared with the live document. `hash` is recomputed from the edited title/authors/year
+  (`staging.compute_document_hash`), except that a pulled document whose hash inputs weren't edited keeps its stored
+  hash. Updates are full `ReplaceOne`s (a deleted field really disappears); datetime fields are restored from their
+  ISO strings only where the live value is a datetime. Pushed unless `rejected`; `--approved-only` pushes only
+  `approved`. **`push` never deletes and never modifies the staging file**, so re-running it is idempotent. Every
+  run that reaches planning writes `push_report.json` (one record per document: action, outcome, `_id`, changed
+  fields, error class + code — never a server message or URI). Exit codes: `0` ok/dry run, `1` refused before any
+  write, `3` partial write errors.
+- **Reverse — `pull -o FILE`** (`commands/pull.py`, `backends/mongo/export.py`): exports the **entire** collection,
+  sorted by `_id`, read-only (no index creation). Every BSON value maps by an explicit rule (`ObjectId` → hex,
+  `datetime` → ISO-8601 `Z`); any other BSON type aborts with the field path rather than being stringified. Refuses
+  an existing output without `--force`, and writes atomically only after the whole export succeeded.
+- Every staging/export/report write goes through `staging.write_staging` (temp file + fsync + `os.replace`,
+  owner-only `0600` for new files, existing permissions kept).
+- Diagnostic reports that aren't book data — `failed_books.json` (`{url, status}` records) / `other_links.json`
+  (`{url}`) from `scrape-urls`, `failed_urls.json` (`{url, site, error}`) from `search` — are always written
+  best-effort by both step 1 subcommands. They are overwritten each run and not written at all when empty.
+- **There is no CSV anywhere** — input, staging, export, and reports are all JSON. Every JSON file the tool writes
+  goes through `book_utils.dumps_documents()` (one top-level array of objects, 2-space indent, UTF-8 verbatim,
+  non-JSON-native values stringified), so the staging file and the reports can't drift into different on-disk
+  formats; diagnostic reports are written via `book_utils.save_json_report()`.
+- **`scrape-urls` input** (`-f`/`--input-file`) is a JSON array of book documents in that same schema — so a staging
+  file or a `pull` export is itself valid input (every site, Leanpub included, now sets `url`). Only each document's
+  `url` is used; other fields are ignored.
+  `commands/scrape_urls.py`'s `load_input_urls()` rejects the **whole file** (`InputFileError` → critical log +
+  `print_log` error + exit 1) if it's missing, not valid JSON, not an array, or any entry lacks a non-empty string
+  `url` — the same fail-loudly rule as the rest of the project, never a silent per-entry skip.
 
 ## Running
 
 ```bash
 # `uv sync` (see Setup above) already registers the `bookscraper` console script inside .venv.
 
-# scrape-urls: scrapes a fixed list of URLs from a CSV (works for all 4 sites via Playwright).
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend mongo
-uv run bookscraper scrape-urls -f content/urls.csv --store-backend json
+# Step 1 - scrape-urls: scrapes a fixed list of URLs from a JSON file of book documents (all 4 sites, via
+# Playwright) into the staging file (default staging/books.json). Never writes MongoDB.
+uv run bookscraper scrape-urls -f content/urls.json
+uv run bookscraper scrape-urls -f content/urls.json --staging-file staging/batch2.json --check-mongo
 
-# search: searches sites for books matching queries defined in parameters.py, then scrapes details.
-uv run bookscraper search --store-backend mongo
-uv run bookscraper search --store-backend json --max-search-pages 5
+# Step 1 - search: searches sites for books matching queries in parameters.py, scrapes details into the staging file.
+uv run bookscraper search
+uv run bookscraper search --max-search-pages 5 --check-mongo
+
+# (review/edit staging/books.json by hand; mark bad documents "_staging": {"status": "rejected"})
+
+# Step 2 - push: validate, plan, and apply the staging file to MongoDB. Always dry-run first.
+uv run bookscraper push --dry-run
+uv run bookscraper push
+uv run bookscraper push --staging-file staging/books_mongo.json --allow-updates   # apply edits to pulled docs
+uv run bookscraper push --approved-only --report-file reports/push.json
+
+# Reverse - pull: export the whole MongoDB collection to a staging-format file (never overwrites without --force).
+uv run bookscraper pull -o staging/books_mongo.json
+uv run bookscraper pull -o staging/books_mongo.json --force
 
 # rotate-cert: issues a new Atlas X.509 client certificate (needs ATLAS_* credentials, see Authentication
-# configuration). Unlike the two above it takes no --store-backend and never touches the book data.
+# configuration). Never touches the book data.
 uv run bookscraper rotate-cert
 uv run bookscraper rotate-cert --months 12 --output ~/.bookscrapper/X509-cert-manual.pem
 
 # detect-schema: AI-assisted CSS-selector proposals for a site's detail page (dev-maintenance tool).
-# Takes no --store-backend and never touches book data; needs ANTHROPIC_API_KEY. See AI-assisted schema
-# detection below.
+# Never touches book data; needs ANTHROPIC_API_KEY. See AI-assisted schema detection below.
 uv run bookscraper detect-schema --site amazon --url "https://www.amazon.com/dp/1098131029"
 uv run bookscraper detect-schema --site leanpub --url "https://leanpub.com/some-book" --output schema-report.txt
 
 # Without `uv run` (inside an activated .venv), or via `python -m` directly:
-python -m bookscraper scrape-urls -f content/urls.csv --store-backend json
-python -m bookscraper search --store-backend json
+python -m bookscraper scrape-urls -f content/urls.json
+python -m bookscraper push --dry-run
 python -m bookscraper rotate-cert
 python -m bookscraper detect-schema --site oreilly --url "https://www.oreilly.com/library/view/x/9780123456789/"
 ```
 
-`--store-backend` is required — omitting it is an argparse error, not an interactive prompt (there is no more
-`(C)/(M)/(B)/(E)` choice: see Storage backend above for why the choice is always explicit).
+There is no `--store-backend` any more (passing it is an argparse error, exit 2): step 1 always writes the staging
+file and only `push` writes MongoDB — see Data flow above.
 
 ## AI-assisted schema detection
 
@@ -190,7 +240,7 @@ otherwise-manual loop of figuring out a site's CSS selectors when its markup dri
 `docs/scraping/schema-detection.md` (full manual-and-automated writeup) and
 `docs/adr/0002-ai-assisted-schema-detection.md` (design rationale). It takes `--site
 {amazon,packtpub,leanpub,oreilly}`, one or more repeatable `--url` sample detail pages, an optional `--output`, and
-`--log-severity` like the other subcommands; it does **not** take `--store-backend`.
+`--log-severity` like the other subcommands; it never reads or writes book data (no staging file, no MongoDB).
 
 The pipeline: load each URL with Playwright (reusing `scrape_details.route_handler` document-only blocking) → prune
 each page to an LLM-sized HTML snapshot → ask Claude (official `anthropic` SDK, `ANTHROPIC_API_KEY` read straight
@@ -214,15 +264,23 @@ mocks the client and never makes a real API call.
   `hash_book`/`extract_year_from_date`/`check_local_write_permission`, `backends/mongo/config.py`'s
   resolver (all six `settings.json` shapes plus the legacy fallback, purely as resolution logic — no
   network), `backends/mongo/cert_rotation.py`'s months validation / atomic write / `settings.json`
-  repointing (real file I/O via `tmp_path`), `backends/local/store.py` (real file I/O via `tmp_path`), `scraping/parameters.py`
+  repointing (real file I/O via `tmp_path`), `backends/local/staging.py` (load/atomic write/index/append in
+  `test_staging.py`, every format-spec rule in `test_staging_validation.py`; real file I/O via `tmp_path`),
+  `backends/mongo/export.py`'s BSON mapping, `backends/mongo/push_plan.py` (the pure planner), `scraping/parameters.py`
   data sanity checks, and `scraping/schema_detection.py`'s pure logic (HTML pruning/truncation, AI-response
   shape validation, diff-report formatting).
 - **`tests/mock/`** — the rest of `src/bookscraper`, with every external dependency mocked
   (`pymongo.MongoClient`, `httpx.AsyncClient`, Playwright's `Browser`/`Page`/`Locator` via
-  `tests/mock/scraping/playwright_fakes.py`): `backends/mongo/database.py`, `backends/mongo/deduplicate.py`,
-  `backends/mongo/cert_rotation.py`'s Atlas API calls (`httpx.post` mocked), `backends/storage.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
+  `tests/mock/scraping/playwright_fakes.py`, and a MongoDB collection via the hand-rolled in-memory
+  `tests/mock/backends/fake_collection.py` — `FakeCollection(read_only=True)` raises on any write, which is how tests
+  prove `pull`, `push --dry-run`, and `--check-mongo` never modify the database): `backends/mongo/database.py`,
+  `backends/mongo/deduplicate.py`, `backends/mongo/cert_rotation.py`'s Atlas API calls (`httpx.post` mocked),
+  `backends/mongo/push_writer.py`, `backends/dedup.py`, `scraping/scrape_details.py`, `scraping/search_utils.py`,
   `scraping/schema_detection.py` (Playwright faked, `anthropic` client mocked — never a real API call),
-  `commands/scrape_urls.py`, `commands/search.py`, `commands/rotate_cert.py`, `commands/detect_schema.py`, and `main.py`.
+  `commands/scrape_urls.py`, `commands/search.py`, `commands/staging_output.py`, `commands/push.py`,
+  `commands/pull.py`, `commands/rotate_cert.py`, `commands/detect_schema.py`, and `main.py`; plus two cross-cutting
+  tests: `test_pull_push_roundtrip.py` (pull → push is a no-op; single edits become single updates) and
+  `test_two_step_pipeline.py` (scrape → edit → push → pull through `main.main()`).
 - **`tests/integration/`** — hits real MongoDB Atlas, tagged `@pytest.mark.integration` and excluded
   from the default run (`addopts = -m "not integration"` in `pyproject.toml`); run explicitly with
   `uv run pytest -m integration`. `test_connection_password.py` / `test_connection_tls.py` verify
@@ -234,7 +292,11 @@ mocks the client and never makes a real API call.
   with Atlas's known `certificate validation failed` error (see Authentication configuration) — those
   legs are `@pytest.mark.xfail(strict=False)`, so they report as expected/non-blocking today and
   would surface as `XPASS` the day that's fixed on the Atlas side, rather than silently staying green
-  forever or hard-failing the suite.
+  forever or hard-failing the suite. `test_push_roundtrip.py` runs the insert → duplicate → refused update →
+  update → unchanged cycle against a throwaway `push_it_<uuid>` collection (dropped in teardown);
+  `test_pull_export.py` exports a throwaway `pull_it_<uuid>` collection and, **read-only** (a pymongo
+  `CommandListener` asserts zero write commands), maps every document of the real books collection to prove no
+  unsupported BSON type is stored.
 
 **Coverage target:** `uv run pytest -m "not integration" --cov=bookscraper --cov-report=term-missing --cov-fail-under=90`
 enforces ≥90% line coverage on `src/bookscraper` (`scripts/*.py` is out of scope). The two
@@ -242,10 +304,11 @@ Playwright-DOM-heavy functions — `scrape_details.py`'s `scrape_book()` and `se
 `get_search_results_via_playwright()` — get happy-path-plus-primary-error-branch coverage rather
 than exhaustive per-selector coverage; everything else targets ~100%.
 
-**Shared fixtures** (`tests/conftest.py`, used by `unit/` and `mock/`): `isolated_config` and
-`isolated_local_store` monkeypatch `backends/mongo/config.py`'s `CONFIG_DIR`/`SETTINGS_FILE` and
-`backends/local/store.py`'s `LOCAL_STORE_FILE` to `tmp_path`, so a test can never read or write the
-real `~/.bookscrapper/settings.json` (it holds real credentials) or the repo-root `books.json`.
+**Shared fixtures** (`tests/conftest.py`, used by `unit/` and `mock/`): `isolated_config` monkeypatches
+`backends/mongo/config.py`'s `CONFIG_DIR`/`SETTINGS_FILE` to `tmp_path`, so a test can never read or write the real
+`~/.bookscrapper/settings.json` (it holds real credentials); `isolated_staging_file` chdirs to `tmp_path` and returns
+`tmp_path/staging/books.json`, so the default staging path, the legacy `books.json` check, and relative report paths
+never resolve inside the repository's own `staging/`.
 `no_real_env` strips MongoDB env vars for a test's duration so a prior `load_dotenv()` can't leak
 real values in. `tests/integration/conftest.py` additionally provides `require_env(name)`, which
 skips (not fails) a test when a required `.env` credential is absent.
@@ -274,12 +337,15 @@ the tier on a name that no longer existed and it skipped instead of testing the 
 
 `src/bookscraper/` is organized into four subpackages by responsibility, plus a small set of root-level entry
 points and cross-cutting utilities. Import direction is one-way and there are no cycles:
-`commands/` → `scraping/` + `backends/`; `scraping/` → `backends/` (for the `StorageBackend` type) + `book_utils.py`;
-`backends/` → `book_utils.py`; nothing under `backends/` or `scraping/` ever imports from `commands/`.
+`commands/` → `scraping/` + `backends/`; `scraping/` → `backends/` (for the `DedupSource` type) + `book_utils.py`;
+`backends/` → `book_utils.py` (and `backends/mongo/` → `backends/local/staging.py` for the shared staging contract);
+nothing under `backends/` or `scraping/` ever imports from `commands/`.
 
 Root-level entry points and shared utilities:
-- **`cli.py`** — argparse only: builds the `bookscraper` parser and its four subparsers (`scrape-urls`, `search`,
-  `rotate-cert`, `detect-schema`).
+- **`cli.py`** — argparse only: builds the `bookscraper` parser and its six subparsers (`scrape-urls`, `search`,
+  `push`, `pull`, `rotate-cert`, `detect-schema`). `DEFAULT_STAGING_FILE` is a literal copy of
+  `staging.DEFAULT_STAGING_FILE` so building the parser imports no backend code (`tests/unit/test_cli.py` keeps them
+  equal).
   Every flag sets an explicit `dest=` (e.g. `--input-file` → `input_file`) so a CLI flag can never silently drift
   from the attribute name the code reads.
 - **`main.py`** — the real entry point: parses args via `cli.build_parser()` and dispatches to the matching
@@ -289,37 +355,57 @@ Root-level entry points and shared utilities:
 - **`book_utils.py`** — `print_log()` (color-coded console + plain-text file logging), `configure_logging(level)`
   (attaches a single `FileHandler` to the **root** logger, pointed at a fresh per-run file under
   `~/.bookscrapper/logs/` — see below), pre-flight checks (`check_local_write_permission`, `check_mongodb_connection`),
-  `extract_year_from_date` (handles several site-specific date formats), `hash_book`. Stays at the package root
+  `extract_year_from_date` (handles several site-specific date formats), `hash_book`, and the shared JSON
+  serializer/report writer (`dumps_documents`, `save_json_report`). Stays at the package root
   since every subpackage below imports from it and it has no backend/scraping-specific logic of its own.
 
-**`commands/`** — the CLI workflows. The two scraping ones each call `resolve_store_backend()` (from `backends/`) once
-up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
-- **`scrape_urls.py`** — the "I already have URLs" workflow: takes a CSV of book URLs, buckets them by site via
-  `identify_website()`, and scrapes each in batches of 10 concurrent Playwright tasks via
-  `scraping.scrape_details.scrape_book()`, passing it the resolved `StorageBackend` for inline duplicate checks.
+**`commands/`** — the CLI workflows. The two step-1 scraping ones each call `resolve_dedup_source()` (from
+`backends/`) once up front and `staging_output.save_to_staging()` once at the end; `push`/`pull` are the only
+commands that touch MongoDB book data; `rotate-cert` and `detect-schema` don't touch book data at all:
+- **`scrape_urls.py`** — the "I already have URLs" workflow: takes a JSON array of book documents (see Data flow
+  above), buckets their URLs by site via `identify_website()`, and scrapes each in batches of 10 concurrent Playwright tasks via
+  `scraping.scrape_details.scrape_book()`, passing it the read-only `DedupSource` for inline duplicate checks.
 - **`search.py`** — the "discover new books" workflow: for each site in `SITES_TO_SCRAPE` and each query in
   `SEARCH_QUERIES` (both in `scraping/parameters.py`), it searches for candidate books, deduplicates them against
-  the resolved storage backend *before* doing the expensive detail scrape, then scrapes details for the survivors.
+  the `DedupSource` *before* doing the expensive detail scrape, then scrapes details for the survivors.
   Currently only Leanpub is wired end-to-end, entirely via its JSON API through `httpx` (no browser needed).
   `SITES_TO_SCRAPE` is currently `["leanpub"]`.
+- **`staging_output.py`** — shared step-1 start/end: the legacy-`books.json` hint, `save_to_staging()` (append, or
+  dump to `*.unsaved-<timestamp>.json` and exit 1 if the file was corrupted mid-run), and the run summary ending in
+  the exact `push --dry-run` command.
+- **`push.py`** — step 2: validate → connect → plan → dry-run / refuse / bulk write → `push_report.json`; exit
+  codes 0/1/3. See Data flow above.
+- **`pull.py`** — the reverse export to a staging-format file; read-only, no-clobber without `--force`.
 - **`rotate_cert.py`** — the "rotate the Atlas X.509 client certificate" workflow: loads `.env`, calls
   `backends.mongo.cert_rotation.rotate_certificate()` in a worker thread (it uses blocking `httpx`), reports the
   result through `print_log`, and `sys.exit(1)`s on a `RotationError`. See TLS certificate rotation pipeline above.
 - **`detect_schema.py`** — the "propose selector-schema updates" workflow (dev maintenance, not scraping): loads
   sample detail-page URLs, asks Claude to propose CSS selectors, validates them against each page's live DOM, and
-  prints a diff-style report. Takes `--site`, one or more repeatable `--url`, and an optional `--output`; no
-  `--store-backend` (it never touches book storage) and it never writes `parameters.py`. `sys.exit(1)`s on a
-  `SchemaDetectionError`. See AI-assisted schema detection above.
+  prints a diff-style report. Takes `--site`, one or more repeatable `--url`, and an optional `--output`; it never
+  touches book data and never writes `parameters.py`. `sys.exit(1)`s on a `SchemaDetectionError`. See AI-assisted
+  schema detection above.
 
-**`backends/`** — the storage-backend abstraction (see Storage backend above):
-- **`storage.py`** — `StorageBackend` (the mongo/json contract), `MongoBackend`, `JsonBackend`, and
-  `resolve_store_backend()`. `backends/__init__.py` re-exports all four.
-- **`mongo/database.py`** / **`mongo/deduplicate.py`** — two layers of dedup for the `mongo` backend: (1)
-  pre-scrape checks by `book_id`/`slug` (Leanpub) or `asin` (Amazon) to avoid re-scraping known books, and (2) a
-  unique MongoDB index on a `hash` field (SHA-256 of normalized title+authors+year, computed by
-  `book_utils.hash_book`) that rejects duplicate inserts at write time. `database.py` holds the MongoDB
-  client/db/collection as module-level globals, lazily initialized by `get_mongo_collection()`; connection details
-  come from `config.resolve_mongo_connection()`, not from reading env vars directly.
+**`backends/`** — the staging file, read-only dedup, and MongoDB access (see Data flow above):
+- **`dedup.py`** — `DedupSource` (read-only lookups: `book_exists_by_hash` / `book_exists_by_asin` /
+  `leanpub_book_exists` / `close`, deliberately no write method), `StagingDedupSource`, `MongoDedupSource`
+  (`--check-mongo`; secondary-preferred reads), `CompositeDedupSource`, and `resolve_dedup_source(staging_file,
+  check_mongo)` (pre-flights the staging file and its directory; exits 1 on a corrupt file, an unwritable directory,
+  or an unreachable MongoDB under `--check-mongo`). `backends/__init__.py` re-exports them.
+- **`local/staging.py`** — the whole staging-file contract, `pymongo`-free: `load_staging` (never turns a corrupt
+  file into `[]`; 1 GiB cap), `write_staging` (atomic), `StagingIndex`, `append_to_staging`, `dump_unsaved`,
+  `validate_staging_documents`, `prepare_for_push`, `compute_document_hash`, and the reserved-key constants.
+- **`mongo/push_plan.py`** — the pure push planner (`build_push_plan`, `format_plan`); `push --dry-run` runs exactly
+  this code. **`mongo/push_writer.py`** — `fetch_existing` (two batched `$in` lookups), `apply_push_plan` (the only
+  code that inserts/replaces books; maps `BulkWriteError`s back to documents), `oversized_documents` (exact BSON
+  size), `restore_bson_types`. **`mongo/export.py`** — `iter_collection` and the explicit BSON → staging mapping
+  shared by `pull` and push's comparisons.
+- **`mongo/database.py`** / **`mongo/deduplicate.py`** — the MongoDB connection plus the lookups `MongoDedupSource`
+  uses: pre-scrape checks by `book_id`/`slug` (Leanpub), `asin` (Amazon), or `hash`. A unique MongoDB index on
+  `hash` (SHA-256 of normalized title+authors+year, computed by `book_utils.hash_book`) rejects duplicate inserts at
+  write time; it is created only by writers — `get_mongo_collection(ensure_indexes=False)` connects without it for
+  `pull`, `push --dry-run`, and `--check-mongo`. `database.py` holds the MongoDB client/db/collection as module-level
+  globals, lazily initialized by `get_mongo_collection()`; connection details come from
+  `config.resolve_mongo_connection()`, not from reading env vars directly.
 - **`mongo/config.py`** — `resolve_mongo_connection()`, the deterministic MongoDB auth resolver
   (`~/.bookscrapper/settings.json` when present, else the legacy env-var fallback) shared by `mongo/database.py`
   and `book_utils.py`. See Authentication configuration above.
@@ -327,10 +413,6 @@ up front; `rotate-cert` and `detect-schema` don't touch book storage at all:
   (`rotate_certificate()`, raising `RotationError` on any failure), plus the atomic cert write and
   `update_settings_after_rotation()`, which repoints `settings.json` via `config`. Returns status lines instead of
   printing, so `commands/rotate_cert.py` owns all user-facing output. See TLS certificate rotation pipeline above.
-- **`local/store.py`** — the `json` backend's implementation: `books.json` at the repo root, persistent and
-  accumulating across runs, with the same `hash`-uniqueness and `asin`/`book_id`/`slug` lookup semantics as
-  `mongo/database.py`'s MongoDB functions (`save_books`, `check_book_exists`, `check_amazon_asin_exists`,
-  `leanpub_book_exists`).
 
 **`scraping/`** — everything about talking to the four book sites:
 - **`parameters.py`** — `site_constants`: per-site CSS selectors and API URLs (this is what to edit when a site
@@ -366,7 +448,7 @@ rather than sharing `book_utils.py`'s `"bookscraper_app"`
 logger, so `configure_logging()` attaches the file handler to the **root** logger instead of a specific named one —
 every logger propagates there by default, so this is the only placement that reliably captures all of them.
 `main.py` calls `configure_logging()` once at startup with the level from `--log-severity {debug|info|warning|error}`
-(defined on `scrape-urls`, `search`, `rotate-cert`, and `detect-schema` in `cli.py`; default `info`). `book_utils.py` also calls
+(defined on every subcommand in `cli.py`; default `info`). `book_utils.py` also calls
 `configure_logging()` once at import time (default `info`) so the logger works for any code that imports it
 without going through the CLI — this is safe to call twice per run since it only adds the `FileHandler` (and only
 prunes old logs) the first time, keyed on `LOG_FILE_PATH` already being attached. Note: `print_log()`'s colored
@@ -374,17 +456,14 @@ console output writes to `sys.stdout` directly, bypassing the logging framework 
 filters what reaches the log file, not the console, which always prints everything passed to `print_log()`.
 
 ## Known inconsistencies to watch for
-- `backends/mongo/database.py`'s `get_mongo_collection()` logs `"Connection to MongoDB Atlas successful."`
-  unconditionally after calling `_initialize_mongodb_connection()`, even when that call actually failed and
-  returned `None` — a pre-existing, cosmetic logging bug (the real success/failure state is still reported
-  correctly to the caller via the return value). Not yet fixed; this file wasn't in scope of the CLI restructuring
-  that touched its callers.
-- Curated input URL lists (`content/urls.csv`, `content/urls_amazon.csv`) live under `content/` and are committed —
-  they're hand-maintained candidate lists for `scrape-urls -f`, not run output. Actual run artifacts (`books.json`
-  for `--store-backend json`; `failed_books.csv`, `failed_urls.csv`, `other_links.csv` diagnostics regardless of
-  backend) are gitignored and written to the repo root by default; don't add new default output filenames without
-  gitignoring them too. Unlike the diagnostics, `books.json` is meant to persist across runs — don't delete it
-  casually, it's the entire point of the `json` backend (see Storage backend above).
+- Curated input URL lists (`content/urls.json`, `content/urls_amazon.json`) live under `content/` and are committed —
+  they're hand-maintained candidate lists for `scrape-urls -f`, not run output. Actual run artifacts are gitignored:
+  `staging/` (the staging file, `pull` exports, `*.unsaved-*` dumps — review work and database content, so never
+  delete it casually and never commit it), `push_report.json`, the diagnostics `failed_books.json` /
+  `failed_urls.json` / `other_links.json` at the repo root, and a legacy repo-root `books.json` from `--store-backend
+  json` days. Don't add new default output filenames without gitignoring them too.
+- `book_exists_by_asin` exists on every `DedupSource` but no command calls it yet (Amazon search isn't wired —
+  see `SITES_TO_SCRAPE`); it is kept so the lookup contract stays complete.
 - `init_template.py` and `release_package.py` are leftover from a generic cookiecutter-style Python module template
   (renaming a template project, building/publishing wheels, tagging GitHub releases). They aren't part of the
   scraping workflow and reference a generic `python_module` template name in places. They also both read/write

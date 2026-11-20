@@ -1,7 +1,7 @@
 """The `bookscraper detect-schema` workflow: AI-assisted CSS-selector proposals.
 
-Unlike `scrape-urls`/`search` this command never touches book storage (no
-`resolve_store_backend()` call) and, unlike anything else in the package, it never
+Unlike `scrape-urls`/`search` this command never touches book data (no staging file,
+no MongoDB) and, unlike anything else in the package, it never
 writes to `parameters.py`. It loads sample detail-page URLs, asks Claude to propose
 selectors, validates them against each page's live DOM, and prints a diff-style report
 for a human to apply by hand (optionally also writing it to `--output`).

@@ -26,10 +26,10 @@ its Mongo pre-flight. Rotation is only useful if someone knows when to run it.
   - Exit codes: `0` if more than N days remain; `3` if within N days (lets cron/CI alert); `1` if expired or
     unreadable; `0` plus a note when no x509 cert is configured.
   - Never contacts Atlas and never needs the `ATLAS_*` variables.
-- **Pre-flight warning:** `resolve_store_backend("mongo")` calls a non-raising helper
-  `cert_expiry_warning(cert_path, warn_days=30) -> Optional[str]` and `print_log`s any warning before connecting. A
-  parse failure there is a warning, not a crash. The helper must be importable from `storage.py` without an import
-  cycle.
+- **Pre-flight warning:** `database.get_mongo_collection()` (the entry point for push, pull, and `--check-mongo`)
+  calls a non-raising helper `cert_expiry_warning(cert_path, warn_days=30) -> Optional[str]` and `print_log`s any
+  warning before connecting. A parse failure there is a warning, not a crash. The helper must be importable from
+  `database.py` without an import cycle (`storage.py` no longer exists).
 - After a successful rotation, the command also prints the **new** cert's expiry date.
 
 ## Files
@@ -39,7 +39,8 @@ its Mongo pre-flight. Rotation is only useful if someone knows when to run it.
 - Modify `src/bookscraper/cli.py` - `--check` (`store_true`, `dest="check"`), `--warn-days` (`int`, default `30`,
   `dest="warn_days"`).
 - Modify `src/bookscraper/commands/rotate_cert.py` - check-mode branch; post-rotation expiry line.
-- Modify `src/bookscraper/backends/storage.py` - pre-flight warning.
+- Modify `src/bookscraper/backends/mongo/database.py` - pre-flight warning (note: `backends/storage.py` was deleted
+  by milestone 0002).
 - Tests: `tests/unit/backends/mongo/test_cert_rotation.py`, `tests/mock/commands/test_rotate_cert.py`,
   `tests/unit/test_cli.py`, `tests/mock/backends/test_storage.py`.
 - Test fixture: generate a throwaway self-signed cert **at test time** with `cryptography`, using a fixed

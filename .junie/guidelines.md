@@ -16,7 +16,7 @@ This repository was ported from a Claude-oriented kit into Junie-native repo gui
 - The target registry lives in `src/bookscraper/parameters.py`; when adding or changing a target, keep `site_constants` and the website-identification flow aligned.
 - Treat the stored book `hash` as the canonical identity. Changes to title/authors/year normalization, hash inputs, or dedup queries are contract-level changes.
 - Every processed input URL should land in exactly one output bucket such as the successful-books, failed-books, or other-links outputs.
-- Be alert for existing contract mismatches between scraper outputs, dedup logic, CSV shape, and persistence paths; do not assume all current behavior is already internally consistent.
+- Be alert for existing contract mismatches between scraper outputs, dedup logic, JSON document/report shape, and persistence paths; do not assume all current behavior is already internally consistent.
 
 ## Testing and verification
 
@@ -36,7 +36,7 @@ This repository was ported from a Claude-oriented kit into Junie-native repo gui
 
 - Never hardcode secrets, tokens, passwords, certificate material, or live connection strings.
 - Never print full secret values in analysis, logs, docs, diffs, or reports. Redact to type plus short excerpt only.
-- Treat environment variables, local secret files, TLS certificates, logs, CSV inputs, external HTML/JSON, and attacker-influenced URLs as potentially sensitive or hostile inputs.
+- Treat environment variables, local secret files, TLS certificates, logs, JSON URL-list inputs, external HTML/JSON, and attacker-influenced URLs as potentially sensitive or hostile inputs.
 - For security-sensitive changes or files, use the `secret-scan` skill and the `security-auditor` agent.
 
 ## Native Junie port of Claude hook behavior

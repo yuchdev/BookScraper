@@ -1,8 +1,14 @@
 # 04 - Honest connection logging
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/02.0-mongodb-auth-configuration/README.md)
-**Status:** ⬜ Not started
+**Status:** 🔶 In progress - core fix delivered by milestone 0002
 **Role:** Python Expert
+
+> **Note:** The core fix (conditional success log) was delivered as part of milestone 0002: `get_mongo_collection`
+> now only prints "Connection to MongoDB Atlas successful." when `_mongo_collection is not None` (line 204 of
+> `database.py`), and the corresponding CLAUDE.md bullet was removed. The remaining Requirements items (renaming
+> the success message to name `bookscraper_db.books`, removing stale commented-out lines) were not implemented
+> and keep this subtask open.
 
 ## Context
 

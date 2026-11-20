@@ -14,8 +14,9 @@
 - Remove the misleading `print_log(f"--- Scraping {len(book_data_to_scrape)} Book Data ---")`, which prints the
   number of **keys** in one dict, once per book.
 - `commands/search.py` and `commands/scrape_urls.py` share one summary/diagnostics helper
-  (`commands/_reporting.py`: status counts, `failed_*.csv` writing, timing). Delete the two duplicated
-  `save_failed_urls_to_csv` implementations.
+  (`commands/_reporting.py`: status counts, `failed_*.json` writing, timing). Fold the two per-command
+  `save_failed_urls_to_json` wrappers into it (both already delegate the actual write to
+  `book_utils.save_json_report`).
 - `storage_backend.save_books()` runs via `asyncio.to_thread` in `search` too (today only `scrape_urls` does
   this; `search` blocks the event loop).
 
@@ -30,9 +31,9 @@
 
 - `test_dispatch_routes_leanpub_to_api_and_others_to_playwright`
 - `test_search_save_runs_off_event_loop`
-- `test_single_failed_csv_writer_used_by_both_commands`
+- `test_single_failed_report_writer_used_by_both_commands`
 - `test_misleading_key_count_log_removed`
 
 ## Success criteria
 
-- [ ] `grep -c "def save_failed_urls_to_csv" -r src/` == 0 (replaced by the shared helper).
+- [ ] `grep -c "def save_failed_urls_to_json" -r src/` == 0 (replaced by the shared helper).

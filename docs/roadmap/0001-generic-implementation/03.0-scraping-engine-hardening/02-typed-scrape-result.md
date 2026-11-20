@@ -10,7 +10,7 @@
 `scrape_book()` returns a union of three shapes: a `dict` on success, `(None, "DUPLICATE")`, or
 `(None, "FAILED")`. Its Leanpub path returns a fourth shape: bare `None`. `commands/scrape_urls.py` pattern-matches
 on `isinstance`/`len(result) == 2`, and anything unexpected falls into `UNKNOWN_ERROR`. A 404, a timeout, and a
-parse error all collapse into `FAILED`, so `failed_books.csv` can't tell "the URL is dead" from "our selector
+parse error all collapse into `FAILED`, so `failed_books.json` can't tell "the URL is dead" from "our selector
 broke".
 
 ## Requirements
@@ -41,8 +41,8 @@ broke".
 - `scrape_book()` and `get_leanpub_book_details()` return `ScrapeResult` on every path. `get_leanpub_book_details`
   keeps a thin wrapper, or a flag, so `commands/search.py` keeps receiving what it needs. Update that caller in the
   same subtask.
-- `commands/scrape_urls.py`: replace the `isinstance` ladder with a `match result.status`. `failed_books.csv` gains
-  an `error` column and uses the enum's value as `status`. Delete the `UNKNOWN_ERROR` branch, since it can no
+- `commands/scrape_urls.py`: replace the `isinstance` ladder with a `match result.status`. `failed_books.json` records gain
+  an `error` field and use the enum's value as `status`. Delete the `UNKNOWN_ERROR` branch, since it can no
   longer happen.
 - `commands/search.py`: the failure records use `result.url` / `result.error`. This fixes today's `"url": "N/A"`,
   caused by reading a `url` key that Leanpub candidates don't have (they carry `book_url`).
@@ -63,7 +63,7 @@ broke".
 - `test_scrape_book_404_returns_not_found`
 - `test_scrape_book_exhausted_timeouts_return_timeout_with_attempt_count`
 - `test_leanpub_failure_returns_failed_result_not_none`
-- `test_scrape_urls_failed_csv_has_status_and_error_columns`
+- `test_scrape_urls_failed_report_has_status_and_error_fields`
 - `test_search_failed_record_uses_real_book_url`
 - `test_run_summary_counts_each_status`
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .storage import JsonBackend, MongoBackend, StorageBackend, resolve_store_backend
+from .dedup import CompositeDedupSource, DedupSource, MongoDedupSource, StagingDedupSource, resolve_dedup_source
 
-__all__ = ["JsonBackend", "MongoBackend", "StorageBackend", "resolve_store_backend"]
+__all__ = ["CompositeDedupSource", "DedupSource", "MongoDedupSource", "StagingDedupSource", "resolve_dedup_source"]

@@ -1,9 +1,15 @@
 # 08 - Backend parity contract tests
 
 **Parent task:** [README.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/README.md)
-**Status:** ⬜ Not started
+**Status:** ✅ Superseded by 0002 04.0/03
 **Depends on:** [05-mongo-save-hardening.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/05-mongo-save-hardening.md), [07-json-store-atomic-write-and-cache.md](/docs/roadmap/0001-generic-implementation/01.0-storage-backend-abstraction/07-json-store-atomic-write-and-cache.md)
 **Role:** Testing Expert
+
+> **Superseded:** Replaced by milestone 0002's
+> [04.0/03 Round-trip fidelity tests](/docs/roadmap/0002-staged-review-and-mongo-sync/04.0-pull-mongo-to-json/03-round-trip-fidelity.md).
+> Since `JsonBackend` and `MongoBackend` no longer exist, parity between them is moot; correctness is now
+> guaranteed by verifying that `pull` → `push --dry-run` on an untouched export plans 100% `unchanged`.
+> Requirements below are historical context.
 
 ## Context
 

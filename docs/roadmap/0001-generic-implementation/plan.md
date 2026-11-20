@@ -14,7 +14,7 @@ Progress lives in [status.md](/docs/roadmap/0001-generic-implementation/status.m
 
 | Task | Name                                   | Category    | Priority | Depends on       | Output                                                                                                           |
 |------|----------------------------------------|-------------|----------|------------------|------------------------------------------------------------------------------------------------------------------|
-| 01.0 | Storage backend abstraction            | feature     | P0       | -                | `StorageBackend` contract with `mongo` / `json` backends selected by a required `--store-backend`, plus indexes  |
+| 01.0 | Storage backend abstraction            | feature     | P0       | -                | `StorageBackend` contract, superseded in part by milestone 0002 ([ADR 0003](/docs/adr/0003-staged-review-and-two-way-sync.md)); artifacts replaced by `DedupSource`, `staging.py`, `push_writer.py` |
 | 02.0 | MongoDB auth configuration             | feature     | P0       | -                | Deterministic `settings.json` resolver + legacy env fallback, X.509 mechanism diagnostics, honest connect logging |
 | 02.1 | X.509 certificate rotation             | feature     | P0       | 02.0             | `bookscraper rotate-cert` via Atlas Admin API (`ATLAS_*`), expiry checks, retention, live re-diagnosis, runbook   |
 | 03.0 | Scraping engine hardening              | bugfix      | P0       | 06.0             | Leak-free, typed-result `scrape_book()`; every defined selector (incl. `TAGS`) actually extracted                  |
@@ -89,7 +89,8 @@ load-bearing.
 - [ ] Every task row in [status.md](/docs/roadmap/0001-generic-implementation/status.md) is ✅ Complete (minor deferred
       subtasks noted inline are acceptable per the implement-subtasks completion rule).
 - [ ] `uv run pytest -m "not integration" --cov=bookscraper` passes with the enforced ≥90% gate, in CI, on every push.
-- [ ] `uv run bookscraper search --store-backend json --site amazon --site leanpub --query Python --dry-run` completes
-      against live sites without an unhandled exception.
+- [ ] `uv run bookscraper search --site amazon --site leanpub --query Python --dry-run` completes against live
+      sites without an unhandled exception (use `--staging-file` to control the output path; `--store-backend` no
+      longer exists).
 - [ ] The X.509 integration legs either pass without `xfail`, or fail with a recorded, reproducible root cause.
 - [ ] CLAUDE.md, README.md, and `docs/` describe the shipped behavior (no stale flags, paths, or thresholds).

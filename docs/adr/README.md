@@ -9,6 +9,7 @@ are in `assets/`.
 | ADR                                              | Title                                  | Status   | Date       |
 |--------------------------------------------------|----------------------------------------|----------|------------|
 | [0002](0002-ai-assisted-schema-detection.md)     | AI-Assisted CSS-Selector Schema Detection | Accepted | 2026-09-23 |
+| [0003](0003-staged-review-and-two-way-sync.md)   | Staged Review & Two-Way MongoDB Sync      | Implemented | 2026-11-19 |
 
 The first real ADR landed as `0002`: `0001` was an illustrative example that has since
 been deleted (see the Naming conventions note below - a gap in the sequence is expected

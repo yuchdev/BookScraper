@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -110,6 +111,42 @@ def print_log(text: str, status: str = "info") -> None:
         logger.error(
             f"Failed to print colored message to console directly: {e}. Original message: {clean_text}", exc_info=False
         )
+
+
+def dumps_documents(documents: list[dict]) -> str:
+    """
+    Serializes a list of documents to JSON text. Every JSON file this tool writes, the
+    `json` storage backend's books.json and the diagnostic reports alike, goes through
+    this one function, so they all share one on-disk format: a top-level array of
+    objects, 2-space indented, non-JSON-native values (e.g. datetime) stringified.
+    """
+    return json.dumps(documents, indent=2, ensure_ascii=False, default=str)
+
+
+def save_json_report(records: list[dict], filename: str, description: str) -> None:
+    """
+    Writes a diagnostic report (failed URLs, skipped links, ...) as a JSON array of
+    objects. Best-effort: an empty list writes no file, and a write failure is logged
+    and reported but never raised, since a diagnostics problem must not abort a run.
+
+    Args:
+        records: The report rows, one dict per entry.
+        filename: Destination path; overwritten on every run.
+        description: Human-readable name for log messages, e.g. "failed/duplicate URLs".
+    """
+    if not records:
+        logger.info(f"No {description} to save to {filename}.")
+        return
+
+    try:
+        Path(filename).write_text(dumps_documents(records) + "\n", encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Error saving {description} to JSON ({filename}): {e}", exc_info=True)
+        print_log(f"Error: Could not write {description} to JSON file {filename}. Details: {e}", "error")
+        return
+
+    print_log(f"Successfully saved {len(records)} {description} to {filename}", "success")
+    logger.info(f"Successfully saved {len(records)} {description} to {filename}")
 
 
 def check_local_write_permission(directory: str = ".") -> bool:

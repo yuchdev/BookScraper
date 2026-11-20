@@ -2,6 +2,41 @@ from __future__ import annotations
 
 import argparse
 
+# Mirrors backends.local.staging.DEFAULT_STAGING_FILE (kept as a literal so building the parser
+# imports no backend code; tests/unit/test_cli.py asserts the two stay equal).
+DEFAULT_STAGING_FILE = "staging/books.json"
+DEFAULT_PUSH_REPORT = "push_report.json"
+
+
+def _add_staging_file_flag(parser: argparse.ArgumentParser, help_text: str) -> None:
+    parser.add_argument(
+        "--staging-file",
+        dest="staging_file",
+        default=DEFAULT_STAGING_FILE,
+        metavar="PATH",
+        help=help_text + f" (default: {DEFAULT_STAGING_FILE}).",
+    )
+
+
+def _add_check_mongo_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--check-mongo",
+        dest="check_mongo",
+        action="store_true",
+        help="Also skip books that already exist in MongoDB (read-only lookups; needs MongoDB credentials). "
+        "Without it, step 1 never contacts MongoDB.",
+    )
+
+
+def _add_log_severity_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--log-severity",
+        dest="log_severity",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
+    )
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Builds the `bookscraper` CLI's argument parser."""
@@ -10,53 +45,44 @@ def build_parser() -> argparse.ArgumentParser:
         description="Scrape and manage book metadata from Amazon, Leanpub, Packtpub, and O'Reilly.",
     )
     subparsers = parser.add_subparsers(
-        dest="command", required=True, metavar="{scrape-urls,search,rotate-cert,detect-schema}"
+        dest="command", required=True, metavar="{scrape-urls,search,push,pull,rotate-cert,detect-schema}"
     )
 
     scrape_parser = subparsers.add_parser(
         "scrape-urls",
-        help="Scrape book details from a CSV of known URLs.",
-        description="Scrape book details from URLs listed in a CSV file (via Playwright).",
+        help="Step 1: scrape book details from a JSON file of known URLs into the staging file.",
+        description="Scrape book details from URLs listed in a JSON file (via Playwright) and append them to "
+        "the staging file for review. Nothing is written to MongoDB; run 'bookscraper push' afterwards.",
     )
     scrape_parser.add_argument(
         "-f",
         "--input-file",
         dest="input_file",
         required=True,
-        help="Path to the CSV file containing URLs to scrape (must have a 'url' column).",
+        help="Path to a JSON file holding an array of book documents (the books.json / MongoDB "
+        "schema); each document's 'url' field is scraped, other fields are ignored.",
     )
-    scrape_parser.add_argument(
-        "--store-backend",
-        dest="store_backend",
-        choices=["mongo", "json"],
-        required=True,
-        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
-        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
-        "schema as the MongoDB documents).",
+    _add_staging_file_flag(
+        scrape_parser,
+        "Staging file that newly scraped books are appended to for review; push it to MongoDB "
+        "afterwards with 'bookscraper push'",
     )
-    scrape_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
-    )
+    _add_check_mongo_flag(scrape_parser)
+    _add_log_severity_flag(scrape_parser)
 
     search_parser = subparsers.add_parser(
         "search",
-        help="Search sites for new books matching configured queries, then scrape their details.",
-        description="Search configured sites for books matching SEARCH_QUERIES, deduplicate "
-        "against MongoDB, and scrape details for new results.",
+        help="Step 1: search sites for new books matching configured queries, scrape them into the staging file.",
+        description="Search configured sites for books matching SEARCH_QUERIES, skip books already in the "
+        "staging file (and in MongoDB with --check-mongo), and append details of new results to the staging "
+        "file for review. Nothing is written to MongoDB; run 'bookscraper push' afterwards.",
     )
-    search_parser.add_argument(
-        "--store-backend",
-        dest="store_backend",
-        choices=["mongo", "json"],
-        required=True,
-        help="Storage backend for both duplicate-check reads and saving scraped books: 'mongo' (the "
-        "configured MongoDB Atlas database) or 'json' (local books.json, kept in sync with the same "
-        "schema as the MongoDB documents).",
+    _add_staging_file_flag(
+        search_parser,
+        "Staging file that newly found books are appended to for review; push it to MongoDB "
+        "afterwards with 'bookscraper push'",
     )
+    _add_check_mongo_flag(search_parser)
     search_parser.add_argument(
         "--max-search-pages",
         dest="max_search_pages",
@@ -64,13 +90,66 @@ def build_parser() -> argparse.ArgumentParser:
         default=3,
         help="Maximum number of search-result pages to fetch per query per site (default: 3).",
     )
-    search_parser.add_argument(
-        "--log-severity",
-        dest="log_severity",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-        help="Minimum severity written to this run's log file under ~/.bookscrapper/logs/ (default: info).",
+    _add_log_severity_flag(search_parser)
+
+    push_parser = subparsers.add_parser(
+        "push",
+        help="Step 2: validate a reviewed staging file and apply it to MongoDB.",
+        description="Validate the whole staging file, plan every document (insert / duplicate / update / "
+        "unchanged / skipped), then apply inserts and updates to MongoDB in one bulk write. Nothing is written "
+        "if any document is invalid, or if the plan contains updates and --allow-updates is absent. Never "
+        "deletes, never modifies the staging file. Exit codes: 0 ok, 1 refused before writing, 3 partial write.",
     )
+    _add_staging_file_flag(push_parser, "Reviewed staging file (or a 'pull' export) to push")
+    push_parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Validate and print the plan, write the report, but make no changes to MongoDB.",
+    )
+    push_parser.add_argument(
+        "--allow-updates",
+        dest="allow_updates",
+        action="store_true",
+        help="Allow replacing existing MongoDB documents (those carrying an _id from 'pull') that were edited.",
+    )
+    push_parser.add_argument(
+        "--approved-only",
+        dest="approved_only",
+        action="store_true",
+        help="Push only documents whose _staging.status is 'approved' (default: everything not 'rejected').",
+    )
+    push_parser.add_argument(
+        "--report-file",
+        dest="report_file",
+        default=DEFAULT_PUSH_REPORT,
+        metavar="PATH",
+        help=f"Where to write the per-document outcome report (default: {DEFAULT_PUSH_REPORT}).",
+    )
+    _add_log_severity_flag(push_parser)
+
+    pull_parser = subparsers.add_parser(
+        "pull",
+        help="Export the entire MongoDB books collection to a staging-format JSON file.",
+        description="Read every document in the MongoDB books collection and write it, with its _id as a hex "
+        "string, to a JSON file in the staging format - edit it and send changes back with "
+        "'bookscraper push --staging-file FILE --allow-updates'. Read-only against MongoDB.",
+    )
+    pull_parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        required=True,
+        metavar="FILE",
+        help="File to write, e.g. staging/books_mongo.json. An existing file is never overwritten without --force.",
+    )
+    pull_parser.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help="Overwrite --output if it already exists (atomically, only after the export succeeded).",
+    )
+    _add_log_severity_flag(pull_parser)
 
     rotate_parser = subparsers.add_parser(
         "rotate-cert",

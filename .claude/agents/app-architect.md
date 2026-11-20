@@ -14,17 +14,20 @@ Two independent asyncio entry points, not one CLI with subcommands:
 
 - `src/scrape_existing_books.py` - the "I already have URLs" workflow. A plain script using
   absolute `from bookscraper...` imports; flags `-f/--input_file` (required), `-c`, `-m`. Reads a
-  CSV with a `url` column via `pandas.read_csv`, buckets each URL through `identify_website()`,
+  JSON array of book documents via `load_input_urls()` (only each one's `url` is used), buckets each URL through `identify_website()`,
   and scrapes in batches of 10 concurrent `scrape_book()` tasks with a 3-5s pause between batches.
 - `src/bookscraper/search_and_scrape.py` - the "discover new books" workflow. Uses relative
   imports, so it only runs as `PYTHONPATH=src python -m bookscraper.search_and_scrape`; flags
   `-c`, `-m`, `--max_search_pages`. Iterates `SITES_TO_SCRAPE` × `SEARCH_QUERIES`, deduplicates
-  candidates against MongoDB *before* the expensive detail fetch, then scrapes the survivors.
+  candidates against the staging file (plus MongoDB, read-only, with `--check-mongo`) *before*
+  the expensive detail fetch, then scrapes the survivors.
 
 The layers, in flow order: configuration (`parameters.py`) → acquisition (`search_utils.py` for
 search results, `scrape_details.py` for detail pages) → deduplication (`deduplicate.py`,
-`database.py`) → sinks (the per-entry-point `save_books_to_csv`/`save_failed_urls_to_csv` writers
-and `database.save_books_to_mongodb`).
+`database.py`, read-only via `backends/dedup.py`) → sink (the staging file, `backends/local/staging.py`)
+→ human review → `push` (`backends/mongo/push_plan.py` + `push_writer.py`, the only MongoDB writer); `pull`
+(`backends/mongo/export.py`) is the reverse path. JSON diagnostic reports go through
+`book_utils.save_json_report` (ADR 0003).
 
 **Two fetch families, deliberately unequal.** Playwright/Chromium serves Amazon, Packtpub, and
 O'Reilly; `httpx` against Leanpub's JSON:API serves Leanpub with no browser at all. `scrape_book()`
@@ -49,8 +52,8 @@ between layers:
   publication_year, isbn10, isbn13, asin (Amazon only), description, hash}`.
 
 The two detail shapes share only `site`, `title`, `authors`, and `hash` - and they disagree on
-`site`'s value. CSV headers are the sorted union of whatever keys a given run produced, so the
-column set is run-dependent.
+`site`'s value. Both storage backends keep whatever keys a document has, so the stored field set
+is site-dependent, not a fixed schema.
 
 **Identity is `hash`**: `book_utils.hash_book` SHA-256s `title|authors|year` after stripping,
 lowercasing, and sorting authors; `database.ensure_unique_index_on_hash` enforces it as
