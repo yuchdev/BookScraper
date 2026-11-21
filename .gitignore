@@ -14,6 +14,8 @@
 /failed_books.json
 /failed_urls.json
 /other_links.json
+# scripts/verify_amazon_books.py's output: a throwaway original-vs-scraped report.
+/CPP_BOOKS_amazon_verified.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
