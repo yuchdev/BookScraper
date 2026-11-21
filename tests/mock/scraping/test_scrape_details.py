@@ -13,6 +13,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from bookscraper.backends.local.staging import validate_staging_documents
 from bookscraper.scraping import scrape_details
+from bookscraper.scraping.parameters import site_constants
 from bookscraper.scraping.scrape_details import (
     _largest_image_from_dynamic,
     get_leanpub_book_details,
@@ -312,6 +313,24 @@ async def test_scrape_book_amazon_missing_isbn_defaults_to_na():
     assert isinstance(result, dict)
     assert result["isbn10"] == "N/A"
     assert result["isbn13"] == "N/A"
+
+
+async def test_scrape_book_publication_date_timeout_defaults_to_none():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+
+    publication_date_selector = site_constants["amazon"]["PUBLICATION_DATE"]
+    page = _amazon_page()
+    page._locators[publication_date_selector] = FakeLocator(
+        [], raises=PlaywrightTimeoutError("Locator.text_content: Timeout 10000ms exceeded.")
+    )
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert isinstance(result, dict)
+    assert result["publication_date"] is None
+    assert result["publication_year"] is None
+    assert isinstance(result["hash"], str) and result["hash"]
 
 
 async def test_scrape_book_duplicate_hash_returns_duplicate():

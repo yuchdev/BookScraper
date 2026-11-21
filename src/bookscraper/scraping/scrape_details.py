@@ -286,6 +286,8 @@ async def scrape_book(
             book_details["authors"] = authors_list if authors_list else []
 
             # Publication Date
+            book_details["publication_date"] = None
+            book_details["publication_year"] = None
             try:
                 # use Metadata (e.g., for Leanpub)
                 meta_publication_date_selector = selectors.get("PUBLICATION_DATE_META")

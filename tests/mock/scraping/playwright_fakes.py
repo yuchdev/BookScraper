@@ -59,8 +59,8 @@ class FakeLocator:
     * ``FakeLocator([{"attrs": {"href": "/x"}, "sub": {".title": FakeLocator("T")}}])`` -
       one element carrying attributes and its own nested locators.
 
-    Pass ``raises=<exception>`` to make ``count()`` raise, mimicking Playwright raising on
-    an invalid selector string (used to test the "bad selector must not abort" path).
+    Pass ``raises=<exception>`` to make ``count()``/``text_content()`` raise, mimicking
+    Playwright raising on an invalid selector or a timed-out wait.
     """
 
     def __init__(self, matches: LocatorInit = None, raises: Optional[BaseException] = None) -> None:
@@ -70,10 +70,12 @@ class FakeLocator:
     @property
     def first(self) -> FakeLocator:
         if self._matches:
-            return FakeLocator([self._matches[0]])
-        return FakeLocator([])
+            return FakeLocator([self._matches[0]], raises=self._raises)
+        return FakeLocator([], raises=self._raises)
 
     async def text_content(self, *args: Any, **kwargs: Any) -> Optional[str]:
+        if self._raises is not None:
+            raise self._raises
         if not self._matches:
             return None
         return self._matches[0].get("text")
