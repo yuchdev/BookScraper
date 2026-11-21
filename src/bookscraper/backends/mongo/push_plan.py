@@ -78,7 +78,7 @@ def _values_equal(staged, live) -> bool:
     if isinstance(staged, dict) and isinstance(live, dict):
         return staged.keys() == live.keys() and all(_values_equal(staged[key], live[key]) for key in staged)
     if isinstance(staged, list) and isinstance(live, list):
-        return len(staged) == len(live) and all(_values_equal(a, b) for a, b in zip(staged, live))
+        return len(staged) == len(live) and all(_values_equal(a, b) for a, b in zip(staged, live, strict=True))
     return staged == live
 
 
