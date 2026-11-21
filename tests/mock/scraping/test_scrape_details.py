@@ -14,6 +14,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from bookscraper.backends.local.staging import validate_staging_documents
 from bookscraper.scraping import scrape_details
 from bookscraper.scraping.scrape_details import (
+    _largest_image_from_dynamic,
     get_leanpub_book_details,
     route_handler,
     scrape_book,
@@ -371,3 +372,95 @@ async def test_scrape_book_retries_three_times_on_generic_exception_then_failed(
     assert result == (None, "FAILED")
     assert page.goto.await_count == 3
     assert mock_sleep.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Cover image
+# ---------------------------------------------------------------------------
+
+
+def test_largest_image_from_dynamic_picks_highest_resolution():
+    raw = json.dumps({"https://cdn/small.jpg": [100, 100], "https://cdn/big.jpg": [500, 600]})
+    assert _largest_image_from_dynamic(raw) == "https://cdn/big.jpg"
+
+
+@pytest.mark.parametrize("raw", [None, "", "not json", "[1, 2]", "{}", json.dumps({"u": "bad-dims"})])
+def test_largest_image_from_dynamic_handles_bad_input(raw):
+    # A null/empty/unparseable attribute yields None; a dict with unusable dims still
+    # returns some URL rather than crashing.
+    result = _largest_image_from_dynamic(raw)
+    assert result is None or result == "u"
+
+
+async def test_scrape_book_amazon_downloads_cover_from_hires_attribute():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()
+    page._locators["#imgTagWrapperId img"] = FakeLocator(
+        [{"attrs": {"data-old-hires": "https://m.media-amazon.com/images/I/81.jpg"}}]
+    )
+    browser = FakeBrowser(page=page)
+
+    with patch.object(
+        scrape_details, "download_cover_image", new=AsyncMock(return_value="covers/Great Python Book/cover.jpg")
+    ) as mock_download:
+        result = await scrape_book(url, browser, "amazon")
+
+    assert isinstance(result, dict)
+    assert result["cover_path"] == "covers/Great Python Book/cover.jpg"
+    mock_download.assert_awaited_once_with("https://m.media-amazon.com/images/I/81.jpg", "Great Python Book")
+
+
+async def test_scrape_book_amazon_cover_falls_back_to_dynamic_image():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()
+    dynamic = json.dumps({"https://cdn/small.jpg": [100, 100], "https://cdn/big.jpg": [900, 900]})
+    page._locators["#imgTagWrapperId img"] = FakeLocator([{"attrs": {"data-a-dynamic-image": dynamic}}])
+    browser = FakeBrowser(page=page)
+
+    with patch.object(
+        scrape_details, "download_cover_image", new=AsyncMock(return_value="covers/x/cover.png")
+    ) as mock_download:
+        result = await scrape_book(url, browser, "amazon")
+
+    assert result["cover_path"] == "covers/x/cover.png"
+    mock_download.assert_awaited_once_with("https://cdn/big.jpg", "Great Python Book")
+
+
+async def test_scrape_book_amazon_no_cover_element_yields_none_without_download():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()  # no #imgTagWrapperId img locator -> empty match
+    browser = FakeBrowser(page=page)
+
+    with patch.object(scrape_details, "download_cover_image", new=AsyncMock()) as mock_download:
+        result = await scrape_book(url, browser, "amazon")
+
+    assert result["cover_path"] is None
+    mock_download.assert_not_awaited()
+
+
+async def test_get_leanpub_book_details_downloads_cover_from_json_attribute():
+    payload = _leanpub_payload()
+    payload["data"]["attributes"]["title_page_url"] = "https://leanpub-cdn/cover.png"
+    response = FakeResponse(json_data=payload)
+    with (
+        _patch_httpx(responses=[response]),
+        patch.object(
+            scrape_details, "download_cover_image", new=AsyncMock(return_value="covers/Example Book/cover.png")
+        ) as mock_download,
+    ):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result["cover_path"] == "covers/Example Book/cover.png"
+    mock_download.assert_awaited_once_with("https://leanpub-cdn/cover.png", "Example Book")
+
+
+async def test_get_leanpub_book_details_without_cover_attribute_sets_none():
+    response = FakeResponse(json_data=_leanpub_payload())
+    with (
+        _patch_httpx(responses=[response]),
+        patch.object(scrape_details, "download_cover_image", new=AsyncMock()) as mock_download,
+    ):
+        result = await get_leanpub_book_details(LEANPUB_URL)
+
+    assert result["cover_path"] is None
+    mock_download.assert_not_awaited()

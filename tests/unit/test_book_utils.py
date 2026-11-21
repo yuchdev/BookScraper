@@ -11,10 +11,12 @@ import json
 from datetime import datetime
 
 from bookscraper.book_utils import (
+    _cover_extension,
     check_local_write_permission,
     dumps_documents,
     extract_year_from_date,
     hash_book,
+    sanitize_title_for_path,
     save_json_report,
 )
 
@@ -176,6 +178,52 @@ class TestDumpsDocuments:
     def test_non_json_native_values_are_stringified(self) -> None:
         text = dumps_documents([{"scraped_at": datetime(2026, 1, 2, 3, 4, 5)}])
         assert json.loads(text) == [{"scraped_at": "2026-01-02 03:04:05"}]
+
+
+class TestSanitizeTitleForPath:
+    def test_plain_title_unchanged(self) -> None:
+        assert sanitize_title_for_path("A Tour of C++ 3rd Edition") == "A Tour of C++ 3rd Edition"
+
+    def test_path_separators_and_unsafe_chars_replaced(self) -> None:
+        # Every unsafe char becomes a space, then whitespace collapses.
+        assert sanitize_title_for_path('C:/Foo\\Bar*?"<>|Baz') == "C Foo Bar Baz"
+
+    def test_no_path_separator_survives(self) -> None:
+        result = sanitize_title_for_path("deep/nested/title")
+        assert "/" not in result and "\\" not in result
+
+    def test_control_characters_removed(self) -> None:
+        assert sanitize_title_for_path("Title\twith\nnewlines") == "Title with newlines"
+
+    def test_whitespace_collapsed_and_trimmed(self) -> None:
+        assert sanitize_title_for_path("   many    spaces   ") == "many spaces"
+
+    def test_trailing_dots_and_spaces_stripped(self) -> None:
+        assert sanitize_title_for_path("Windows name...  ") == "Windows name"
+
+    def test_empty_or_dotted_becomes_untitled(self) -> None:
+        assert sanitize_title_for_path("") == "untitled"
+        assert sanitize_title_for_path("...") == "untitled"
+        assert sanitize_title_for_path("   ") == "untitled"
+
+    def test_non_string_input_is_tolerated(self) -> None:
+        assert sanitize_title_for_path(None) == "untitled"
+        assert sanitize_title_for_path(1234) == "1234"
+
+
+class TestCoverExtension:
+    def test_content_type_wins(self) -> None:
+        assert _cover_extension("image/png", "https://x/cover") == ".png"
+        assert _cover_extension("image/jpeg; charset=binary", "https://x/cover") == ".jpg"
+        assert _cover_extension("image/webp", "https://x/cover.jpg") == ".webp"
+
+    def test_falls_back_to_url_suffix_when_type_generic(self) -> None:
+        assert _cover_extension("application/octet-stream", "https://x/cover.png") == ".png"
+        assert _cover_extension(None, "https://x/img/cover.gif?v=2") == ".gif"
+
+    def test_defaults_to_jpg_when_nothing_usable(self) -> None:
+        assert _cover_extension(None, "https://x/no-extension-here") == ".jpg"
+        assert _cover_extension("application/octet-stream", "https://x/weird.thisisnotanext") == ".jpg"
 
 
 class TestSaveJsonReport:

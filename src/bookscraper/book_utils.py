@@ -6,10 +6,13 @@ import logging
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
+import httpx
 from dotenv import load_dotenv
 from pymongo import MongoClient, server_api
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
@@ -287,6 +290,115 @@ def extract_year_from_date(date_string: str) -> Optional[int]:
 
     except Exception as e:
         logger.error(f"Error in extract_year_from_date for '{date_string}': {e}", exc_info=True)
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Cover-image download
+# --------------------------------------------------------------------------- #
+# Resolved relative to the current working directory, exactly like the staging dir, and
+# created on first write. Gitignored; never committed.
+COVERS_DIR = Path("covers")
+
+# An identifying, non-spoofed User-Agent for the cover CDN fetch. The page-scraping paths
+# rotate browser-spoofing User-Agents (parameters.USER_AGENTS) to look like a human browser;
+# that is a liability, not a pattern to extend - a newly added request path identifies
+# itself honestly instead.
+COVER_DOWNLOAD_USER_AGENT = "bookscraper/cover-fetcher (book metadata tool)"
+
+_CONTENT_TYPE_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tif",
+    "image/x-icon": ".ico",
+}
+
+_UNSAFE_PATH_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def sanitize_title_for_path(title: Optional[str]) -> str:
+    """Turn a book title into one filesystem-safe folder name (never a path separator).
+
+    Replaces the Windows/Unix-unsafe characters (/ \\ : * ? " < > | and control chars) with
+    spaces, collapses whitespace runs, trims surrounding whitespace, and strips trailing
+    dots/spaces (both illegal at the end of a Windows name even though this host is macOS,
+    since staging files get reviewed cross-platform). Returns "untitled" when nothing
+    printable remains. Pure - no I/O.
+    """
+    text = title if isinstance(title, str) else ("" if title is None else str(title))
+    cleaned = _UNSAFE_PATH_CHARS.sub(" ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = cleaned.rstrip(". ")
+    return cleaned or "untitled"
+
+
+def _cover_extension(content_type: Optional[str], url: str) -> str:
+    """Choose the cover file extension from the response Content-Type, falling back to the
+    URL's own suffix, then to .jpg. Content-Type wins because an image-CDN URL's suffix is
+    often absent or misleading."""
+    if content_type:
+        main_type = content_type.split(";", 1)[0].strip().lower()
+        if main_type in _CONTENT_TYPE_EXTENSIONS:
+            return _CONTENT_TYPE_EXTENSIONS[main_type]
+    suffix = Path(urlparse(url).path).suffix.lower()
+    if re.fullmatch(r"\.[a-z0-9]{1,5}", suffix):
+        return suffix
+    return ".jpg"
+
+
+async def download_cover_image(
+    image_url: Optional[str], title: Optional[str], covers_dir: Optional[Path] = None
+) -> Optional[str]:
+    """Download a book cover into ``covers/<sanitized title>/cover.<ext>`` and return its
+    path as a string, or ``None`` on any failure.
+
+    Resilient by contract: a missing URL, a network/HTTP error, an empty body, or a write
+    failure is logged and yields ``None`` (the documented "no cover" state) - it never
+    raises, so a cover problem can never fail the surrounding book scrape. The extension
+    comes from the response Content-Type (see ``_cover_extension``). The file is written to
+    a temp name and atomically renamed, so a crash mid-download never leaves a half-written
+    ``cover.*`` behind.
+    """
+    if not isinstance(image_url, str) or not image_url.strip():
+        return None
+    base_dir = Path(covers_dir) if covers_dir is not None else COVERS_DIR
+    folder = base_dir / sanitize_title_for_path(title)
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                image_url.strip(), timeout=30.0, headers={"User-Agent": COVER_DOWNLOAD_USER_AGENT}
+            )
+            response.raise_for_status()
+            content = response.content
+            content_type = response.headers.get("content-type")
+        if not content:
+            logger.warning(f"Cover image at '{image_url}' was empty; no cover saved for '{title}'.")
+            return None
+        extension = _cover_extension(content_type, image_url)
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"cover{extension}"
+        fd, tmp_name = tempfile.mkstemp(prefix=".cover.", suffix=extension, dir=folder)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_name, target)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
+        logger.info(f"Saved cover for '{title}' to {target}.")
+        return str(target)
+    except Exception as e:
+        logger.warning(f"Could not download cover image '{image_url}' for '{title}': {e}")
         return None
 
 

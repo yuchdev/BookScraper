@@ -14,11 +14,38 @@ import httpx
 from playwright.async_api import Browser, Route, TimeoutError
 
 from ..backends import DedupSource
-from ..book_utils import extract_year_from_date, hash_book, print_log
+from ..book_utils import download_cover_image, extract_year_from_date, hash_book, print_log
 from .parameters import USER_AGENTS, site_constants
 
 # Get a logger instance specifically for this module
 module_logger = logging.getLogger("scrape_details")
+
+
+def _largest_image_from_dynamic(raw: Optional[str]) -> Optional[str]:
+    """Parse Amazon's ``data-a-dynamic-image`` attribute (a JSON object mapping each image
+    URL to its ``[width, height]``) and return the highest-resolution URL, or None if the
+    attribute is absent/unparseable. Pure."""
+    if not raw:
+        return None
+    try:
+        mapping = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(mapping, dict) or not mapping:
+        return None
+    best_url = None
+    best_area = -1
+    for candidate_url, dimensions in mapping.items():
+        area = 0
+        if isinstance(dimensions, (list, tuple)) and len(dimensions) == 2:
+            try:
+                area = int(dimensions[0]) * int(dimensions[1])
+            except (TypeError, ValueError):
+                area = 0
+        if area > best_area:
+            best_area = area
+            best_url = candidate_url
+    return best_url
 
 
 async def route_handler(route: Route) -> None:
@@ -116,6 +143,25 @@ async def get_leanpub_book_details(url: str) -> Optional[dict]:
                 category_name = category_item.get("name")
                 if category_name:
                     extracted_details["categories"].append(category_name)
+
+            # Cover image: pulled straight from the API JSON (Leanpub never uses CSS
+            # selectors). The exact attribute key could not be verified against the live
+            # cache API from this environment, so a small ordered list of the known
+            # cover-field names is tried and a miss is logged loudly rather than silently
+            # defaulting - cover_path is None on a miss/failed download, never a bad value.
+            cover_url = None
+            for cover_key in ("title_page_url", "image_url", "cover_image_url", "page_medium_url"):
+                cover_value = attributes.get(cover_key)
+                if isinstance(cover_value, str) and cover_value.strip():
+                    cover_url = cover_value.strip()
+                    break
+            if cover_url:
+                extracted_details["cover_path"] = await download_cover_image(cover_url, extracted_details.get("title"))
+            else:
+                print_log(
+                    f"No cover-image attribute found on Leanpub book '{extracted_details.get('slug')}'.", "warning"
+                )
+                extracted_details["cover_path"] = None
 
             extracted_details["hash"] = hash_book(
                 extracted_details["title"],
@@ -287,6 +333,21 @@ async def scrape_book(
                 # If the selector itself is not defined in parameters.py
                 book_details["isbn13"] = "N/A"
 
+            # Edition, Publisher, Series - same selector-driven pattern as ISBN10/13 above:
+            # a defined selector resolves its text (or "N/A" on a miss/timeout), a selector
+            # left None in parameters.py always resolves to "N/A".
+            for field_key, detail_key in (("EDITION", "edition"), ("PUBLISHER", "publisher"), ("SERIES", "series")):
+                field_selector = selectors.get(field_key)
+                if field_selector:
+                    try:
+                        field_text = await page.locator(field_selector).first.text_content(timeout=2000)
+                        book_details[detail_key] = field_text.strip() if field_text else "N/A"
+                    except TimeoutError:
+                        book_details[detail_key] = "N/A"
+                        module_logger.info(f"{field_key} element not found for {url}.")
+                else:
+                    book_details[detail_key] = "N/A"
+
             # Amazon ASIN extraction
             if site == "amazon":
                 try:
@@ -322,6 +383,31 @@ async def scrape_book(
             else:
                 module_logger.warning(f"No DESCRIPTION selector for {site}.")
                 book_details["description"] = None
+
+            # Cover image: COVER_IMAGE points at an <img> whose URL lives in an attribute,
+            # not in text. Amazon exposes a hi-res URL in data-old-hires (or a resolution map
+            # in data-a-dynamic-image); other sites use a plain src. A None selector, a
+            # missing element, or a failed download all resolve to cover_path=None and never
+            # abort the scrape (same resilience as the ISBN "N/A" fallback above).
+            cover_url = None
+            cover_selector = selectors.get("COVER_IMAGE")
+            if cover_selector:
+                try:
+                    cover_element = page.locator(cover_selector).first
+                    for attribute_name in ("data-old-hires", "src"):
+                        attribute_value = await cover_element.get_attribute(attribute_name)
+                        if attribute_value and attribute_value.strip():
+                            cover_url = attribute_value.strip()
+                            break
+                    if not cover_url:
+                        cover_url = _largest_image_from_dynamic(
+                            await cover_element.get_attribute("data-a-dynamic-image")
+                        )
+                except Exception as e:
+                    module_logger.info(f"COVER_IMAGE element not found for {url}: {e}")
+            book_details["cover_path"] = (
+                await download_cover_image(cover_url, book_details.get("title")) if cover_url else None
+            )
 
             # Generate hash
             book_details["hash"] = hash_book(

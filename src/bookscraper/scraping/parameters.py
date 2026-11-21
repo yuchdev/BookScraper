@@ -7,26 +7,21 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
-
     # Firefox (Windows)
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0",
-
     # Edge (Windows)
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.44",
-
     # Safari (macOS)
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
-
     # Chrome (macOS)
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-
     # Linux (Chrome/Firefox)
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
@@ -65,15 +60,14 @@ site_constants = {
         ### SEARCH SELECTORS
         "SEARCH_BASE_URL": "https://www.amazon.com/s?i=stripbooks-intl-ship&k=[k]&page=[p]",
         "SEARCH_BOOK_CARD": '[data-component-type="s-search-result"]',
-        "SEARCH_TITLE": 'h2.a-size-medium.a-spacing-none.a-color-base.a-text-normal > span',
-        "SEARCH_AUTHORS": 'div.a-row.a-size-base.a-color-secondary div.a-row > a.a-link-normal',
-        "SEARCH_PUBLICATION_DATE": 'div.a-row.a-size-base.a-color-secondary div.a-row > span.a-size-base.a-color-secondary.a-text-normal',
-        "SEARCH_ASIN_ATTRIBUTE": 'data-asin',
-        "SEARCH_BOOK_DETAIL_LINK": 'a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal',
+        "SEARCH_TITLE": "h2.a-size-medium.a-spacing-none.a-color-base.a-text-normal > span",
+        "SEARCH_AUTHORS": "div.a-row.a-size-base.a-color-secondary div.a-row > a.a-link-normal",
+        "SEARCH_PUBLICATION_DATE": "div.a-row.a-size-base.a-color-secondary div.a-row > span.a-size-base.a-color-secondary.a-text-normal",
+        "SEARCH_ASIN_ATTRIBUTE": "data-asin",
+        "SEARCH_BOOK_DETAIL_LINK": "a.a-link-normal.s-line-clamp-2.s-link-style.a-text-normal",
         "SEARCH_NEXT_PAGE_SELECTOR": ".s-pagination-next",
-        "SEARCH_NO_RESULTS_TEXT": 'div.s-no-results-box h1.a-size-large',
+        "SEARCH_NO_RESULTS_TEXT": "div.s-no-results-box h1.a-size-large",
         "SEARCH_MAXIMUM_PAGES": 2,
-
         ### BOOK DETAIL PAGE SELECTORS
         "404_PAGE_TITLE": "page not found",  # Part of title to check for 404 pages
         "BOOK_TITLE": "#productTitle",
@@ -85,6 +79,10 @@ site_constants = {
         "ISBN13": "#rpi-attribute-book_details-isbn13 .rpi-attribute-value span",
         # Usually inside #detailBullets_feature_div or #productDetails_techSpec_section_1
         "PUBLICATION_DATE": "#rpi-attribute-book_details-publication_date .rpi-attribute-value span, #rpi-attribute-audiobook_details-release-date .rpi-attribute-value span",
+        "EDITION": "#rpi-attribute-book_details-edition .rpi-attribute-value span",
+        "PUBLISHER": "#rpi-attribute-book_details-publisher .rpi-attribute-value span",
+        "SERIES": None,  # No series block on sampled pages; left unresolved rather than guessed
+        "COVER_IMAGE": "#imgTagWrapperId img",  # Read via data-old-hires / data-a-dynamic-image / src, not text
         "DESCRIPTION": "#bookDescription_feature_div .a-expander-content",  # Main description block
         "DESCRIPTION_ALT": "#productDescription p",  # Fallback for simpler descriptions
         "TAGS": "#detailBulletsWrapper_feature_div ul.zg_hrsr a",
@@ -102,7 +100,6 @@ site_constants = {
         "SEARCH_TITLE": "h3.ListItem__Title",
         "SEARCH_AUTHORS": "div.names",
         "SEARCH_NEXT_PAGE_SELECTOR": "section.pagination-wrapper button.btn--plain",
-
         ### BOOK DETAIL PAGE SELECTORS
         # Single Book API Endpoint: https://leanpub.com/api/v1/cache/books/mastering_modern_time_series_forecasting.json?include=accepted_authors
         "SINGLE_BOOK_API": "https://leanpub.com/api/v1/cache/books/[slug].json",
@@ -126,7 +123,6 @@ site_constants = {
         "SEARCH_AUTHOR_SELECTOR": ".product-result-author",
         "SEARCH_RATING_SELECTOR": ".rating-value",  # Or similar, might be a number
         "SEARCH_NEXT_PAGE_SELECTOR": "a.next-page-link",  # Or similar pagination
-
         "404_PAGE_TITLE": "page not found",
         "BOOK_TITLE": "h1.product-title",
         "AUTHORS": "div.authors span",
@@ -136,6 +132,7 @@ site_constants = {
         "TAGS": "div.product-page-rhs.desktop a",  # Example: tags under "Related Titles" or "Subjects"
         "PUBLICATION_DATE": "div.product-page-rhs.desktop span.product-details-section-key:has-text('Publication date :') + span.product-details-section-value",
         "DESCRIPTION": ".product-book-content-details h2:has-text('Description') + div.content-text",
+        "COVER_IMAGE": None,  # Read as an attribute (src), not text; unresolved (site actively blocks scraping)
         "READ_MORE_LINK": "",  # Usually no expander
     },
     "oreilly": {
@@ -157,6 +154,7 @@ site_constants = {
         "DESCRIPTION": 'h2.t-description-heading:has-text("Book description") + span',
         "DESCRIPTION_ALT": "div.read-more-wrapper",
         "TAGS": ".topic-link",  # Example: topics listed on the page
+        "COVER_IMAGE": None,  # Read as an attribute (src), not text; unresolved (site actively blocks scraping)
         "READ_MORE_LINK": "a.read-more-link",  # For description expanders
-    }
+    },
 }

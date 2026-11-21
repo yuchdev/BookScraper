@@ -3,6 +3,9 @@
 # database content - don't delete casually, never commit.
 # (Comments must be on their own line: gitignore has no trailing comments.)
 /staging/
+# Downloaded book cover images (covers/<sanitized title>/cover.<ext>), created on first
+# scrape. Run output, never committed - same treatment as staging/.
+/covers/
 # Legacy --store-backend json local store, from before the staged pipeline.
 /books.json
 # Per-run push outcome report.
