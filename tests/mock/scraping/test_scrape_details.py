@@ -333,6 +333,58 @@ async def test_scrape_book_publication_date_timeout_defaults_to_none():
     assert isinstance(result["hash"], str) and result["hash"]
 
 
+async def test_scrape_book_title_edition_suffix_fills_missing_edition_and_cuts_title():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()
+    page._locators["#productTitle"] = FakeLocator("C++ Primer (5th Edition)")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert result["title"] == "C++ Primer"
+    assert result["edition"] == "5th"
+    assert result["series"] == "N/A"
+
+
+async def test_scrape_book_title_series_suffix_fills_missing_series_and_cuts_title():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()
+    page._locators["#productTitle"] = FakeLocator("Tour of C++, A (C++ In-Depth Series)")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert result["title"] == "Tour of C++, A"
+    assert result["series"] == "C++ In-Depth"
+
+
+async def test_scrape_book_title_suffix_conflict_keeps_selector_edition_but_still_cuts_title():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    edition_selector = site_constants["amazon"]["EDITION"]
+    page = _amazon_page()
+    page._locators["#productTitle"] = FakeLocator("C++ Primer (3rd Edition)")
+    page._locators[edition_selector] = FakeLocator("5th")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert result["title"] == "C++ Primer"
+    assert result["edition"] == "5th"  # selector value wins over the title-suffix candidate
+
+
+async def test_scrape_book_non_edition_or_series_bracket_left_in_title():
+    url = "https://www.amazon.com/dp/B0ABCDEFGH/"
+    page = _amazon_page()
+    page._locators["#productTitle"] = FakeLocator("Foundations of Game Engine Development (2 books)")
+    browser = FakeBrowser(page=page)
+
+    result = await scrape_book(url, browser, "amazon")
+
+    assert result["title"] == "Foundations of Game Engine Development (2 books)"
+    assert result["edition"] == "N/A"
+    assert result["series"] == "N/A"
+
+
 async def test_scrape_book_duplicate_hash_returns_duplicate():
     url = "https://www.amazon.com/dp/B0ABCDEFGH/"
     page = _amazon_page()

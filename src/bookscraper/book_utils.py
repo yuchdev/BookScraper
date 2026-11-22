@@ -337,6 +337,50 @@ def sanitize_title_for_path(title: Optional[str]) -> str:
     return cleaned or "untitled"
 
 
+_TRAILING_EDITION_OR_SERIES_RE = re.compile(r"\s*\(([^()]*?)\s+(Edition|Series)\)\s*$", re.IGNORECASE)
+
+
+def extract_edition_or_series_from_title(title: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Parse a trailing ``(... Edition)`` or ``(... Series)`` parenthetical off ``title``.
+
+    Returns ``(title, edition, series)``. When the title's final parenthetical group ends in
+    the word "Edition" or "Series" (e.g. ``"C++ Primer (5th Edition)"``, ``"Tour of C++, A
+    (C++ In-Depth Series)"``), that group - including the separating space before ``(`` - is
+    cut from the returned title, and whichever of ``edition``/``series`` matches is set to
+    the text before the keyword (``"5th"``, ``"C++ In-Depth"``); the other stays ``None``.
+    Any other trailing bracket (e.g. ``"(2 books)"``, ``"(pdf)"``) is left alone, and the
+    title is returned unchanged with both ``None``. Pure - no I/O.
+    """
+    match = _TRAILING_EDITION_OR_SERIES_RE.search(title)
+    if not match:
+        return title, None, None
+    value = match.group(1).strip()
+    if not value:
+        return title, None, None
+    cleaned_title = title[: match.start()].rstrip()
+    if match.group(2).lower() == "edition":
+        return cleaned_title, value, None
+    return cleaned_title, None, value
+
+
+def fill_or_confirm_field(details: dict, field: str, candidate: str) -> str:
+    """Fill ``details[field]`` with ``candidate`` if it's currently unset/"N/A", otherwise
+    leave the existing (selector-derived) value alone and report the outcome.
+
+    A structured CSS-selector extraction is trusted over text parsed out of a title, so this
+    never overwrites an already-populated field - it only fills a gap, or reports whether a
+    free-text candidate agrees with what's already there. Returns ``"filled"``,
+    ``"confirmed"``, or ``"conflict"``. Pure - no I/O, no logging.
+    """
+    current = details.get(field)
+    if current in (None, "N/A", ""):
+        details[field] = candidate
+        return "filled"
+    if current == candidate:
+        return "confirmed"
+    return "conflict"
+
+
 def _cover_extension(content_type: Optional[str], url: str) -> str:
     """Choose the cover file extension from the response Content-Type, falling back to the
     URL's own suffix, then to .jpg. Content-Type wins because an image-CDN URL's suffix is

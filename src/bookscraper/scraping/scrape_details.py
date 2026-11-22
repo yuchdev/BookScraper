@@ -14,7 +14,14 @@ import httpx
 from playwright.async_api import Browser, Route, TimeoutError
 
 from ..backends import DedupSource
-from ..book_utils import download_cover_image, extract_year_from_date, hash_book, print_log
+from ..book_utils import (
+    download_cover_image,
+    extract_edition_or_series_from_title,
+    extract_year_from_date,
+    fill_or_confirm_field,
+    hash_book,
+    print_log,
+)
 from .parameters import USER_AGENTS, site_constants
 
 # Get a logger instance specifically for this module
@@ -349,6 +356,28 @@ async def scrape_book(
                         module_logger.info(f"{field_key} element not found for {url}.")
                 else:
                     book_details[detail_key] = "N/A"
+
+            # Title suffix: product titles often carry a trailing "(... Edition)" or
+            # "(... Series)" parenthetical duplicating the dedicated selectors above (e.g.
+            # "Tour of C++, A (C++ In-Depth Series)"). Cut it off the title and use it to
+            # fill edition/series if the selector came back "N/A", or cross-check it
+            # otherwise - a selector-derived value is trusted over free text, so a mismatch
+            # is only logged, never overwritten. Any other trailing bracket (e.g. "(2
+            # books)") is left alone.
+            if book_details.get("title"):
+                cleaned_title, edition_from_title, series_from_title = extract_edition_or_series_from_title(
+                    book_details["title"]
+                )
+                book_details["title"] = cleaned_title
+                for detail_key, candidate in (("edition", edition_from_title), ("series", series_from_title)):
+                    if candidate:
+                        outcome = fill_or_confirm_field(book_details, detail_key, candidate)
+                        if outcome == "conflict":
+                            module_logger.warning(
+                                f"{detail_key} mismatch for {url}: selector gave "
+                                f"{book_details[detail_key]!r}, title suffix gave {candidate!r}; "
+                                "keeping the selector value."
+                            )
 
             # Amazon ASIN extraction
             if site == "amazon":

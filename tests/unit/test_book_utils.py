@@ -14,7 +14,9 @@ from bookscraper.book_utils import (
     _cover_extension,
     check_local_write_permission,
     dumps_documents,
+    extract_edition_or_series_from_title,
     extract_year_from_date,
+    fill_or_confirm_field,
     hash_book,
     sanitize_title_for_path,
     save_json_report,
@@ -209,6 +211,64 @@ class TestSanitizeTitleForPath:
     def test_non_string_input_is_tolerated(self) -> None:
         assert sanitize_title_for_path(None) == "untitled"
         assert sanitize_title_for_path(1234) == "1234"
+
+
+class TestExtractEditionOrSeriesFromTitle:
+    def test_edition_suffix_extracted_and_cut(self) -> None:
+        title, edition, series = extract_edition_or_series_from_title("C++ Primer (5th Edition)")
+        assert title == "C++ Primer"
+        assert edition == "5th"
+        assert series is None
+
+    def test_series_suffix_extracted_and_cut(self) -> None:
+        title, edition, series = extract_edition_or_series_from_title("Tour of C++, A (C++ In-Depth Series)")
+        assert title == "Tour of C++, A"
+        assert edition is None
+        assert series == "C++ In-Depth"
+
+    def test_is_case_insensitive_on_keyword(self) -> None:
+        title, edition, _ = extract_edition_or_series_from_title("Some Book (2nd edition)")
+        assert title == "Some Book"
+        assert edition == "2nd"
+
+    def test_non_edition_or_series_bracket_left_alone(self) -> None:
+        original = "Foundations of Game Engine Development (2 books)"
+        title, edition, series = extract_edition_or_series_from_title(original)
+        assert title == original
+        assert edition is None
+        assert series is None
+
+    def test_no_trailing_bracket_left_alone(self) -> None:
+        original = "Effective Modern C++"
+        assert extract_edition_or_series_from_title(original) == (original, None, None)
+
+    def test_only_trailing_bracket_considered(self) -> None:
+        # An earlier, non-matching bracket ("(pdf)") must survive untouched.
+        title, edition, _ = extract_edition_or_series_from_title("Some Book (pdf) (3rd Edition)")
+        assert title == "Some Book (pdf)"
+        assert edition == "3rd"
+
+
+class TestFillOrConfirmField:
+    def test_fills_when_unset(self) -> None:
+        details: dict = {}
+        assert fill_or_confirm_field(details, "series", "C++ In-Depth") == "filled"
+        assert details["series"] == "C++ In-Depth"
+
+    def test_fills_when_placeholder_na(self) -> None:
+        details = {"edition": "N/A"}
+        assert fill_or_confirm_field(details, "edition", "5th") == "filled"
+        assert details["edition"] == "5th"
+
+    def test_confirms_matching_value_without_overwriting(self) -> None:
+        details = {"edition": "5th"}
+        assert fill_or_confirm_field(details, "edition", "5th") == "confirmed"
+        assert details["edition"] == "5th"
+
+    def test_conflict_keeps_existing_value(self) -> None:
+        details = {"edition": "5th"}
+        assert fill_or_confirm_field(details, "edition", "6th") == "conflict"
+        assert details["edition"] == "5th"
 
 
 class TestCoverExtension:
